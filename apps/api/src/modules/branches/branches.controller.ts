@@ -1,0 +1,27 @@
+import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
+import { UserRole } from '@lunara/types';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { BranchesService } from './branches.service';
+
+@Controller('branches')
+@UseGuards(JwtAuthGuard, RolesGuard)
+export class BranchesController {
+  constructor(private readonly branchesService: BranchesService) {}
+
+  @Get('nearest')
+  @Roles(UserRole.CUSTOMER, UserRole.ADMIN)
+  findNearest(
+    @Req() req: { user: { sub: string } },
+    @Query('addressId') addressId: string,
+  ) {
+    return this.branchesService.findNearestByAddressId(req.user.sub, addressId);
+  }
+
+  @Get()
+  @Roles(UserRole.ADMIN, UserRole.PARTNER)
+  list() {
+    return this.branchesService.listBranches();
+  }
+}

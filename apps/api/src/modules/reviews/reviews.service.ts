@@ -1,0 +1,162 @@
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
+import { NotificationChannel, OrderStatus } from '@lunara/types';
+import { Order, OrderDocument } from '../orders/schemas/order.schema';
+import { TrackingGateway } from '../realtime/tracking.gateway';
+import { CreateReviewDto } from './dto/create-review.dto';
+import { Notification, NotificationDocument } from './schemas/notification.schema';
+import { Review, ReviewDocument } from './schemas/review.schema';
+
+@Injectable()
+export class ReviewsService {
+  constructor(
+    @InjectModel(Review.name) private reviewModel: Model<ReviewDocument>,
+    @InjectModel(Notification.name) private notificationModel: Model<NotificationDocument>,
+    @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
+    private trackingGateway: TrackingGateway,
+  ) {}
+
+  async notifyOrderCompleted(orderId: string) {
+    const order = await this.orderModel.findById(orderId);
+    if (!order || order.status !== OrderStatus.COMPLETED) return;
+
+    const existing = await this.notificationModel.findOne({
+      userId: order.customerId,
+      'data.orderId': orderId,
+      'data.type': 'review_request',
+    });
+    if (existing) return;
+
+    const notification = await this.notificationModel.create({
+      userId: order.customerId,
+      title: 'How was your laundry?',
+      body: 'Your order is complete. Rate your experience to help us improve.',
+      channel: NotificationChannel.IN_APP,
+      read: false,
+      data: { type: 'review_request', orderId },
+    });
+
+    this.trackingGateway.emitOrderEvent(orderId, 'reviewRequested', {
+      message: 'Order complete — we would love your feedback!',
+      notificationId: notification._id.toString(),
+      reviewUrl: `/orders/${orderId}/review`,
+    });
+
+    return notification;
+  }
+
+  async getOrderReviewStatus(orderId: string, customerId: string) {
+    const order = await this.orderModel.findById(orderId);
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.customerId.toString() !== customerId) {
+      throw new BadRequestException('Not your order');
+    }
+
+    const review = await this.reviewModel.findOne({
+      orderId: order._id,
+      customerId: new Types.ObjectId(customerId),
+    });
+
+    const canReview = order.status === OrderStatus.COMPLETED && !review;
+
+    return {
+      success: true,
+      data: {
+        orderId: order._id.toString(),
+        orderStatus: order.status,
+        canReview,
+        review: review ? this.serializeReview(review) : null,
+      },
+    };
+  }
+
+  async createReview(customerId: string, dto: CreateReviewDto) {
+    const order = await this.orderModel.findById(dto.orderId);
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.customerId.toString() !== customerId) {
+      throw new BadRequestException('Not your order');
+    }
+    if (order.status !== OrderStatus.COMPLETED) {
+      throw new BadRequestException('You can only review completed orders');
+    }
+
+    const existing = await this.reviewModel.findOne({
+      orderId: order._id,
+      customerId: new Types.ObjectId(customerId),
+    });
+    if (existing) throw new BadRequestException('You already reviewed this order');
+
+    const review = await this.reviewModel.create({
+      orderId: order._id,
+      customerId: new Types.ObjectId(customerId),
+      partnerId: order.partnerId,
+      rating: dto.rating,
+      comment: dto.comment?.trim() || undefined,
+      publishedAt: new Date(),
+    });
+
+    await this.notificationModel.updateMany(
+      {
+        userId: new Types.ObjectId(customerId),
+        'data.orderId': dto.orderId,
+        'data.type': 'review_request',
+      },
+      { read: true },
+    );
+
+    this.trackingGateway.emitOrderEvent(dto.orderId, 'reviewPublished', {
+      message: 'Thank you for your review!',
+      rating: review.rating,
+    });
+
+    return {
+      success: true,
+      data: {
+        review: this.serializeReview(review),
+        message: 'Review published',
+      },
+    };
+  }
+
+  async listNotifications(userId: string, limit = 20) {
+    const items = await this.notificationModel
+      .find({ userId: new Types.ObjectId(userId) })
+      .sort({ createdAt: -1 })
+      .limit(limit);
+
+    return {
+      success: true,
+      data: items.map((n) => ({
+        _id: n._id.toString(),
+        title: n.title,
+        body: n.body,
+        read: n.read,
+        data: n.data,
+        createdAt: n.createdAt,
+      })),
+    };
+  }
+
+  async markNotificationRead(userId: string, notificationId: string) {
+    const notification = await this.notificationModel.findById(notificationId);
+    if (!notification) throw new NotFoundException('Notification not found');
+    if (notification.userId.toString() !== userId) {
+      throw new BadRequestException('Not your notification');
+    }
+    notification.read = true;
+    await notification.save();
+    return { success: true, data: notification };
+  }
+
+  private serializeReview(review: ReviewDocument) {
+    return {
+      _id: review._id.toString(),
+      orderId: review.orderId.toString(),
+      rating: review.rating,
+      comment: review.comment,
+      publishedAt: review.publishedAt,
+      createdAt: review.createdAt,
+    };
+  }
+}

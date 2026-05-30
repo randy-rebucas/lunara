@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared packages
+        run: |
+          npm run build --workspace=@lunara/types
+          npm run build --workspace=@lunara/validation
+          npm run build --workspace=@lunara/utils
+          npm run build --workspace=@lunara/config
+          npm run build --workspace=@lunara/hooks
+
+      - name: Build API
+        run: npm run build --workspace=@lunara/api
+
+      - name: Typecheck web apps
+        run: |
+          npm run typecheck --workspace=@lunara/customer-web
+          npm run typecheck --workspace=@lunara/admin-web
+          npm run typecheck --workspace=@lunara/partner-web

@@ -1,0 +1,350 @@
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { HydratedDocument, Types } from 'mongoose';
+import { BookingType, OrderStatus } from '@lunara/types';
+
+export type OrderDocument = HydratedDocument<Order>;
+
+@Schema({ _id: false })
+class OrderAddon {
+  @Prop({ required: true })
+  id!: string;
+
+  @Prop({ required: true })
+  label!: string;
+
+  @Prop({ required: true })
+  price!: number;
+}
+
+@Schema({ _id: false })
+class OrderItem {
+  @Prop({ required: true, enum: BookingType })
+  serviceType!: BookingType;
+
+  @Prop({ required: true })
+  quantity!: number;
+
+  @Prop({ required: true })
+  unitPrice!: number;
+
+  @Prop()
+  notes?: string;
+}
+
+@Schema({ _id: false })
+class OrderPickup {
+  @Prop()
+  offeredAt?: Date;
+
+  @Prop()
+  acceptedAt?: Date;
+
+  @Prop()
+  arrivedAt?: Date;
+
+  @Prop()
+  customerVerifiedAt?: Date;
+
+  @Prop()
+  collectedAt?: Date;
+
+  @Prop()
+  photoUrl?: string;
+
+  @Prop()
+  receiptCode?: string;
+
+  @Prop()
+  actualWeightKg?: number;
+
+  /** Last 4 digits of customer phone for rider verification. */
+  @Prop()
+  verificationHint?: string;
+
+  @Prop()
+  notes?: string;
+
+  @Prop()
+  receiptGeneratedAt?: Date;
+
+  @Prop()
+  inTransitToShopAt?: Date;
+
+  @Prop()
+  droppedAtShop?: Date;
+}
+
+@Schema({ _id: false })
+class ProcessingStepRecord {
+  @Prop({ required: true })
+  stepId!: string;
+
+  @Prop({ required: true, default: Date.now })
+  completedAt!: Date;
+
+  @Prop()
+  note?: string;
+
+  @Prop()
+  verifiedWeightKg?: number;
+
+  @Prop()
+  tagCode?: string;
+
+  @Prop()
+  photoUrl?: string;
+}
+
+@Schema({ _id: false })
+class OrderDelivery {
+  @Prop()
+  offeredAt?: Date;
+
+  @Prop()
+  acceptedAt?: Date;
+
+  @Prop()
+  pickedUpFromShopAt?: Date;
+
+  @Prop()
+  startedAt?: Date;
+
+  @Prop()
+  outForDeliveryAt?: Date;
+
+  @Prop()
+  arrivedAt?: Date;
+
+  @Prop()
+  customerReceivedAt?: Date;
+
+  @Prop()
+  customerVerifiedAt?: Date;
+
+  @Prop()
+  customerSignedAt?: Date;
+
+  @Prop()
+  signatureName?: string;
+
+  @Prop()
+  deliveredAt?: Date;
+
+  @Prop()
+  photoUrl?: string;
+
+  @Prop()
+  receiptCode?: string;
+
+  @Prop()
+  verificationHint?: string;
+}
+
+@Schema({ _id: false })
+class OrderShopReceiving {
+  @Prop()
+  receivedAt?: Date;
+
+  @Prop()
+  receivedBy?: string;
+
+  @Prop()
+  verifiedWeightKg?: number;
+
+  @Prop()
+  weightVerifiedAt?: Date;
+
+  @Prop()
+  itemCount?: number;
+
+  @Prop()
+  itemsConfirmedAt?: Date;
+
+  @Prop()
+  confirmedBy?: string;
+
+  @Prop()
+  notes?: string;
+}
+
+@Schema({ _id: false })
+class OrderLaundryProcessing {
+  @Prop()
+  currentStepId?: string;
+
+  @Prop({ type: [ProcessingStepRecord], default: [] })
+  completedSteps!: ProcessingStepRecord[];
+
+  @Prop({ default: false })
+  ironingSkipped!: boolean;
+
+  @Prop()
+  verifiedWeightKg?: number;
+
+  @Prop()
+  startedAt?: Date;
+
+  @Prop()
+  completedAt?: Date;
+
+  @Prop({ type: Types.ObjectId })
+  assignedStaffId?: Types.ObjectId;
+
+  @Prop()
+  assignedAt?: Date;
+
+  @Prop({ type: Types.ObjectId })
+  assignedBy?: Types.ObjectId;
+}
+
+@Schema({ _id: false })
+class OrderStatusEvent {
+  @Prop({ required: true, enum: OrderStatus })
+  status!: OrderStatus;
+
+  @Prop({ required: true, default: Date.now })
+  timestamp!: Date;
+
+  @Prop()
+  note?: string;
+
+  @Prop()
+  updatedBy?: string;
+}
+
+@Schema({ timestamps: true, collection: 'orders' })
+export class Order {
+  @Prop({ type: Types.ObjectId, required: true, index: true })
+  customerId!: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId })
+  partnerId?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, index: true })
+  branchId?: Types.ObjectId;
+
+  @Prop()
+  branchCode?: string;
+
+  @Prop()
+  branchName?: string;
+
+  @Prop({ enum: ['pending_dispatch', 'dispatched'] })
+  dispatchStatus?: 'pending_dispatch' | 'dispatched';
+
+  @Prop()
+  dispatchedAt?: Date;
+
+  @Prop({ type: Types.ObjectId })
+  dispatchedBy?: Types.ObjectId;
+
+  @Prop()
+  partnerAcceptedAt?: Date;
+
+  @Prop({ type: Types.ObjectId })
+  partnerAcceptedBy?: Types.ObjectId;
+
+  @Prop()
+  pickupRequestedAt?: Date;
+
+  @Prop()
+  deliveryRequestedAt?: Date;
+
+  @Prop()
+  slaPickupDueAt?: Date;
+
+  @Prop()
+  estimatedTurnaroundHours?: number;
+
+  @Prop({ type: Types.ObjectId })
+  suggestedPickupRiderId?: Types.ObjectId;
+
+  @Prop()
+  suggestedPickupRiderAt?: Date;
+
+  @Prop({ type: Types.ObjectId })
+  pickupRiderAssignedBy?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId })
+  suggestedDeliveryRiderId?: Types.ObjectId;
+
+  @Prop()
+  suggestedDeliveryRiderAt?: Date;
+
+  @Prop({ type: Types.ObjectId })
+  deliveryRiderAssignedBy?: Types.ObjectId;
+
+  @Prop()
+  awaitingDeliveryDispatchAt?: Date;
+
+  @Prop({ default: false })
+  operationsConflict?: boolean;
+
+  @Prop()
+  operationsConflictNote?: string;
+
+  @Prop({ type: Types.ObjectId })
+  pickupRiderId?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId })
+  deliveryRiderId?: Types.ObjectId;
+
+  @Prop({ required: true, enum: OrderStatus, default: OrderStatus.PENDING })
+  status!: OrderStatus;
+
+  @Prop({ required: true, enum: BookingType })
+  bookingType!: BookingType;
+
+  @Prop({ type: [OrderItem], required: true })
+  items!: OrderItem[];
+
+  @Prop({ required: true })
+  pickupAddressId!: string;
+
+  @Prop({ required: true })
+  deliveryAddressId!: string;
+
+  @Prop({ required: true })
+  scheduledPickupAt!: Date;
+
+  @Prop()
+  scheduledDeliveryAt?: Date;
+
+  @Prop()
+  estimatedWeightKg?: number;
+
+  @Prop({ type: [OrderAddon], default: [] })
+  addons!: OrderAddon[];
+
+  @Prop({ type: OrderPickup, default: {} })
+  pickup!: OrderPickup;
+
+  @Prop({ type: OrderShopReceiving, default: {} })
+  shopReceiving!: OrderShopReceiving;
+
+  @Prop({ type: OrderLaundryProcessing, default: {} })
+  laundryProcessing!: OrderLaundryProcessing;
+
+  @Prop({ type: OrderDelivery, default: {} })
+  delivery!: OrderDelivery;
+
+  @Prop({ required: true })
+  subtotal!: number;
+
+  @Prop({ default: 0 })
+  discount!: number;
+
+  @Prop({ required: true })
+  deliveryFee!: number;
+
+  @Prop({ required: true })
+  total!: number;
+
+  @Prop({ type: [OrderStatusEvent], default: [] })
+  statusHistory!: OrderStatusEvent[];
+
+  createdAt!: Date;
+  updatedAt!: Date;
+}
+
+export const OrderSchema = SchemaFactory.createForClass(Order);

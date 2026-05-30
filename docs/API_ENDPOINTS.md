@@ -1,0 +1,365 @@
+# API Endpoints
+
+Lunara REST API reference. All routes below are relative to the global prefix **`/api/v1`** (default base: `http://localhost:3001/api/v1`).
+
+## Conventions
+
+| Item | Detail |
+|------|--------|
+| Auth header | `Authorization: Bearer <accessToken>` |
+| Response shape | `{ success: true, data: … }` or `{ success: false, error: { message, code? } }` |
+| Roles | `customer`, `partner`, `staff`, `rider`, `admin` |
+| Validation | Unknown body fields are rejected (`forbidNonWhitelisted`) |
+
+### Public register
+
+`POST /auth/register` always creates a **customer** account. Role cannot be set via the public API.
+
+### Payment webhook confirm
+
+`POST /payments/:id/confirm` requires header `x-payment-webhook-secret` (env `PAYMENT_WEBHOOK_SECRET`, dev default `dev-payment-webhook-secret`). Mock checkout flows confirm payments server-side and do not call this route.
+
+---
+
+## Health
+
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| GET | `/health` | Public | Probes MongoDB + Redis. Returns **200** when all checks pass, **503** when degraded. |
+
+Example response (healthy):
+
+```json
+{
+  "success": true,
+  "data": {
+    "status": "ok",
+    "service": "lunara-api",
+    "timestamp": "2026-05-30T12:00:00.000Z",
+    "checks": { "mongo": "ok", "redis": "ok" }
+  }
+}
+```
+
+---
+
+## Auth
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/auth/register` | Public | Register customer (email/phone + password) |
+| POST | `/auth/login` | Public | Password or OTP login |
+| POST | `/auth/otp/request` | Public | Request SMS OTP |
+| POST | `/auth/refresh` | Public | Exchange refresh token |
+| POST | `/auth/logout` | JWT | Invalidate session |
+
+---
+
+## Users & customers
+
+| Method | Path | Roles | Description |
+|--------|------|-------|-------------|
+| GET | `/users/me` | Any | Auth user profile |
+| GET | `/users` | admin | List users |
+| GET | `/customers/me` | customer | Customer profile |
+| PATCH | `/customers/me` | customer | Update profile |
+| GET | `/customers/me/onboarding` | customer | Onboarding completion status |
+
+---
+
+## Addresses
+
+| Method | Path | Roles | Description |
+|--------|------|-------|-------------|
+| GET | `/addresses` | customer | List saved addresses |
+| POST | `/addresses` | customer | Add address |
+| PATCH | `/addresses/:id` | customer | Update address |
+| DELETE | `/addresses/:id` | customer | Remove address |
+
+---
+
+## Booking (customer)
+
+| Method | Path | Roles | Description |
+|--------|------|-------|-------------|
+| GET | `/booking/config` | customer | Services, pricing config |
+| GET | `/booking/availability?addressId=` | customer | Pickup slots + nearest branches |
+| POST | `/booking/quote?addressId=` | customer | Price quote |
+| POST | `/booking/orders` | customer | Create order from booking wizard (pending payment) |
+
+---
+
+## Branches
+
+| Method | Path | Roles | Description |
+|--------|------|-------|-------------|
+| GET | `/branches/nearest?addressId=` | customer, admin | Nearest branches for address |
+| GET | `/branches` | admin, partner | List branches (flat) |
+
+Admin branch network and CRUD live under **`/admin/branches`** (see Admin).
+
+---
+
+## Orders
+
+| Method | Path | Roles | Description |
+|--------|------|-------|-------------|
+| POST | `/orders` | customer | Create order (legacy/direct) |
+| GET | `/orders` | Any (scoped) | List orders for current user/role |
+| GET | `/orders/queue` | partner, staff, admin | Partner processing queue |
+| GET | `/orders/:id` | Owner / assigned / admin | Order detail |
+| PATCH | `/orders/:id/status` | partner, staff, rider, admin | Update status |
+| POST | `/orders/:id/assign-rider` | admin | Assign pickup/delivery rider |
+| GET | `/orders/:id/delivery` | customer | Delivery verify/sign UI state |
+| POST | `/orders/:id/delivery/verify` | customer | Verify delivery code |
+| POST | `/orders/:id/delivery/sign` | customer | Sign for delivery |
+
+---
+
+## Payments
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/payments/intent` | JWT | Create payment intent for order |
+| GET | `/payments/orders/:orderId` | JWT | Payment + order summary for checkout |
+| GET | `/payments/:id` | JWT | Payment by id |
+| POST | `/payments/:id/confirm` | Webhook secret | Confirm payment (provider callback) |
+| GET | `/payments/mock/paymongo/checkout` | Public | Dev PayMongo checkout page |
+| GET | `/payments/mock/paymongo/complete` | Public | Dev PayMongo complete redirect |
+| GET | `/payments/mock/gcash` | Public | Dev GCash confirm redirect |
+| GET | `/payments/mock/maya` | Public | Dev Maya confirm redirect |
+| GET | `/payments/mock/stripe` | Public | Dev card confirm redirect |
+
+---
+
+## Wallets
+
+| Method | Path | Roles | Description |
+|--------|------|-------|-------------|
+| GET | `/wallets/me` | customer | Balance |
+| GET | `/wallets/me/transactions` | customer | Transaction history |
+| POST | `/wallets/topup` | customer | Dev top-up |
+
+---
+
+## Reviews & notifications
+
+| Method | Path | Roles | Description |
+|--------|------|-------|-------------|
+| GET | `/notifications/me` | customer | In-app notifications |
+| PATCH | `/notifications/:id/read` | customer | Mark notification read |
+| GET | `/reviews/orders/:orderId` | customer | Review eligibility + existing review |
+| POST | `/reviews` | customer | Submit order review |
+
+---
+
+## Support (customer)
+
+| Method | Path | Roles | Description |
+|--------|------|-------|-------------|
+| POST | `/support/lost-items` | customer | Report lost item |
+| GET | `/support/tickets` | customer | My tickets |
+| GET | `/support/tickets/:id` | customer | Ticket detail + investigation view |
+
+---
+
+## Refunds (customer)
+
+| Method | Path | Roles | Description |
+|--------|------|-------|-------------|
+| POST | `/refunds` | customer | Submit refund request |
+| GET | `/refunds` | customer | My refund requests |
+| GET | `/refunds/:id` | customer | Refund detail + timeline |
+
+---
+
+## Partner portal
+
+Base: `/partner` — JWT required; role enforced per route.
+
+| Method | Path | Roles | Description |
+|--------|------|-------|-------------|
+| GET | `/partner/dashboard` | partner, admin | Shop dashboard |
+| GET | `/partner/orders/incoming` | partner, staff, admin | Incoming orders |
+| POST | `/partner/orders/:orderId/accept` | partner, admin | Accept partner assignment |
+| POST | `/partner/orders/:orderId/request-pickup` | partner, admin | Request pickup rider |
+| POST | `/partner/orders/:orderId/request-delivery` | partner, staff, admin | Request delivery rider |
+| GET | `/partner/orders/progress` | partner, admin | In-progress monitor |
+| GET | `/partner/staff` | partner, admin | Staff list + workload |
+| POST | `/partner/orders/:orderId/assign-staff` | partner, admin | Assign staff to order |
+| GET | `/partner/inventory` | partner, admin | Shop inventory |
+| PATCH | `/partner/inventory/:id` | partner, admin | Update stock quantity |
+| GET | `/partner/reports?days=` | partner, admin | Operational reports |
+| GET | `/partner/revenue` | partner, admin | Revenue summary |
+| GET | `/partner/orders/:orderId/receiving` | partner, staff, admin | Shop receiving state |
+| POST | `/partner/orders/:orderId/receiving/receive` | partner, staff, admin | Mark laundry received |
+| POST | `/partner/orders/:orderId/receiving/verify-weight` | partner, staff, admin | Verify weight at shop |
+| POST | `/partner/orders/:orderId/receiving/confirm-items` | partner, staff, admin | Confirm item count |
+| GET | `/partner/processing/config` | partner, staff, admin | Processing step config |
+| GET | `/partner/orders/queue?mine=` | partner, staff, admin | Processing queue |
+| POST | `/partner/orders/:orderId/processing/accept` | partner, staff, admin | Staff accept job |
+| GET | `/partner/orders/:orderId/processing` | partner, staff, admin | Processing view |
+| POST | `/partner/orders/:orderId/processing/advance` | partner, staff, admin | Complete processing step |
+| POST | `/partner/orders/:orderId/delivery/dispatch` | partner, staff, admin | Notify delivery riders |
+
+---
+
+## Riders
+
+Base: `/riders` — JWT + `rider` role unless noted.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/riders/me` | Rider profile + online state |
+| GET | `/riders/notifications` | Rider notifications |
+| GET | `/riders/tasks` | Active tasks |
+| GET | `/riders/earnings` | Earnings summary |
+| PATCH | `/riders/location` | Update GPS location |
+| POST | `/riders/online` | Go online |
+| POST | `/riders/offline` | Go offline |
+| GET | `/riders/pickup-offers` | Open pickup offers |
+| GET | `/riders/pickup-tasks/:orderId` | Pickup task detail |
+| POST | `/riders/pickup-offers/:orderId/accept` | Accept pickup |
+| POST | `/riders/pickup-tasks/:orderId/arrive` | Mark arrived at customer |
+| POST | `/riders/pickup-tasks/:orderId/verify` | Verify customer code |
+| POST | `/riders/pickup-tasks/:orderId/collect` | Collect laundry |
+| POST | `/riders/pickup-tasks/:orderId/photo` | Upload pickup photo URL |
+| POST | `/riders/pickup-tasks/:orderId/generate-receipt` | Generate pickup receipt |
+| POST | `/riders/pickup-tasks/:orderId/drop-at-shop` | Drop at shop |
+| POST | `/riders/pickup-tasks/:orderId/complete` | Complete pickup leg |
+| GET | `/riders/delivery-offers` | Open delivery offers |
+| GET | `/riders/delivery-tasks/:orderId` | Delivery task detail |
+| POST | `/riders/delivery-offers/:orderId/accept` | Accept delivery |
+| POST | `/riders/delivery-tasks/:orderId/pickup-from-shop` | Pick up from shop |
+| POST | `/riders/delivery-tasks/:orderId/out-for-delivery` | Out for delivery |
+| POST | `/riders/delivery-tasks/:orderId/start` | Start delivery |
+| POST | `/riders/delivery-tasks/:orderId/customer-received` | Customer received |
+| POST | `/riders/delivery-tasks/:orderId/arrive` | Arrived at customer |
+| POST | `/riders/delivery-tasks/:orderId/photo` | Delivery photo URL |
+| POST | `/riders/delivery-tasks/:orderId/complete` | Complete delivery |
+
+---
+
+## Admin
+
+Base: `/admin` — JWT + `admin` role.
+
+### Dashboard & monitoring
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/admin/dashboard` | Overview stats |
+| GET | `/admin/control-tower` | SLA / conflict watchlist |
+| GET | `/admin/orders?status=&limit=` | All orders |
+| GET | `/admin/riders` | Rider roster |
+| GET | `/admin/shops` | Partner accounts |
+| GET | `/admin/revenue` | Platform revenue |
+| GET | `/admin/reports?days=` | Analytics report |
+
+### Dispatch & operations
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/admin/dispatch/dashboard` | Dispatch boards |
+| GET | `/admin/dispatch/queue` | Pending dispatch queue |
+| GET | `/admin/dispatch/orders/:orderId/suggestions` | Branch suggestions |
+| POST | `/admin/dispatch/orders/:orderId/assign` | Assign shop to order |
+| GET | `/admin/operations/orders/:orderId` | Order ops detail |
+| GET | `/admin/operations/orders/:orderId/suggest-pickup-rider` | Pickup rider suggestions |
+| POST | `/admin/operations/orders/:orderId/confirm-pickup-rider` | Confirm pickup rider |
+| POST | `/admin/operations/orders/:orderId/assign-rider` | Direct rider assign |
+| POST | `/admin/operations/orders/:orderId/dispatch-pickup` | Trigger pickup dispatch |
+| GET | `/admin/operations/orders/:orderId/suggest-delivery-rider` | Delivery rider suggestions |
+| POST | `/admin/operations/orders/:orderId/confirm-delivery-rider` | Confirm delivery rider |
+| POST | `/admin/operations/orders/:orderId/flag-conflict` | Flag ops conflict |
+| POST | `/admin/operations/orders/:orderId/resolve-conflict` | Resolve conflict |
+
+### Branches
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/admin/branches` | Branch list |
+| GET | `/admin/branches/network` | Hierarchy tree |
+| GET | `/admin/branches/:id/profile` | Branch profile |
+| POST | `/admin/branches` | Create branch |
+| PATCH | `/admin/branches/:id` | Update branch |
+
+### Support tickets
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/admin/tickets?status=&type=` | Ticket list |
+| GET | `/admin/tickets/:id` | Ticket detail |
+| GET | `/admin/tickets/:id/investigation` | Lost-item investigation bundle |
+| POST | `/admin/tickets/:id/investigate` | Advance investigation |
+| PATCH | `/admin/tickets/:id` | Update status / priority / admin note |
+
+### Refunds
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/admin/refunds?status=` | Refund queue |
+| GET | `/admin/refunds/:id` | Refund review bundle |
+| POST | `/admin/refunds/:id/review` | Review workflow action |
+
+### Promotions
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/admin/promotions` | List promos |
+| POST | `/admin/promotions` | Create promo |
+| PATCH | `/admin/promotions/:id` | Update promo |
+
+---
+
+## WebSocket — `/tracking`
+
+Connect to `{API_ORIGIN}/tracking` with JWT in handshake:
+
+- `auth: { token: "<accessToken>" }`, or
+- Header `Authorization: Bearer <accessToken>`
+
+Unauthenticated connections are disconnected.
+
+### Client → server events
+
+| Event | Roles | Payload | Description |
+|-------|-------|---------|-------------|
+| `joinOrder` | Any authenticated | `{ orderId }` | Join order room for live updates |
+| `riderLocation` | rider | `{ orderId, lat, lng, riderId }` | Emit rider GPS (`riderId` must match JWT sub) |
+| `joinRider` | rider | `{ userId? }` | Join personal rider room |
+| `joinRiders` | rider | — | Join online riders broadcast room |
+| `joinAdminOperations` | admin | — | Join admin dispatcher room |
+| `joinPartnerOperations` | partner | — | Join partner pipeline room |
+| `joinBranch` | partner, staff, admin | `{ branchId }` | Join branch pipeline room |
+
+### Server → client events
+
+| Event | Description |
+|-------|-------------|
+| `locationUpdate` | Rider location for an order |
+| `orderStatusUpdate` | `{ orderId, status }` |
+| `orderEvent` | `{ orderId, event, message?, … }` lifecycle events |
+| `pickupOffer` / `deliveryOffer` | Rider marketplace offers |
+| `pickupAssignment` / `deliveryAssignment` | Rider task assignment |
+| `dispatcherAlert` | Admin control-tower alert (e.g. new paid order, delivery rider needed) |
+| `dispatchQueueUpdated` | Admin dispatch dashboard should refresh queue counts |
+| `partnerPipelineUpdated` | Partner portal — laundry pipeline changed for partner shop |
+| `branchPipelineUpdated` | Partner/staff portal — laundry pipeline changed for branch |
+
+---
+
+## Environment variables (API)
+
+| Variable | Purpose |
+|----------|---------|
+| `PORT` | HTTP port (default `3001`) |
+| `MONGODB_URI` | MongoDB connection |
+| `REDIS_URL` | Redis connection |
+| `JWT_SECRET` / `JWT_REFRESH_SECRET` | Required in production |
+| `PAYMENT_WEBHOOK_SECRET` | Protects `POST /payments/:id/confirm` |
+| `API_URL` | Public API URL for mock payment redirects |
+
+---
+
+*Last updated: 2026-05-30 — reflects implemented routes in `apps/api`.*

@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "Lunara Rider",
+    "slug": "lunara-rider",
+    "version": "1.0.0",
+    "scheme": "lunara-rider",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "plugins": ["expo-router", "expo-location"],
+    "experiments": { "typedRoutes": true }
+  }
+}

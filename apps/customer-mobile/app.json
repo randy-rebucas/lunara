@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "Lunara",
+    "slug": "lunara-customer",
+    "version": "1.0.0",
+    "scheme": "lunara",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "plugins": ["expo-router"],
+    "experiments": { "typedRoutes": true }
+  }
+}

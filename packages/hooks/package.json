@@ -1,0 +1,35 @@
+{
+  "name": "@lunara/hooks",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./auth-provider": "./src/auth-provider.tsx",
+    "./onboarding": "./src/onboarding.ts"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf dist"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": "^5.0.0",
+    "react": "^19.0.0"
+  },
+  "dependencies": {
+    "@lunara/types": "*",
+    "@lunara/utils": "*"
+  },
+  "devDependencies": {
+    "@tanstack/react-query": "^5.80.7",
+    "@types/react": "^19.1.6",
+    "react": "^19.1.0",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.8.3"
+  }
+}
