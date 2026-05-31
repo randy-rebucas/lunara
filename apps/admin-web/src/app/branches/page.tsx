@@ -129,33 +129,77 @@ export default function BranchNetworkPage() {
   const [profile, setProfile] = useState<BranchProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [profileError, setProfileError] = useState('');
-
-  function findFirstSelectable(node: BranchTreeNode): string | null {
-    if (node.branchType !== 'hq') return node.id;
-    for (const c of node.children) {
-      const found = findFirstSelectable(c);
-      if (found) return found;
-    }
-    return node.id;
-  }
+  const [branchMsg, setBranchMsg] = useState('');
+  const [branchBusy, setBranchBusy] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    code: '',
+    name: '',
+    branchType: 'partner_shop' as 'franchise' | 'partner_shop',
+    parentBranchId: '',
+    partnerUserId: '',
+    line1: '',
+    city: '',
+    province: '',
+    lat: '14.5995',
+    lng: '120.9842',
+  });
+  const [editForm, setEditForm] = useState({
+    name: '',
+    maxActiveOrders: '',
+    maxWeightCapacityKg: '',
+    dailyQuotaOrders: '',
+    dailyQuotaWeightKg: '',
+    isActive: true,
+  });
 
   const loadNetwork = useCallback(async () => {
-    const d = await adminFetch<{ tree: BranchTreeNode[]; totalBranches: number; operationalCount: number }>(
+    return adminFetch<{ tree: BranchTreeNode[]; totalBranches: number; operationalCount: number }>(
       '/admin/branches/network',
     );
-    if (d.tree[0]) {
-      const firstShop = findFirstSelectable(d.tree[0]);
-      if (firstShop) setSelectedId((prev) => prev ?? firstShop);
-    }
-    return d;
+  }, []);
+
+  const loadMeta = useCallback(async () => {
+    const [branches, shops] = await Promise.all([
+      adminFetch<Array<{ _id: string; code: string; name: string }>>('/admin/branches'),
+      adminFetch<{ shops: Array<{ _id: string; email?: string }> }>('/admin/shops'),
+    ]);
+    return { branches, shops: shops.shops };
   }, []);
 
   const { data: network, loading, error } = useAdminQuery(loadNetwork, []);
+  const { data: meta } = useAdminQuery(loadMeta, []);
   const tree = network?.tree ?? [];
   const stats = {
     totalBranches: network?.totalBranches ?? 0,
     operationalCount: network?.operationalCount ?? 0,
   };
+
+  useEffect(() => {
+    if (!network?.tree[0] || selectedId) return;
+    function pick(node: BranchTreeNode): string | null {
+      if (node.branchType !== 'hq') return node.id;
+      for (const c of node.children) {
+        const found = pick(c);
+        if (found) return found;
+      }
+      return node.id;
+    }
+    const firstShop = pick(network.tree[0]);
+    if (firstShop) setSelectedId(firstShop);
+  }, [network, selectedId]);
+
+  useEffect(() => {
+    if (!profile) return;
+    setEditForm({
+      name: profile.branch.name,
+      maxActiveOrders: String(profile.branch.maxActiveOrders),
+      maxWeightCapacityKg: String(profile.branch.maxWeightCapacityKg),
+      dailyQuotaOrders: String(profile.branch.dailyQuotaOrders),
+      dailyQuotaWeightKg: String(profile.branch.dailyQuotaWeightKg),
+      isActive: profile.branch.isActive,
+    });
+  }, [profile]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -173,6 +217,55 @@ export default function BranchNetworkPage() {
       })
       .finally(() => setLoadingProfile(false));
   }, [selectedId]);
+
+  async function createBranch(e: React.FormEvent) {
+    e.preventDefault();
+    setBranchBusy(true);
+    setBranchMsg('');
+    try {
+      await adminFetch('/admin/branches', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...createForm,
+          coordinates: [Number(createForm.lng), Number(createForm.lat)],
+        }),
+      });
+      setBranchMsg('Branch created.');
+      setShowCreate(false);
+      window.location.reload();
+    } catch (err) {
+      setBranchMsg(err instanceof Error ? err.message : 'Create failed');
+    } finally {
+      setBranchBusy(false);
+    }
+  }
+
+  async function updateBranch(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedId) return;
+    setBranchBusy(true);
+    setBranchMsg('');
+    try {
+      await adminFetch(`/admin/branches/${selectedId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: editForm.name,
+          maxActiveOrders: Number(editForm.maxActiveOrders),
+          maxWeightCapacityKg: Number(editForm.maxWeightCapacityKg),
+          dailyQuotaOrders: Number(editForm.dailyQuotaOrders),
+          dailyQuotaWeightKg: Number(editForm.dailyQuotaWeightKg),
+          isActive: editForm.isActive,
+        }),
+      });
+      setBranchMsg('Branch updated.');
+      const refreshed = await adminFetch<BranchProfile>(`/admin/branches/${selectedId}/profile`);
+      setProfile(refreshed);
+    } catch (err) {
+      setBranchMsg(err instanceof Error ? err.message : 'Update failed');
+    } finally {
+      setBranchBusy(false);
+    }
+  }
 
   return (
     <div>
@@ -198,7 +291,144 @@ export default function BranchNetworkPage() {
         <Link href="/shops" className="link-primary">
           Partner accounts →
         </Link>
+        <button type="button" className="btn-secondary btn-sm" onClick={() => setShowCreate((v) => !v)}>
+          {showCreate ? 'Cancel create' : 'Create branch'}
+        </button>
       </div>
+
+      {branchMsg ? (
+        <p className="mt-3 text-sm text-muted" role="status">
+          {branchMsg}
+        </p>
+      ) : null}
+
+      {showCreate ? (
+        <form onSubmit={createBranch} className="card card-body mt-6 grid gap-3 md:grid-cols-2">
+          <h3 className="md:col-span-2 text-lg font-semibold text-slate-900">Create branch</h3>
+          <div>
+            <label htmlFor="branch-code" className="form-label">
+              Code
+            </label>
+            <input
+              id="branch-code"
+              className="input-field w-full"
+              value={createForm.code}
+              onChange={(e) => setCreateForm((f) => ({ ...f, code: e.target.value }))}
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="branch-name" className="form-label">
+              Name
+            </label>
+            <input
+              id="branch-name"
+              className="input-field w-full"
+              value={createForm.name}
+              onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))}
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="branch-type" className="form-label">
+              Type
+            </label>
+            <select
+              id="branch-type"
+              className="input-field w-full"
+              value={createForm.branchType}
+              onChange={(e) =>
+                setCreateForm((f) => ({
+                  ...f,
+                  branchType: e.target.value as 'franchise' | 'partner_shop',
+                }))
+              }
+            >
+              <option value="partner_shop">Partner shop</option>
+              <option value="franchise">Franchise</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="parent-branch" className="form-label">
+              Parent branch
+            </label>
+            <select
+              id="parent-branch"
+              className="input-field w-full"
+              value={createForm.parentBranchId}
+              onChange={(e) => setCreateForm((f) => ({ ...f, parentBranchId: e.target.value }))}
+              required
+            >
+              <option value="">Select parent</option>
+              {(meta?.branches ?? []).map((b) => (
+                <option key={b._id} value={b._id}>
+                  {b.code} — {b.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="partner-user" className="form-label">
+              Partner account
+            </label>
+            <select
+              id="partner-user"
+              className="input-field w-full"
+              value={createForm.partnerUserId}
+              onChange={(e) => setCreateForm((f) => ({ ...f, partnerUserId: e.target.value }))}
+              required
+            >
+              <option value="">Select partner</option>
+              {(meta?.shops ?? []).map((s) => (
+                <option key={s._id} value={s._id}>
+                  {s.email ?? s._id}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="md:col-span-2">
+            <label htmlFor="branch-line1" className="form-label">
+              Address line
+            </label>
+            <input
+              id="branch-line1"
+              className="input-field w-full"
+              value={createForm.line1}
+              onChange={(e) => setCreateForm((f) => ({ ...f, line1: e.target.value }))}
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="branch-city" className="form-label">
+              City
+            </label>
+            <input
+              id="branch-city"
+              className="input-field w-full"
+              value={createForm.city}
+              onChange={(e) => setCreateForm((f) => ({ ...f, city: e.target.value }))}
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="branch-province" className="form-label">
+              Province
+            </label>
+            <input
+              id="branch-province"
+              className="input-field w-full"
+              value={createForm.province}
+              onChange={(e) => setCreateForm((f) => ({ ...f, province: e.target.value }))}
+              required
+            />
+          </div>
+          <div className="md:col-span-2">
+            <button type="submit" className="btn-primary btn-sm" disabled={branchBusy}>
+              {branchBusy ? 'Creating…' : 'Create branch'}
+            </button>
+          </div>
+        </form>
+      ) : null}
 
       <div className="mt-8 grid gap-6 lg:grid-cols-5">
         <div className="card card-body !py-4 lg:col-span-2">
@@ -382,6 +612,63 @@ export default function BranchNetworkPage() {
                   </p>
                 </div>
               </div>
+
+              <form onSubmit={updateBranch} className="mt-6 space-y-3 border-t border-slate-100 pt-6">
+                <h4 className="text-sm font-semibold text-slate-900">Edit branch</h4>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="edit-name" className="form-label">
+                      Name
+                    </label>
+                    <input
+                      id="edit-name"
+                      className="input-field w-full"
+                      value={editForm.name}
+                      onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                    />
+                  </div>
+                  <div className="flex items-end gap-2 pb-2">
+                    <input
+                      id="edit-active"
+                      type="checkbox"
+                      checked={editForm.isActive}
+                      onChange={(e) => setEditForm((f) => ({ ...f, isActive: e.target.checked }))}
+                    />
+                    <label htmlFor="edit-active" className="text-sm">
+                      Active
+                    </label>
+                  </div>
+                  <div>
+                    <label htmlFor="edit-max-orders" className="form-label">
+                      Max active orders
+                    </label>
+                    <input
+                      id="edit-max-orders"
+                      type="number"
+                      className="input-field w-full"
+                      value={editForm.maxActiveOrders}
+                      onChange={(e) => setEditForm((f) => ({ ...f, maxActiveOrders: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="edit-max-weight" className="form-label">
+                      Max weight (kg)
+                    </label>
+                    <input
+                      id="edit-max-weight"
+                      type="number"
+                      className="input-field w-full"
+                      value={editForm.maxWeightCapacityKg}
+                      onChange={(e) =>
+                        setEditForm((f) => ({ ...f, maxWeightCapacityKg: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+                <button type="submit" className="btn-primary btn-sm" disabled={branchBusy}>
+                  {branchBusy ? 'Saving…' : 'Save changes'}
+                </button>
+              </form>
             </>
           )}
         </div>

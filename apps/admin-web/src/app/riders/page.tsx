@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { DataPageStatus } from '../../components/data-page-status';
 import { PageHeader } from '../../components/ui/page-header';
 import { adminFetch } from '../../lib/admin-api';
@@ -61,14 +61,54 @@ function verificationLabel(status: RiderRow['verificationStatus']) {
 }
 
 export default function MonitorRidersPage() {
+  const [announceTitle, setAnnounceTitle] = useState('');
+  const [announceBody, setAnnounceBody] = useState('');
+  const [announceBusy, setAnnounceBusy] = useState(false);
+  const [announceMsg, setAnnounceMsg] = useState('');
+  const [search, setSearch] = useState('');
+
   const loadRiders = useCallback(() => adminFetch<RiderRow[]>('/admin/riders'), []);
   const loadPending = useCallback(
     () => adminFetch<PendingDocumentRow[]>('/admin/riders/documents/pending'),
     [],
   );
   const { data: riders, loading, error } = useAdminQuery(loadRiders, []);
-  const { data: pendingDocs } = useAdminQuery(loadPending, []);
+  const { data: pendingDocs, error: pendingError } = useAdminQuery(loadPending, []);
   const online = (riders ?? []).filter((r) => r.isOnline).length;
+
+  const filteredRiders = (riders ?? []).filter((r) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    const name = `${r.firstName ?? ''} ${r.lastName ?? ''}`.trim();
+    return (
+      name.toLowerCase().includes(q) ||
+      (r.email ?? '').toLowerCase().includes(q) ||
+      (r.phone ?? '').toLowerCase().includes(q)
+    );
+  });
+
+  async function sendAnnouncement(e: React.FormEvent) {
+    e.preventDefault();
+    if (!announceBody.trim()) return;
+    setAnnounceBusy(true);
+    setAnnounceMsg('');
+    try {
+      const res = await adminFetch<{ sent: number }>('/admin/riders/announcement', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: announceTitle.trim() || undefined,
+          body: announceBody.trim(),
+        }),
+      });
+      setAnnounceMsg(`Sent to ${res.sent} rider(s).`);
+      setAnnounceTitle('');
+      setAnnounceBody('');
+    } catch (err) {
+      setAnnounceMsg(err instanceof Error ? err.message : 'Announcement failed');
+    } finally {
+      setAnnounceBusy(false);
+    }
+  }
 
   return (
     <div>
@@ -89,6 +129,58 @@ export default function MonitorRidersPage() {
       <div className="mt-4">
         <DataPageStatus loading={loading} error={error} loadingMessage="Loading riders…" />
       </div>
+
+      <form onSubmit={sendAnnouncement} className="card card-body mt-6 space-y-3">
+        <h3 className="text-lg font-semibold text-slate-900">Broadcast announcement</h3>
+        <p className="text-sm text-muted">Send a push notification to all active riders.</p>
+        <label htmlFor="announce-title" className="form-label">
+          Title (optional)
+        </label>
+        <input
+          id="announce-title"
+          className="input-field"
+          value={announceTitle}
+          onChange={(e) => setAnnounceTitle(e.target.value)}
+          maxLength={120}
+        />
+        <label htmlFor="announce-body" className="form-label">
+          Message
+        </label>
+        <textarea
+          id="announce-body"
+          className="input-field min-h-24"
+          value={announceBody}
+          onChange={(e) => setAnnounceBody(e.target.value)}
+          required
+          maxLength={1000}
+        />
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="submit" className="btn-primary btn-sm" disabled={announceBusy}>
+            {announceBusy ? 'Sending…' : 'Send announcement'}
+          </button>
+          {announceMsg ? <p className="text-sm text-muted">{announceMsg}</p> : null}
+        </div>
+      </form>
+
+      <div className="mt-4">
+        <label htmlFor="rider-search" className="form-label">
+          Search riders
+        </label>
+        <input
+          id="rider-search"
+          type="search"
+          className="input-field max-w-md"
+          placeholder="Name, email, or phone"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
+
+      {pendingError ? (
+        <div className="alert-error mt-4" role="alert">
+          {pendingError}
+        </div>
+      ) : null}
 
       {(pendingDocs ?? []).length > 0 ? (
         <div className="mt-6 card card-body">
@@ -115,7 +207,7 @@ export default function MonitorRidersPage() {
       ) : null}
 
       <div className="mt-6 space-y-3">
-        {(riders ?? []).map((r) => (
+        {filteredRiders.map((r) => (
           <Link key={r._id} href={`/riders/${r.userId}`} className="block">
             <div className="card card-body flex flex-wrap items-center justify-between gap-4 !py-5 transition hover:border-primary/30">
               <div>
@@ -147,7 +239,7 @@ export default function MonitorRidersPage() {
             </div>
           </Link>
         ))}
-        {!loading && !error && (riders ?? []).length === 0 && (
+        {!loading && !error && filteredRiders.length === 0 && (
           <p className="text-sm text-muted">No riders. Seed rider@lunara.dev and run API seed.</p>
         )}
       </div>

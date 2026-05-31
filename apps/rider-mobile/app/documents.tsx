@@ -4,7 +4,7 @@ import { useRiderOperations } from '../src/context/rider-operations';
 import { Card } from '../src/components/ui/card';
 import { Screen } from '../src/components/ui/screen';
 import { DataLoadState } from '../src/components/data-load-state';
-import { getApiOrigin } from '../src/api-config';
+import { resolveAuthenticatedMediaSource } from '../src/lib/media-url';
 import { riderFetch } from '../src/api';
 import {
   RIDER_DOCUMENT_LABELS,
@@ -130,7 +130,7 @@ export default function DocumentsScreen() {
 
       {RIDER_DOCUMENT_TYPES.map((type) => {
         const doc = documentsByType.get(type);
-        const imageUri = doc?.fileUrl ? `${getApiOrigin()}${doc.fileUrl}` : undefined;
+        const imageSource = doc?.fileUrl ? resolveAuthenticatedMediaSource(doc.fileUrl) : undefined;
         const uploading = uploadingType === type;
 
         return (
@@ -142,8 +142,8 @@ export default function DocumentsScreen() {
               </Text>
             </View>
 
-            {imageUri ? (
-              <Image source={{ uri: imageUri }} style={styles.preview} resizeMode="cover" />
+            {imageSource ? (
+              <Image source={imageSource} style={styles.preview} resizeMode="cover" />
             ) : (
               <View style={styles.previewPlaceholder}>
                 <Text style={styles.previewPlaceholderText}>No upload yet</Text>

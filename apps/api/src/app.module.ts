@@ -22,6 +22,7 @@ import { BranchesModule } from './modules/branches/branches.module';
 import { DealsModule } from './modules/deals/deals.module';
 import { PushModule } from './modules/push/push.module';
 import { SosModule } from './modules/sos/sos.module';
+import { MediaModule } from './modules/media/media.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { SosModule } from './modules/sos/sos.module';
     DealsModule,
     SosModule,
     RealtimeModule,
+    MediaModule,
   ],
 })
 export class AppModule {}

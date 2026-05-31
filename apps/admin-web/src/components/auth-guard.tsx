@@ -1,26 +1,26 @@
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
+import { AuthLoading } from './auth-loading';
 import { getAdminToken } from '../lib/admin-api';
+import { useAdminAuth } from '../lib/admin-auth-provider';
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [ready, setReady] = useState(false);
+  const { isReady } = useAdminAuth();
 
   useEffect(() => {
-    if (pathname === '/login') {
-      setReady(true);
-      return;
-    }
+    if (!isReady) return;
+    if (pathname === '/login') return;
     if (!getAdminToken()) {
       router.replace('/login');
-      return;
     }
-    setReady(true);
-  }, [pathname, router]);
+  }, [pathname, router, isReady]);
 
-  if (!ready) return null;
+  if (!isReady) return <AuthLoading message="Checking session…" />;
+  if (pathname !== '/login' && !getAdminToken()) return <AuthLoading message="Redirecting to sign in…" />;
+
   return <>{children}</>;
 }

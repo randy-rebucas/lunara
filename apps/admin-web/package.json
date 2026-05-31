@@ -7,11 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test src/**/*.test.ts"
   },
   "dependencies": {
     "@lunara/brand": "*",
     "@lunara/config": "*",
+    "@lunara/hooks": "*",
     "@lunara/types": "*",
     "@lunara/ui": "*",
     "@lunara/utils": "*",
@@ -29,6 +31,7 @@
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.2.6",
     "tailwindcss": "^4.1.8",
+    "tsx": "^4.20.3",
     "typescript": "^5.8.3"
   }
 }

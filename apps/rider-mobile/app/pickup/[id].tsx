@@ -22,7 +22,7 @@ import { SosButton } from '../../src/components/sos-button';
 import { loadTaskCache } from '../../src/lib/offline/task-cache';
 import { isOnline } from '../../src/lib/offline/network';
 import { captureTaskPhoto } from '../../src/lib/task-photo';
-import { resolveMediaUrl } from '../../src/lib/media-url';
+import { resolveAuthenticatedMediaSource, resolveMediaUrl } from '../../src/lib/media-url';
 import { callPhone, promptNavigate } from '../../src/lib/task-contact';
 import type { RiderShopLocation, RiderTaskAddress } from '../../src/lib/rider-task-types';
 import { colors, spacing, typography } from '../../src/theme';
@@ -129,10 +129,10 @@ export default function PickupScreen() {
     }
   }
 
-  function photoUri(url?: string) {
+  function photoSource(url?: string) {
     if (!url) return undefined;
-    if (url.startsWith('file://')) return url;
-    return resolveMediaUrl(url);
+    if (url.startsWith('file://')) return { uri: url };
+    return resolveAuthenticatedMediaSource(url) ?? (resolveMediaUrl(url) ? { uri: resolveMediaUrl(url)! } : undefined);
   }
 
   function confirmReject() {
@@ -361,7 +361,7 @@ export default function PickupScreen() {
               <Card elevated style={styles.card}>
                 <Text style={styles.cardTitle}>Pickup photo proof</Text>
                 <Image
-                  source={{ uri: photoUri(p.photoUrl) }}
+                  source={photoSource(p.photoUrl)}
                   style={styles.photoPreview}
                   accessibilityLabel="Pickup photo proof"
                 />

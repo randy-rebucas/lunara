@@ -21,7 +21,7 @@ import { SosButton } from '../../src/components/sos-button';
 import { loadTaskCache } from '../../src/lib/offline/task-cache';
 import { isOnline } from '../../src/lib/offline/network';
 import { captureTaskPhoto } from '../../src/lib/task-photo';
-import { resolveMediaUrl } from '../../src/lib/media-url';
+import { resolveAuthenticatedMediaSource, resolveMediaUrl } from '../../src/lib/media-url';
 import { callPhone, promptNavigate } from '../../src/lib/task-contact';
 import type { RiderShopLocation, RiderTaskAddress } from '../../src/lib/rider-task-types';
 import { colors, spacing, typography } from '../../src/theme';
@@ -129,10 +129,10 @@ export default function DeliveryScreen() {
     }
   }
 
-  function photoUri(url?: string) {
+  function photoSource(url?: string) {
     if (!url) return undefined;
-    if (url.startsWith('file://')) return url;
-    return resolveMediaUrl(url);
+    if (url.startsWith('file://')) return { uri: url };
+    return resolveAuthenticatedMediaSource(url) ?? (resolveMediaUrl(url) ? { uri: resolveMediaUrl(url)! } : undefined);
   }
 
   function confirmReject() {
@@ -348,7 +348,7 @@ export default function DeliveryScreen() {
             <Card elevated style={styles.card}>
               <Text style={styles.cardTitle}>Delivery photo proof</Text>
               <Image
-                source={{ uri: photoUri(d.photoUrl) }}
+                source={photoSource(d.photoUrl)}
                 style={styles.photoPreview}
                 accessibilityLabel="Delivery photo proof"
               />

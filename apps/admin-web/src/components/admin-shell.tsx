@@ -12,6 +12,7 @@ const nav = [
   { href: '/orders', label: 'Orders' },
   { href: '/dispatch', label: 'Dispatch' },
   { href: '/riders', label: 'Riders' },
+  { href: '/riders/withdrawals', label: 'Withdrawals' },
   { href: '/branches', label: 'Branches' },
   { href: '/shops', label: 'Shops' },
   { href: '/revenue', label: 'Revenue' },

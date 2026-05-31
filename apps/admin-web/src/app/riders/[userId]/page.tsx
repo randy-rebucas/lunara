@@ -3,13 +3,11 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useState } from 'react';
-import { resolveApiV1BaseUrl } from '@lunara/utils';
+import { AuthenticatedImage } from '../../../components/authenticated-image';
 import { DataPageStatus } from '../../../components/data-page-status';
 import { PageHeader } from '../../../components/ui/page-header';
 import { adminFetch } from '../../../lib/admin-api';
 import { useAdminQuery } from '../../../lib/use-admin-query';
-
-const API_ORIGIN = resolveApiV1BaseUrl(process.env.NEXT_PUBLIC_API_URL).replace(/\/api\/v1$/, '');
 
 interface RiderDocument {
   type: string;
@@ -44,6 +42,8 @@ interface RiderProfileData {
   };
   user?: { email?: string; phone?: string } | null;
   isActive?: boolean;
+  totalEarnings?: number;
+  todayEarnings?: number;
 }
 
 function docLabel(type: string) {
@@ -56,6 +56,11 @@ export default function RiderProfileReviewPage() {
   const [rejectType, setRejectType] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [actionError, setActionError] = useState('');
+  const [walletHold, setWalletHold] = useState('');
+  const [creditAmount, setCreditAmount] = useState('');
+  const [creditNote, setCreditNote] = useState('');
+  const [creditType, setCreditType] = useState<'bonus' | 'adjustment'>('bonus');
+  const [walletBusy, setWalletBusy] = useState(false);
 
   const load = useCallback(async () => {
     if (!userId) throw new Error('Rider not found');
@@ -86,6 +91,52 @@ export default function RiderProfileReviewPage() {
     }
   }
 
+  async function applyWalletHold() {
+    if (!userId) return;
+    const pendingHold = Number(walletHold);
+    if (Number.isNaN(pendingHold) || pendingHold < 0) {
+      setActionError('Enter a valid hold amount');
+      return;
+    }
+    setWalletBusy(true);
+    setActionError('');
+    try {
+      await adminFetch(`/admin/riders/${userId}/wallet/hold`, {
+        method: 'POST',
+        body: JSON.stringify({ pendingHold }),
+      });
+      setWalletHold('');
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Wallet hold failed');
+    } finally {
+      setWalletBusy(false);
+    }
+  }
+
+  async function creditEarning() {
+    if (!userId) return;
+    const amount = Number(creditAmount);
+    if (Number.isNaN(amount) || amount < 1) {
+      setActionError('Enter a valid credit amount');
+      return;
+    }
+    setWalletBusy(true);
+    setActionError('');
+    try {
+      await adminFetch(`/admin/riders/${userId}/earnings/credit`, {
+        method: 'POST',
+        body: JSON.stringify({ type: creditType, amount, note: creditNote.trim() || undefined }),
+      });
+      setCreditAmount('');
+      setCreditNote('');
+      await reload();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Credit failed');
+    } finally {
+      setWalletBusy(false);
+    }
+  }
+
   const name =
     data?.firstName || data?.lastName
       ? `${data.firstName ?? ''} ${data.lastName ?? ''}`.trim()
@@ -105,7 +156,11 @@ export default function RiderProfileReviewPage() {
         <DataPageStatus loading={loading} error={error} loadingMessage="Loading rider profile…" />
       </div>
 
-      {actionError ? <p className="mt-4 text-sm text-destructive">{actionError}</p> : null}
+      {actionError ? (
+        <p className="mt-4 text-sm text-destructive" role="alert">
+          {actionError}
+        </p>
+      ) : null}
 
       {data ? (
         <>
@@ -127,6 +182,10 @@ export default function RiderProfileReviewPage() {
                 {data.homeAddress?.line1
                   ? `${data.homeAddress.line1}${data.homeAddress.line2 ? `, ${data.homeAddress.line2}` : ''}, ${data.homeAddress.city ?? ''}, ${data.homeAddress.province ?? ''} ${data.homeAddress.postalCode ?? ''}`
                   : '—'}
+              </p>
+              <p className="text-sm">
+                <span className="text-muted">Earnings:</span> Today ₱{data.todayEarnings ?? 0} · Total ₱
+                {data.totalEarnings ?? 0}
               </p>
               <p className="text-sm">
                 <span className="text-muted">Status:</span>{' '}
@@ -156,11 +215,78 @@ export default function RiderProfileReviewPage() {
             </div>
           </div>
 
+          <div className="card card-body mt-6 space-y-4">
+            <h3 className="text-lg font-semibold text-slate-900">Wallet operations</h3>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <label htmlFor="wallet-hold" className="form-label">
+                  Set pending hold (₱)
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    id="wallet-hold"
+                    type="number"
+                    min={0}
+                    className="input-field flex-1"
+                    value={walletHold}
+                    onChange={(e) => setWalletHold(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary btn-sm"
+                    disabled={walletBusy}
+                    onClick={applyWalletHold}
+                  >
+                    Apply hold
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="credit-amount" className="form-label">
+                  Manual credit (₱)
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  <select
+                    id="credit-type"
+                    className="input-field"
+                    value={creditType}
+                    onChange={(e) => setCreditType(e.target.value as 'bonus' | 'adjustment')}
+                  >
+                    <option value="bonus">Bonus</option>
+                    <option value="adjustment">Adjustment</option>
+                  </select>
+                  <input
+                    id="credit-amount"
+                    type="number"
+                    min={1}
+                    className="input-field flex-1"
+                    value={creditAmount}
+                    onChange={(e) => setCreditAmount(e.target.value)}
+                  />
+                </div>
+                <input
+                  id="credit-note"
+                  className="input-field w-full"
+                  placeholder="Optional note"
+                  value={creditNote}
+                  onChange={(e) => setCreditNote(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="btn-primary btn-sm"
+                  disabled={walletBusy}
+                  onClick={creditEarning}
+                >
+                  Credit earning
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div className="mt-8">
             <h3 className="text-lg font-semibold text-slate-900">Documents</h3>
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               {(data.documents ?? []).map((doc) => {
-                const imageUrl = doc.fileUrl ? `${API_ORIGIN}${doc.fileUrl}` : null;
                 const reviewing = busyType === doc.type;
 
                 return (
@@ -170,10 +296,9 @@ export default function RiderProfileReviewPage() {
                       <span className="badge-primary">{doc.status ?? 'missing'}</span>
                     </div>
 
-                    {imageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={imageUrl}
+                    {doc.fileUrl ? (
+                      <AuthenticatedImage
+                        publicPath={doc.fileUrl}
                         alt={doc.type}
                         className="h-48 w-full rounded-lg border border-slate-200 object-cover"
                       />
@@ -191,7 +316,7 @@ export default function RiderProfileReviewPage() {
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
-                          className="btn btn-accent btn-sm"
+                          className="btn-accent btn-sm"
                           disabled={reviewing}
                           onClick={() => reviewDocument(doc.type, 'approved')}
                         >
@@ -199,7 +324,7 @@ export default function RiderProfileReviewPage() {
                         </button>
                         <button
                           type="button"
-                          className="btn btn-outline btn-sm"
+                          className="btn-secondary btn-sm"
                           disabled={reviewing}
                           onClick={() => {
                             setRejectType(doc.type);
@@ -213,8 +338,12 @@ export default function RiderProfileReviewPage() {
 
                     {rejectType === doc.type ? (
                       <div className="space-y-2 border-t border-slate-100 pt-3">
+                        <label htmlFor={`reject-${doc.type}`} className="form-label">
+                          Rejection reason
+                        </label>
                         <textarea
-                          className="input min-h-20 w-full"
+                          id={`reject-${doc.type}`}
+                          className="input-field min-h-20 w-full"
                           placeholder="Rejection reason (required)"
                           value={rejectReason}
                           onChange={(e) => setRejectReason(e.target.value)}
@@ -222,7 +351,7 @@ export default function RiderProfileReviewPage() {
                         <div className="flex gap-2">
                           <button
                             type="button"
-                            className="btn btn-destructive btn-sm"
+                            className="btn-primary btn-sm bg-destructive hover:bg-destructive/90"
                             disabled={reviewing || !rejectReason.trim()}
                             onClick={() => reviewDocument(doc.type, 'rejected', rejectReason.trim())}
                           >
@@ -230,7 +359,7 @@ export default function RiderProfileReviewPage() {
                           </button>
                           <button
                             type="button"
-                            className="btn btn-outline btn-sm"
+                            className="btn-secondary btn-sm"
                             onClick={() => setRejectType(null)}
                           >
                             Cancel

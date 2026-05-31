@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { formatRefundStatus } from '@lunara/utils';
 import { DataPageStatus } from '../../components/data-page-status';
+import { filterBySearch, ListControls } from '../../components/list-controls';
 import { PageHeader } from '../../components/ui/page-header';
 import { adminFetch } from '../../lib/admin-api';
 import { useAdminQuery } from '../../lib/use-admin-query';
@@ -20,6 +21,8 @@ interface RefundRow {
 
 export default function AdminRefundsPage() {
   const [filter, setFilter] = useState('');
+  const [search, setSearch] = useState('');
+  const [limit, setLimit] = useState(50);
 
   const load = useCallback(async () => {
     const q = filter ? `?status=${filter}` : '';
@@ -27,6 +30,15 @@ export default function AdminRefundsPage() {
   }, [filter]);
 
   const { data, loading, error } = useAdminQuery(load, [filter]);
+  const filteredItems = useMemo(() => {
+    const rows = data?.items ?? [];
+    return filterBySearch(rows.slice(0, limit), search, [
+      (r) => r.orderId,
+      (r) => r.reason,
+      (r) => r.status,
+      (r) => r.bookingType,
+    ]);
+  }, [data?.items, search, limit]);
   const items = data?.items ?? [];
 
   return (
@@ -51,12 +63,22 @@ export default function AdminRefundsPage() {
         )}
       </div>
 
+      <ListControls
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Order ID, reason, status…"
+        limit={limit}
+        onLimitChange={setLimit}
+        total={items.length}
+        filtered={filteredItems.length}
+      />
+
       <div className="mt-4">
         <DataPageStatus loading={loading} error={error} loadingMessage="Loading refunds…" />
       </div>
 
       <div className="mt-6 space-y-2">
-        {items.map((r) => (
+        {filteredItems.map((r) => (
           <Link key={r._id} href={`/refunds/${r._id}`} className="list-row block">
             <div className="flex w-full justify-between">
               <p className="font-medium text-slate-900">Order …{r.orderId.slice(-6)}</p>
@@ -69,7 +91,7 @@ export default function AdminRefundsPage() {
             <p className="mt-1 truncate text-sm text-slate-600">{r.reason}</p>
           </Link>
         ))}
-        {!loading && !error && items.length === 0 && (
+        {!loading && !error && filteredItems.length === 0 && (
           <p className="text-sm text-muted">No refund requests.</p>
         )}
       </div>

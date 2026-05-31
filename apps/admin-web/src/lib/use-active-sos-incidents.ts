@@ -6,13 +6,14 @@ import {
   resolveSosIncident,
   type ActiveSosIncident,
 } from '../components/sos-incident-banner';
-import type { DispatcherAlert, SosLocationUpdate } from '../lib/use-admin-tracking-socket';
+import type { DispatcherAlert, SosLocationUpdate } from './use-admin-operations-socket';
 
 export function useActiveSosIncidents() {
   const [incidents, setIncidents] = useState<ActiveSosIncident[]>([]);
   const [liveAlert, setLiveAlert] = useState<DispatcherAlert | null>(null);
   const [liveLocations, setLiveLocations] = useState<Record<string, SosLocationUpdate>>({});
   const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [resolveError, setResolveError] = useState('');
 
   const reload = useCallback(async () => {
     try {
@@ -56,6 +57,7 @@ export function useActiveSosIncidents() {
   const handleResolve = useCallback(
     async (incidentId: string) => {
       setResolvingId(incidentId);
+      setResolveError('');
       try {
         await resolveSosIncident(incidentId);
         setIncidents((prev) => prev.filter((i) => i.incidentId !== incidentId));
@@ -65,11 +67,13 @@ export function useActiveSosIncidents() {
           delete next[incidentId];
           return next;
         });
+      } catch (e) {
+        setResolveError(e instanceof Error ? e.message : 'Failed to resolve SOS incident');
       } finally {
         setResolvingId(null);
       }
     },
-    [liveAlert?.incidentId],
+    [liveAlert],
   );
 
   return {
@@ -77,6 +81,7 @@ export function useActiveSosIncidents() {
     liveAlert,
     liveLocations,
     resolvingId,
+    resolveError,
     reload,
     onDispatcherAlert,
     onSosLocationUpdate,

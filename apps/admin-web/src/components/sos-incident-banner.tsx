@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { adminFetch } from '../lib/admin-api';
-import type { DispatcherAlert, SosLocationUpdate } from '../lib/use-admin-tracking-socket';
+import type { DispatcherAlert, SosLocationUpdate } from '../lib/use-admin-operations-socket';
 
 export interface ActiveSosIncident {
   incidentId: string;
@@ -39,6 +39,7 @@ interface SosIncidentBannerProps {
   liveAlert?: DispatcherAlert | null;
   liveLocations: Record<string, SosLocationUpdate>;
   resolvingId?: string | null;
+  resolveError?: string;
   onResolve: (incidentId: string) => void;
   onDismissAlert?: () => void;
 }
@@ -48,6 +49,7 @@ export function SosIncidentBanner({
   liveAlert,
   liveLocations,
   resolvingId,
+  resolveError,
   onResolve,
   onDismissAlert,
 }: SosIncidentBannerProps) {
@@ -73,7 +75,10 @@ export function SosIncidentBanner({
   if (merged.length === 0 && liveAlert?.type !== 'rider_sos') return null;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" role="alert" aria-live="assertive">
+      {resolveError ? (
+        <div className="alert-error text-sm">{resolveError}</div>
+      ) : null}
       {merged.map((incident) => {
         const live = liveLocations[incident.incidentId];
         const lat = live?.lat ?? incident.lastLocation?.lat;

@@ -3,13 +3,11 @@
 import Link from 'next/link';
 import { useCallback } from 'react';
 import { DataPageStatus } from '../../components/data-page-status';
-import { SosIncidentBanner } from '../../components/sos-incident-banner';
 import { PageHeader } from '../../components/ui/page-header';
 import { StatCard, LiveBadge } from '../../components/ui/stat-card';
 import { adminFetch } from '../../lib/admin-api';
-import { useActiveSosIncidents } from '../../lib/use-active-sos-incidents';
 import { useAdminQuery } from '../../lib/use-admin-query';
-import { useAdminOperationsSocket } from '../../lib/use-admin-tracking-socket';
+import { useAdminOperationsSocket } from '../../lib/use-admin-operations-socket';
 
 interface ControlTowerData {
   counts: {
@@ -36,19 +34,14 @@ interface ControlTowerData {
 export default function ControlTowerPage() {
   const load = useCallback(() => adminFetch<ControlTowerData>('/admin/control-tower'), []);
   const { data, loading, error, reload } = useAdminQuery(load, []);
-  const sos = useActiveSosIncidents();
 
   const { connected: socketLive } = useAdminOperationsSocket({
     onDispatchQueueUpdated: () => {
       void reload();
     },
-    onDispatcherAlert: (alert) => {
-      if (alert.type === 'rider_sos') {
-        sos.onDispatcherAlert(alert);
-      }
+    onDispatcherAlert: () => {
       void reload();
     },
-    onSosLocationUpdate: sos.onSosLocationUpdate,
   });
 
   if (loading || error || !data) {
@@ -80,19 +73,6 @@ export default function ControlTowerPage() {
         description="Logistics hub — review orders, assign shops and riders, monitor SLA, resolve conflicts."
         badge={socketLive ? <LiveBadge /> : undefined}
       />
-
-      <div className="mt-6">
-        <SosIncidentBanner
-          incidents={sos.incidents}
-          liveAlert={sos.liveAlert}
-          liveLocations={sos.liveLocations}
-          resolvingId={sos.resolvingId}
-          onResolve={(id) => {
-            void sos.handleResolve(id);
-          }}
-          onDismissAlert={sos.dismissLiveAlert}
-        />
-      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {stats.map((s) => (

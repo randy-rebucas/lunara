@@ -3,14 +3,12 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { PageHeader } from '../../components/ui/page-header';
-import { SosIncidentBanner } from '../../components/sos-incident-banner';
 import { LiveBadge } from '../../components/ui/stat-card';
 import { adminFetch } from '../../lib/admin-api';
-import { useActiveSosIncidents } from '../../lib/use-active-sos-incidents';
 import {
   type DispatcherAlert,
   useAdminOperationsSocket,
-} from '../../lib/use-admin-tracking-socket';
+} from '../../lib/use-admin-operations-socket';
 
 interface IncomingOrder {
   orderId: string;
@@ -82,7 +80,6 @@ export default function AdminDispatchDashboardPage() {
   const [selectedBranch, setSelectedBranch] = useState('');
   const [assigning, setAssigning] = useState(false);
   const [liveAlert, setLiveAlert] = useState<DispatcherAlert | null>(null);
-  const sos = useActiveSosIncidents();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -111,14 +108,11 @@ export default function AdminDispatchDashboardPage() {
       void loadSilent();
     },
     onDispatcherAlert: (alert) => {
-      if (alert.type === 'rider_sos') {
-        sos.onDispatcherAlert(alert);
-      } else {
+      if (alert.type !== 'rider_sos') {
         setLiveAlert(alert);
       }
       void loadSilent();
     },
-    onSosLocationUpdate: sos.onSosLocationUpdate,
   });
 
   useEffect(() => {
@@ -189,17 +183,6 @@ export default function AdminDispatchDashboardPage() {
         <span className="badge-primary px-3 py-1.5">{data.counts.needsPickupRider} need pickup rider</span>
         <span className="badge-accent px-3 py-1.5">{data.counts.needsDeliveryRider} need delivery rider</span>
       </div>
-
-      <SosIncidentBanner
-        incidents={sos.incidents}
-        liveAlert={sos.liveAlert}
-        liveLocations={sos.liveLocations}
-        resolvingId={sos.resolvingId}
-        onResolve={(id) => {
-          void sos.handleResolve(id);
-        }}
-        onDismissAlert={sos.dismissLiveAlert}
-      />
 
       {liveAlert?.message && liveAlert.type !== 'rider_sos' && (
         <div className="alert-info flex flex-wrap items-start justify-between gap-3">

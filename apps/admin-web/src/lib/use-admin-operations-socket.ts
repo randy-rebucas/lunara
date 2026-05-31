@@ -36,7 +36,10 @@ export function useAdminOperationsSocket(handlers: {
 }) {
   const [connected, setConnected] = useState(false);
   const handlersRef = useRef(handlers);
-  handlersRef.current = handlers;
+
+  useEffect(() => {
+    handlersRef.current = handlers;
+  });
 
   useEffect(() => {
     const token = getAdminToken();

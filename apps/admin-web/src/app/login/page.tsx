@@ -1,16 +1,22 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BrandMark } from '../../components/ui/brand-mark';
-import { adminLogin } from '../../lib/admin-api';
+import { adminLogin, getAdminToken } from '../../lib/admin-api';
 
 export default function AdminLoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('admin@lunara.dev');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (getAdminToken()) {
+      router.replace('/');
+    }
+  }, [router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -39,33 +45,47 @@ export default function AdminLoginPage() {
             Platform management — operate orders, riders, shops, and support.
           </p>
 
-          <label className="form-label mt-6">Email</label>
+          <label htmlFor="admin-email" className="form-label mt-6">
+            Email
+          </label>
           <input
+            id="admin-email"
             className="input-field"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="email"
+            required
           />
 
-          <label className="form-label mt-4">Password</label>
+          <label htmlFor="admin-password" className="form-label mt-4">
+            Password
+          </label>
           <input
+            id="admin-password"
             className="input-field"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="current-password"
+            required
           />
 
-          {error && <div className="alert-error mt-4">{error}</div>}
+          {error ? (
+            <div className="alert-error mt-4" role="alert">
+              {error}
+            </div>
+          ) : null}
 
           <button type="submit" disabled={loading} className="btn-primary mt-6 w-full">
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
 
-          <p className="mt-6 text-center text-xs text-muted-foreground">
-            Dev: admin@lunara.dev / password123 (run API seed first)
-          </p>
+          {process.env.NODE_ENV === 'development' ? (
+            <p className="mt-6 text-center text-xs text-muted-foreground">
+              Dev: seed the API first, then use admin@lunara.dev / password123
+            </p>
+          ) : null}
         </div>
       </form>
     </div>

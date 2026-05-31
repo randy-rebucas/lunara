@@ -4,7 +4,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { assertProductionJwtSecrets } from './common/config/jwt-config';
 import { ensureUploadDirectories } from './common/uploads/ensure-upload-dirs';
-import { UPLOADS_ROOT } from './common/uploads/upload-paths';
+import { AVATAR_UPLOAD_DIR } from './common/uploads/upload-paths';
 
 async function bootstrap() {
   assertProductionJwtSecrets();
@@ -13,7 +13,8 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   app.setGlobalPrefix('api/v1');
-  app.useStaticAssets(UPLOADS_ROOT, { prefix: '/api/v1/uploads/' });
+  // Avatars only — rider documents and task photos require JWT via MediaController.
+  app.useStaticAssets(AVATAR_UPLOAD_DIR, { prefix: '/api/v1/uploads/avatars/' });
   app.enableCors({ origin: true, credentials: true });
   app.useGlobalPipes(
     new ValidationPipe({
