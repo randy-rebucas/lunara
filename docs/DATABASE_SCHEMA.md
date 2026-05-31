@@ -21,7 +21,15 @@ Shop profile: `name`, `address`, `ownerId`, `staffIds[]`, `operatingHours`, `rat
 
 ## riders
 
-`userId`, `vehicleType`, `isOnline`, `currentLocation` (GeoJSON), `earnings`.
+`userId`, profile/KYC fields, `vehicleType`, `isOnline`, `currentLocation` (GeoJSON), location telemetry (`lastLocationSpeed`, `lastLocationHeading`, `lastLocationRecordedAt`), earnings counters (`totalEarnings`, `todayEarnings`, `recentEarnings[]`), wallet fields (`walletBalance`, `pendingHold`, `payoutMethod`, GCash/Maya/bank account details).
+
+## rider_wallet_transactions
+
+Ledger for rider wallet: `riderUserId`, `type` (`credit`|`debit`|`hold`|`release`), `amount`, `reference` (unique per rider), `description`.
+
+## rider_withdrawals
+
+Payout requests: `riderUserId`, `amount`, `method` (`gcash`|`maya`|`bank`), payout snapshot fields, `status` (`pending`|`approved`|`rejected`|`paid`), `adminNote`, `processedBy`, `processedAt`.
 
 ## orders
 

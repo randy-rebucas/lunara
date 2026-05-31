@@ -16,7 +16,13 @@ import {
 import { RiderAssignmentService } from '../riders/rider-assignment.service';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
+import { User, UserDocument } from '../users/schemas/user.schema';
 import { AdvanceProcessingDto } from './dto/processing.dto';
+import {
+  applyStaffBranchFilter,
+  assertOrderPortalAccess,
+  resolvePortalBranchId,
+} from './partner-access';
 
 const PROCESSING_QUEUE_STATUSES = [
   OrderStatus.RECEIVED_AT_SHOP,
@@ -27,6 +33,7 @@ const PROCESSING_QUEUE_STATUSES = [
 export class ProcessingService {
   constructor(
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
     private trackingGateway: TrackingGateway,
     private riderAssignmentService: RiderAssignmentService,
   ) {}
@@ -58,6 +65,10 @@ export class ProcessingService {
     if (role === UserRole.PARTNER && partnerUserId) {
       filter.partnerId = new Types.ObjectId(partnerUserId);
     }
+    if (role === UserRole.STAFF && staffUserId) {
+      const branchId = await resolvePortalBranchId(this.userModel, staffUserId, role);
+      applyStaffBranchFilter(filter, role, branchId);
+    }
 
     const items = await this.orderModel
       .find(filter)
@@ -81,15 +92,20 @@ export class ProcessingService {
     };
   }
 
-  async getOrderProcessing(orderId: string) {
+  async getOrderProcessing(orderId: string, userId: string, role: UserRole) {
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
+    const branchId = await resolvePortalBranchId(this.userModel, userId, role);
+    assertOrderPortalAccess(order, userId, role, branchId);
     return { success: true, data: this.buildProcessingView(order) };
   }
 
   async acceptJob(orderId: string, userId: string, role: UserRole) {
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
+
+    const branchId = await resolvePortalBranchId(this.userModel, userId, role);
+    assertOrderPortalAccess(order, userId, role, branchId);
 
     if (!PROCESSING_QUEUE_STATUSES.includes(order.status)) {
       throw new BadRequestException('Order is not in the processing queue');
@@ -128,6 +144,9 @@ export class ProcessingService {
   async advance(orderId: string, userId: string, role: UserRole, dto: AdvanceProcessingDto) {
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
+
+    const branchId = await resolvePortalBranchId(this.userModel, userId, role);
+    assertOrderPortalAccess(order, userId, role, branchId);
 
     if (!PROCESSING_QUEUE_STATUSES.includes(order.status)) {
       throw new BadRequestException(`Order status ${order.status} is not in processing queue`);
@@ -203,6 +222,21 @@ export class ProcessingService {
     return { success: true, data: this.buildProcessingView(order) };
   }
 
+  async registerProcessingPhoto(
+    orderId: string,
+    userId: string,
+    role: UserRole,
+    photoUrl: string,
+  ) {
+    const order = await this.orderModel.findById(orderId);
+    if (!order) throw new NotFoundException('Order not found');
+
+    const branchId = await resolvePortalBranchId(this.userModel, userId, role);
+    assertOrderPortalAccess(order, userId, role, branchId);
+
+    return { success: true, data: { photoUrl } };
+  }
+
   private resolveCurrentStepId(order: OrderDocument): LaundryProcessingStepId {
     const stored = normalizeProcessingStepId(order.laundryProcessing?.currentStepId);
     if (stored) return stored;
@@ -247,6 +281,7 @@ export class ProcessingService {
       currentStepId,
       currentStepLabel: step?.label ?? currentStepId,
       progress: this.calcProgress(currentStepId as LaundryProcessingStepId),
+      branchId: order.branchId?.toString(),
       assignedStaffId: order.laundryProcessing?.assignedStaffId?.toString(),
       isAssigned: !!order.laundryProcessing?.assignedStaffId,
     };

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { OrderStatus } from '@lunara/types';
@@ -14,6 +14,10 @@ import { PageShell } from '../../../components/page-shell';
 import { DataPageStatus } from '../../../components/data-page-status';
 import { OrderNotifications, type OrderNotification } from '../../../components/order-notifications';
 import { OrderTimeline } from '../../../components/order-timeline';
+import { RiderLocationMap } from '../../../components/rider-location-map';
+import { AuthLoading } from '../../../components/auth-loading';
+import { useDebouncedCallback } from '../../../hooks/use-debounced-callback';
+import { useProtectedPage } from '../../../hooks/use-protected-page';
 
 interface OrderDetail {
   _id: string;
@@ -86,8 +90,8 @@ export default function OrderTrackPage() {
   const { id } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const justBooked = searchParams.get('booked') === '1';
-  const { isAuthenticated, isLoading, api, tokens } = useAuthContext();
-  const router = useRouter();
+  const { api, tokens } = useAuthContext();
+  const { isLoading, ready } = useProtectedPage({ requireOnboarding: true });
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [notifications, setNotifications] = useState<OrderNotification[]>([]);
@@ -107,10 +111,6 @@ export default function OrderTrackPage() {
       ...prev,
     ].slice(0, 12));
   }, []);
-
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) router.push('/login');
-  }, [isLoading, isAuthenticated, router]);
 
   const reload = useCallback(async () => {
     if (!id) return;
@@ -143,11 +143,15 @@ export default function OrderTrackPage() {
     }
   }, [id, api]);
 
+  const scheduleReload = useDebouncedCallback(() => {
+    reload().catch(() => {});
+  }, 500);
+
   useEffect(() => {
-    if (isAuthenticated && id) {
+    if (ready && id) {
       reload().catch(() => {});
     }
-  }, [isAuthenticated, id, reload]);
+  }, [ready, id, reload]);
 
   useEffect(() => {
     if (justBooked) {
@@ -170,7 +174,7 @@ export default function OrderTrackPage() {
     socket.on('orderStatusUpdate', (data: { status: string }) => {
       setOrder((prev) => (prev ? { ...prev, status: data.status } : prev));
       pushNotification(`Status updated: ${formatOrderStatusLabel(data.status)}`);
-      reload();
+      scheduleReload();
     });
 
     socket.on(
@@ -178,7 +182,7 @@ export default function OrderTrackPage() {
       (data: { event: string; message?: string }) => {
         const msg = data.message ?? ORDER_EVENT_MESSAGES[data.event];
         if (msg) pushNotification(msg);
-        reload();
+        scheduleReload();
       },
     );
 
@@ -190,7 +194,7 @@ export default function OrderTrackPage() {
       setSocketLive(false);
       socket.disconnect();
     };
-  }, [id, tokens?.accessToken, reload, pushNotification]);
+  }, [id, tokens?.accessToken, scheduleReload, pushNotification]);
 
   async function handleVerify() {
     setDeliveryError('');
@@ -213,7 +217,11 @@ export default function OrderTrackPage() {
     }
   }
 
-  if (isLoading || pageLoading) {
+  if (isLoading || !ready) {
+    return <AuthLoading message="Loading order…" />;
+  }
+
+  if (pageLoading) {
     return (
       <PageShell narrow>
         <Link href="/orders" className="text-sm text-muted transition-colors hover:text-primary">
@@ -313,12 +321,7 @@ export default function OrderTrackPage() {
           </div>
         </section>
 
-        {location && (
-          <p className="mt-6 rounded-lg bg-slate-100 p-4 text-sm">
-            <span className="font-medium">Rider location (live):</span>{' '}
-            {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
-          </p>
-        )}
+        {location && <RiderLocationMap lat={location.lat} lng={location.lng} />}
 
         {showDeliveryActions && deliveryUi?.needsVerify && (
           <div className="panel mt-6">

@@ -7,6 +7,7 @@ import { fetchOnboardingStatus } from '@lunara/hooks/onboarding';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { AuthShellWide } from '../../../components/auth-shell';
 import { OnboardingProgress } from '../../../components/onboarding-progress';
+import { AuthLoading } from '../../../components/auth-loading';
 import { Input } from '../../../components/ui/input';
 
 export default function OnboardingAddressPage() {
@@ -49,7 +50,7 @@ export default function OnboardingAddressPage() {
     }
   }
 
-  if (isLoading || !isAuthenticated) return null;
+  if (isLoading || !isAuthenticated) return <AuthLoading message="Loading…" />;
 
   return (
     <AuthShellWide>

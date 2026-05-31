@@ -1,8 +1,28 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
 import { UserRole } from '@lunara/types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import {
+  TASK_PHOTO_UPLOAD_DIR,
+  taskPhotoPublicPath,
+} from '../../common/uploads/upload-paths';
 import { PickupService } from '../riders/pickup.service';
 import { AssignStaffDto } from './dto/assign-staff.dto';
 import { AdvanceProcessingDto } from './dto/processing.dto';
@@ -15,6 +35,29 @@ import {
   ReceiveLaundryDto,
   VerifyShopWeightDto,
 } from './dto/shop-receiving.dto';
+
+const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/jpg']);
+
+const processingPhotoUploadOptions = {
+  storage: diskStorage({
+    destination: TASK_PHOTO_UPLOAD_DIR,
+    filename: (_req, file, cb) => {
+      const req = _req as { user?: { sub: string }; params?: { orderId?: string } };
+      const userId = req.user?.sub ?? 'partner';
+      const orderId = req.params?.orderId ?? 'order';
+      const ext = extname(file.originalname).toLowerCase() || '.jpg';
+      cb(null, `${userId}-${orderId}-${Date.now()}${ext}`);
+    },
+  }),
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter: (_req: unknown, file: Express.Multer.File, cb: (error: Error | null, ok: boolean) => void) => {
+    if (!ALLOWED_IMAGE_TYPES.has(file.mimetype)) {
+      cb(new BadRequestException('Only JPEG, PNG, and WebP images are allowed'), false);
+      return;
+    }
+    cb(null, true);
+  },
+};
 
 @Controller('partner')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -181,8 +224,30 @@ export class PartnerController {
 
   @Get('orders/:orderId/processing')
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
-  getProcessing(@Param('orderId') orderId: string) {
-    return this.processingService.getOrderProcessing(orderId);
+  getProcessing(
+    @Param('orderId') orderId: string,
+    @Req() req: { user: { sub: string; role: UserRole } },
+  ) {
+    return this.processingService.getOrderProcessing(orderId, req.user.sub, req.user.role);
+  }
+
+  @Post('orders/:orderId/processing/photo-upload')
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
+  @UseInterceptors(FileInterceptor('photo', processingPhotoUploadOptions))
+  uploadProcessingPhoto(
+    @Param('orderId') orderId: string,
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('Photo image is required');
+    }
+    return this.processingService.registerProcessingPhoto(
+      orderId,
+      req.user.sub,
+      req.user.role,
+      taskPhotoPublicPath(file.filename),
+    );
   }
 
   @Post('orders/:orderId/processing/advance')

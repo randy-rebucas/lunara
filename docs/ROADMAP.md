@@ -19,7 +19,7 @@
 - [ ] Rider assignment & dispatch logic
 - [ ] Payment integrations (GCash, Maya, Stripe)
 - [ ] Wallet & transactions
-- [ ] Push notifications (Firebase)
+- [x] Push notifications (Firebase)
 
 ## Phase 3 — Operations
 

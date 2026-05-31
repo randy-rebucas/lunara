@@ -23,4 +23,7 @@ module.exports = {
       backgroundColor: '#ffffff',
     },
   },
+  ios: {
+    ...require('./app.json').expo.ios,
+  },
 };

@@ -1,14 +1,85 @@
-import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
 import { UserRole } from '@lunara/types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import {
+  TASK_PHOTO_UPLOAD_DIR,
+  RIDER_DOCUMENT_UPLOAD_DIR,
+  taskPhotoPublicPath,
+} from '../../common/uploads/upload-paths';
 import { DeliveryPhotoDto } from './dto/delivery.dto';
-import { CapturePhotoDto, CollectLaundryDto, VerifyCustomerDto } from './dto/pickup.dto';
-import { UpdateLocationDto } from './dto/rider.dto';
+import { CapturePhotoDto, CollectLaundryDto, DropAtShopDto, VerifyCustomerDto, VerifyQrDto } from './dto/pickup.dto';
+import { UpdateLocationDto, UpdateRiderProfileDto } from './dto/rider.dto';
+import { RequestWithdrawalDto, UpdatePayoutMethodDto } from './dto/rider-wallet.dto';
 import { DeliveryService } from './delivery.service';
 import { PickupService } from './pickup.service';
 import { RidersService } from './riders.service';
+import { TriggerSosDto } from '../sos/dto/trigger-sos.dto';
+import { RiderSosService } from '../sos/rider-sos.service';
+import { HandoffQrService } from '../handoff/handoff-qr.service';
+import { RiderWalletService } from './rider-wallet.service';
+import { isValidRiderDocumentType } from './rider-compliance';
+
+const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/jpg']);
+
+const taskPhotoUploadOptions = {
+  storage: diskStorage({
+    destination: TASK_PHOTO_UPLOAD_DIR,
+    filename: (_req, file, cb) => {
+      const req = _req as { user?: { sub: string }; params?: { orderId?: string } };
+      const userId = req.user?.sub ?? 'rider';
+      const orderId = req.params?.orderId ?? 'task';
+      const ext = extname(file.originalname).toLowerCase() || '.jpg';
+      cb(null, `${userId}-${orderId}-${Date.now()}${ext}`);
+    },
+  }),
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter: (_req: unknown, file: Express.Multer.File, cb: (error: Error | null, ok: boolean) => void) => {
+    if (!ALLOWED_IMAGE_TYPES.has(file.mimetype)) {
+      cb(new BadRequestException('Only JPEG, PNG, and WebP images are allowed'), false);
+      return;
+    }
+    cb(null, true);
+  },
+};
+
+const riderDocumentUploadOptions = {
+  storage: diskStorage({
+    destination: RIDER_DOCUMENT_UPLOAD_DIR,
+    filename: (req, file, cb) => {
+      const request = req as { user?: { sub: string }; params?: { type?: string } };
+      const userId = request.user?.sub ?? 'rider';
+      const docType = request.params?.type ?? 'document';
+      const ext = extname(file.originalname).toLowerCase() || '.jpg';
+      cb(null, `${userId}-${docType}-${Date.now()}${ext}`);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req: unknown, file: Express.Multer.File, cb: (error: Error | null, ok: boolean) => void) => {
+    if (!ALLOWED_IMAGE_TYPES.has(file.mimetype)) {
+      cb(new BadRequestException('Only JPEG, PNG, and WebP images are allowed'), false);
+      return;
+    }
+    cb(null, true);
+  },
+};
 
 @Controller('riders')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -17,6 +88,9 @@ export class RidersController {
     private readonly ridersService: RidersService,
     private readonly pickupService: PickupService,
     private readonly deliveryService: DeliveryService,
+    private readonly riderSosService: RiderSosService,
+    private readonly handoffQrService: HandoffQrService,
+    private readonly riderWalletService: RiderWalletService,
   ) {}
 
   @Get('pickup-offers')
@@ -41,6 +115,24 @@ export class RidersController {
     @Req() req: { user: { sub: string } },
   ) {
     return this.pickupService.acceptPickup(orderId, req.user.sub);
+  }
+
+  @Post('pickup-offers/:orderId/reject')
+  @Roles(UserRole.RIDER)
+  rejectPickupOffer(
+    @Param('orderId') orderId: string,
+    @Req() req: { user: { sub: string } },
+  ) {
+    return this.pickupService.rejectPickup(orderId, req.user.sub);
+  }
+
+  @Post('pickup-tasks/:orderId/reject')
+  @Roles(UserRole.RIDER)
+  rejectPickupTask(
+    @Param('orderId') orderId: string,
+    @Req() req: { user: { sub: string } },
+  ) {
+    return this.pickupService.rejectPickup(orderId, req.user.sub);
   }
 
   @Post('pickup-tasks/:orderId/arrive')
@@ -82,6 +174,24 @@ export class RidersController {
     return this.pickupService.capturePhoto(orderId, req.user.sub, dto.photoUrl);
   }
 
+  @Post('pickup-tasks/:orderId/photo-upload')
+  @Roles(UserRole.RIDER)
+  @UseInterceptors(FileInterceptor('photo', taskPhotoUploadOptions))
+  uploadPickupPhoto(
+    @Param('orderId') orderId: string,
+    @Req() req: { user: { sub: string } },
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('Photo image is required');
+    }
+    return this.pickupService.capturePhoto(
+      orderId,
+      req.user.sub,
+      taskPhotoPublicPath(file.filename),
+    );
+  }
+
   @Post('pickup-tasks/:orderId/generate-receipt')
   @Roles(UserRole.RIDER)
   generatePickupReceipt(
@@ -96,8 +206,21 @@ export class RidersController {
   dropAtShop(
     @Param('orderId') orderId: string,
     @Req() req: { user: { sub: string } },
+    @Body() dto: DropAtShopDto,
   ) {
-    return this.pickupService.dropAtShop(orderId, req.user.sub);
+    return this.pickupService.dropAtShop(orderId, req.user.sub, dto);
+  }
+
+  @Get('pickup-tasks/:orderId/order-qr')
+  @Roles(UserRole.RIDER)
+  getPickupOrderQr(
+    @Param('orderId') orderId: string,
+    @Req() req: { user: { sub: string; role: UserRole } },
+  ) {
+    return this.handoffQrService.getOrderHandoffQr(orderId, req.user).then((data) => ({
+      success: true,
+      data,
+    }));
   }
 
   @Post('pickup-tasks/:orderId/complete')
@@ -115,10 +238,45 @@ export class RidersController {
     return this.ridersService.getMe(req.user.sub);
   }
 
+  @Patch('me')
+  @Roles(UserRole.RIDER)
+  updateMe(@Req() req: { user: { sub: string } }, @Body() dto: UpdateRiderProfileDto) {
+    return this.ridersService.updateProfile(req.user.sub, dto);
+  }
+
+  @Post('me/documents/:type')
+  @Roles(UserRole.RIDER)
+  @UseInterceptors(FileInterceptor('document', riderDocumentUploadOptions))
+  uploadDocument(
+    @Param('type') type: string,
+    @Req() req: { user: { sub: string } },
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!isValidRiderDocumentType(type)) {
+      throw new BadRequestException('Invalid document type');
+    }
+    if (!file) {
+      throw new BadRequestException('Document image is required');
+    }
+    return this.ridersService.uploadDocument(req.user.sub, type, file.filename);
+  }
+
   @Get('notifications')
   @Roles(UserRole.RIDER)
-  listNotifications(@Req() req: { user: { sub: string } }) {
-    return this.ridersService.listNotifications(req.user.sub);
+  listNotifications(
+    @Req() req: { user: { sub: string } },
+    @Query('limit') limit = '20',
+  ) {
+    return this.ridersService.listNotifications(req.user.sub, Number(limit));
+  }
+
+  @Patch('notifications/:id/read')
+  @Roles(UserRole.RIDER)
+  markNotificationRead(
+    @Req() req: { user: { sub: string } },
+    @Param('id') id: string,
+  ) {
+    return this.ridersService.markNotificationRead(req.user.sub, id);
   }
 
   @Get('delivery-offers')
@@ -143,6 +301,15 @@ export class RidersController {
     @Req() req: { user: { sub: string } },
   ) {
     return this.deliveryService.acceptDelivery(orderId, req.user.sub);
+  }
+
+  @Post('delivery-tasks/:orderId/reject')
+  @Roles(UserRole.RIDER)
+  rejectDeliveryTask(
+    @Param('orderId') orderId: string,
+    @Req() req: { user: { sub: string } },
+  ) {
+    return this.deliveryService.rejectDelivery(orderId, req.user.sub);
   }
 
   @Post('delivery-tasks/:orderId/pickup-from-shop')
@@ -181,6 +348,16 @@ export class RidersController {
     return this.deliveryService.markCustomerReceived(orderId, req.user.sub);
   }
 
+  @Post('delivery-tasks/:orderId/verify-customer-qr')
+  @Roles(UserRole.RIDER)
+  verifyDeliveryCustomerQr(
+    @Param('orderId') orderId: string,
+    @Req() req: { user: { sub: string } },
+    @Body() dto: VerifyQrDto,
+  ) {
+    return this.deliveryService.verifyCustomerByQr(orderId, req.user.sub, dto);
+  }
+
   @Post('delivery-tasks/:orderId/arrive')
   @Roles(UserRole.RIDER)
   markDeliveryArrived(
@@ -200,6 +377,24 @@ export class RidersController {
     return this.deliveryService.capturePhoto(orderId, req.user.sub, dto.photoUrl);
   }
 
+  @Post('delivery-tasks/:orderId/photo-upload')
+  @Roles(UserRole.RIDER)
+  @UseInterceptors(FileInterceptor('photo', taskPhotoUploadOptions))
+  uploadDeliveryPhoto(
+    @Param('orderId') orderId: string,
+    @Req() req: { user: { sub: string } },
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('Photo image is required');
+    }
+    return this.deliveryService.capturePhoto(
+      orderId,
+      req.user.sub,
+      taskPhotoPublicPath(file.filename),
+    );
+  }
+
   @Post('delivery-tasks/:orderId/complete')
   @Roles(UserRole.RIDER)
   completeDelivery(
@@ -215,16 +410,82 @@ export class RidersController {
     return this.ridersService.getTasks(req.user.sub);
   }
 
+  @Get('active-assignment')
+  @Roles(UserRole.RIDER)
+  getActiveAssignment(@Req() req: { user: { sub: string } }) {
+    return this.ridersService.getActiveAssignment(req.user.sub);
+  }
+
+  @Get('tasks/history')
+  @Roles(UserRole.RIDER)
+  getTaskHistory(
+    @Req() req: { user: { sub: string } },
+    @Query('limit') limit = '30',
+  ) {
+    return this.ridersService.getTaskHistory(req.user.sub, Number(limit));
+  }
+
+  @Get('tasks/cancelled')
+  @Roles(UserRole.RIDER)
+  getCancelledTasks(
+    @Req() req: { user: { sub: string } },
+    @Query('limit') limit = '30',
+  ) {
+    return this.ridersService.getCancelledTasks(req.user.sub, Number(limit));
+  }
+
   @Get('earnings')
   @Roles(UserRole.RIDER)
   getEarnings(@Req() req: { user: { sub: string } }) {
     return this.ridersService.getEarnings(req.user.sub);
   }
 
+  @Get('performance')
+  @Roles(UserRole.RIDER)
+  getPerformance(@Req() req: { user: { sub: string } }) {
+    return this.ridersService.getPerformance(req.user.sub);
+  }
+
+  @Get('wallet')
+  @Roles(UserRole.RIDER)
+  getWallet(@Req() req: { user: { sub: string } }) {
+    return this.riderWalletService.getWallet(req.user.sub);
+  }
+
+  @Get('wallet/withdrawals')
+  @Roles(UserRole.RIDER)
+  listWithdrawals(@Req() req: { user: { sub: string } }) {
+    return this.riderWalletService.listWithdrawals(req.user.sub);
+  }
+
+  @Post('wallet/withdraw')
+  @Roles(UserRole.RIDER)
+  requestWithdrawal(
+    @Req() req: { user: { sub: string } },
+    @Body() dto: RequestWithdrawalDto,
+  ) {
+    return this.riderWalletService.requestWithdrawal(req.user.sub, dto.amount);
+  }
+
+  @Get('payout-method')
+  @Roles(UserRole.RIDER)
+  getPayoutMethod(@Req() req: { user: { sub: string } }) {
+    return this.riderWalletService.getPayoutMethod(req.user.sub);
+  }
+
+  @Patch('payout-method')
+  @Roles(UserRole.RIDER)
+  updatePayoutMethod(
+    @Req() req: { user: { sub: string } },
+    @Body() dto: UpdatePayoutMethodDto,
+  ) {
+    return this.riderWalletService.updatePayoutMethod(req.user.sub, dto);
+  }
+
   @Patch('location')
   @Roles(UserRole.RIDER)
   updateLocation(@Req() req: { user: { sub: string } }, @Body() dto: UpdateLocationDto) {
-    return this.ridersService.updateLocation(req.user.sub, dto.lat, dto.lng);
+    return this.ridersService.updateLocation(req.user.sub, dto);
   }
 
   @Post('online')
@@ -237,5 +498,40 @@ export class RidersController {
   @Roles(UserRole.RIDER)
   goOffline(@Req() req: { user: { sub: string } }) {
     return this.ridersService.setOnline(req.user.sub, false);
+  }
+
+  @Post('break/start')
+  @Roles(UserRole.RIDER)
+  startBreak(@Req() req: { user: { sub: string } }) {
+    return this.ridersService.startBreak(req.user.sub);
+  }
+
+  @Post('break/end')
+  @Roles(UserRole.RIDER)
+  endBreak(@Req() req: { user: { sub: string } }) {
+    return this.ridersService.endBreak(req.user.sub);
+  }
+
+  @Post('sos/notify')
+  @Roles(UserRole.RIDER)
+  sosNotify(@Req() req: { user: { sub: string } }, @Body() dto: TriggerSosDto) {
+    return this.riderSosService.notifyDispatch(req.user.sub, dto.orderId, dto.lat, dto.lng);
+  }
+
+  @Post('sos/location/start')
+  @Roles(UserRole.RIDER)
+  sosStartLocation(@Req() req: { user: { sub: string } }, @Body() dto: TriggerSosDto) {
+    return this.riderSosService.startLocationSharing(
+      req.user.sub,
+      dto.orderId,
+      dto.lat,
+      dto.lng,
+    );
+  }
+
+  @Post('sos/location/stop')
+  @Roles(UserRole.RIDER)
+  sosStopLocation(@Req() req: { user: { sub: string } }, @Body() dto: TriggerSosDto) {
+    return this.riderSosService.stopLocationSharing(req.user.sub, dto.orderId);
   }
 }

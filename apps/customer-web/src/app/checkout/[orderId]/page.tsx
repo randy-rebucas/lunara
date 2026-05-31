@@ -1,16 +1,19 @@
 'use client';
 
 import { useParams } from 'next/navigation';
+import { AuthLoading } from '../../../components/auth-loading';
 import { PageShell } from '../../../components/page-shell';
 import { PaymentCheckout } from '../../../components/payment/payment-checkout';
 import { PageHeader } from '../../../components/ui/page-header';
-import { useRequireOnboardingComplete } from '../../../hooks/use-require-onboarding';
+import { useProtectedPage } from '../../../hooks/use-protected-page';
 
 export default function CheckoutPage() {
   const { orderId } = useParams<{ orderId: string }>();
-  const { isLoading, ready } = useRequireOnboardingComplete();
+  const { isLoading, ready } = useProtectedPage({ requireOnboarding: true });
 
-  if (isLoading || !ready) return null;
+  if (isLoading || !ready) {
+    return <AuthLoading message="Loading checkout…" />;
+  }
 
   return (
     <PageShell narrow>

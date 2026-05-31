@@ -1,71 +1,123 @@
-import { useEffect, useState } from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
-import { formatCurrency, RIDER_DELIVERY_PAYOUT, RIDER_PICKUP_PAYOUT } from '@lunara/utils';
+import { useCallback, useEffect, useState } from 'react';
+import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { formatCurrency, RIDER_DELIVERY_PAYOUT, RIDER_PICKUP_PAYOUT, type RiderEarningType } from '@lunara/utils';
+import { DataLoadState } from '../src/components/data-load-state';
+import { EarningTypeBadge } from '../src/components/earning-type-badge';
 import { Card } from '../src/components/ui/card';
 import { Screen } from '../src/components/ui/screen';
 import { SectionHeader } from '../src/components/ui/section-header';
-import { TaskTypeBadge } from '../src/components/ui/task-type-badge';
 import { riderFetch } from '../src/api';
+import type { EarningsData } from '../src/lib/rider-types';
 import { colors, spacing, typography } from '../src/theme';
 
-interface EarningsData {
-  totalEarnings: number;
-  todayEarnings: number;
-  todayPickups: number;
-  todayDeliveries: number;
-  recentEarnings: {
-    type: 'pickup' | 'delivery';
-    amount: number;
-    orderId: string;
-    earnedAt: string;
-  }[];
-}
+const PERIOD_KEYS = [
+  { key: 'todayEarnings' as const, label: 'Today' },
+  { key: 'weekEarnings' as const, label: 'This Week' },
+  { key: 'monthEarnings' as const, label: 'This Month' },
+  { key: 'lifetimeEarnings' as const, label: 'Lifetime' },
+];
 
 export default function EarningsScreen() {
   const [data, setData] = useState<EarningsData>({
-    totalEarnings: 0,
     todayEarnings: 0,
+    weekEarnings: 0,
+    monthEarnings: 0,
+    lifetimeEarnings: 0,
+    totalEarnings: 0,
     todayPickups: 0,
     todayDeliveries: 0,
     recentEarnings: [],
   });
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState('');
+
+  const load = useCallback(async () => {
+    setError('');
+    try {
+      const next = await riderFetch<EarningsData>('/riders/earnings');
+      setData(next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load earnings');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    riderFetch<EarningsData>('/riders/earnings')
-      .then(setData)
-      .catch(() => {});
-  }, []);
+    load();
+  }, [load]);
+
+  async function onRefresh() {
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  if (loading && !error) {
+    return (
+      <Screen inStack>
+        <DataLoadState loading error="" loadingMessage="Loading earnings…" />
+      </Screen>
+    );
+  }
+
+  if (error && data.recentEarnings.length === 0 && data.lifetimeEarnings === 0) {
+    return (
+      <Screen inStack>
+        <DataLoadState loading={false} error={error} onRetry={load} />
+      </Screen>
+    );
+  }
 
   return (
     <Screen inStack>
-      <View style={styles.hero}>
-        <Text style={styles.amount}>{formatCurrency(data.todayEarnings)}</Text>
-        <Text style={styles.label}>Today&apos;s earnings</Text>
-        <Text style={styles.total}>Total: {formatCurrency(data.totalEarnings)}</Text>
-      </View>
-
-      <View style={styles.stats}>
-        <Card elevated style={styles.stat}>
-          <Text style={styles.statValue}>{data.todayPickups}</Text>
-          <Text style={styles.statLabel}>Pickups today</Text>
-          <Text style={styles.rate}>₱{RIDER_PICKUP_PAYOUT} each</Text>
-        </Card>
-        <Card elevated style={styles.stat}>
-          <Text style={styles.statValue}>{data.todayDeliveries}</Text>
-          <Text style={styles.statLabel}>Deliveries today</Text>
-          <Text style={styles.rate}>₱{RIDER_DELIVERY_PAYOUT} each</Text>
-        </Card>
-      </View>
-
-      <SectionHeader title="Recent earnings" />
       <FlatList
         style={styles.list}
         data={data.recentEarnings}
-        keyExtractor={(item, i) => `${item.orderId}-${i}`}
+        keyExtractor={(item, i) => `${item.type}-${item.orderId ?? item.note ?? i}-${i}`}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+        }
+        ListHeaderComponent={
+          <>
+            <SectionHeader title="Dashboard" hint="Earnings by period" />
+            <View style={styles.periodGrid}>
+              {PERIOD_KEYS.map((period) => (
+                <Card key={period.key} elevated style={styles.periodCard}>
+                  <Text style={styles.periodLabel}>{period.label}</Text>
+                  <Text style={styles.periodValue}>{formatCurrency(data[period.key])}</Text>
+                </Card>
+              ))}
+            </View>
+
+            <View style={styles.stats}>
+              <Card elevated style={styles.stat}>
+                <Text style={styles.statValue}>{data.todayPickups}</Text>
+                <Text style={styles.statLabel}>Pickups today</Text>
+                <Text style={styles.rate}>₱{RIDER_PICKUP_PAYOUT} each</Text>
+              </Card>
+              <Card elevated style={styles.stat}>
+                <Text style={styles.statValue}>{data.todayDeliveries}</Text>
+                <Text style={styles.statLabel}>Deliveries today</Text>
+                <Text style={styles.rate}>₱{RIDER_DELIVERY_PAYOUT} each</Text>
+              </Card>
+            </View>
+
+            <SectionHeader title="Earnings breakdown" hint="Per task and adjustments" />
+            {error ? <Text style={styles.inlineError}>{error}</Text> : null}
+          </>
+        }
         renderItem={({ item }) => (
           <Card style={styles.row}>
             <View style={styles.rowLeft}>
-              <TaskTypeBadge type={item.type === 'pickup' ? 'pickup' : 'delivery'} />
+              <EarningTypeBadge type={item.type as RiderEarningType} />
+              <Text style={styles.rowMeta}>
+                {item.orderId ? `Order ${item.orderId.slice(-6).toUpperCase()}` : item.note ?? 'Manual credit'}
+              </Text>
               <Text style={styles.rowDate}>
                 {new Date(item.earnedAt).toLocaleString('en-PH', {
                   month: 'short',
@@ -87,16 +139,28 @@ export default function EarningsScreen() {
 }
 
 const styles = StyleSheet.create({
-  hero: { marginTop: spacing.lg, marginBottom: spacing.sm },
-  amount: {
-    fontSize: 36,
-    fontWeight: '700',
-    color: colors.accent,
-    letterSpacing: -0.5,
+  list: { flex: 1 },
+  periodGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md,
+    marginBottom: spacing.lg,
   },
-  label: { ...typography.bodySm, marginTop: spacing.sm },
-  total: { marginTop: spacing.xs, color: colors.primary, fontWeight: '600', fontSize: 15 },
-  stats: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xxl },
+  periodCard: {
+    width: '47%',
+    flexGrow: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+  },
+  periodLabel: { ...typography.caption, textAlign: 'center' },
+  periodValue: {
+    marginTop: spacing.sm,
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.primary,
+    textAlign: 'center',
+  },
+  stats: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.lg },
   stat: { flex: 1, alignItems: 'center' },
   statValue: { fontSize: 24, fontWeight: '700', color: colors.foreground },
   statLabel: { marginTop: spacing.xs, ...typography.caption, textAlign: 'center' },
@@ -107,9 +171,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: spacing.sm,
   },
-  rowLeft: { gap: spacing.xs },
-  rowDate: { ...typography.caption, marginTop: 2 },
+  rowLeft: { flex: 1, gap: spacing.xs, paddingRight: spacing.md },
+  rowMeta: { ...typography.bodySm, color: colors.foreground },
+  rowDate: { ...typography.caption },
   rowAmount: { fontWeight: '700', color: colors.accent, fontSize: 16 },
   empty: { ...typography.caption, textAlign: 'center', marginTop: spacing.xxl },
-  list: { flex: 1 },
+  inlineError: { color: colors.destructive, marginBottom: spacing.sm, fontSize: 13 },
 });

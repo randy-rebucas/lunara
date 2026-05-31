@@ -4,10 +4,12 @@ import Link from 'next/link';
 import { useCallback } from 'react';
 import { formatRefundStatus } from '@lunara/utils';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
+import { AuthLoading } from '../../components/auth-loading';
 import { DataPageStatus } from '../../components/data-page-status';
 import { PageShell } from '../../components/page-shell';
 import { Card, CardBody } from '../../components/ui/card';
 import { PageHeader } from '../../components/ui/page-header';
+import { useProtectedPage } from '../../hooks/use-protected-page';
 import { useCustomerQuery } from '../../lib/use-customer-query';
 
 interface RefundRow {
@@ -22,13 +24,18 @@ interface RefundRow {
 
 export default function RefundsListPage() {
   const { api } = useAuthContext();
+  const { isLoading, ready } = useProtectedPage({ requireOnboarding: true });
 
   const load = useCallback(async () => {
     const res = await api.get<RefundRow[]>('/refunds');
     return res.data;
   }, [api]);
 
-  const { data: items, loading, error } = useCustomerQuery(load, [api]);
+  const { data: items, loading, error } = useCustomerQuery(load, [ready, api]);
+
+  if (isLoading || !ready) {
+    return <AuthLoading message="Loading refunds…" />;
+  }
 
   return (
     <PageShell>

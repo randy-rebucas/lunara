@@ -36,3 +36,9 @@ jobs:
           npm run typecheck --workspace=@lunara/customer-web
           npm run typecheck --workspace=@lunara/admin-web
           npm run typecheck --workspace=@lunara/partner-web
+
+      - name: Lint partner web
+        run: npm run lint --workspace=@lunara/partner-web
+
+      - name: Build partner web
+        run: npm run build --workspace=@lunara/partner-web

@@ -2,12 +2,14 @@
 
 import Link from 'next/link';
 import { useCallback } from 'react';
-import { useAuthContext } from '@lunara/hooks/auth-provider';
+import { AuthLoading } from '../../components/auth-loading';
 import { DataPageStatus } from '../../components/data-page-status';
 import { PageShell } from '../../components/page-shell';
 import { Card, CardBody } from '../../components/ui/card';
 import { PageHeader } from '../../components/ui/page-header';
+import { useProtectedPage } from '../../hooks/use-protected-page';
 import { useCustomerQuery } from '../../lib/use-customer-query';
+import { useAuthContext } from '@lunara/hooks/auth-provider';
 
 interface Ticket {
   _id: string;
@@ -19,13 +21,18 @@ interface Ticket {
 
 export default function SupportTicketsPage() {
   const { api } = useAuthContext();
+  const { isLoading, ready } = useProtectedPage({ requireOnboarding: true });
 
   const load = useCallback(async () => {
     const res = await api.get<Ticket[]>('/support/tickets');
     return res.data;
   }, [api]);
 
-  const { data: tickets, loading, error } = useCustomerQuery(load, [api]);
+  const { data: tickets, loading, error } = useCustomerQuery(load, [ready, api]);
+
+  if (isLoading || !ready) {
+    return <AuthLoading message="Loading support…" />;
+  }
 
   return (
     <PageShell>

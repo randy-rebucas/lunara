@@ -1,23 +1,47 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Linking, StyleSheet, Text } from 'react-native';
+import { Alert, Image, StyleSheet, Text, View } from 'react-native';
 import {
   DELIVERY_WORKFLOW_STEPS,
   formatCurrency,
   getDeliveryWorkflowStepIndex,
 } from '@lunara/utils';
 import { OpsStepper } from '../../src/components/ops-stepper';
+import { TaskDetailsCard } from '../../src/components/task-details-card';
+import { DataLoadState } from '../../src/components/data-load-state';
 import { Button } from '../../src/components/ui/button';
 import { Card } from '../../src/components/ui/card';
 import { Screen } from '../../src/components/ui/screen';
-import { riderFetch } from '../../src/api';
+import { riderFetch, riderUpload, loadTaskWithCache, isQueuedResponse } from '../../src/api';
+import { useRiderOrderSocket } from '../../src/hooks/use-rider-dispatch-socket';
+import { useOrderPendingCount } from '../../src/hooks/use-offline-sync';
+import { PendingSyncChip } from '../../src/components/pending-sync-chip';
+import { SosButton } from '../../src/components/sos-button';
+import { loadTaskCache } from '../../src/lib/offline/task-cache';
+import { isOnline } from '../../src/lib/offline/network';
+import { captureTaskPhoto } from '../../src/lib/task-photo';
+import { resolveMediaUrl } from '../../src/lib/media-url';
+import { callPhone, promptNavigate } from '../../src/lib/task-contact';
+import type { RiderShopLocation, RiderTaskAddress } from '../../src/lib/rider-task-types';
 import { colors, spacing, typography } from '../../src/theme';
 
 interface DeliveryTask {
   _id: string;
   status: string;
   bookingType: string;
+  orderNumber?: string;
   branchName?: string;
+  branchCode?: string;
+  shopName?: string;
+  estimatedWeightKg?: number;
+  specialInstructions?: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerPhoneMasked?: string;
+  shopPhone?: string;
+  shopPhoneMasked?: string;
+  canReject?: boolean;
   deliveryWorkflowSteps?: string[];
   deliveryWorkflowStep?: number;
   customerReceived?: boolean;
@@ -35,48 +59,69 @@ interface DeliveryTask {
     photoUrl?: string;
     receiptCode?: string;
   };
-  customerPhoneMasked?: string;
-  deliveryAddress?: {
-    label: string;
-    line1: string;
-    city: string;
-    latitude?: number;
-    longitude?: number;
-  } | null;
+  deliveryAddress?: RiderTaskAddress | null;
+  shopLocation?: RiderShopLocation | null;
 }
 
 export default function DeliveryScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const pendingCount = useOrderPendingCount(id);
   const [task, setTask] = useState<DeliveryTask | null>(null);
+  const [fromCache, setFromCache] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
   const load = useCallback(async () => {
     if (!id) return;
-    const data = await riderFetch<DeliveryTask>(`/riders/delivery-tasks/${id}`);
-    setTask(data);
+    setLoadError('');
+    try {
+      const { data, fromCache: cached } = await loadTaskWithCache<DeliveryTask>(
+        `/riders/delivery-tasks/${id}`,
+        id,
+      );
+      setTask(data);
+      setFromCache(cached);
+    } catch {
+      const offline = !(await isOnline());
+      setLoadError(
+        offline
+          ? 'Offline — open this task while online first to cache it locally.'
+          : 'Could not load delivery task',
+      );
+    }
   }, [id]);
 
   useEffect(() => {
-    load().catch((e) =>
-      Alert.alert('Error', e instanceof Error ? e.message : 'Could not load delivery'),
-    );
+    load();
   }, [load]);
 
-  useEffect(() => {
-    if (!task?.delivery?.customerReceivedAt || task.customerSigned) return;
-    const interval = setInterval(() => {
-      load().catch(() => {});
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [task?.delivery?.customerReceivedAt, task?.customerSigned, load]);
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
+
+  useRiderOrderSocket(id, load);
 
   async function run<T>(fn: () => Promise<T>, msg?: string) {
     setLoading(true);
     try {
-      await fn();
+      const res = await fn();
+      if (isQueuedResponse(res)) {
+        const cached = id ? await loadTaskCache<DeliveryTask>(id) : null;
+        if (cached) {
+          setTask(cached);
+          setFromCache(true);
+        }
+        if (msg) {
+          Alert.alert('Saved offline', `${msg} — will sync when you're back online.`);
+        }
+        return res;
+      }
       await load();
       if (msg) Alert.alert('Done', msg);
+      return res;
     } catch (e) {
       Alert.alert('Error', e instanceof Error ? e.message : 'Failed');
     } finally {
@@ -84,21 +129,36 @@ export default function DeliveryScreen() {
     }
   }
 
-  function openMaps(
-    addr: { line1: string; city: string; latitude?: number; longitude?: number },
-  ) {
-    const q = encodeURIComponent(`${addr.line1}, ${addr.city}`);
-    const url =
-      addr.latitude && addr.longitude
-        ? `https://www.google.com/maps/dir/?api=1&destination=${addr.latitude},${addr.longitude}`
-        : `https://www.google.com/maps/search/?api=1&query=${q}`;
-    Linking.openURL(url);
+  function photoUri(url?: string) {
+    if (!url) return undefined;
+    if (url.startsWith('file://')) return url;
+    return resolveMediaUrl(url);
+  }
+
+  function confirmReject() {
+    Alert.alert('Reject task', 'Decline this delivery assignment?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reject',
+        style: 'destructive',
+        onPress: () =>
+          void run(async () => {
+            await riderFetch(`/riders/delivery-tasks/${id}/reject`, { method: 'POST' });
+            router.back();
+          }),
+      },
+    ]);
   }
 
   if (!task) {
     return (
       <Screen inStack>
-        <Text style={typography.body}>Loading…</Text>
+        <DataLoadState
+          loading={!loadError}
+          error={loadError}
+          loadingMessage="Loading delivery task…"
+          onRetry={load}
+        />
       </Screen>
     );
   }
@@ -113,31 +173,64 @@ export default function DeliveryScreen() {
   const isOffer =
     task.status === 'ready_for_delivery' && !d.acceptedAt && !isAssigned;
   const done = task.status === 'delivered' || task.status === 'completed';
+  const isActiveDelivery = Boolean(d.acceptedAt && !done && !isOffer);
 
   return (
-    <Screen scroll inStack contentStyle={styles.content}>
+    <View style={styles.screenWrap}>
+      <Screen scroll inStack contentStyle={styles.content}>
       <Text style={styles.title}>Delivery route</Text>
       <Text style={styles.subtitle}>
         {task.bookingType.replace(/_/g, ' ')} · {task.status.replace(/_/g, ' ')}
         {task.branchName ? ` · ${task.branchName}` : ''}
       </Text>
       <OpsStepper steps={steps} currentIndex={stepIndex} />
+      {pendingCount > 0 ? <PendingSyncChip /> : null}
+      {fromCache ? (
+        <Text style={styles.cacheHint}>Showing cached task — changes sync when online</Text>
+      ) : null}
 
-      {task.branchName && (
-        <Card elevated style={styles.card}>
-          <Text style={styles.cardTitle}>Pickup from shop</Text>
-          <Text style={styles.cardBody}>{task.branchName}</Text>
-        </Card>
-      )}
-
-      {task.deliveryAddress && (
-        <Card elevated style={styles.card}>
-          <Text style={styles.cardTitle}>Deliver to · {task.deliveryAddress.label}</Text>
-          <Text style={styles.cardBody}>
-            {task.deliveryAddress.line1}, {task.deliveryAddress.city}
-          </Text>
-        </Card>
-      )}
+      <TaskDetailsCard
+        task={{
+          orderNumber: task.orderNumber,
+          bookingType: task.bookingType,
+          estimatedWeightKg: task.estimatedWeightKg,
+          specialInstructions: task.specialInstructions,
+          customerName: task.customerName,
+          customerPhone: task.customerPhone,
+          customerPhoneMasked: task.customerPhoneMasked,
+          customerAddress: task.deliveryAddress,
+          shopName: task.shopName,
+          branchName: task.branchName,
+          branchCode: task.branchCode,
+          shopLocation: task.shopLocation,
+          shopPhone: task.shopPhone,
+          shopPhoneMasked: task.shopPhoneMasked,
+          canReject: task.canReject,
+        }}
+        taskType="delivery"
+        showActions={Boolean(isAssigned && !done) || isOffer}
+        loading={loading}
+        onAccept={
+          isAssigned && !d.acceptedAt
+            ? () =>
+                run(
+                  () => riderFetch(`/riders/delivery-offers/${id}/accept`, { method: 'POST' }),
+                  'Assignment acknowledged',
+                )
+            : undefined
+        }
+        onReject={task.canReject ? confirmReject : undefined}
+        onNavigateCustomer={
+          task.deliveryAddress && d.pickedUpFromShopAt
+            ? () => promptNavigate(task.deliveryAddress!)
+            : undefined
+        }
+        onNavigateShop={
+          task.shopLocation ? () => promptNavigate(task.shopLocation!) : undefined
+        }
+        onCallCustomer={() => callPhone(task.customerPhone)}
+        onCallShop={() => callPhone(task.shopPhone)}
+      />
 
       {isOffer && (
         <Card muted style={styles.card}>
@@ -147,20 +240,6 @@ export default function DeliveryScreen() {
             the home screen.
           </Text>
         </Card>
-      )}
-
-      {isAssigned && !d.acceptedAt && (
-        <Button
-          label="Acknowledge assignment"
-          disabled={loading}
-          onPress={() =>
-            run(
-              () => riderFetch(`/riders/delivery-offers/${id}/accept`, { method: 'POST' }),
-              'Assignment acknowledged',
-            )
-          }
-          style={styles.action}
-        />
       )}
 
       {d.acceptedAt && !done && (
@@ -199,30 +278,35 @@ export default function DeliveryScreen() {
             />
           )}
 
-          {task.status === 'out_for_delivery' && d.pickedUpFromShopAt && (
-            <Button
-              label="Navigate to customer"
-              variant="secondary"
-              onPress={() => task.deliveryAddress && openMaps(task.deliveryAddress)}
-              style={styles.action}
-            />
-          )}
-
           {task.canMarkCustomerReceived && (
-            <Button
-              label="Customer receives"
-              disabled={loading}
-              onPress={() =>
-                run(
-                  () =>
-                    riderFetch(`/riders/delivery-tasks/${id}/customer-received`, {
-                      method: 'POST',
-                    }),
-                  'Or customer verifies in their app',
-                )
-              }
-              style={styles.action}
-            />
+            <>
+              <Button
+                label="Scan Customer QR"
+                disabled={loading}
+                onPress={() =>
+                  router.push({
+                    pathname: '/scan',
+                    params: { orderId: id!, mode: 'customer_delivery' },
+                  })
+                }
+                style={styles.action}
+              />
+              <Button
+                label="Customer receives (manual)"
+                variant="outline"
+                disabled={loading}
+                onPress={() =>
+                  run(
+                    () =>
+                      riderFetch(`/riders/delivery-tasks/${id}/customer-received`, {
+                        method: 'POST',
+                      }),
+                    'Or customer verifies in their app',
+                  )
+                }
+                style={styles.action}
+              />
+            </>
           )}
 
           {(task.customerReceived || d.customerReceivedAt) && (
@@ -246,20 +330,30 @@ export default function DeliveryScreen() {
               label="Photo proof"
               disabled={loading}
               onPress={() =>
-                run(
-                  () =>
-                    riderFetch(`/riders/delivery-tasks/${id}/photo`, {
-                      method: 'POST',
-                      body: JSON.stringify({
-                        photoUrl: `https://storage.lunara.dev/delivery/${id}-${Date.now()}.jpg`,
-                      }),
-                    }),
-                  'Photo proof saved',
-                )
+                run(async () => {
+                  const captured = await captureTaskPhoto();
+                  if (!captured) return;
+                  return riderUpload(
+                    `/riders/delivery-tasks/${id}/photo-upload`,
+                    captured.formData,
+                    id,
+                  );
+                }, 'Photo proof saved')
               }
               style={styles.action}
             />
           )}
+
+          {d.photoUrl ? (
+            <Card elevated style={styles.card}>
+              <Text style={styles.cardTitle}>Delivery photo proof</Text>
+              <Image
+                source={{ uri: photoUri(d.photoUrl) }}
+                style={styles.photoPreview}
+                accessibilityLabel="Delivery photo proof"
+              />
+            </Card>
+          ) : null}
 
           {task.canComplete && (
             <Button
@@ -303,23 +397,38 @@ export default function DeliveryScreen() {
           <Text style={styles.cardBody}>Order delivered and completed.</Text>
         </Card>
       )}
-    </Screen>
+      </Screen>
+      {id ? <SosButton orderId={id} taskActive={isActiveDelivery} /> : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { paddingBottom: spacing.xxxl },
+  screenWrap: { flex: 1 },
+  content: { paddingBottom: spacing.xxxl + 72 },
   title: { ...typography.title, fontSize: 22 },
   subtitle: {
     marginTop: spacing.xs,
     ...typography.bodySm,
     textTransform: 'capitalize',
   },
+  cacheHint: {
+    marginTop: spacing.sm,
+    ...typography.caption,
+    color: colors.warning,
+  },
   card: { marginTop: spacing.lg },
   cardTitle: { ...typography.subheading, fontSize: 16 },
   cardBody: { marginTop: spacing.xs + 2, ...typography.bodySm },
   hint: { marginTop: spacing.sm, ...typography.bodySm },
   action: { marginTop: spacing.lg },
+  photoPreview: {
+    marginTop: spacing.sm,
+    width: '100%',
+    height: 180,
+    borderRadius: 12,
+    backgroundColor: colors.surfaceMuted,
+  },
   receiptCode: {
     marginTop: spacing.sm,
     fontSize: 20,

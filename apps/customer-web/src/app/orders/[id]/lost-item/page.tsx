@@ -5,22 +5,24 @@ import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Button } from '@lunara/ui';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
+import { AuthLoading } from '../../../../components/auth-loading';
 import { PageShell } from '../../../../components/page-shell';
 import { Card, CardBody } from '../../../../components/ui/card';
 import { FormLabel, Input } from '../../../../components/ui/input';
+import { useProtectedPage } from '../../../../hooks/use-protected-page';
 
 export default function ReportLostItemPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { api, isAuthenticated, isLoading } = useAuthContext();
+  const { api } = useAuthContext();
+  const { isLoading, ready } = useProtectedPage({ requireOnboarding: true });
   const [description, setDescription] = useState('');
   const [missingItems, setMissingItems] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  if (!isLoading && !isAuthenticated) {
-    router.replace('/login');
-    return null;
+  if (isLoading || !ready) {
+    return <AuthLoading message="Loading…" />;
   }
 
   async function handleSubmit(e: React.FormEvent) {

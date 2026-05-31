@@ -6,15 +6,17 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Server, Socket } from 'socket.io';
 import type { JwtPayload } from '@lunara/types';
 import { UserRole } from '@lunara/types';
+import { normalizeRiderLocationPayload, riderLocationWirePayload } from '@lunara/utils';
 import { getJwtSecret } from '../../common/config/jwt-config';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
+import { RiderSosService } from '../sos/rider-sos.service';
 
 @Injectable()
 @WebSocketGateway({ cors: { origin: '*' }, namespace: '/tracking' })
@@ -28,6 +30,8 @@ export class TrackingGateway implements OnGatewayConnection {
   constructor(
     private readonly jwtService: JwtService,
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
+    @Inject(forwardRef(() => RiderSosService))
+    private readonly riderSosService: RiderSosService,
   ) {}
 
   handleConnection(client: Socket) {
@@ -99,7 +103,18 @@ export class TrackingGateway implements OnGatewayConnection {
   @SubscribeMessage('riderLocation')
   handleRiderLocation(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { orderId: string; lat: number; lng: number; riderId: string },
+    @MessageBody()
+    data: {
+      orderId: string;
+      riderId: string;
+      lat?: number;
+      lng?: number;
+      latitude?: number;
+      longitude?: number;
+      speed?: number;
+      heading?: number;
+      timestamp?: string;
+    },
   ) {
     const user = this.getUser(client);
     if (!user || user.role !== UserRole.RIDER) {
@@ -110,13 +125,66 @@ export class TrackingGateway implements OnGatewayConnection {
       return { success: false, error: 'Forbidden' };
     }
 
+    let normalized;
+    try {
+      normalized = normalizeRiderLocationPayload(data);
+    } catch {
+      return { success: false, error: 'Invalid location payload' };
+    }
+
+    const wire = riderLocationWirePayload(normalized);
     this.server.to(`order:${data.orderId}`).emit('locationUpdate', {
       orderId: data.orderId,
       riderId: data.riderId,
-      lat: data.lat,
-      lng: data.lng,
-      timestamp: new Date().toISOString(),
+      ...wire,
     });
+
+    void this.riderSosService.recordSosLocation(
+      user.sub,
+      data.orderId,
+      normalized.latitude,
+      normalized.longitude,
+    );
+
+    return { success: true };
+  }
+
+  @SubscribeMessage('sosLocation')
+  handleSosLocation(
+    @ConnectedSocket() client: Socket,
+    @MessageBody()
+    data: {
+      orderId: string;
+      lat?: number;
+      lng?: number;
+      latitude?: number;
+      longitude?: number;
+      speed?: number;
+      heading?: number;
+      timestamp?: string;
+    },
+  ) {
+    const user = this.getUser(client);
+    if (!user || user.role !== UserRole.RIDER) {
+      return { success: false, error: 'Forbidden' };
+    }
+    if (!data?.orderId) {
+      return { success: false, error: 'orderId required' };
+    }
+
+    let normalized;
+    try {
+      normalized = normalizeRiderLocationPayload(data);
+    } catch {
+      return { success: false, error: 'Invalid location payload' };
+    }
+
+    void this.riderSosService.recordSosLocation(
+      user.sub,
+      data.orderId,
+      normalized.latitude,
+      normalized.longitude,
+    );
     return { success: true };
   }
 
@@ -172,9 +240,19 @@ export class TrackingGateway implements OnGatewayConnection {
     this.server.to('riders:online').emit('deliveryAssignment', payload);
   }
 
+  /** In-app notification created for a rider (assignments, alerts). */
+  emitRiderNotification(riderUserId: string, payload: Record<string, unknown>) {
+    this.server.to(`rider:${riderUserId}`).emit('riderNotification', payload);
+  }
+
   /** Alerts admin dispatcher UI (control tower). */
   emitAdminDispatcherAlert(payload: Record<string, unknown>) {
     this.server.to('admin:operations').emit('dispatcherAlert', payload);
+  }
+
+  /** Live SOS location for admin dispatchers. */
+  emitSosLocationUpdate(payload: Record<string, unknown>) {
+    this.server.to('admin:operations').emit('sosLocationUpdate', payload);
   }
 
   /** Refresh admin dispatch queue when counts may have changed. */
@@ -263,6 +341,16 @@ export class TrackingGateway implements OnGatewayConnection {
       return { success: false, error: 'Forbidden' };
     }
     client.join('riders:online');
+    return { success: true };
+  }
+
+  @SubscribeMessage('leaveRiders')
+  handleLeaveRiders(@ConnectedSocket() client: Socket) {
+    const user = this.getUser(client);
+    if (!user || user.role !== UserRole.RIDER) {
+      return { success: false, error: 'Forbidden' };
+    }
+    client.leave('riders:online');
     return { success: true };
   }
 }

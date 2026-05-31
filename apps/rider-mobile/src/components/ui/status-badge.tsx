@@ -1,16 +1,48 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing } from '../../theme';
+import type { ShiftStatus } from '../../lib/rider-types';
 
 interface StatusBadgeProps {
-  online: boolean;
+  online?: boolean;
+  shiftStatus?: ShiftStatus;
 }
 
-export function StatusBadge({ online }: StatusBadgeProps) {
+function resolveShiftStatus(online: boolean | undefined, shiftStatus?: ShiftStatus): ShiftStatus {
+  if (shiftStatus) return shiftStatus;
+  return online ? 'online' : 'offline';
+}
+
+const LABELS: Record<ShiftStatus, string> = {
+  online: 'Online — receiving assignments',
+  offline: 'Offline',
+  break: 'On break — not receiving assignments',
+};
+
+export function StatusBadge({ online, shiftStatus }: StatusBadgeProps) {
+  const status = resolveShiftStatus(online, shiftStatus);
+  const isOnline = status === 'online';
+  const isBreak = status === 'break';
+
   return (
-    <View style={[styles.badge, online ? styles.online : styles.offline]}>
-      <View style={[styles.dot, online ? styles.dotOnline : styles.dotOffline]} />
-      <Text style={[styles.text, online ? styles.textOnline : styles.textOffline]}>
-        {online ? 'Online — receiving assignments' : 'Offline'}
+    <View
+      style={[
+        styles.badge,
+        isOnline ? styles.online : isBreak ? styles.break : styles.offline,
+      ]}
+    >
+      <View
+        style={[
+          styles.dot,
+          isOnline ? styles.dotOnline : isBreak ? styles.dotBreak : styles.dotOffline,
+        ]}
+      />
+      <Text
+        style={[
+          styles.text,
+          isOnline ? styles.textOnline : isBreak ? styles.textBreak : styles.textOffline,
+        ]}
+      >
+        {LABELS[status]}
       </Text>
     </View>
   );
@@ -30,6 +62,9 @@ const styles = StyleSheet.create({
   online: {
     backgroundColor: colors.accentLight,
   },
+  break: {
+    backgroundColor: '#FEF3C7',
+  },
   offline: {
     backgroundColor: colors.surfaceMuted,
   },
@@ -41,6 +76,9 @@ const styles = StyleSheet.create({
   dotOnline: {
     backgroundColor: colors.accent,
   },
+  dotBreak: {
+    backgroundColor: '#D97706',
+  },
   dotOffline: {
     backgroundColor: colors.mutedForeground,
   },
@@ -50,6 +88,9 @@ const styles = StyleSheet.create({
   },
   textOnline: {
     color: colors.accentDark,
+  },
+  textBreak: {
+    color: '#92400E',
   },
   textOffline: {
     color: colors.muted,

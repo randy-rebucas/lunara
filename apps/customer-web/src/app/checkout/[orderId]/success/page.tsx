@@ -3,6 +3,7 @@
 import { useParams, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { PaymentStatus } from '@lunara/types';
+import { AuthLoading } from '../../../../components/auth-loading';
 import { ButtonLink } from '../../../../components/ui/button-link';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 import {
@@ -10,14 +11,14 @@ import {
   type PaymentReceiptData,
 } from '../../../../components/payment/payment-receipt';
 import { PageShell } from '../../../../components/page-shell';
-import { useRequireOnboardingComplete } from '../../../../hooks/use-require-onboarding';
+import { useProtectedPage } from '../../../../hooks/use-protected-page';
 
 export default function PaymentSuccessPage() {
   const { orderId } = useParams<{ orderId: string }>();
   const searchParams = useSearchParams();
   const paymentId = searchParams.get('paymentId');
   const { api } = useAuthContext();
-  const { isLoading, ready } = useRequireOnboardingComplete();
+  const { isLoading, ready } = useProtectedPage({ requireOnboarding: true });
   const [payment, setPayment] = useState<PaymentReceiptData | null>(null);
   const [orderTotal, setOrderTotal] = useState(0);
   const [loadError, setLoadError] = useState('');
@@ -35,7 +36,9 @@ export default function PaymentSuccessPage() {
       .catch((e) => setLoadError(e instanceof Error ? e.message : 'Could not load receipt'));
   }, [ready, api, paymentId]);
 
-  if (isLoading || !ready) return null;
+  if (isLoading || !ready) {
+    return <AuthLoading message="Loading receipt…" />;
+  }
 
   const isPaid = payment?.status === PaymentStatus.PAID;
   const isCashPending = payment?.method === 'cash' && payment?.status === PaymentStatus.PENDING;

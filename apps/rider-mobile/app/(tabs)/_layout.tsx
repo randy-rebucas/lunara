@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { RiderOperationsProvider, useRiderOperations } from '../../src/context/rider-operations';
+import { useRiderOperations } from '../../src/context/rider-operations';
 import { RiderAlertsBell } from '../../src/components/rider-alerts-bell';
 import { TAB_BAR_CONTENT_HEIGHT } from '../../src/hooks/use-tab-bar-height';
 import { colors, spacing } from '../../src/theme';
@@ -84,9 +84,5 @@ function TabsNavigator() {
 }
 
 export default function TabsLayout() {
-  return (
-    <RiderOperationsProvider>
-      <TabsNavigator />
-    </RiderOperationsProvider>
-  );
+  return <TabsNavigator />;
 }

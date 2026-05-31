@@ -15,17 +15,21 @@ export interface AppNotification {
 export type NotificationRoute =
   | { kind: 'order'; orderId: string }
   | { kind: 'review'; orderId: string }
+  | { kind: 'refund'; refundId: string }
   | { kind: 'wallet' };
 
 export function resolveNotificationRoute(notification: AppNotification): NotificationRoute | null {
   const type = notification.data?.type;
   const orderId = notification.data?.orderId;
+  const refundId = notification.data?.refundId;
 
   if (type === 'review_request' && orderId) {
     return { kind: 'review', orderId };
   }
   if (type === 'refund_update') {
-    return orderId ? { kind: 'order', orderId } : { kind: 'wallet' };
+    if (refundId) return { kind: 'refund', refundId };
+    if (orderId) return { kind: 'order', orderId };
+    return { kind: 'wallet' };
   }
   if (orderId) {
     return { kind: 'order', orderId };
@@ -54,4 +58,19 @@ export function formatNotificationTime(iso: string): string {
     hour: 'numeric',
     minute: '2-digit',
   });
+}
+
+export function notificationRouteToPath(
+  route: NonNullable<ReturnType<typeof resolveNotificationRoute>>,
+): string {
+  switch (route.kind) {
+    case 'review':
+      return `/review/${route.orderId}`;
+    case 'order':
+      return `/orders/${route.orderId}`;
+    case 'refund':
+      return `/refunds/${route.refundId}`;
+    case 'wallet':
+      return '/(tabs)/wallet';
+  }
 }

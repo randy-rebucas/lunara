@@ -16,7 +16,10 @@ const partnerNav = [
   { href: '/revenue', label: 'Revenue' },
 ];
 
-const staffNav = [{ href: '/orders', label: 'Processing queue' }];
+const staffNav = [
+  { href: '/orders', label: 'Processing queue' },
+  { href: '/orders/incoming', label: 'Shop intake' },
+];
 
 function isActive(pathname: string, href: string) {
   return pathname === href || (href !== '/' && pathname.startsWith(`${href}/`));

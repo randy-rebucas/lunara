@@ -6,14 +6,33 @@ import { getAdminToken } from './admin-api';
 export interface DispatcherAlert {
   type?: string;
   orderId?: string;
+  incidentId?: string;
+  riderUserId?: string;
+  riderName?: string;
   message?: string;
   branchName?: string;
   status?: string;
+  lat?: number;
+  lng?: number;
+  mapsUrl?: string;
+  at?: string;
+}
+
+export interface SosLocationUpdate {
+  incidentId: string;
+  orderId: string;
+  riderUserId: string;
+  riderName: string;
+  lat: number;
+  lng: number;
+  timestamp: string;
+  mapsUrl?: string;
 }
 
 export function useAdminOperationsSocket(handlers: {
   onDispatchQueueUpdated?: () => void;
   onDispatcherAlert?: (alert: DispatcherAlert) => void;
+  onSosLocationUpdate?: (update: SosLocationUpdate) => void;
 }) {
   const [connected, setConnected] = useState(false);
   const handlersRef = useRef(handlers);
@@ -40,6 +59,9 @@ export function useAdminOperationsSocket(handlers: {
     });
     socket.on('dispatcherAlert', (data: DispatcherAlert) => {
       handlersRef.current.onDispatcherAlert?.(data);
+    });
+    socket.on('sosLocationUpdate', (data: SosLocationUpdate) => {
+      handlersRef.current.onSosLocationUpdate?.(data);
     });
 
     return () => {

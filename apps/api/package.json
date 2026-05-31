@@ -9,7 +9,7 @@
     "start": "node dist/main.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
     "typecheck": "tsc --noEmit",
-    "test": "jest",
+    "test": "node --import tsx --test src/modules/push/**/*.test.ts src/modules/riders/**/*.test.ts src/modules/sos/**/*.test.ts",
     "seed": "npx ts-node src/scripts/seed.ts",
     "clean": "rimraf dist tsconfig.tsbuildinfo"
   },
@@ -29,6 +29,7 @@
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
+    "firebase-admin": "^13.10.0",
     "ioredis": "^5.6.1",
     "mongoose": "^8.15.1",
     "passport": "^0.7.0",

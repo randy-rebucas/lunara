@@ -23,3 +23,4 @@ export * from './deals.js';
 export * from './share.js';
 export * from './user-roles.js';
 export * from './sla.js';
+export * from './qr-handoff.js';

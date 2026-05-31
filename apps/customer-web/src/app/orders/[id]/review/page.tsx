@@ -8,7 +8,8 @@ import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { PageShell } from '../../../../components/page-shell';
 import { ReviewForm } from '../../../../components/review/review-form';
 import { StarRating } from '../../../../components/review/star-rating';
-import { useRequireOnboardingComplete } from '../../../../hooks/use-require-onboarding';
+import { useProtectedPage } from '../../../../hooks/use-protected-page';
+import { AuthLoading } from '../../../../components/auth-loading';
 
 interface ReviewData {
   _id: string;
@@ -26,7 +27,7 @@ interface ReviewStatus {
 export default function OrderReviewPage() {
   const { id } = useParams<{ id: string }>();
   const { api } = useAuthContext();
-  const { isLoading, ready } = useRequireOnboardingComplete();
+  const { isLoading, ready } = useProtectedPage({ requireOnboarding: true });
   const [status, setStatus] = useState<ReviewStatus | null>(null);
   const [loadError, setLoadError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -67,7 +68,9 @@ export default function OrderReviewPage() {
     }
   }
 
-  if (isLoading || !ready) return null;
+  if (isLoading || !ready) {
+    return <AuthLoading message="Loading review…" />;
+  }
 
   const showForm = status?.canReview && !published;
   const showPublished = published ?? status?.review;

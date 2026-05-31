@@ -9,6 +9,7 @@ import { RefundsModule } from '../refunds/refunds.module';
 import { BranchesModule } from '../branches/branches.module';
 import { OrdersModule } from '../orders/orders.module';
 import { RidersModule } from '../riders/riders.module';
+import { SosModule } from '../sos/sos.module';
 import { AdminController } from './admin.controller';
 import { AdminOperationsService } from './admin-operations.service';
 import { AdminDispatchService } from './admin-dispatch.service';
@@ -29,6 +30,7 @@ import { Promotion, PromotionSchema } from './schemas/promotion.schema';
     BranchesModule,
     OrdersModule,
     RidersModule,
+    SosModule,
   ],
   controllers: [AdminController],
   providers: [AdminService, AdminOperationsService, AdminDispatchService],

@@ -7,12 +7,13 @@ import { fetchOnboardingStatus, getOnboardingPath } from '@lunara/hooks/onboardi
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { AuthShellWide } from '../../../components/auth-shell';
 import { OnboardingProgress } from '../../../components/onboarding-progress';
+import { AuthLoading } from '../../../components/auth-loading';
 import { Input } from '../../../components/ui/input';
 
 export default function OnboardingProfilePage() {
-  const { isAuthenticated, isLoading, api } = useAuthContext();
+  const { isAuthenticated, isLoading, api, user } = useAuthContext();
   const router = useRouter();
-  const [form, setForm] = useState({ firstName: '', lastName: '', email: '' });
+  const [form, setForm] = useState({ firstName: '', lastName: '' });
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -46,7 +47,7 @@ export default function OnboardingProfilePage() {
     }
   }
 
-  if (isLoading || !isAuthenticated) return null;
+  if (isLoading || !isAuthenticated) return <AuthLoading message="Loading…" />;
 
   return (
     <AuthShellWide>
@@ -70,12 +71,15 @@ export default function OnboardingProfilePage() {
                 required
               />
             </div>
-            <Input
-              placeholder="Email (optional)"
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-            />
+            {user?.email && (
+              <div>
+                <p className="form-label">Email</p>
+                <p className="rounded-lg bg-slate-50 px-4 py-2.5 text-sm text-muted">{user.email}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Email is tied to your account and cannot be changed here.
+                </p>
+              </div>
+            )}
             {error && (
               <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
             )}

@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { UserRole } from '@lunara/types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { DeliveryService } from '../riders/delivery.service';
+import { HandoffQrService } from '../handoff/handoff-qr.service';
 import { CustomerSignDeliveryDto, CustomerVerifyDeliveryDto } from './dto/delivery.dto';
 import { AssignRiderDto, CreateOrderDto, UpdateOrderStatusDto } from './dto/order.dto';
 import { OrdersService } from './orders.service';
@@ -14,6 +15,7 @@ export class OrdersController {
   constructor(
     private readonly ordersService: OrdersService,
     private readonly deliveryService: DeliveryService,
+    private readonly handoffQrService: HandoffQrService,
   ) {}
 
   @Post()
@@ -35,6 +37,22 @@ export class OrdersController {
     @Query('limit') limit = '20',
   ) {
     return this.ordersService.findAll(req.user, Number(page), Number(limit));
+  }
+
+  @Get(':id/handoff-qr')
+  @Roles(UserRole.CUSTOMER)
+  getCustomerHandoffQr(
+    @Param('id') id: string,
+    @Query('context') context: 'pickup' | 'delivery',
+    @Req() req: { user: { sub: string } },
+  ) {
+    if (context !== 'pickup' && context !== 'delivery') {
+      throw new BadRequestException('context must be pickup or delivery');
+    }
+    return this.handoffQrService.getCustomerHandoffQr(id, req.user.sub, context).then((data) => ({
+      success: true,
+      data,
+    }));
   }
 
   @Get(':id/delivery')

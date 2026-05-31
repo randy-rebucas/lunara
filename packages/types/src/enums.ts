@@ -74,6 +74,11 @@ export enum NotificationChannel {
   IN_APP = 'in_app',
 }
 
+export enum PushPlatform {
+  IOS = 'ios',
+  ANDROID = 'android',
+}
+
 export enum AddressType {
   HOME = 'home',
   WORK = 'work',

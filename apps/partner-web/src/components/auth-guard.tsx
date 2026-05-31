@@ -2,12 +2,13 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { AuthLoading } from './auth-loading';
 import { getPartnerToken } from '../lib/partner-api';
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState(pathname === '/login');
 
   useEffect(() => {
     if (pathname === '/login') {
@@ -22,6 +23,6 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     setReady(true);
   }, [pathname, router]);
 
-  if (!ready) return null;
+  if (!ready) return <AuthLoading message="Checking session…" />;
   return <>{children}</>;
 }

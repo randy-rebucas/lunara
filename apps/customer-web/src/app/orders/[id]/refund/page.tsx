@@ -5,14 +5,17 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Button } from '@lunara/ui';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
+import { AuthLoading } from '../../../../components/auth-loading';
 import { PageShell } from '../../../../components/page-shell';
 import { Card, CardBody } from '../../../../components/ui/card';
 import { FormLabel } from '../../../../components/ui/input';
+import { useProtectedPage } from '../../../../hooks/use-protected-page';
 
 export default function RequestRefundPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { api, isAuthenticated, isLoading } = useAuthContext();
+  const { api } = useAuthContext();
+  const { isLoading, ready } = useProtectedPage({ requireOnboarding: true });
   const [reason, setReason] = useState('');
   const [orderTotal, setOrderTotal] = useState<number | null>(null);
   const [loadError, setLoadError] = useState('');
@@ -20,16 +23,15 @@ export default function RequestRefundPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!id || !isAuthenticated) return;
+    if (!id || !ready) return;
     api
       .get<{ order: { total: number } }>(`/payments/orders/${id}`)
       .then((res) => setOrderTotal(res.data.order?.total ?? null))
       .catch((e) => setLoadError(e instanceof Error ? e.message : 'Failed to load order'));
-  }, [api, id, isAuthenticated]);
+  }, [api, id, ready]);
 
-  if (!isLoading && !isAuthenticated) {
-    router.replace('/login');
-    return null;
+  if (isLoading || !ready) {
+    return <AuthLoading message="Loading…" />;
   }
 
   async function handleSubmit(e: React.FormEvent) {

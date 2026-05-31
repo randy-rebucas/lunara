@@ -2,6 +2,9 @@ import { Stack, useRouter, useSegments, type Href } from 'expo-router';
 import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AuthLoadingScreen } from '../src/components/auth-loading';
+import { PushNotificationsBootstrap } from '../src/components/push-notifications-bootstrap';
+import { RiderOperationsProvider } from '../src/context/rider-operations';
 import { colors } from '../src/theme';
 import { useAuthStore } from '../src/store/auth';
 
@@ -23,6 +26,7 @@ function isPublicRoute(segments: string[]): boolean {
   if (segments.length === 0) return true;
   if (segments[0] === 'index') return true;
   if (segments[0] === 'login') return true;
+  if (segments[0] === 'forgot-password') return true;
   return false;
 }
 
@@ -51,20 +55,31 @@ export default function RootLayout() {
     }
   }, [isLoading, tokens, segments, router]);
 
-  if (isLoading) return null;
+  if (isLoading) return <AuthLoadingScreen />;
 
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />
-      <Stack screenOptions={stackHeaderOptions}>
-        <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="login" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="pickup/[id]" options={{ title: 'Pickup task' }} />
-        <Stack.Screen name="delivery/[id]" options={{ title: 'Delivery task' }} />
-        <Stack.Screen name="earnings" options={{ title: 'My earnings' }} />
-        <Stack.Screen name="notifications" options={{ title: 'Notifications' }} />
-      </Stack>
+      <RiderOperationsProvider>
+        <PushNotificationsBootstrap />
+        <Stack screenOptions={stackHeaderOptions}>
+          <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="login" options={{ headerShown: false }} />
+          <Stack.Screen name="forgot-password" options={{ title: 'Reset password' }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="pickup/[id]" options={{ title: 'Pickup task' }} />
+          <Stack.Screen name="delivery/[id]" options={{ title: 'Delivery task' }} />
+          <Stack.Screen name="earnings" options={{ title: 'My earnings' }} />
+          <Stack.Screen name="wallet" options={{ title: 'Wallet' }} />
+          <Stack.Screen name="notifications" options={{ title: 'Notifications' }} />
+          <Stack.Screen name="history" options={{ title: 'Task history' }} />
+          <Stack.Screen name="performance" options={{ title: 'Performance' }} />
+          <Stack.Screen name="support" options={{ title: 'Help & support' }} />
+          <Stack.Screen name="profile/edit" options={{ title: 'Edit profile' }} />
+          <Stack.Screen name="documents" options={{ title: 'Documents' }} />
+          <Stack.Screen name="scan" options={{ title: 'Scan QR', headerShown: false }} />
+        </Stack>
+      </RiderOperationsProvider>
     </SafeAreaProvider>
   );
 }

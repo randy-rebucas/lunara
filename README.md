@@ -76,6 +76,8 @@ EXPO_PUBLIC_API_URL=http://localhost:3001
 
 On a physical device, `localhost` points at the phone — not your PC. Both apps automatically rewrite `localhost` / `127.0.0.1` in `EXPO_PUBLIC_API_URL` to your dev machine’s LAN IP (derived from the Expo dev-server host). No manual IP editing is required when using Expo Go on the same network.
 
+**Note:** Remote push notifications (FCM) do **not** work in Expo Go (SDK 53+). In-app notifications and Socket.IO alerts still work. For background push, use an [EAS development build](#push-notifications-firebase--eas) on a physical device.
+
 ### Run locally
 
 | App | Command | Metro port | Dev login |
@@ -98,31 +100,44 @@ Expo slug: `lunara-customer` · scheme: `lunara`
 
 | Screen | Route | Description |
 |--------|-------|-------------|
-| Splash | `/` | Welcome → Get Started |
+| Splash | `/` | Welcome → Get Started / Sign in |
+| Sign up | `/(auth)/signup` | Phone OTP → onboarding |
 | Login | `/(auth)/login` | Phone OTP or email/password |
-| Home | `/(tabs)` | Book laundry, quick links |
+| Onboarding | `/onboarding/profile`, `/onboarding/address` | First-time profile & address setup |
+| Home | `/(tabs)` | Book laundry, deals, notifications preview |
 | Orders | `/(tabs)/orders` | Order list |
 | Wallet | `/(tabs)/wallet` | Balance & top-up |
-| Profile | `/(tabs)/profile` | Account info |
+| Profile | `/(tabs)/profile` | Account, addresses, support & refunds links |
 | Book | `/book` | Full booking flow (service → address → schedule → weight → add-ons → payment) |
-| Track order | `/orders/[id]` | Timeline, live WebSocket updates, delivery verify/sign |
+| Checkout | `/checkout/[orderId]` | Retry payment for unpaid orders |
+| Track order | `/orders/[id]` | Timeline, live WebSocket, delivery verify/sign, review/refund/lost-item |
+| Notifications | `/notifications` | In-app alerts with mark-read and deep links |
+| Review | `/review/[id]` | Star rating after completed orders |
+| Refunds | `/refunds`, `/refunds/[id]`, `/orders/[id]/refund` | List, detail, and submit refund requests |
+| Support | `/support`, `/support/[id]`, `/orders/[id]/lost-item` | Tickets and lost-item complaints |
 
-Features mirror customer-web: managed-network booking (no shop picker), PayMongo / cash / wallet payment, order tracking with rider GPS when en route, and delivery verification (last 4 digits of phone + signature).
+Features mirror customer-web: managed-network booking (no shop picker), onboarding after signup, PayMongo / cash / wallet payment, order tracking with rider GPS when en route, delivery verification (last 4 digits of phone + signature), refunds, support tickets, and push notifications (FCM via EAS build on a physical device).
 
 ### Rider mobile (`apps/rider-mobile`)
 
-Expo slug: `lunara-rider` · scheme: `lunara-rider` · requires **location** permission for GPS tracking
+Expo slug: `lunara-rider` · scheme: `lunara-rider` · requires **location** and **camera** permissions for field ops
 
 | Screen | Route | Description |
 |--------|-------|-------------|
 | Login | `/login` | Email/password |
-| Operations | `/` | Go online/offline, pickup & delivery offers, active tasks, earnings summary |
+| Home | `/(tabs)/` | Shift on/off, earnings summary, route guide |
+| Tasks | `/(tabs)/tasks` | Pickup offers, delivery queue, active tasks |
+| Profile | `/(tabs)/profile` | Verification summary, edit profile, documents, earnings, notifications |
+| Edit profile | `/profile/edit` | Name, phone, home address, vehicle type, plate/OR-CR number |
+| Documents | `/documents` | Upload driver's license, OR/CR, NBI clearance, selfie for admin review |
 | Pickup task | `/pickup/[id]` | Arrive → verify customer → collect → photo → receipt → drop at shop |
-| Delivery task | `/delivery/[id]` | Pick up from shop → navigate → customer verify/sign → photo → complete |
+| Delivery task | `/delivery/[id]` | Pick up from shop → out for delivery → customer handoff → photo → complete |
 | Earnings | `/earnings` | Today & total earnings |
-| Notifications | `/notifications` | Rider alerts |
+| Task history | `/history` | Completed pickups and deliveries |
+| Notifications | `/notifications` | Dispatch alerts with mark-read and tap-to-open task |
+| SOS | Pickup/delivery task screens | Emergency button — notify dispatch + share live location during active tasks |
 
-Real-time task offers and location updates use Socket.IO (`/tracking` namespace). See [End-to-End Test Flow → Rider daily operations](#rider-daily-operations-mobile-port-8082) for the full pickup/delivery walkthrough.
+Real-time task offers and location updates use Socket.IO (`/tracking` namespace). **Riders must complete profile and get all KYC documents approved** before going online (`POST /riders/online` returns 403 until verified). Admins review documents at admin-web **Riders → rider detail**. **Push notifications** (Firebase Cloud Messaging via `expo-notifications`) deliver assignments and offers when the app is backgrounded — requires an EAS development or production build on a physical device. Task photos upload to the API (`/riders/*/photo-upload`). Production builds use [EAS Build](https://docs.expo.dev/build/introduction/) (`npm run build --workspace=@lunara/rider-mobile`). See [Push notifications setup](#push-notifications-firebase--eas) and [End-to-End Test Flow → Rider daily operations](#rider-daily-operations-mobile-port-8082) for the full pickup/delivery walkthrough.
 
 ### Troubleshooting (Metro / Expo)
 
@@ -135,6 +150,30 @@ npm run dev:clear --workspace=@lunara/rider-mobile
 ```
 
 That runs `expo start --clear`. You can also delete `apps/<mobile-app>/.expo` and restart.
+
+### Push notifications (Firebase + EAS)
+
+Mobile apps register native device tokens with `POST /api/v1/users/me/push-token`. The API sends FCM messages via `firebase-admin` when in-app notifications are created (assignments, refunds, review requests) and when pickup/delivery offers are dispatched to online riders.
+
+**One-time setup:**
+
+1. Create a [Firebase project](https://console.firebase.google.com/) and enable Cloud Messaging.
+2. Add Android apps (`com.lunara.rider`, `com.lunara.customer`) and an iOS app for each bundle ID.
+3. Download a Firebase **service account** JSON and set in the API `.env`:
+   - `FIREBASE_PROJECT_ID`
+   - `FIREBASE_CLIENT_EMAIL`
+   - `FIREBASE_PRIVATE_KEY` (escape newlines as `\n`)
+4. Upload FCM and APNs credentials to EAS for each app:
+   ```bash
+   cd apps/rider-mobile && eas credentials
+   cd apps/customer-mobile && eas credentials
+   ```
+5. Build dev clients and test on a **physical device** (simulators do not receive FCM):
+   ```bash
+   npm run build --workspace=@lunara/rider-mobile -- --profile development
+   ```
+
+Push is skipped when Firebase env vars are missing (local dev without credentials still works for in-app + socket alerts).
 
 ### Monorepo notes
 
@@ -267,7 +306,7 @@ Track status: http://localhost:3000/refunds/{refundId}
 1. **Login** at http://localhost:3002/login — `admin@lunara.dev` / `password123`
 2. **Overview dashboard** — active orders, riders online, shops, open tickets, MTD revenue
 3. **Monitor orders** — filter by status, platform-wide list
-4. **Monitor riders** — online status, earnings, active tasks
+4. **Monitor riders** — online status, verification status, earnings, active tasks; review KYC documents
 5. **Monitor shops** — partner accounts, order volume, revenue
 6. **Monitor revenue** — today, month, 7-day chart, revenue by service
 7. **Support tickets** — view, update status/priority, add admin notes

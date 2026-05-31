@@ -8,18 +8,24 @@
     "dev:clear": "expo start --clear --port 8082",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "build": "echo \"Use EAS Build for production\"",
-    "typecheck": "tsc --noEmit"
+    "build": "eas build --platform all",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test src/lib/**/*.test.ts"
   },
   "dependencies": {
     "@lunara/brand": "*",
     "@lunara/config": "*",
-    "@lunara/hooks": "*",
     "@lunara/types": "*",
     "@lunara/utils": "*",
     "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/netinfo": "11.4.1",
     "expo": "~54.0.0",
+    "expo-camera": "~17.0.10",
+    "expo-device": "~8.0.10",
+    "expo-file-system": "~19.0.0",
+    "expo-image-picker": "~17.0.0",
     "expo-location": "~19.0.0",
+    "expo-notifications": "~0.32.17",
     "expo-router": "~6.0.24",
     "expo-status-bar": "~3.0.9",
     "react": "19.1.0",
@@ -32,6 +38,7 @@
   "devDependencies": {
     "@babel/core": "^7.27.4",
     "@types/react": "~19.1.10",
+    "tsx": "^4.20.3",
     "typescript": "^5.8.3"
   }
 }

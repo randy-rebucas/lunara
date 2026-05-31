@@ -6,11 +6,11 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { NotificationChannel, OrderStatus, PaymentStatus } from '@lunara/types';
+import { OrderStatus, PaymentStatus } from '@lunara/types';
 import { REFUND_FLOW } from '@lunara/utils';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
-import { Notification, NotificationDocument } from '../reviews/schemas/notification.schema';
+import { NotificationDispatchService } from '../push/notification-dispatch.service';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { WalletsService } from '../wallets/wallets.service';
 import { CreateRefundDto } from './dto/create-refund.dto';
@@ -51,9 +51,9 @@ export class RefundsService {
     @InjectModel(RefundRequest.name) private refundModel: Model<RefundRequestDocument>,
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
-    @InjectModel(Notification.name) private notificationModel: Model<NotificationDocument>,
     private walletsService: WalletsService,
     private trackingGateway: TrackingGateway,
+    private notificationDispatch: NotificationDispatchService,
   ) {}
 
   async createRequest(customerId: string, dto: CreateRefundDto) {
@@ -367,12 +367,11 @@ export class RefundsService {
       body = 'Your refund request is being reviewed by our team.';
     }
 
-    const notification = await this.notificationModel.create({
-      userId: refund.customerId,
+    const notification = await this.notificationDispatch.dispatch({
+      userId: refund.customerId.toString(),
       title,
       body,
-      channel: NotificationChannel.IN_APP,
-      read: false,
+      channelId: 'orders',
       data: {
         type: 'refund_update',
         refundId: refund._id.toString(),

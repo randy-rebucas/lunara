@@ -2,48 +2,31 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import type { PartnerOrderSummary } from '@lunara/types';
+import { UserRole } from '@lunara/types';
+import { AuthLoading } from '../../../components/auth-loading';
 import { PageHeader } from '../../../components/ui/page-header';
 import { LiveBadge } from '../../../components/ui/card';
+import { useProtectedPage } from '../../../hooks/use-protected-page';
 import { isPartnerRole, partnerFetch } from '../../../lib/partner-api';
 import { usePartnerPipelineSocket } from '../../../lib/use-partner-pipeline-socket';
 
-interface IncomingOrder {
-  _id: string;
-  bookingType: string;
-  status: string;
-  total: number;
-  branchName?: string;
-  branchId?: string;
-  currentStepLabel?: string;
-  assignedStaffEmail?: string;
-  partnerAcceptedAt?: string;
-  canAccept?: boolean;
-  canRequestPickup?: boolean;
-  canRequestDelivery?: boolean;
-  canReceiveAtShop?: boolean;
-  receivingStepLabel?: string;
-  slaLabel?: string;
-}
-
 export default function IncomingOrdersPage() {
-  const router = useRouter();
-  const [items, setItems] = useState<IncomingOrder[]>([]);
+  const { ready } = useProtectedPage({ roles: [UserRole.PARTNER, UserRole.ADMIN, UserRole.STAFF] });
+  const partner = isPartnerRole();
+  const [items, setItems] = useState<PartnerOrderSummary[]>([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const d = await partnerFetch<{ items: IncomingOrder[] }>('/partner/orders/incoming');
+    const d = await partnerFetch<{ items: PartnerOrderSummary[] }>('/partner/orders/incoming');
     setItems(d.items);
   }, []);
 
   useEffect(() => {
-    if (!isPartnerRole()) {
-      router.replace('/orders');
-      return;
-    }
+    if (!ready) return;
     load().catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'));
-  }, [router, load]);
+  }, [ready, load]);
 
   const branchIds = useMemo(
     () => [...new Set(items.map((o) => o.branchId).filter(Boolean))] as string[],
@@ -69,11 +52,17 @@ export default function IncomingOrdersPage() {
     }
   }
 
+  if (!ready) return <AuthLoading message="Loading incoming orders…" />;
+
   return (
     <div>
       <PageHeader
         title="Incoming orders"
-        description="Orders assigned by Lunara. Accept at the shop, then request pickup or process laundry."
+        description={
+          partner
+            ? 'Orders assigned by Lunara. Accept at the shop, then request pickup or process laundry.'
+            : 'Orders arriving at your branch — receive laundry and verify intake.'
+        }
         badge={socketLive ? <LiveBadge /> : undefined}
       />
 
@@ -95,12 +84,12 @@ export default function IncomingOrdersPage() {
                 <p className="mt-1 text-xs text-amber-700">{o.receivingStepLabel}</p>
               )}
               {o.slaLabel && <p className="mt-1 text-xs text-muted-foreground">{o.slaLabel}</p>}
-              {!o.partnerAcceptedAt && (
+              {partner && !o.partnerAcceptedAt && (
                 <p className="mt-1 text-xs text-amber-700">Awaiting shop acceptance</p>
               )}
             </Link>
             <div className="flex flex-wrap gap-2">
-              {o.canAccept && (
+              {partner && o.canAccept && (
                 <button
                   type="button"
                   disabled={!!busy}
@@ -115,7 +104,7 @@ export default function IncomingOrdersPage() {
                   Receive at shop
                 </Link>
               )}
-              {o.canRequestPickup && (
+              {partner && o.canRequestPickup && (
                 <button
                   type="button"
                   disabled={!!busy}

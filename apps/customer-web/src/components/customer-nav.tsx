@@ -12,6 +12,7 @@ const links = [
   { href: '/book', label: 'Book' },
   { href: '/orders', label: 'Orders' },
   { href: '/wallet', label: 'Wallet' },
+  { href: '/profile', label: 'Profile' },
   { href: '/support', label: 'Support' },
   { href: '/refunds', label: 'Refunds' },
 ];

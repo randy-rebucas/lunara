@@ -6,8 +6,10 @@ import { useCallback } from 'react';
 import { LOST_ITEM_FLOW, formatLostItemOutcome, lostItemFlowIndex } from '@lunara/utils';
 import { ButtonLink } from '../../../components/ui/button-link';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
+import { AuthLoading } from '../../../components/auth-loading';
 import { PageShell } from '../../../components/page-shell';
 import { DataPageStatus } from '../../../components/data-page-status';
+import { useProtectedPage } from '../../../hooks/use-protected-page';
 import { useCustomerQuery } from '../../../lib/use-customer-query';
 
 interface Ticket {
@@ -33,6 +35,7 @@ interface TicketData {
 export default function CustomerTicketPage() {
   const { id } = useParams<{ id: string }>();
   const { api } = useAuthContext();
+  const { isLoading, ready } = useProtectedPage({ requireOnboarding: true });
 
   const load = useCallback(async () => {
     if (!id) throw new Error('Ticket not found');
@@ -45,7 +48,11 @@ export default function CustomerTicketPage() {
     } satisfies TicketData;
   }, [api, id]);
 
-  const { data, loading, error } = useCustomerQuery(load, [api, id]);
+  const { data, loading, error } = useCustomerQuery(load, [ready, api, id]);
+
+  if (isLoading || !ready) {
+    return <AuthLoading message="Loading ticket…" />;
+  }
 
   if (loading || error || !data) {
     return (

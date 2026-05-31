@@ -20,12 +20,15 @@ import { SupportModule } from './modules/support/support.module';
 import { RefundsModule } from './modules/refunds/refunds.module';
 import { BranchesModule } from './modules/branches/branches.module';
 import { DealsModule } from './modules/deals/deals.module';
+import { PushModule } from './modules/push/push.module';
+import { SosModule } from './modules/sos/sos.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     RedisModule,
     MongooseModule.forRoot(process.env.MONGODB_URI ?? 'mongodb://localhost:27017/lunara'),
+    PushModule,
     HealthModule,
     AuthModule,
     UsersModule,
@@ -43,6 +46,7 @@ import { DealsModule } from './modules/deals/deals.module';
     RefundsModule,
     BranchesModule,
     DealsModule,
+    SosModule,
     RealtimeModule,
   ],
 })

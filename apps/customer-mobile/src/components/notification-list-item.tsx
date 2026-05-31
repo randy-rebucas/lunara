@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   formatNotificationTime,
   notificationIconName,
+  notificationRouteToPath,
   resolveNotificationRoute,
   type AppNotification,
 } from '../lib/notification-types';
@@ -16,14 +17,7 @@ interface NotificationListItemProps {
 }
 
 function routeToPath(route: NonNullable<ReturnType<typeof resolveNotificationRoute>>): string {
-  switch (route.kind) {
-    case 'review':
-      return `/review/${route.orderId}`;
-    case 'order':
-      return `/orders/${route.orderId}`;
-    case 'wallet':
-      return '/(tabs)/wallet';
-  }
+  return notificationRouteToPath(route);
 }
 
 export function NotificationListItem({
@@ -77,9 +71,11 @@ export function NotificationListItem({
           <Text style={styles.action}>
             {route.kind === 'review'
               ? 'Leave a review →'
-              : route.kind === 'wallet'
-                ? 'View wallet →'
-                : 'View order →'}
+              : route.kind === 'refund'
+                ? 'View refund →'
+                : route.kind === 'wallet'
+                  ? 'View wallet →'
+                  : 'View order →'}
           </Text>
         ) : null}
       </View>

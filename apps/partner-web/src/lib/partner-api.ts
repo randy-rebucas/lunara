@@ -1,9 +1,13 @@
-import { resolveApiV1BaseUrl } from '@lunara/utils';
+import type { PortalRole, PortalUser } from '@lunara/types';
+import { UserRole } from '@lunara/types';
+import { resolveApiOrigin, resolveApiV1BaseUrl } from '@lunara/utils';
 import { parseApiError } from './api-error';
 
 const API_URL = resolveApiV1BaseUrl(process.env.NEXT_PUBLIC_API_URL);
 const STORAGE_KEY = 'lunara_portal_token';
 const USER_KEY = 'lunara_portal_user';
+
+export type { PortalRole, PortalUser };
 
 export function getPartnerToken() {
   if (typeof window === 'undefined') return '';
@@ -19,20 +23,27 @@ export function clearPartnerToken() {
   localStorage.removeItem(USER_KEY);
 }
 
-export function getPortalUser() {
+export function getPortalUser(): PortalUser | null {
   if (typeof window === 'undefined') return null;
   const raw = localStorage.getItem(USER_KEY);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as { email?: string; role: string };
+    return JSON.parse(raw) as PortalUser;
   } catch {
     return null;
   }
 }
 
-export function isPartnerRole() {
-  const u = getPortalUser();
-  return u?.role === 'partner' || u?.role === 'admin';
+export function isPartnerRole(user = getPortalUser()) {
+  return user?.role === UserRole.PARTNER || user?.role === UserRole.ADMIN;
+}
+
+export function isStaffRole(user = getPortalUser()) {
+  return user?.role === UserRole.STAFF;
+}
+
+export function hasPortalRole(roles: PortalRole[], user = getPortalUser()) {
+  return !!user && roles.includes(user.role);
 }
 
 export async function staffLogin(email: string, password: string) {
@@ -48,7 +59,11 @@ export async function staffLogin(email: string, password: string) {
     throw new Error('Staff or partner account required');
   }
   setPartnerToken(body.data.tokens.accessToken);
-  const user = body.data.user as { email?: string; role: string };
+  const user: PortalUser = {
+    email: body.data.user.email,
+    role: body.data.user.role,
+    branchId: body.data.user.branchId,
+  };
   localStorage.setItem(USER_KEY, JSON.stringify(user));
   return user;
 }
@@ -91,4 +106,38 @@ export async function partnerFetch<T>(path: string, init?: RequestInit): Promise
   }
   if (!body.success) throw new Error(parseApiError(body));
   return body.data as T;
+}
+
+export async function uploadProcessingPhoto(orderId: string, file: File): Promise<string> {
+  const token = getPartnerToken();
+  const formData = new FormData();
+  formData.append('photo', file);
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/partner/orders/${orderId}/processing/photo-upload`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+  } catch {
+    throw new Error('Cannot reach API to upload photo.');
+  }
+
+  const body = await res.json();
+  if (res.status === 401) {
+    clearPartnerToken();
+    if (typeof window !== 'undefined') window.location.href = '/login';
+    throw new Error('Session expired. Please sign in again.');
+  }
+  if (!body.success) throw new Error(parseApiError(body, 'Photo upload failed'));
+  return body.data.photoUrl as string;
+}
+
+/** Build absolute URL for uploaded task photos. */
+export function resolveMediaUrl(path: string) {
+  if (!path) return '';
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  const origin = resolveApiOrigin(process.env.NEXT_PUBLIC_API_URL);
+  return `${origin}${path.startsWith('/') ? path : `/${path}`}`;
 }

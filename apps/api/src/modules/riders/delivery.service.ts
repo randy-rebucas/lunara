@@ -13,11 +13,17 @@ import {
   getDeliveryWorkflowStepIndex,
 } from '@lunara/utils';
 import { Address, AddressDocument } from '../addresses/schemas/address.schema';
+import { Branch, BranchDocument } from '../branches/schemas/branch.schema';
+import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { TrackingGateway } from '../realtime/tracking.gateway';
+import { RiderOfferPushService } from '../push/rider-offer-push.service';
 import { ReviewsService } from '../reviews/reviews.service';
+import { HandoffQrService } from '../handoff/handoff-qr.service';
+import { VerifyQrDto } from './dto/pickup.dto';
 import { RidersService } from './riders.service';
+import { buildRiderTaskDetails } from './rider-task-summary';
 
 function generateDeliveryReceipt(orderId: string) {
   const short = orderId.slice(-6).toUpperCase();
@@ -36,9 +42,13 @@ export class DeliveryService {
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(Address.name) private addressModel: Model<AddressDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
+    @InjectModel(Branch.name) private branchModel: Model<BranchDocument>,
     private ridersService: RidersService,
     private trackingGateway: TrackingGateway,
     private reviewsService: ReviewsService,
+    private riderOfferPush: RiderOfferPushService,
+    private handoffQrService: HandoffQrService,
   ) {}
 
   async dispatchDeliverySearch(orderId: string) {
@@ -56,6 +66,14 @@ export class DeliveryService {
 
     const summary = await this.buildDeliverySummary(order);
     this.trackingGateway.emitDeliveryOffer(summary);
+    void this.riderOfferPush.notifyOnlineRiders({
+      title: 'New delivery offer',
+      body: `Delivery from ${order.branchName ?? 'shop'} · ${order.bookingType.replace(/_/g, ' ')}`,
+      data: {
+        type: 'delivery_offer',
+        orderId: order._id.toString(),
+      },
+    });
     this.trackingGateway.emitOrderEvent(orderId, 'findingDeliveryRider', {
       message: 'Looking for a rider to deliver your laundry…',
     });
@@ -79,7 +97,7 @@ export class DeliveryService {
 
   async getDeliveryTask(orderId: string, riderUserId: string) {
     const order = await this.getOrderForRider(orderId, riderUserId);
-    return { success: true, data: await this.buildDeliverySummary(order) };
+    return { success: true, data: await this.buildDeliverySummary(order, riderUserId) };
   }
 
   async acceptDelivery(orderId: string, riderUserId: string) {
@@ -112,7 +130,44 @@ export class DeliveryService {
       riderId: riderUserId,
     });
 
-    return { success: true, data: await this.buildDeliverySummary(order) };
+    return { success: true, data: await this.buildDeliverySummary(order, riderUserId) };
+  }
+
+  async rejectDelivery(orderId: string, riderUserId: string) {
+    const order = await this.orderModel.findById(orderId);
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.deliveryRiderId?.toString() !== riderUserId) {
+      throw new ForbiddenException('Not your delivery assignment');
+    }
+    if (order.status !== OrderStatus.RIDER_ASSIGNED_DELIVERY) {
+      throw new BadRequestException('Delivery assignment cannot be rejected at this stage');
+    }
+    if (order.delivery?.pickedUpFromShopAt) {
+      throw new BadRequestException('Cannot reject after pickup from shop');
+    }
+
+    const now = new Date();
+    order.set('deliveryRiderId', undefined);
+    order.status = OrderStatus.READY_FOR_DELIVERY;
+    if (order.delivery) {
+      order.delivery.acceptedAt = undefined;
+      order.delivery.verificationHint = undefined;
+    }
+    order.statusHistory.push({
+      status: OrderStatus.READY_FOR_DELIVERY,
+      timestamp: now,
+      note: 'Rider rejected delivery assignment',
+      updatedBy: riderUserId,
+    });
+    await order.save();
+
+    this.trackingGateway.emitOrderStatus(orderId, OrderStatus.READY_FOR_DELIVERY);
+    this.trackingGateway.emitDispatchQueueUpdated({
+      reason: 'delivery_rider_rejected',
+      orderId,
+    });
+
+    return { success: true, data: await this.buildDeliverySummary(order, riderUserId) };
   }
 
   async pickupFromShop(orderId: string, riderUserId: string) {
@@ -136,7 +191,7 @@ export class DeliveryService {
       branchName: order.branchName,
     });
 
-    return { success: true, data: await this.buildDeliverySummary(order) };
+    return { success: true, data: await this.buildDeliverySummary(order, riderUserId) };
   }
 
   /** @deprecated use pickupFromShop + outForDelivery */
@@ -178,7 +233,7 @@ export class DeliveryService {
       message: 'Your laundry is on the way',
     });
 
-    return { success: true, data: await this.buildDeliverySummary(order) };
+    return { success: true, data: await this.buildDeliverySummary(order, riderUserId) };
   }
 
   /** @deprecated use markCustomerReceived */
@@ -205,7 +260,40 @@ export class DeliveryService {
       message: 'Your laundry has been handed to you',
     });
 
-    return { success: true, data: await this.buildDeliverySummary(order) };
+    return { success: true, data: await this.buildDeliverySummary(order, riderUserId) };
+  }
+
+  async verifyCustomerByQr(orderId: string, riderUserId: string, dto: VerifyQrDto) {
+    const order = await this.getAssignedDeliveryOrder(orderId, riderUserId);
+    if (order.status !== OrderStatus.OUT_FOR_DELIVERY) {
+      throw new BadRequestException('Order must be out for delivery');
+    }
+    if (!order.delivery?.pickedUpFromShopAt) {
+      throw new BadRequestException('Complete shop pickup and out-for-delivery first');
+    }
+
+    const customer = await this.userModel.findById(order.customerId).select('phone');
+    const expected = phoneVerificationHint(customer?.phone);
+    const code = this.handoffQrService.resolveDeliveryVerificationCode(dto.qrPayload, orderId);
+    if (code !== expected) {
+      throw new BadRequestException('Verification code does not match customer phone');
+    }
+
+    if (!order.delivery) order.delivery = {};
+    const now = new Date();
+    order.delivery.customerVerifiedAt = now;
+    order.delivery.customerReceivedAt = order.delivery.customerReceivedAt ?? now;
+    order.delivery.arrivedAt = order.delivery.arrivedAt ?? now;
+    if (!order.delivery.verificationHint) {
+      order.delivery.verificationHint = expected;
+    }
+    await order.save();
+
+    this.trackingGateway.emitOrderEvent(orderId, 'customerReceivedDelivery', {
+      message: 'Customer verified via QR',
+    });
+
+    return { success: true, data: await this.buildDeliverySummary(order, riderUserId) };
   }
 
   async capturePhoto(orderId: string, riderUserId: string, photoUrl: string) {
@@ -222,7 +310,7 @@ export class DeliveryService {
       photoUrl,
     });
 
-    return { success: true, data: await this.buildDeliverySummary(order) };
+    return { success: true, data: await this.buildDeliverySummary(order, riderUserId) };
   }
 
   async customerVerify(orderId: string, customerId: string, code: string) {
@@ -421,12 +509,27 @@ export class DeliveryService {
     return order;
   }
 
-  private async buildDeliverySummary(order: OrderDocument) {
+  private async buildDeliverySummary(order: OrderDocument, riderUserId?: string) {
     const address = await this.addressModel.findById(order.deliveryAddressId);
-    const customer = await this.userModel.findById(order.customerId).select('phone');
-    const shopAddress = order.branchName
-      ? { label: order.branchName, line1: order.branchName, city: '' }
-      : null;
+    const isAssigned = order.deliveryRiderId?.toString() === riderUserId;
+    const taskDetails = await buildRiderTaskDetails(
+      order,
+      {
+        customerModel: this.customerModel,
+        branchModel: this.branchModel,
+        userModel: this.userModel,
+        addressModel: this.addressModel,
+      },
+      {
+        includeDialablePhone: isAssigned,
+        customerAddressId: order.deliveryAddressId,
+      },
+    );
+
+    const canReject =
+      isAssigned &&
+      order.status === OrderStatus.RIDER_ASSIGNED_DELIVERY &&
+      !order.delivery?.pickedUpFromShopAt;
 
     return {
       _id: order._id.toString(),
@@ -434,13 +537,15 @@ export class DeliveryService {
       bookingType: order.bookingType,
       total: order.total,
       branchName: order.branchName,
+      branchCode: order.branchCode,
+      estimatedWeightKg: order.estimatedWeightKg,
       delivery: order.delivery,
       deliveryWorkflowSteps: DELIVERY_WORKFLOW_STEPS.map((s) => s.label),
       deliveryWorkflowStep: getDeliveryWorkflowStepIndex({
         status: order.status,
         delivery: order.delivery,
       }),
-      shopLocation: shopAddress,
+      shopLocation: taskDetails.shopLocation,
       deliveryAddress: address
         ? {
             label: address.label,
@@ -453,7 +558,15 @@ export class DeliveryService {
             longitude: address.longitude,
           }
         : null,
-      customerPhoneMasked: customer?.phone ? `***${customer.phone.slice(-4)}` : undefined,
+      customerPhoneMasked: taskDetails.customerPhoneMasked,
+      customerPhone: taskDetails.customerPhone,
+      customerName: taskDetails.customerName,
+      orderNumber: taskDetails.orderNumber,
+      specialInstructions: taskDetails.specialInstructions,
+      shopName: taskDetails.shopName,
+      shopPhone: taskDetails.shopPhone,
+      shopPhoneMasked: taskDetails.shopPhoneMasked,
+      canReject,
       customerReceived: this.hasCustomerReceived(order),
       customerSigned: !!order.delivery?.customerSignedAt,
       canPickupFromShop:

@@ -28,7 +28,15 @@ import { AssignDispatchDto } from '../branches/dto/assign-dispatch.dto';
 import { AdminAssignRiderDto, ResolveConflictDto } from './dto/admin-operations.dto';
 import { AdminOperationsService } from './admin-operations.service';
 import { AdminDispatchService } from './admin-dispatch.service';
+import { RiderSosService } from '../sos/rider-sos.service';
+import { ReviewRiderDocumentDto } from '../riders/dto/rider.dto';
+import { CreditRiderEarningDto } from '../riders/dto/rider-earnings.dto';
+import { RidersService } from '../riders/riders.service';
+import { RiderNotificationService } from '../riders/rider-notification.service';
+import { RiderWalletService } from '../riders/rider-wallet.service';
+import { ReviewWithdrawalDto, SetWalletHoldDto } from '../riders/dto/rider-wallet.dto';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
+import { RiderAnnouncementDto } from './dto/rider-announcement.dto';
 import { UpdatePromotionDto } from './dto/update-promotion.dto';
 
 @Controller('admin')
@@ -43,7 +51,21 @@ export class AdminController {
     private readonly branchManagementService: BranchManagementService,
     private readonly adminOperationsService: AdminOperationsService,
     private readonly adminDispatchService: AdminDispatchService,
+    private readonly riderSosService: RiderSosService,
+    private readonly ridersService: RidersService,
+    private readonly riderNotificationService: RiderNotificationService,
+    private readonly riderWalletService: RiderWalletService,
   ) {}
+
+  @Get('sos/active')
+  listActiveSosIncidents() {
+    return this.riderSosService.listActiveIncidents();
+  }
+
+  @Patch('sos/:id/resolve')
+  resolveSosIncident(@Param('id') id: string) {
+    return this.riderSosService.resolveIncident(id);
+  }
 
   @Get('control-tower')
   getControlTower() {
@@ -136,6 +158,77 @@ export class AdminController {
   @Get('riders')
   getRiders() {
     return this.adminService.getRiders();
+  }
+
+  @Get('riders/documents/pending')
+  getPendingRiderDocuments() {
+    return this.ridersService.listPendingDocumentReviews();
+  }
+
+  @Get('riders/withdrawals')
+  listRiderWithdrawals(@Query('status') status?: string) {
+    return this.riderWalletService.listWithdrawalsForAdmin(status);
+  }
+
+  @Post('riders/withdrawals/:id/approve')
+  approveRiderWithdrawal(
+    @Param('id') id: string,
+    @Req() req: { user: { sub: string } },
+    @Body() dto: ReviewWithdrawalDto,
+  ) {
+    return this.riderWalletService.approveWithdrawal(id, req.user.sub, dto.adminNote);
+  }
+
+  @Post('riders/withdrawals/:id/reject')
+  rejectRiderWithdrawal(
+    @Param('id') id: string,
+    @Req() req: { user: { sub: string } },
+    @Body() dto: ReviewWithdrawalDto,
+  ) {
+    return this.riderWalletService.rejectWithdrawal(id, req.user.sub, dto.adminNote);
+  }
+
+  @Post('riders/:userId/wallet/hold')
+  setRiderWalletHold(@Param('userId') userId: string, @Body() dto: SetWalletHoldDto) {
+    return this.riderWalletService.setWalletHold(userId, dto.pendingHold);
+  }
+
+  @Post('riders/:userId/earnings/credit')
+  creditRiderEarning(@Param('userId') userId: string, @Body() dto: CreditRiderEarningDto) {
+    return this.ridersService
+      .creditManualEarning(userId, dto.type, dto.amount, dto.note)
+      .then((data) => ({ success: true, data }));
+  }
+
+  @Get('riders/:userId/profile')
+  getRiderProfile(@Param('userId') userId: string) {
+    return this.ridersService.getRiderProfileForAdmin(userId);
+  }
+
+  @Patch('riders/:userId/documents/:type')
+  reviewRiderDocument(
+    @Param('userId') userId: string,
+    @Param('type') type: string,
+    @Req() req: { user: { sub: string } },
+    @Body() dto: ReviewRiderDocumentDto,
+  ) {
+    return this.ridersService.reviewDocument(
+      userId,
+      type,
+      req.user.sub,
+      dto.status,
+      dto.rejectionReason,
+    );
+  }
+
+  @Post('riders/announcement')
+  broadcastRiderAnnouncement(@Body() dto: RiderAnnouncementDto) {
+    return this.riderNotificationService
+      .broadcastPlatformAnnouncement(dto.body, dto.title, dto.userIds)
+      .then((count) => ({
+        success: true,
+        data: { sent: count },
+      }));
   }
 
   @Get('shops')

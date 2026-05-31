@@ -1,7 +1,8 @@
-import { useRouter } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { appConfig } from '@lunara/config';
+import { redirectAfterAuth } from '../../src/lib/onboarding';
 import { BrandMark } from '../../src/components/ui/brand-mark';
 import { Button } from '../../src/components/ui/button';
 import { Card } from '../../src/components/ui/card';
@@ -12,7 +13,7 @@ import { useAuthStore } from '../../src/store/auth';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { loginWithOtp, loginWithEmail, requestOtp } = useAuthStore();
+  const { loginWithOtp, loginWithEmail, requestOtp, apiFetch } = useAuthStore();
   const [mode, setMode] = useState<'otp' | 'email'>('otp');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('customer@lunara.dev');
@@ -39,7 +40,7 @@ export default function LoginScreen() {
       } else {
         await loginWithOtp(phone, otp);
       }
-      router.replace('/(tabs)');
+      await redirectAfterAuth(apiFetch, router);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Login failed');
     }
@@ -119,6 +120,13 @@ export default function LoginScreen() {
         <Button label="Sign in" onPress={handleLogin} style={styles.submitBtn} />
       </Card>
 
+      <Text style={styles.footer}>
+        New here?{' '}
+        <Link href="/(auth)/signup" style={styles.footerLink}>
+          Create account
+        </Link>
+      </Text>
+
       <Text style={styles.devHint}>
         Dev OTP is always 123456 · email: customer@lunara.dev / password123
       </Text>
@@ -157,10 +165,12 @@ const styles = StyleSheet.create({
   devOtp: { color: colors.accent, marginBottom: spacing.sm, fontSize: 13, fontWeight: '500' },
   error: { color: colors.destructive, marginBottom: spacing.sm, fontSize: 14 },
   submitBtn: { marginTop: spacing.sm },
+  footer: { ...typography.bodySm, textAlign: 'center', marginTop: spacing.xxl },
+  footerLink: { color: colors.primary, fontWeight: '600' },
   devHint: {
     ...typography.caption,
     textAlign: 'center',
-    marginTop: spacing.xxl,
+    marginTop: spacing.lg,
     paddingHorizontal: spacing.lg,
   },
 });

@@ -1,45 +1,32 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useState } from 'react';
+import type { PartnerInventoryItem } from '@lunara/types';
+import { AuthLoading } from '../../components/auth-loading';
 import { DataPageStatus } from '../../components/data-page-status';
 import { PageHeader } from '../../components/ui/page-header';
-import { isPartnerRole, partnerFetch } from '../../lib/partner-api';
+import { useRequirePartner } from '../../hooks/use-protected-page';
+import { partnerFetch } from '../../lib/partner-api';
 import { usePartnerQuery } from '../../lib/use-partner-query';
 
-interface InventoryItem {
-  _id: string;
-  sku: string;
-  name: string;
-  category: string;
-  quantity: number;
-  unit: string;
-  lowStockThreshold: number;
-}
-
 export default function InventoryPage() {
-  const router = useRouter();
+  const { ready } = useRequirePartner();
   const [saving, setSaving] = useState<string | null>(null);
   const [actionError, setActionError] = useState('');
 
-  useEffect(() => {
-    if (!isPartnerRole()) router.replace('/orders');
-  }, [router]);
-
   const load = useCallback(async () => {
-    if (!isPartnerRole()) return [] as InventoryItem[];
-    return partnerFetch<InventoryItem[]>('/partner/inventory');
+    return partnerFetch<PartnerInventoryItem[]>('/partner/inventory');
   }, []);
 
   const { data: items, loading, error, setData } = usePartnerQuery(load, []);
 
-  if (!isPartnerRole()) return null;
+  if (!ready) return <AuthLoading message="Loading inventory…" />;
 
   async function updateQty(id: string, quantity: number) {
     setSaving(id);
     setActionError('');
     try {
-      const updated = await partnerFetch<InventoryItem>(`/partner/inventory/${id}`, {
+      const updated = await partnerFetch<PartnerInventoryItem>(`/partner/inventory/${id}`, {
         method: 'PATCH',
         body: JSON.stringify({ quantity }),
       });

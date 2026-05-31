@@ -9,15 +9,19 @@ import { Model, Types } from 'mongoose';
 import { OrderStatus } from '@lunara/types';
 import {
   getPickupWorkflowStepIndex,
-  PARTNER_SHOP_LOCATION,
   PICKUP_WORKFLOW_STEPS,
 } from '@lunara/utils';
 import { Address, AddressDocument } from '../addresses/schemas/address.schema';
+import { Branch, BranchDocument } from '../branches/schemas/branch.schema';
+import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { TrackingGateway } from '../realtime/tracking.gateway';
-import { CollectLaundryDto, VerifyCustomerDto } from './dto/pickup.dto';
+import { RiderOfferPushService } from '../push/rider-offer-push.service';
+import { CollectLaundryDto, DropAtShopDto, VerifyCustomerDto } from './dto/pickup.dto';
+import { HandoffQrService } from '../handoff/handoff-qr.service';
 import { RidersService } from './riders.service';
+import { buildRiderTaskDetails } from './rider-task-summary';
 
 function generateReceiptCode(orderId: string) {
   const short = orderId.slice(-6).toUpperCase();
@@ -36,8 +40,12 @@ export class PickupService {
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(Address.name) private addressModel: Model<AddressDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
+    @InjectModel(Branch.name) private branchModel: Model<BranchDocument>,
     private ridersService: RidersService,
     private trackingGateway: TrackingGateway,
+    private riderOfferPush: RiderOfferPushService,
+    private handoffQrService: HandoffQrService,
   ) {}
 
   async dispatchPickupSearch(orderId: string) {
@@ -58,6 +66,16 @@ export class PickupService {
 
     const summary = await this.buildPickupSummary(order);
     this.trackingGateway.emitPickupOffer(summary);
+    void this.riderOfferPush.notifyOnlineRiders({
+      title: 'New Pickup Assigned',
+      body: `Pickup near ${order.branchName ?? 'laundry shop'} · ${order.bookingType.replace(/_/g, ' ')}`,
+      data: {
+        category: 'assignment',
+        type: 'pickup_offer',
+        orderId: order._id.toString(),
+      },
+      channelId: 'assignments',
+    });
     this.trackingGateway.emitOrderEvent(orderId, 'findingRider', {
       message: 'Looking for a nearby rider…',
     });
@@ -84,7 +102,7 @@ export class PickupService {
 
   async getPickupTask(orderId: string, riderUserId: string) {
     const order = await this.getOrderForRider(orderId, riderUserId);
-    return { success: true, data: await this.buildPickupSummary(order) };
+    return { success: true, data: await this.buildPickupSummary(order, riderUserId) };
   }
 
   async acceptPickup(orderId: string, riderUserId: string) {
@@ -129,7 +147,49 @@ export class PickupService {
       riderId: riderUserId,
     });
 
-    return { success: true, data: await this.buildPickupSummary(order) };
+    return { success: true, data: await this.buildPickupSummary(order, riderUserId) };
+  }
+
+  async rejectPickup(orderId: string, riderUserId: string) {
+    const order = await this.orderModel.findById(orderId);
+    if (!order) throw new NotFoundException('Order not found');
+
+    const isOpenOffer =
+      (order.status === OrderStatus.SHOP_ASSIGNED || order.status === OrderStatus.CONFIRMED) &&
+      !order.pickupRiderId;
+
+    if (isOpenOffer) {
+      return { success: true, data: { dismissed: true, orderId } };
+    }
+
+    if (order.pickupRiderId?.toString() !== riderUserId) {
+      throw new ForbiddenException('Not your pickup task');
+    }
+    if (order.pickup?.arrivedAt || order.pickup?.collectedAt) {
+      throw new BadRequestException('Cannot reject after pickup has started');
+    }
+
+    const now = new Date();
+    order.set('pickupRiderId', undefined);
+    order.status = order.branchId ? OrderStatus.SHOP_ASSIGNED : OrderStatus.CONFIRMED;
+    if (order.pickup) {
+      order.pickup.acceptedAt = undefined;
+      order.pickup.verificationHint = undefined;
+    }
+    order.statusHistory.push({
+      status: order.status,
+      timestamp: now,
+      note: 'Rider rejected pickup assignment',
+      updatedBy: riderUserId,
+    });
+    await order.save();
+
+    this.trackingGateway.emitDispatchQueueUpdated({
+      reason: 'pickup_rider_rejected',
+      orderId,
+    });
+
+    return { success: true, data: await this.buildPickupSummary(order, riderUserId) };
   }
 
   async markArrived(orderId: string, riderUserId: string) {
@@ -142,14 +202,15 @@ export class PickupService {
       message: 'Your rider has arrived',
     });
 
-    return { success: true, data: await this.buildPickupSummary(order) };
+    return { success: true, data: await this.buildPickupSummary(order, riderUserId) };
   }
 
   async verifyCustomer(orderId: string, riderUserId: string, dto: VerifyCustomerDto) {
     const order = await this.getActivePickupOrder(orderId, riderUserId, true);
     const customer = await this.userModel.findById(order.customerId).select('phone');
     const expected = phoneVerificationHint(customer?.phone);
-    if (dto.code !== expected) {
+    const code = this.handoffQrService.resolvePickupVerificationCode(dto, orderId);
+    if (code !== expected) {
       throw new BadRequestException('Verification code does not match customer phone');
     }
     if (!order.pickup) order.pickup = {};
@@ -193,7 +254,7 @@ export class PickupService {
     }
     await order.save();
 
-    return { success: true, data: await this.buildPickupSummary(order) };
+    return { success: true, data: await this.buildPickupSummary(order, riderUserId) };
   }
 
   async capturePhoto(orderId: string, riderUserId: string, photoUrl: string) {
@@ -208,7 +269,7 @@ export class PickupService {
     order.pickup.photoUrl = photoUrl;
     await order.save();
 
-    return { success: true, data: await this.buildPickupSummary(order) };
+    return { success: true, data: await this.buildPickupSummary(order, riderUserId) };
   }
 
   async generatePickupReceipt(orderId: string, riderUserId: string) {
@@ -233,16 +294,19 @@ export class PickupService {
     return {
       success: true,
       data: {
-        ...(await this.buildPickupSummary(order)),
+        ...(await this.buildPickupSummary(order, riderUserId)),
         receiptCode,
       },
     };
   }
 
-  async dropAtShop(orderId: string, riderUserId: string) {
+  async dropAtShop(orderId: string, riderUserId: string, dto?: DropAtShopDto) {
     const order = await this.getActivePickupOrder(orderId, riderUserId);
     if (!order.pickup?.receiptCode) {
       throw new BadRequestException('Generate pickup receipt before delivering to shop');
+    }
+    if (dto?.qrPayload) {
+      this.handoffQrService.validateOrderHandoverQr(dto.qrPayload, order);
     }
     if (!order.pickup) order.pickup = {};
     const now = new Date();
@@ -271,7 +335,7 @@ export class PickupService {
     return {
       success: true,
       data: {
-        ...(await this.buildPickupSummary(order)),
+        ...(await this.buildPickupSummary(order, riderUserId)),
         earnings,
       },
     };
@@ -329,9 +393,35 @@ export class PickupService {
     return order;
   }
 
-  private async buildPickupSummary(order: OrderDocument) {
+  private async buildPickupSummary(order: OrderDocument, riderUserId?: string) {
     const address = await this.addressModel.findById(order.pickupAddressId);
-    const customer = await this.userModel.findById(order.customerId).select('phone');
+    const isAssigned = order.pickupRiderId?.toString() === riderUserId;
+    const isOffer =
+      (order.status === OrderStatus.SHOP_ASSIGNED || order.status === OrderStatus.CONFIRMED) &&
+      !order.pickupRiderId;
+    const taskDetails = await buildRiderTaskDetails(
+      order,
+      {
+        customerModel: this.customerModel,
+        branchModel: this.branchModel,
+        userModel: this.userModel,
+        addressModel: this.addressModel,
+      },
+      {
+        includeDialablePhone: isAssigned,
+        customerAddressId: order.pickupAddressId,
+      },
+    );
+
+    const canReject =
+      isOffer ||
+      (isAssigned &&
+        !order.pickup?.arrivedAt &&
+        !order.pickup?.collectedAt &&
+        [
+          OrderStatus.RIDER_ASSIGNED_PICKUP,
+          OrderStatus.RIDER_ASSIGNED,
+        ].includes(order.status));
 
     return {
       _id: order._id.toString(),
@@ -360,10 +450,16 @@ export class PickupService {
             longitude: address.longitude,
           }
         : null,
-      customerPhoneMasked: customer?.phone
-        ? `***${customer.phone.slice(-4)}`
-        : undefined,
-      shopLocation: PARTNER_SHOP_LOCATION,
+      customerPhoneMasked: taskDetails.customerPhoneMasked,
+      customerPhone: taskDetails.customerPhone,
+      customerName: taskDetails.customerName,
+      orderNumber: taskDetails.orderNumber,
+      specialInstructions: taskDetails.specialInstructions,
+      shopName: taskDetails.shopName,
+      shopPhone: taskDetails.shopPhone,
+      shopPhoneMasked: taskDetails.shopPhoneMasked,
+      canReject,
+      shopLocation: taskDetails.shopLocation,
     };
   }
 }

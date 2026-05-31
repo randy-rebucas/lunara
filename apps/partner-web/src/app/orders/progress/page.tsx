@@ -1,36 +1,22 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useMemo } from 'react';
+import type { PartnerOrderSummary } from '@lunara/types';
+import { AuthLoading } from '../../../components/auth-loading';
 import { DataPageStatus } from '../../../components/data-page-status';
 import { PageHeader } from '../../../components/ui/page-header';
 import { LiveBadge } from '../../../components/ui/card';
-import { isPartnerRole, partnerFetch } from '../../../lib/partner-api';
+import { useRequirePartner } from '../../../hooks/use-protected-page';
+import { partnerFetch } from '../../../lib/partner-api';
 import { usePartnerQuery } from '../../../lib/use-partner-query';
 import { usePartnerPipelineSocket } from '../../../lib/use-partner-pipeline-socket';
 
-interface ProgressOrder {
-  _id: string;
-  bookingType: string;
-  status: string;
-  total: number;
-  currentStepLabel?: string;
-  assignedStaffEmail?: string;
-  progress?: number;
-  branchId?: string;
-}
-
 export default function MonitorProgressPage() {
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!isPartnerRole()) router.replace('/orders');
-  }, [router]);
+  const { ready } = useRequirePartner();
 
   const load = useCallback(async () => {
-    if (!isPartnerRole()) return [] as ProgressOrder[];
-    const d = await partnerFetch<{ items: ProgressOrder[] }>('/partner/orders/progress');
+    const d = await partnerFetch<{ items: PartnerOrderSummary[] }>('/partner/orders/progress');
     return d.items;
   }, []);
 
@@ -47,7 +33,7 @@ export default function MonitorProgressPage() {
     },
   });
 
-  if (!isPartnerRole()) return null;
+  if (!ready) return <AuthLoading message="Loading progress…" />;
 
   return (
     <div>
@@ -74,9 +60,6 @@ export default function MonitorProgressPage() {
               </p>
               {o.assignedStaffEmail && (
                 <p className="mt-1 text-xs text-muted">Staff: {o.assignedStaffEmail}</p>
-              )}
-              {typeof o.progress === 'number' && o.progress > 0 && (
-                <p className="mt-1 text-xs text-primary">{o.progress} steps completed</p>
               )}
             </div>
           </Link>

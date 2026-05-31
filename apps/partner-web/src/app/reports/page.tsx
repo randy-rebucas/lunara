@@ -1,40 +1,26 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useState } from 'react';
+import type { PartnerReportData } from '@lunara/types';
+import { AuthLoading } from '../../components/auth-loading';
 import { DataPageStatus } from '../../components/data-page-status';
 import { Card, CardBody, StatCard } from '../../components/ui/card';
 import { PageHeader } from '../../components/ui/page-header';
-import { isPartnerRole, partnerFetch } from '../../lib/partner-api';
+import { useRequirePartner } from '../../hooks/use-protected-page';
+import { partnerFetch } from '../../lib/partner-api';
 import { usePartnerQuery } from '../../lib/use-partner-query';
 
-interface ReportData {
-  periodDays: number;
-  from: string;
-  totalOrders: number;
-  completedOrders: number;
-  revenue: number;
-  averageOrderValue: number;
-  ordersByStatus: Record<string, number>;
-  completedByService: Record<string, number>;
-}
-
 export default function ReportsPage() {
-  const router = useRouter();
+  const { ready } = useRequirePartner();
   const [days, setDays] = useState(7);
 
-  useEffect(() => {
-    if (!isPartnerRole()) router.replace('/orders');
-  }, [router]);
-
   const load = useCallback(async () => {
-    if (!isPartnerRole()) return null as unknown as ReportData;
-    return partnerFetch<ReportData>(`/partner/reports?days=${days}`);
+    return partnerFetch<PartnerReportData>(`/partner/reports?days=${days}`);
   }, [days]);
 
   const { data: report, loading, error } = usePartnerQuery(load, [days]);
 
-  if (!isPartnerRole()) return null;
+  if (!ready) return <AuthLoading message="Loading reports…" />;
 
   return (
     <div>

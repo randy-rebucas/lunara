@@ -1,18 +1,18 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useCallback, useEffect } from 'react';
+import { useCallback } from 'react';
 import { ButtonLink } from '../../components/ui/button-link';
-import { fetchOnboardingStatus } from '@lunara/hooks/onboarding';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { formatCurrency } from '@lunara/utils';
+import { AuthLoading } from '../../components/auth-loading';
 import { DataPageStatus } from '../../components/data-page-status';
 import { PageShell } from '../../components/page-shell';
 import { ReviewNotifications } from '../../components/review/review-notifications';
 import { DashboardDeals, ShareInviteCard } from '../../components/share/share-sections';
 import { Card, CardBody } from '../../components/ui/card';
 import { PageHeader } from '../../components/ui/page-header';
+import { useProtectedPage } from '../../hooks/use-protected-page';
 import { useCustomerQuery } from '../../lib/use-customer-query';
 
 interface CustomerProfile {
@@ -28,24 +28,11 @@ interface OrderSummary {
 }
 
 export default function DashboardPage() {
-  const { isAuthenticated, isLoading, api } = useAuthContext();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) router.replace('/login');
-  }, [isLoading, isAuthenticated, router]);
-
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    fetchOnboardingStatus(api).then((status) => {
-      if (!status.isComplete) {
-        router.replace(status.needsProfile ? '/onboarding/profile' : '/onboarding/address');
-      }
-    });
-  }, [isAuthenticated, api, router]);
+  const { api } = useAuthContext();
+  const { isLoading, ready } = useProtectedPage({ requireOnboarding: true });
 
   const load = useCallback(async () => {
-    if (!isAuthenticated) {
+    if (!ready) {
       return { profile: null as CustomerProfile | null, balance: 0, orders: [] as OrderSummary[] };
     }
     const [profileRes, walletRes, ordersRes] = await Promise.all([
@@ -58,11 +45,13 @@ export default function DashboardPage() {
       balance: walletRes.data.balance,
       orders: ordersRes.data.items.slice(0, 3),
     };
-  }, [isAuthenticated, api]);
+  }, [ready, api]);
 
-  const { data, loading, error } = useCustomerQuery(load, [isAuthenticated, api]);
+  const { data, loading, error } = useCustomerQuery(load, [ready, api]);
 
-  if (isLoading || !isAuthenticated) return null;
+  if (isLoading || !ready) {
+    return <AuthLoading message="Loading dashboard…" />;
+  }
 
   const profile = data?.profile ?? null;
   const balance = data?.balance ?? 0;

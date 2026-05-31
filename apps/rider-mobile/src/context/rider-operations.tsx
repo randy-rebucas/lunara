@@ -4,78 +4,61 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
-import { Alert } from 'react-native';
 import * as Location from 'expo-location';
-import { io } from 'socket.io-client';
-import { getApiOrigin } from '../api-config';
-import { riderFetch } from '../api';
+import { Alert } from 'react-native';
+import type { Socket } from 'socket.io-client';
+import { RIDER_GPS_UPDATE_INTERVAL_MS, type RiderLocationPayload } from '@lunara/utils';
+import { riderFetch, queueGps } from '../api';
 import { riderLogout } from '../auth';
+import { useRiderDispatchSocket } from '../hooks/use-rider-dispatch-socket';
+import { isOnline } from '../lib/offline/network';
+import { buildLocationPayload, locationSocketPayload } from '../lib/rider-location';
+import { getRouteProgressIndex } from '../lib/route-progress';
+import type {
+  ActiveAssignment,
+  DeliveryOffer,
+  EarningsData,
+  PickupOffer,
+  RiderMe,
+  ShiftStatus,
+  Task,
+} from '../lib/rider-types';
 import { useAuthStore } from '../store/auth';
-
-export interface PickupOffer {
-  _id: string;
-  status: string;
-  bookingType: string;
-  scheduledPickupAt?: string;
-  pickupAddress?: { label: string; city: string } | null;
-}
-
-export interface DeliveryOffer {
-  _id: string;
-  status: string;
-  bookingType: string;
-  deliveryAddress?: { label: string; city: string } | null;
-}
-
-export interface Task {
-  _id: string;
-  status: string;
-  bookingType: string;
-}
-
-export interface RiderMe {
-  userId?: string;
-  riderId?: string;
-  isOnline: boolean;
-  totalEarnings: number;
-  todayEarnings: number;
-  user?: { firstName: string; lastName: string } | null;
-}
-
-export function getRouteProgressIndex(
-  online: boolean,
-  offers: PickupOffer[],
-  deliveryOffers: DeliveryOffer[],
-  tasks: Task[],
-): number {
-  if (tasks.length > 0) return 4;
-  if (offers.length > 0 || deliveryOffers.length > 0) return 3;
-  if (online) return 2;
-  return 1;
-}
 
 interface RiderOperationsContextValue {
   me: RiderMe | null;
   offers: PickupOffer[];
   deliveryOffers: DeliveryOffer[];
   tasks: Task[];
+  activeAssignment: ActiveAssignment | null;
   unreadCount: number;
   refreshing: boolean;
+  locationDenied: boolean;
   name: string;
   online: boolean;
+  shiftStatus: ShiftStatus;
+  weekEarnings: number;
+  monthEarnings: number;
   routeProgressIndex: number;
   taskBadgeCount: number;
   refresh: () => void;
   onRefresh: () => Promise<void>;
   goOnline: () => Promise<void>;
   goOffline: () => Promise<void>;
+  startBreak: () => Promise<void>;
+  endBreak: () => Promise<void>;
   acceptPickupOffer: (orderId: string) => Promise<void>;
   previewDeliveryQueue: (orderId: string) => void;
   openTask: (orderId: string, status: string) => void;
+  requestLocationPermission: () => Promise<void>;
   handleLogout: () => Promise<void>;
+  setUnreadCount: (count: number) => void;
+  emitSosLocation: (orderId: string, payload: RiderLocationPayload) => void;
 }
 
 const RiderOperationsContext = createContext<RiderOperationsContextValue | null>(null);
@@ -90,9 +73,14 @@ export function RiderOperationsProvider({ children }: { children: ReactNode }) {
   const [offers, setOffers] = useState<PickupOffer[]>([]);
   const [deliveryOffers, setDeliveryOffers] = useState<DeliveryOffer[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [activeAssignment, setActiveAssignment] = useState<ActiveAssignment | null>(null);
+  const [weekEarnings, setWeekEarnings] = useState(0);
+  const [monthEarnings, setMonthEarnings] = useState(0);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [locationDenied, setLocationDenied] = useState(false);
+  const socketRef = useRef<Socket | null>(null);
 
   const loadMe = useCallback(async () => {
     try {
@@ -130,6 +118,29 @@ export function RiderOperationsProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const loadActiveAssignment = useCallback(async () => {
+    try {
+      const data = await riderFetch<ActiveAssignment | null>('/riders/active-assignment');
+      setActiveAssignment(data);
+      if (data?.orderId) {
+        setActiveOrderId(data.orderId);
+      }
+    } catch {
+      setActiveAssignment(null);
+    }
+  }, []);
+
+  const loadEarnings = useCallback(async () => {
+    try {
+      const data = await riderFetch<EarningsData>('/riders/earnings');
+      setWeekEarnings(data.weekEarnings);
+      setMonthEarnings(data.monthEarnings);
+    } catch {
+      setWeekEarnings(0);
+      setMonthEarnings(0);
+    }
+  }, []);
+
   const loadNotifications = useCallback(async () => {
     try {
       const data = await riderFetch<{ read: boolean }[]>('/riders/notifications');
@@ -144,74 +155,78 @@ export function RiderOperationsProvider({ children }: { children: ReactNode }) {
     loadOffers();
     loadDeliveryOffers();
     loadTasks();
+    loadActiveAssignment();
+    loadEarnings();
     loadNotifications();
-  }, [loadMe, loadOffers, loadDeliveryOffers, loadTasks, loadNotifications]);
+  }, [loadMe, loadOffers, loadDeliveryOffers, loadTasks, loadActiveAssignment, loadEarnings, loadNotifications]);
 
   useEffect(() => {
+    if (!accessToken) return;
     refresh();
-  }, [refresh]);
+  }, [accessToken, refresh]);
+
+  const taskOrderIds = useMemo(() => tasks.map((task) => task._id), [tasks]);
+  const userId = socketUserId ?? me?.userId ?? null;
+  const shiftStatus: ShiftStatus =
+    me?.shiftStatus ?? (me?.isOnline ? 'online' : 'offline');
+  const online = shiftStatus === 'online';
+
+  useRiderDispatchSocket(accessToken, userId, online, taskOrderIds, {
+    onRefresh: refresh,
+    onNotificationsSync: loadNotifications,
+    onSocket: (socket) => {
+      socketRef.current = socket;
+    },
+  });
+
+  const requestLocationPermission = useCallback(async () => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    setLocationDenied(status !== 'granted');
+    if (status !== 'granted') {
+      Alert.alert(
+        'Location required',
+        'Enable location access to go on shift and share your route during active tasks.',
+      );
+    }
+  }, []);
 
   useEffect(() => {
-    if (!me?.isOnline || !accessToken) return;
+    if (!activeOrderId || !online || !accessToken) return;
 
-    const userId = socketUserId ?? me.userId;
-    const apiUrl = getApiOrigin();
-    const socket = io(`${apiUrl}/tracking`, {
-      transports: ['websocket'],
-      auth: { token: accessToken },
-    });
-    socket.emit('joinRiders');
-    if (userId) socket.emit('joinRider', { userId });
+    const orderId = activeOrderId;
+    const riderId = userId;
+    if (!riderId) return;
 
-    socket.on('pickupOffer', () => refresh());
-    socket.on('pickupAssignment', () => {
-      refresh();
-      Alert.alert('New assignment', 'You have a new pickup task from Lunara dispatch.');
-    });
-    socket.on('deliveryOffer', () => refresh());
-    socket.on('deliveryAssignment', () => {
-      refresh();
-      Alert.alert('New assignment', 'You have a new delivery task from Lunara dispatch.');
-    });
+    let cancelled = false;
 
-    return () => {
-      socket.disconnect();
-    };
-  }, [me?.isOnline, me?.userId, socketUserId, accessToken, refresh]);
-
-  useEffect(() => {
-    if (!activeOrderId || !me?.isOnline || !accessToken) return;
-
-    const userId = socketUserId ?? me.userId;
-    const apiUrl = getApiOrigin();
-    const socket = io(`${apiUrl}/tracking`, {
-      transports: ['websocket'],
-      auth: { token: accessToken },
-    });
-
-    const interval = setInterval(async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
+    const tick = async () => {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (cancelled) return;
+      setLocationDenied(status !== 'granted');
       if (status !== 'granted') return;
+
       const loc = await Location.getCurrentPositionAsync({});
-      if (userId) {
-        socket.emit('riderLocation', {
-          orderId: activeOrderId,
-          lat: loc.coords.latitude,
-          lng: loc.coords.longitude,
-          riderId: userId,
-        });
-      }
-      await riderFetch('/riders/location', {
-        method: 'PATCH',
-        body: JSON.stringify({ lat: loc.coords.latitude, lng: loc.coords.longitude }),
-      }).catch(() => {});
-    }, 5000);
+      if (cancelled) return;
+
+      const payload = buildLocationPayload(loc);
+      socketRef.current?.emit(
+        'riderLocation',
+        locationSocketPayload(payload, orderId, riderId),
+      );
+
+      await queueGps(payload, orderId);
+    };
+
+    void tick();
+    const interval = setInterval(() => {
+      void tick();
+    }, RIDER_GPS_UPDATE_INTERVAL_MS);
 
     return () => {
+      cancelled = true;
       clearInterval(interval);
-      socket.disconnect();
     };
-  }, [activeOrderId, me?.isOnline, me?.userId, socketUserId, accessToken]);
+  }, [activeOrderId, online, userId, accessToken]);
 
   async function onRefresh() {
     setRefreshing(true);
@@ -221,6 +236,8 @@ export function RiderOperationsProvider({ children }: { children: ReactNode }) {
         loadOffers(),
         loadDeliveryOffers(),
         loadTasks(),
+        loadActiveAssignment(),
+        loadEarnings(),
         loadNotifications(),
       ]);
     } finally {
@@ -229,16 +246,78 @@ export function RiderOperationsProvider({ children }: { children: ReactNode }) {
   }
 
   async function goOnline() {
-    await riderFetch('/riders/online', { method: 'POST' });
-    await loadMe();
-    refresh();
-    Alert.alert('Shift started', 'You are online and ready for assignments.');
+    if (!(await isOnline())) {
+      Alert.alert('Offline', 'Connect to the internet to start your shift.');
+      return;
+    }
+
+    const compliance = me?.compliance;
+    if (compliance && !compliance.isCompliant) {
+      const gaps = [...compliance.profileGaps, ...compliance.documentGaps];
+      Alert.alert(
+        'Complete verification first',
+        gaps.length > 0 ? gaps.join('\n') : 'Finish your profile and document uploads before going online.',
+        [
+          ...(compliance.profileGaps.length > 0
+            ? [{ text: 'Edit profile', onPress: () => router.push('/profile/edit') }]
+            : []),
+          { text: 'Documents', onPress: () => router.push('/documents') },
+          { text: 'Cancel', style: 'cancel' as const },
+        ],
+      );
+      return;
+    }
+
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    setLocationDenied(status !== 'granted');
+    if (status !== 'granted') {
+      Alert.alert(
+        'Location required',
+        'Allow location access before starting your shift so dispatch and customers can track active routes.',
+      );
+      return;
+    }
+
+    try {
+      await riderFetch('/riders/online', { method: 'POST' });
+      await loadMe();
+      refresh();
+      Alert.alert('Shift started', 'You are online and ready for assignments.');
+    } catch (e) {
+      Alert.alert('Cannot go online', e instanceof Error ? e.message : 'Verification incomplete.');
+    }
   }
 
   async function goOffline() {
+    if (!(await isOnline())) {
+      Alert.alert('Offline', 'Connect to the internet to end your shift.');
+      return;
+    }
+
     await riderFetch('/riders/offline', { method: 'POST' });
     setActiveOrderId(null);
     await loadMe();
+  }
+
+  async function startBreak() {
+    if (!(await isOnline())) {
+      Alert.alert('Offline', 'Connect to the internet to update your shift.');
+      return;
+    }
+    await riderFetch('/riders/break/start', { method: 'POST' });
+    setActiveOrderId(null);
+    await loadMe();
+  }
+
+  async function endBreak() {
+    if (!(await isOnline())) {
+      Alert.alert('Offline', 'Connect to the internet to resume your shift.');
+      return;
+    }
+    await riderFetch('/riders/break/end', { method: 'POST' });
+    await loadMe();
+    refresh();
+    Alert.alert('Shift resumed', 'You are online and ready for assignments.');
   }
 
   async function acceptPickupOffer(orderId: string) {
@@ -270,7 +349,9 @@ export function RiderOperationsProvider({ children }: { children: ReactNode }) {
   }
 
   async function handleLogout() {
-    if (me?.isOnline) await goOffline().catch(() => {});
+    if (shiftStatus === 'online' || shiftStatus === 'break') {
+      await goOffline().catch(() => {});
+    }
     await riderLogout();
     router.replace('/login');
   }
@@ -278,29 +359,54 @@ export function RiderOperationsProvider({ children }: { children: ReactNode }) {
   const name = me?.user
     ? `${me.user.firstName} ${me.user.lastName}`.trim()
     : authUser?.email?.split('@')[0] ?? 'Rider';
-  const online = me?.isOnline ?? false;
   const routeProgressIndex = getRouteProgressIndex(online, offers, deliveryOffers, tasks);
   const taskBadgeCount = online ? offers.length + deliveryOffers.length + tasks.length : 0;
+
+  const emitSosLocation = useCallback((orderId: string, payload: RiderLocationPayload) => {
+    if (!socketUserId) return;
+    const wire = locationSocketPayload(payload, orderId, socketUserId);
+    socketRef.current?.emit('sosLocation', {
+      orderId,
+      lat: payload.latitude,
+      lng: payload.longitude,
+      latitude: payload.latitude,
+      longitude: payload.longitude,
+      speed: payload.speed,
+      heading: payload.heading,
+      timestamp: payload.timestamp,
+    });
+    socketRef.current?.emit('riderLocation', wire);
+  }, [socketUserId]);
 
   const value: RiderOperationsContextValue = {
     me,
     offers,
     deliveryOffers,
     tasks,
+    activeAssignment,
     unreadCount,
     refreshing,
+    locationDenied,
     name,
     online,
+    shiftStatus,
+    weekEarnings,
+    monthEarnings,
     routeProgressIndex,
     taskBadgeCount,
     refresh,
     onRefresh,
     goOnline,
     goOffline,
+    startBreak,
+    endBreak,
     acceptPickupOffer,
     previewDeliveryQueue,
     openTask,
+    requestLocationPermission,
     handleLogout,
+    setUnreadCount,
+    emitSosLocation,
   };
 
   return (

@@ -3,47 +3,31 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
+import type { PartnerReceivingView } from '@lunara/types';
+import { UserRole } from '@lunara/types';
+import { AuthLoading } from '../../../../components/auth-loading';
 import { PageHeader } from '../../../../components/ui/page-header';
-import { partnerFetch } from '../../../../lib/partner-api';
-
-interface ReceivingView {
-  order: {
-    _id: string;
-    status: string;
-    bookingType: string;
-    total: number;
-    estimatedWeightKg?: number;
-    branchName?: string;
-    pickup?: { actualWeightKg?: number; receiptCode?: string };
-  };
-  shopReceiving?: {
-    receivedAt?: string;
-    verifiedWeightKg?: number;
-    weightVerifiedAt?: string;
-    itemCount?: number;
-    itemsConfirmedAt?: string;
-  };
-  workflowSteps: string[];
-  workflowStep: number;
-  workflowStepLabel?: string;
-  canReceive: boolean;
-  canVerifyWeight: boolean;
-  canConfirmItems: boolean;
-  isComplete: boolean;
-}
+import { OrderHandoffQr } from '../../../../components/order-handoff-qr';
+import { useProtectedPage } from '../../../../hooks/use-protected-page';
+import { isPartnerRole, partnerFetch } from '../../../../lib/partner-api';
 
 export default function ShopReceivingPage() {
   const { id } = useParams<{ id: string }>();
-  const [view, setView] = useState<ReceivingView | null>(null);
+  const { ready } = useProtectedPage({ roles: [UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN] });
+  const partner = isPartnerRole();
+  const [view, setView] = useState<PartnerReceivingView | null>(null);
   const [weight, setWeight] = useState('');
   const [itemCount, setItemCount] = useState('1');
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const backHref = partner ? '/orders/incoming' : '/orders';
+  const backLabel = partner ? 'Incoming orders' : 'Processing queue';
+
   const load = useCallback(async () => {
     if (!id) return;
-    const data = await partnerFetch<ReceivingView>(`/partner/orders/${id}/receiving`);
+    const data = await partnerFetch<PartnerReceivingView>(`/partner/orders/${id}/receiving`);
     setView(data);
     if (data.shopReceiving?.verifiedWeightKg) {
       setWeight(String(data.shopReceiving.verifiedWeightKg));
@@ -56,8 +40,9 @@ export default function ShopReceivingPage() {
   }, [id]);
 
   useEffect(() => {
+    if (!ready) return;
     load().catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'));
-  }, [load]);
+  }, [ready, load]);
 
   async function run(path: string, body?: object) {
     if (!id) return;
@@ -76,8 +61,10 @@ export default function ShopReceivingPage() {
     }
   }
 
+  if (!ready) return <AuthLoading message="Loading receiving…" />;
+
   if (!view) {
-    return error ? <div className="alert-error">{error}</div> : <p className="text-sm text-muted">Loading…</p>;
+    return error ? <div className="alert-error">{error}</div> : <AuthLoading message="Loading…" />;
   }
 
   const est = view.order.estimatedWeightKg;
@@ -87,8 +74,8 @@ export default function ShopReceivingPage() {
     <div>
       <PageHeader
         title="Shop receiving"
-        backHref="/orders/incoming"
-        backLabel="Incoming orders"
+        backHref={backHref}
+        backLabel={backLabel}
         description={
           <>
             <span className="capitalize">{view.order.bookingType.replace(/_/g, ' ')}</span>
@@ -121,10 +108,13 @@ export default function ShopReceivingPage() {
       </ol>
 
       {view.order.pickup?.receiptCode && (
-        <p className="mt-4 text-sm text-muted">
-          Pickup receipt:{' '}
-          <span className="font-mono font-semibold text-slate-900">{view.order.pickup.receiptCode}</span>
-        </p>
+        <>
+          <p className="mt-4 text-sm text-muted">
+            Pickup receipt:{' '}
+            <span className="font-mono font-semibold text-slate-900">{view.order.pickup.receiptCode}</span>
+          </p>
+          <OrderHandoffQr orderId={view.order._id} receiptCode={view.order.pickup.receiptCode} />
+        </>
       )}
 
       {error && <div className="alert-error mt-4">{error}</div>}

@@ -9,12 +9,13 @@ import {
   formatCurrency,
   formatOrderStatusLabel,
 } from '@lunara/utils';
+import { AuthLoading } from '../../components/auth-loading';
 import { DataPageStatus } from '../../components/data-page-status';
 import { PageShell } from '../../components/page-shell';
 import { Card, CardBody } from '../../components/ui/card';
 import { PageHeader } from '../../components/ui/page-header';
 import { useInfiniteScroll } from '../../hooks/use-infinite-scroll';
-import { useRequireOnboardingComplete } from '../../hooks/use-require-onboarding';
+import { useProtectedPage } from '../../hooks/use-protected-page';
 
 interface OrderSummary {
   _id: string;
@@ -34,7 +35,7 @@ const PAGE_SIZE = 15;
 
 export default function OrdersPage() {
   const { api } = useAuthContext();
-  const { isLoading, ready } = useRequireOnboardingComplete();
+  const { isLoading, ready } = useProtectedPage({ requireOnboarding: true });
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -100,7 +101,9 @@ export default function OrdersPage() {
     loading: loading || loadingMore,
   });
 
-  if (isLoading || !ready) return null;
+  if (isLoading || !ready) {
+    return <AuthLoading message="Loading orders…" />;
+  }
 
   return (
     <PageShell>

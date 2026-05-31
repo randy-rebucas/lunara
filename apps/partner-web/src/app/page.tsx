@@ -1,48 +1,26 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback } from 'react';
+import type { PartnerDashboardData } from '@lunara/types';
+import { AuthLoading } from '../components/auth-loading';
 import { DataPageStatus } from '../components/data-page-status';
 import { Card, CardBody, StatCard } from '../components/ui/card';
 import { PageHeader } from '../components/ui/page-header';
-import { isPartnerRole, partnerFetch } from '../lib/partner-api';
+import { useRequirePartner } from '../hooks/use-protected-page';
+import { partnerFetch } from '../lib/partner-api';
 import { usePartnerQuery } from '../lib/use-partner-query';
 
-interface DashboardData {
-  counts: {
-    incoming: number;
-    inProcessing: number;
-    readyForDelivery: number;
-    completedToday: number;
-    staffMembers: number;
-    lowStockItems: number;
-  };
-  revenue: { today: number; week: number; todayOrders: number; weekOrders: number };
-  recentOrders: {
-    _id: string;
-    bookingType: string;
-    status: string;
-    total: number;
-    assignedStaffEmail?: string;
-  }[];
-}
-
 export default function PartnerDashboardPage() {
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!isPartnerRole()) router.replace('/orders');
-  }, [router]);
+  const { ready } = useRequirePartner();
 
   const load = useCallback(async () => {
-    if (!isPartnerRole()) return null as unknown as DashboardData;
-    return partnerFetch<DashboardData>('/partner/dashboard');
+    return partnerFetch<PartnerDashboardData>('/partner/dashboard');
   }, []);
 
   const { data, loading, error } = usePartnerQuery(load, []);
 
-  if (!isPartnerRole()) return null;
+  if (!ready) return <AuthLoading message="Loading dashboard…" />;
 
   if (loading || error || !data) {
     return (

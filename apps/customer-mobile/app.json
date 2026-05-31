@@ -7,8 +7,25 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "ios": {
+      "bundleIdentifier": "com.lunara.customer",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "com.lunara.customer",
+      "softwareKeyboardLayoutMode": "resize"
+    },
     "plugins": [
       "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "../../packages/brand/assets/icon.png",
+          "color": "#6366f1",
+          "defaultChannel": "default",
+          "sounds": []
+        }
+      ],
       [
         "expo-location",
         {
@@ -22,9 +39,6 @@
         }
       ]
     ],
-    "experiments": { "typedRoutes": true },
-    "android": {
-      "softwareKeyboardLayoutMode": "resize"
-    }
+    "experiments": { "typedRoutes": true }
   }
 }

@@ -2,13 +2,18 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { UserRole } from '@lunara/types';
 import { BrandMark } from '../../components/ui/brand-mark';
 import { staffLogin } from '../../lib/partner-api';
 
+const DEV_EMAIL = 'partner@lunara.dev';
+const DEV_PASSWORD = 'password123';
+const isDev = process.env.NODE_ENV === 'development';
+
 export default function PortalLoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('partner@lunara.dev');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState(isDev ? DEV_EMAIL : '');
+  const [password, setPassword] = useState(isDev ? DEV_PASSWORD : '');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -18,7 +23,7 @@ export default function PortalLoginPage() {
     setError('');
     try {
       const user = await staffLogin(email.trim(), password);
-      router.replace(user.role === 'staff' ? '/orders' : '/');
+      router.replace(user.role === UserRole.STAFF ? '/orders' : '/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
@@ -46,6 +51,7 @@ export default function PortalLoginPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="email"
+            required
           />
 
           <label className="form-label mt-4">Password</label>
@@ -55,6 +61,7 @@ export default function PortalLoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="current-password"
+            required
           />
 
           {error && <div className="alert-error mt-4">{error}</div>}
@@ -63,9 +70,11 @@ export default function PortalLoginPage() {
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
 
-          <p className="mt-6 text-center text-xs text-muted-foreground">
-            Partner: partner@lunara.dev · Staff: staff@lunara.dev / password123
-          </p>
+          {isDev && (
+            <p className="mt-6 text-center text-xs text-muted-foreground">
+              Partner: partner@lunara.dev · Staff: staff@lunara.dev / password123
+            </p>
+          )}
         </div>
       </form>
     </div>

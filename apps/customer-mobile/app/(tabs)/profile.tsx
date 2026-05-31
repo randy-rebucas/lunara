@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
@@ -320,6 +320,29 @@ export default function ProfileScreen() {
                 </Card>
               ))
             )}
+
+            <Text style={[styles.sectionTitle, styles.sectionTitleSpaced]}>Help & account</Text>
+            <Card muted style={styles.sectionCard}>
+              <Pressable style={styles.prefRow} onPress={() => router.push('/support' as Href)}>
+                <Ionicons name="help-circle-outline" size={20} color={colors.secondary} />
+                <View style={styles.prefCopy}>
+                  <Text style={styles.prefTitle}>Support tickets</Text>
+                  <Text style={styles.prefHint}>Track lost-item reports and complaints</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
+              </Pressable>
+              <Pressable
+                style={[styles.prefRow, styles.prefRowBorder]}
+                onPress={() => router.push('/refunds' as Href)}
+              >
+                <Ionicons name="cash-outline" size={20} color={colors.accent} />
+                <View style={styles.prefCopy}>
+                  <Text style={styles.prefTitle}>Refund requests</Text>
+                  <Text style={styles.prefHint}>View status from submission through payout</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
+              </Pressable>
+            </Card>
 
             <Text style={[styles.sectionTitle, styles.sectionTitleSpaced]}>Preferences</Text>
             <Card muted style={styles.sectionCard}>

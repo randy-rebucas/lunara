@@ -7,6 +7,7 @@ import { appConfig } from '@lunara/config';
 import { fetchOnboardingStatus, getOnboardingPath } from '@lunara/hooks/onboarding';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { BrandMark } from '@lunara/ui';
+import { AuthLoading } from '../components/auth-loading';
 import { ButtonLink } from '../components/ui/button-link';
 export default function HomePage() {
   const { isAuthenticated, isLoading, api } = useAuthContext();
@@ -19,8 +20,8 @@ export default function HomePage() {
     });
   }, [isLoading, isAuthenticated, api, router]);
 
-  if (isLoading) return null;
-  if (isAuthenticated) return null;
+  if (isLoading) return <AuthLoading />;
+  if (isAuthenticated) return <AuthLoading message="Redirecting…" />;
 
   return (
     <div className="laundry-bg flex min-h-screen flex-col">

@@ -1,9 +1,11 @@
 import { useRouter } from 'expo-router';
 import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { formatCurrency } from '@lunara/utils';
+import { ComplianceBanner } from '../../src/components/compliance-banner';
 import { useRiderOperations } from '../../src/context/rider-operations';
 import { Button } from '../../src/components/ui/button';
 import { Card } from '../../src/components/ui/card';
+import { LocationPermissionBanner } from '../../src/components/ui/location-permission-banner';
 import { Screen } from '../../src/components/ui/screen';
 import { StatusBadge } from '../../src/components/ui/status-badge';
 import { useTabScreenPadding } from '../../src/hooks/use-tab-bar-height';
@@ -14,9 +16,24 @@ export default function ProfileScreen() {
   const router = useRouter();
   const tabPadding = useTabScreenPadding();
   const authUser = useAuthStore((s) => s.user);
-  const { me, name, online, unreadCount, refreshing, onRefresh, handleLogout } = useRiderOperations();
+  const {
+    me,
+    name,
+    shiftStatus,
+    unreadCount,
+    refreshing,
+    onRefresh,
+    handleLogout,
+    locationDenied,
+    requestLocationPermission,
+  } = useRiderOperations();
 
-  const email = authUser?.email ?? '—';
+  const email = authUser?.email ?? me?.user?.email ?? '—';
+  const phone = me?.user?.phone ?? '—';
+  const vehicleType = me?.vehicleType ?? 'motorcycle';
+  const plateNumber = me?.plateNumber ?? '—';
+  const compliance = me?.compliance;
+  const approvedDocs = compliance?.approvedDocumentCount ?? 0;
 
   return (
     <Screen
@@ -25,13 +42,43 @@ export default function ProfileScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       contentStyle={{ paddingBottom: tabPadding }}
     >
+      <ComplianceBanner compliance={compliance} />
+
       <Card elevated style={styles.profileCard}>
         <Text style={styles.name}>{name}</Text>
         <Text style={styles.email}>{email}</Text>
+        <Text style={styles.email}>{phone}</Text>
         <View style={styles.statusRow}>
           <Text style={styles.statusLabel}>Shift status</Text>
-          <StatusBadge online={online} />
+          <StatusBadge shiftStatus={shiftStatus} />
         </View>
+      </Card>
+
+      <LocationPermissionBanner
+        denied={locationDenied}
+        onRequestPermission={requestLocationPermission}
+      />
+
+      <Card style={styles.linkCard}>
+        <Text style={styles.cardLabel}>Verification</Text>
+        <Text style={styles.cardHint}>
+          {compliance?.isCompliant
+            ? 'Profile and documents verified — you can go online.'
+            : `${approvedDocs} of 4 documents approved.`}
+        </Text>
+        <Pressable onPress={() => router.push('/profile/edit')} style={styles.linkBtn}>
+          <Text style={styles.linkText}>Edit profile →</Text>
+        </Pressable>
+        <Pressable onPress={() => router.push('/documents')} style={styles.linkBtn}>
+          <Text style={styles.linkText}>Documents →</Text>
+        </Pressable>
+      </Card>
+
+      <Card style={styles.linkCard}>
+        <Text style={styles.cardLabel}>Vehicle</Text>
+        <Text style={styles.cardHint}>
+          {vehicleType} · Plate {plateNumber}
+        </Text>
       </Card>
 
       <Card style={styles.linkCard}>
@@ -49,7 +96,31 @@ export default function ProfileScreen() {
         <Pressable onPress={() => router.push('/earnings')} style={styles.linkBtn}>
           <Text style={styles.linkText}>View earnings history →</Text>
         </Pressable>
+        <Pressable onPress={() => router.push('/wallet' as import('expo-router').Href)} style={styles.linkBtn}>
+          <Text style={styles.linkText}>Wallet & withdrawals →</Text>
+        </Pressable>
       </Card>
+
+      <Pressable onPress={() => router.push('/(tabs)/tasks?filter=completed' as import('expo-router').Href)}>
+        <Card style={styles.menuCard}>
+          <Text style={styles.menuTitle}>Task history</Text>
+          <Text style={styles.menuHint}>Completed pickups and deliveries</Text>
+        </Card>
+      </Pressable>
+
+      <Pressable onPress={() => router.push('/performance')}>
+        <Card style={styles.menuCard}>
+          <Text style={styles.menuTitle}>Performance</Text>
+          <Text style={styles.menuHint}>Completion, acceptance, and customer ratings</Text>
+        </Card>
+      </Pressable>
+
+      <Pressable onPress={() => router.push('/support')}>
+        <Card style={styles.menuCard}>
+          <Text style={styles.menuTitle}>Help & support</Text>
+          <Text style={styles.menuHint}>FAQs, contact dispatch, and emergency SOS</Text>
+        </Card>
+      </Pressable>
 
       <Pressable onPress={() => router.push('/notifications')}>
         <Card style={styles.menuCard}>
@@ -91,6 +162,7 @@ const styles = StyleSheet.create({
   statusLabel: { ...typography.label },
   linkCard: { marginBottom: spacing.md, gap: spacing.md },
   cardLabel: { ...typography.label },
+  cardHint: { ...typography.bodySm },
   earningsRow: { flexDirection: 'row', gap: spacing.xxl },
   earnCaption: { ...typography.caption },
   earnToday: {
@@ -107,7 +179,7 @@ const styles = StyleSheet.create({
   },
   linkBtn: { marginTop: spacing.xs },
   linkText: { color: colors.primary, fontWeight: '600', fontSize: 13 },
-  menuCard: { marginBottom: spacing.lg },
+  menuCard: { marginBottom: spacing.md },
   menuRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   menuTitle: { ...typography.subheading, fontSize: 16 },
   menuHint: { ...typography.bodySm, marginTop: spacing.xs },

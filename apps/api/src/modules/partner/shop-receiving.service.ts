@@ -8,12 +8,14 @@ import {
   SHOP_RECEIVING_STEPS,
 } from '@lunara/utils';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
+import { User, UserDocument } from '../users/schemas/user.schema';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import {
   ConfirmShopItemsDto,
   ReceiveLaundryDto,
   VerifyShopWeightDto,
 } from './dto/shop-receiving.dto';
+import { assertOrderPortalAccess, resolvePortalBranchId } from './partner-access';
 
 const RECEIVING_STATUSES = [
   OrderStatus.IN_TRANSIT_TO_SHOP,
@@ -24,6 +26,7 @@ const RECEIVING_STATUSES = [
 export class ShopReceivingService {
   constructor(
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
     private trackingGateway: TrackingGateway,
   ) {}
 
@@ -168,9 +171,8 @@ export class ShopReceivingService {
     if (!order) throw new NotFoundException('Order not found');
     if (!order.branchId) throw new BadRequestException('Order has no assigned branch');
 
-    if (role === UserRole.PARTNER && order.partnerId?.toString() && order.partnerId.toString() !== userId) {
-      throw new BadRequestException('Order belongs to another partner');
-    }
+    const branchId = await resolvePortalBranchId(this.userModel, userId, role);
+    assertOrderPortalAccess(order, userId, role, branchId);
 
     return order;
   }

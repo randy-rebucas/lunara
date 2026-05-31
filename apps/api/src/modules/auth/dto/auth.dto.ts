@@ -48,3 +48,20 @@ export class RefreshTokenDto {
   @IsString()
   refreshToken!: string;
 }
+
+export class ForgotPasswordDto {
+  @IsEmail()
+  email!: string;
+}
+
+export class ResetPasswordDto {
+  @IsString()
+  phone!: string;
+
+  @IsString()
+  otp!: string;
+
+  @IsString()
+  @MinLength(8)
+  password!: string;
+}

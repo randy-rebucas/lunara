@@ -1,17 +1,54 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { existsSync, unlinkSync } from 'fs';
 import { Model, Types } from 'mongoose';
+import { basename } from 'path';
 import { OrderStatus } from '@lunara/types';
 import {
   PARTNER_SHOP_LOCATION,
-  RIDER_DELIVERY_PAYOUT,
-  RIDER_PICKUP_PAYOUT,
+  getEarningsPeriodStarts,
+  normalizeRiderLocationPayload,
+  riderEarningAmount,
+  riderLocationWirePayload,
+  RIDER_EARNING_TYPE_LABELS,
   type RiderEarningType,
 } from '@lunara/utils';
+import {
+  RIDER_DOCUMENT_PUBLIC_PREFIX,
+  riderDocumentFilePath,
+  riderDocumentPublicPath,
+} from '../../common/uploads/upload-paths';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
+import { Address, AddressDocument } from '../addresses/schemas/address.schema';
+import { Branch, BranchDocument } from '../branches/schemas/branch.schema';
+import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
 import { Notification, NotificationDocument } from '../reviews/schemas/notification.schema';
+import { Review, ReviewDocument } from '../reviews/schemas/review.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import { UpdateLocationDto, UpdateRiderProfileDto } from './dto/rider.dto';
+import {
+  isRiderCompliant,
+  isValidRiderDocumentType,
+  serializeRiderDocuments,
+  type RiderDocumentType,
+} from './rider-compliance';
+import { inferRiderNotificationCategory } from './rider-notification.constants';
+import { RiderNotificationService } from './rider-notification.service';
+import { RiderWalletService } from './rider-wallet.service';
 import { Rider, RiderDocument } from './schemas/rider.schema';
+import {
+  buildActiveAssignmentPayload,
+  isPickupLeg,
+  pickPrimaryActiveOrder,
+} from './rider-active-assignment';
+import { buildRiderPerformancePayload } from './rider-performance';
+import { buildRiderTaskDetails } from './rider-task-summary';
 
 @Injectable()
 export class RidersService {
@@ -19,7 +56,13 @@ export class RidersService {
     @InjectModel(Rider.name) private riderModel: Model<RiderDocument>,
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Address.name) private addressModel: Model<AddressDocument>,
+    @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
+    @InjectModel(Branch.name) private branchModel: Model<BranchDocument>,
     @InjectModel(Notification.name) private notificationModel: Model<NotificationDocument>,
+    @InjectModel(Review.name) private reviewModel: Model<ReviewDocument>,
+    private riderNotificationService: RiderNotificationService,
+    private riderWalletService: RiderWalletService,
   ) {}
 
   async listNotifications(userId: string, limit = 20) {
@@ -34,9 +77,29 @@ export class RidersService {
         title: n.title,
         body: n.body,
         read: n.read,
+        category:
+          (n.data?.category as string | undefined) ??
+          inferRiderNotificationCategory(n.data?.type as string | undefined),
         data: n.data,
         createdAt: n.createdAt,
       })),
+    };
+  }
+
+  async markNotificationRead(userId: string, notificationId: string) {
+    const notification = await this.notificationModel.findById(notificationId);
+    if (!notification) throw new NotFoundException('Notification not found');
+    if (notification.userId.toString() !== userId) {
+      throw new NotFoundException('Notification not found');
+    }
+    notification.read = true;
+    await notification.save();
+    return {
+      success: true,
+      data: {
+        _id: notification._id.toString(),
+        read: notification.read,
+      },
     };
   }
 
@@ -61,36 +124,65 @@ export class RidersService {
     return rider;
   }
 
-  async getMe(userId: string) {
-    const rider = await this.findOrCreate(userId);
-    const user = await this.userModel.findById(userId).select('email phone');
-    const displayName = user?.email?.split('@')[0] ?? 'Rider';
+  private serializeMePayload(
+    userId: string,
+    rider: RiderDocument,
+    user: Pick<UserDocument, 'email' | 'phone'> | null,
+  ) {
+    const compliance = isRiderCompliant(rider, user);
+    const displayFirstName =
+      rider.firstName?.trim() || user?.email?.split('@')[0] || 'Rider';
+    const displayLastName = rider.lastName?.trim() || '';
+
     return {
-      success: true,
-      data: {
-        userId,
-        riderId: rider._id.toString(),
-        isOnline: rider.isOnline,
-        totalEarnings: rider.totalEarnings,
-        todayEarnings: rider.todayEarnings,
-        shopLocation: PARTNER_SHOP_LOCATION,
-        user: user
-          ? {
-              firstName: displayName,
-              lastName: '',
-              email: user.email,
-              phone: user.phone,
-            }
-          : null,
+      userId,
+      riderId: rider._id.toString(),
+      isOnline: rider.isOnline,
+      shiftStatus: rider.shiftStatus ?? (rider.isOnline ? 'online' : 'offline'),
+      firstName: rider.firstName,
+      lastName: rider.lastName,
+      homeAddress: rider.homeAddress ?? null,
+      vehicleType: rider.vehicleType,
+      plateNumber: rider.plateNumber,
+      orCrNumber: rider.orCrNumber,
+      documents: serializeRiderDocuments(rider.documents),
+      compliance: {
+        isCompliant: compliance.isCompliant,
+        profileGaps: compliance.profileGaps,
+        documentGaps: compliance.documentGaps,
+        approvedDocumentCount: compliance.approvedDocumentCount,
+        verificationStatus: compliance.verificationStatus,
       },
+      totalEarnings: rider.totalEarnings,
+      todayEarnings: rider.todayEarnings,
+      shopLocation: PARTNER_SHOP_LOCATION,
+      user: user
+        ? {
+            firstName: displayFirstName,
+            lastName: displayLastName,
+            email: user.email,
+            phone: user.phone,
+          }
+        : null,
     };
   }
 
-  async creditEarning(userId: string, orderId: string, type: RiderEarningType) {
+  async getMe(userId: string) {
+    void this.riderNotificationService.syncOverduePickupReminders(userId).catch(() => {});
     const rider = await this.findOrCreate(userId);
-    const amount = type === 'pickup' ? RIDER_PICKUP_PAYOUT : RIDER_DELIVERY_PAYOUT;
+    const user = await this.userModel.findById(userId).select('email phone');
+    return {
+      success: true,
+      data: this.serializeMePayload(userId, rider, user),
+    };
+  }
+
+  async creditEarning(userId: string, orderId: string, type: Extract<RiderEarningType, 'pickup' | 'delivery'>) {
+    const rider = await this.findOrCreate(userId);
+    const amount = riderEarningAmount(type);
 
     rider.totalEarnings += amount;
+    this.ensureTodayBucket(rider);
     rider.todayEarnings += amount;
     rider.recentEarnings = [
       {
@@ -100,8 +192,56 @@ export class RidersService {
         earnedAt: new Date(),
       },
       ...rider.recentEarnings,
-    ].slice(0, 30);
+    ].slice(0, 50);
     await rider.save();
+
+    void this.riderWalletService
+      .creditFromTask(userId, orderId, type, amount)
+      .catch(() => {});
+
+    void this.riderNotificationService
+      .notifyEarningsCredited(userId, orderId, type, amount)
+      .catch(() => {});
+
+    return {
+      amount,
+      totalEarnings: rider.totalEarnings,
+      todayEarnings: rider.todayEarnings,
+    };
+  }
+
+  async creditManualEarning(
+    userId: string,
+    type: Extract<RiderEarningType, 'bonus' | 'adjustment'>,
+    amount: number,
+    note?: string,
+  ) {
+    const rider = await this.findOrCreate(userId);
+    const referenceId = new Types.ObjectId().toString();
+    const label = RIDER_EARNING_TYPE_LABELS[type];
+    const description = note?.trim() ? `${label}: ${note.trim()}` : label;
+
+    rider.totalEarnings += amount;
+    this.ensureTodayBucket(rider);
+    rider.todayEarnings += amount;
+    rider.recentEarnings = [
+      {
+        type,
+        amount,
+        note: note?.trim() || undefined,
+        earnedAt: new Date(),
+      },
+      ...rider.recentEarnings,
+    ].slice(0, 50);
+    await rider.save();
+
+    void this.riderWalletService
+      .creditEarning(userId, { referenceId, type, amount, description })
+      .catch(() => {});
+
+    void this.riderNotificationService
+      .notifyEarningsCredited(userId, referenceId, type, amount, note)
+      .catch(() => {});
 
     return {
       amount,
@@ -111,6 +251,7 @@ export class RidersService {
   }
 
   async getTasks(userId: string) {
+    void this.riderNotificationService.syncOverduePickupReminders(userId).catch(() => {});
     const riderId = new Types.ObjectId(userId);
     const tasks = await this.orderModel.find({
       $or: [{ pickupRiderId: riderId }, { deliveryRiderId: riderId }],
@@ -126,57 +267,448 @@ export class RidersService {
         ],
       },
     });
-    return { success: true, data: tasks };
+    return { success: true, data: tasks.map((task) => this.serializeActiveTask(task, userId)) };
   }
 
-  async getEarnings(userId: string) {
+  async getActiveAssignment(userId: string) {
     const rider = await this.findOrCreate(userId);
     const riderId = new Types.ObjectId(userId);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const orders = await this.orderModel.find({
+      $or: [{ pickupRiderId: riderId }, { deliveryRiderId: riderId }],
+      status: {
+        $in: [
+          OrderStatus.RIDER_ASSIGNED_PICKUP,
+          OrderStatus.RIDER_ASSIGNED,
+          OrderStatus.PICKED_UP,
+          OrderStatus.IN_TRANSIT_TO_SHOP,
+          OrderStatus.READY_FOR_DELIVERY,
+          OrderStatus.RIDER_ASSIGNED_DELIVERY,
+          OrderStatus.OUT_FOR_DELIVERY,
+        ],
+      },
+    });
 
-    const [todayPickups, todayDeliveries] = await Promise.all([
-      this.orderModel.countDocuments({
-        pickupRiderId: riderId,
-        'pickup.receiptCode': { $exists: true },
-        updatedAt: { $gte: today },
-      }),
-      this.orderModel.countDocuments({
-        deliveryRiderId: riderId,
-        status: { $in: [OrderStatus.DELIVERED, OrderStatus.COMPLETED] },
-        updatedAt: { $gte: today },
-      }),
+    const order = pickPrimaryActiveOrder(orders, userId);
+    if (!order) {
+      return { success: true, data: null };
+    }
+
+    const taskDetails = await buildRiderTaskDetails(
+      order,
+      {
+        customerModel: this.customerModel,
+        branchModel: this.branchModel,
+        userModel: this.userModel,
+        addressModel: this.addressModel,
+      },
+      {
+        includeDialablePhone: false,
+        customerAddressId:
+          isPickupLeg(order, userId) ? order.pickupAddressId : order.deliveryAddressId,
+      },
+    );
+
+    const [pickupAddressDoc, deliveryAddressDoc] = await Promise.all([
+      this.addressModel.findById(order.pickupAddressId),
+      this.addressModel.findById(order.deliveryAddressId),
     ]);
+
+    const toNav = (addr: typeof pickupAddressDoc) =>
+      addr
+        ? {
+            line1: addr.line1,
+            city: addr.city,
+            province: addr.province,
+            latitude: addr.latitude,
+            longitude: addr.longitude,
+          }
+        : null;
+
+    const payload = buildActiveAssignmentPayload(
+      order,
+      userId,
+      rider,
+      taskDetails.customerName,
+      toNav(pickupAddressDoc),
+      toNav(deliveryAddressDoc),
+      {
+        line1: taskDetails.shopLocation.line1,
+        city: taskDetails.shopLocation.city,
+        province: taskDetails.shopLocation.province,
+        latitude: taskDetails.shopLocation.latitude,
+        longitude: taskDetails.shopLocation.longitude,
+      },
+    );
+
+    return { success: true, data: payload };
+  }
+
+  private serializeActiveTask(task: OrderDocument, userId: string) {
+    const isDeliveryRider = task.deliveryRiderId?.toString() === userId;
+    const isPickupRider = task.pickupRiderId?.toString() === userId;
+    const pickupLeg =
+      isPickupRider &&
+      (!isDeliveryRider ||
+        [
+          OrderStatus.RIDER_ASSIGNED_PICKUP,
+          OrderStatus.RIDER_ASSIGNED,
+          OrderStatus.PICKED_UP,
+          OrderStatus.IN_TRANSIT_TO_SHOP,
+        ].includes(task.status));
+
+    return {
+      _id: task._id.toString(),
+      status: task.status,
+      bookingType: task.bookingType,
+      branchName: task.branchName,
+      leg: pickupLeg ? ('pickup' as const) : ('delivery' as const),
+      pickup: task.pickup
+        ? {
+            acceptedAt: task.pickup.acceptedAt,
+            arrivedAt: task.pickup.arrivedAt,
+            collectedAt: task.pickup.collectedAt,
+            droppedAtShop: task.pickup.droppedAtShop,
+          }
+        : undefined,
+      delivery: task.delivery
+        ? {
+            acceptedAt: task.delivery.acceptedAt,
+            pickedUpFromShopAt: task.delivery.pickedUpFromShopAt,
+            startedAt: task.delivery.startedAt,
+          }
+        : undefined,
+    };
+  }
+
+  async getTaskHistory(userId: string, limit = 30) {
+    const riderId = new Types.ObjectId(userId);
+    const tasks = await this.orderModel
+      .find({
+        $or: [
+          {
+            pickupRiderId: riderId,
+            'pickup.droppedAtShop': { $exists: true },
+          },
+          {
+            deliveryRiderId: riderId,
+            status: { $in: [OrderStatus.DELIVERED, OrderStatus.COMPLETED] },
+          },
+        ],
+      })
+      .sort({ updatedAt: -1 })
+      .limit(limit)
+      .select('_id status bookingType branchName updatedAt pickup.droppedAtShop delivery.deliveredAt deliveryRiderId');
 
     return {
       success: true,
+      data: tasks.map((task) => ({
+        _id: task._id.toString(),
+        status: task.status,
+        bookingType: task.bookingType,
+        branchName: task.branchName,
+        completedAt:
+          task.delivery?.deliveredAt ?? task.pickup?.droppedAtShop ?? task.updatedAt,
+        leg:
+          [OrderStatus.DELIVERED, OrderStatus.COMPLETED].includes(task.status) &&
+          task.deliveryRiderId?.toString() === userId
+            ? 'delivery'
+            : 'pickup',
+      })),
+    };
+  }
+
+  async getCancelledTasks(userId: string, limit = 30) {
+    const riderId = new Types.ObjectId(userId);
+    const tasks = await this.orderModel
+      .find({
+        $or: [{ pickupRiderId: riderId }, { deliveryRiderId: riderId }],
+        status: OrderStatus.CANCELLED,
+      })
+      .sort({ updatedAt: -1 })
+      .limit(limit)
+      .select('_id status bookingType branchName updatedAt pickupRiderId deliveryRiderId');
+
+    return {
+      success: true,
+      data: tasks.map((task) => ({
+        _id: task._id.toString(),
+        status: task.status,
+        bookingType: task.bookingType,
+        branchName: task.branchName,
+        cancelledAt: task.updatedAt,
+        leg:
+          task.deliveryRiderId?.toString() === userId &&
+          task.pickupRiderId?.toString() !== userId
+            ? ('delivery' as const)
+            : task.deliveryRiderId?.toString() === userId
+              ? ('delivery' as const)
+              : ('pickup' as const),
+      })),
+    };
+  }
+
+  async updateProfile(userId: string, dto: UpdateRiderProfileDto) {
+    const rider = await this.findOrCreate(userId);
+    const user = await this.userModel.findById(userId);
+
+    if (dto.firstName !== undefined) rider.firstName = dto.firstName.trim();
+    if (dto.lastName !== undefined) rider.lastName = dto.lastName.trim();
+    if (dto.vehicleType !== undefined) rider.vehicleType = dto.vehicleType;
+    if (dto.plateNumber !== undefined) rider.plateNumber = dto.plateNumber.trim();
+    if (dto.orCrNumber !== undefined) rider.orCrNumber = dto.orCrNumber.trim();
+
+    if (dto.homeAddress) {
+      rider.homeAddress = {
+        ...(rider.homeAddress ?? {}),
+        ...(dto.homeAddress.line1 !== undefined ? { line1: dto.homeAddress.line1.trim() } : {}),
+        ...(dto.homeAddress.line2 !== undefined ? { line2: dto.homeAddress.line2.trim() } : {}),
+        ...(dto.homeAddress.city !== undefined ? { city: dto.homeAddress.city.trim() } : {}),
+        ...(dto.homeAddress.province !== undefined
+          ? { province: dto.homeAddress.province.trim() }
+          : {}),
+        ...(dto.homeAddress.postalCode !== undefined
+          ? { postalCode: dto.homeAddress.postalCode.trim() }
+          : {}),
+      };
+    }
+
+    if (dto.phone !== undefined && user) {
+      const phone = dto.phone.trim();
+      if (phone !== user.phone) {
+        const existing = await this.userModel.findOne({
+          phone,
+          _id: { $ne: user._id },
+        });
+        if (existing) {
+          throw new ConflictException('Mobile number is already in use');
+        }
+        user.phone = phone;
+        await user.save();
+      }
+    }
+
+    await rider.save();
+    return this.getMe(userId);
+  }
+
+  async uploadDocument(userId: string, type: string, filename: string) {
+    if (!isValidRiderDocumentType(type)) {
+      throw new BadRequestException('Invalid document type');
+    }
+
+    const rider = await this.findOrCreate(userId);
+    const fileUrl = riderDocumentPublicPath(filename);
+    const existing = rider.documents?.find((d) => d.type === type);
+
+    if (existing?.fileUrl?.startsWith(RIDER_DOCUMENT_PUBLIC_PREFIX)) {
+      const oldFilename = basename(existing.fileUrl);
+      const oldPath = riderDocumentFilePath(oldFilename);
+      if (existsSync(oldPath)) {
+        unlinkSync(oldPath);
+      }
+    }
+
+    const nextDocuments = (rider.documents ?? []).filter((d) => d.type !== type);
+    nextDocuments.push({
+      type: type as RiderDocumentType,
+      fileUrl,
+      status: 'pending',
+      uploadedAt: new Date(),
+      reviewedAt: undefined,
+      reviewedBy: undefined,
+      rejectionReason: undefined,
+    });
+    rider.documents = nextDocuments;
+    await rider.save();
+
+    return this.getMe(userId);
+  }
+
+  async reviewDocument(
+    riderUserId: string,
+    type: string,
+    adminUserId: string,
+    status: 'approved' | 'rejected',
+    rejectionReason?: string,
+  ) {
+    if (!isValidRiderDocumentType(type)) {
+      throw new BadRequestException('Invalid document type');
+    }
+    if (status === 'rejected' && !rejectionReason?.trim()) {
+      throw new BadRequestException('Rejection reason is required');
+    }
+
+    const rider = await this.riderModel.findOne({ userId: new Types.ObjectId(riderUserId) });
+    if (!rider) throw new NotFoundException('Rider not found');
+
+    const doc = rider.documents?.find((d) => d.type === type);
+    if (!doc?.fileUrl) {
+      throw new BadRequestException('Document has not been uploaded');
+    }
+
+    doc.status = status;
+    doc.reviewedAt = new Date();
+    doc.reviewedBy = adminUserId;
+    doc.rejectionReason = status === 'rejected' ? rejectionReason?.trim() : undefined;
+    await rider.save();
+
+    const user = await this.userModel.findById(riderUserId).select('email phone');
+    return {
+      success: true,
+      data: this.serializeMePayload(riderUserId, rider, user),
+    };
+  }
+
+  async getRiderProfileForAdmin(riderUserId: string) {
+    const rider = await this.riderModel.findOne({ userId: new Types.ObjectId(riderUserId) });
+    if (!rider) throw new NotFoundException('Rider not found');
+    const user = await this.userModel.findById(riderUserId).select('email phone isActive');
+    return {
+      success: true,
       data: {
-        totalEarnings: rider.totalEarnings,
-        todayEarnings: rider.todayEarnings,
-        todayPickups,
-        todayDeliveries,
-        recentEarnings: rider.recentEarnings.map((e) => ({
-          type: e.type,
-          amount: e.amount,
-          orderId: e.orderId.toString(),
-          earnedAt: e.earnedAt,
-        })),
+        ...this.serializeMePayload(riderUserId, rider, user),
+        isActive: user?.isActive ?? true,
       },
     };
   }
 
-  async updateLocation(userId: string, lat: number, lng: number) {
+  async listPendingDocumentReviews() {
+    const riders = await this.riderModel
+      .find({ 'documents.status': 'pending' })
+      .sort({ updatedAt: -1 });
+    const users = await this.userModel
+      .find({ _id: { $in: riders.map((r) => r.userId) } })
+      .select('email phone');
+
+    const userMap = new Map(users.map((u) => [u._id.toString(), u]));
+
+    return {
+      success: true,
+      data: riders.flatMap((rider) => {
+        const userId = rider.userId.toString();
+        const user = userMap.get(userId);
+        return (rider.documents ?? [])
+          .filter((d) => d.status === 'pending' && d.fileUrl)
+          .map((d) => ({
+            userId,
+            riderId: rider._id.toString(),
+            email: user?.email,
+            phone: user?.phone,
+            firstName: rider.firstName,
+            lastName: rider.lastName,
+            document: d,
+          }));
+      }),
+    };
+  }
+
+  async getEarnings(userId: string) {
     const rider = await this.findOrCreate(userId);
-    rider.currentLocation = { type: 'Point', coordinates: [lng, lat] };
+    this.ensureTodayBucket(rider);
+    const riderId = new Types.ObjectId(userId);
+    const { todayStart, weekStart, monthStart } = getEarningsPeriodStarts();
+
+    const [todayPickups, todayDeliveries, weekEarnings, monthEarnings, recentEarnings] =
+      await Promise.all([
+        this.orderModel.countDocuments({
+          pickupRiderId: riderId,
+          'pickup.receiptCode': { $exists: true },
+          updatedAt: { $gte: todayStart },
+        }),
+        this.orderModel.countDocuments({
+          deliveryRiderId: riderId,
+          status: { $in: [OrderStatus.DELIVERED, OrderStatus.COMPLETED] },
+          updatedAt: { $gte: todayStart },
+        }),
+        this.riderWalletService.sumCreditsSince(userId, weekStart),
+        this.riderWalletService.sumCreditsSince(userId, monthStart),
+        this.riderWalletService.getRecentEarningEntries(userId, 30),
+      ]);
+
+    return {
+      success: true,
+      data: {
+        todayEarnings: rider.todayEarnings,
+        weekEarnings,
+        monthEarnings,
+        lifetimeEarnings: rider.totalEarnings,
+        totalEarnings: rider.totalEarnings,
+        todayPickups,
+        todayDeliveries,
+        recentEarnings,
+      },
+    };
+  }
+
+  async updateLocation(userId: string, dto: UpdateLocationDto) {
+    const normalized = normalizeRiderLocationPayload(dto);
+    const rider = await this.findOrCreate(userId);
+    rider.currentLocation = {
+      type: 'Point',
+      coordinates: [normalized.longitude, normalized.latitude],
+    };
+    rider.lastLocationSpeed = normalized.speed;
+    rider.lastLocationHeading = normalized.heading;
+    rider.lastLocationRecordedAt = new Date(normalized.timestamp);
     await rider.save();
-    return { success: true, data: { lat, lng } };
+    return { success: true, data: riderLocationWirePayload(normalized) };
   }
 
   async setOnline(userId: string, isOnline: boolean) {
     const rider = await this.findOrCreate(userId);
+
+    if (isOnline) {
+      const user = await this.userModel.findById(userId).select('phone');
+      const compliance = isRiderCompliant(rider, user);
+      if (!compliance.isCompliant) {
+        throw new ForbiddenException({
+          message: 'Complete your profile and get all documents approved before going online',
+          profileGaps: compliance.profileGaps,
+          documentGaps: compliance.documentGaps,
+        });
+      }
+    }
+
     rider.isOnline = isOnline;
+    rider.shiftStatus = isOnline ? 'online' : 'offline';
     await rider.save();
-    return { success: true, data: { isOnline } };
+    return {
+      success: true,
+      data: { isOnline, shiftStatus: rider.shiftStatus },
+    };
+  }
+
+  async startBreak(userId: string) {
+    const rider = await this.findOrCreate(userId);
+    if (!rider.isOnline && rider.shiftStatus !== 'online') {
+      throw new BadRequestException('Go online before taking a break');
+    }
+    rider.shiftStatus = 'break';
+    rider.isOnline = false;
+    await rider.save();
+    return {
+      success: true,
+      data: { isOnline: false, shiftStatus: 'break' as const },
+    };
+  }
+
+  async endBreak(userId: string) {
+    const rider = await this.findOrCreate(userId);
+    if (rider.shiftStatus !== 'break') {
+      throw new BadRequestException('You are not on break');
+    }
+    rider.shiftStatus = 'online';
+    rider.isOnline = true;
+    await rider.save();
+    return {
+      success: true,
+      data: { isOnline: true, shiftStatus: 'online' as const },
+    };
+  }
+
+  async getPerformance(userId: string) {
+    const data = await buildRiderPerformancePayload(this.orderModel, this.reviewModel, userId);
+    return { success: true, data };
   }
 
   async findNearestOnline() {

@@ -23,7 +23,7 @@ export default function SplashScreen() {
             <Text style={styles.title}>{appConfig.name}</Text>
             <Text style={styles.subtitle}>{appConfig.tagline}</Text>
             <View style={styles.actions}>
-              <Link href="/(auth)/login" asChild>
+              <Link href="/(auth)/signup" asChild>
                 <Button label="Get started" size="lg" style={styles.primaryBtn} />
               </Link>
               <Link href="/(auth)/login" asChild>

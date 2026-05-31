@@ -6,8 +6,10 @@ import { useCallback } from 'react';
 import { REFUND_FLOW, formatRefundStatus, refundFlowIndex } from '@lunara/utils';
 import { ButtonLink } from '../../../components/ui/button-link';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
+import { AuthLoading } from '../../../components/auth-loading';
 import { PageShell } from '../../../components/page-shell';
 import { DataPageStatus } from '../../../components/data-page-status';
+import { useProtectedPage } from '../../../hooks/use-protected-page';
 import { useCustomerQuery } from '../../../lib/use-customer-query';
 
 interface RefundDetail {
@@ -27,6 +29,7 @@ interface RefundDetail {
 export default function RefundDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { api } = useAuthContext();
+  const { isLoading, ready } = useProtectedPage({ requireOnboarding: true });
 
   const load = useCallback(async () => {
     if (!id) throw new Error('Refund not found');
@@ -34,7 +37,11 @@ export default function RefundDetailPage() {
     return res.data.refund;
   }, [api, id]);
 
-  const { data: refund, loading, error } = useCustomerQuery(load, [api, id]);
+  const { data: refund, loading, error } = useCustomerQuery(load, [ready, api, id]);
+
+  if (isLoading || !ready) {
+    return <AuthLoading message="Loading refund…" />;
+  }
 
   if (loading || error || !refund) {
     return (

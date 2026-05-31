@@ -5,6 +5,7 @@ import { OrderStatus, UserRole } from '@lunara/types';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { Rider, RiderDocument } from '../riders/schemas/rider.schema';
+import { isRiderCompliant } from '../riders/rider-compliance';
 import {
   Promotion,
   PromotionDocument,
@@ -223,6 +224,7 @@ export class AdminService {
       data: riders.map((r) => {
         const uid = r.userId.toString();
         const user = userMap.get(uid);
+        const compliance = isRiderCompliant(r, user);
         return {
           _id: r._id.toString(),
           userId: uid,
@@ -231,6 +233,9 @@ export class AdminService {
           isActive: user?.isActive ?? true,
           isOnline: r.isOnline,
           vehicleType: r.vehicleType,
+          firstName: r.firstName,
+          lastName: r.lastName,
+          verificationStatus: compliance.verificationStatus,
           totalEarnings: r.totalEarnings,
           todayEarnings: r.todayEarnings,
           activeTasks: (deliveryMap.get(uid) ?? 0) + (pickupMap.get(uid) ?? 0),

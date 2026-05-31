@@ -9,6 +9,7 @@ import { TrackingGateway } from '../realtime/tracking.gateway';
 import { RiderAssignmentService } from '../riders/rider-assignment.service';
 import { ShopInventoryDocument, ShopInventoryItem } from './schemas/shop-inventory.schema';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
+import { applyStaffBranchFilter, resolvePortalBranchId } from './partner-access';
 
 const INCOMING_STATUSES = [
   OrderStatus.SHOP_ASSIGNED,
@@ -245,6 +246,10 @@ export class PartnerOperationsService {
     };
     if (role === UserRole.PARTNER && partnerUserId) {
       filter.partnerId = new Types.ObjectId(partnerUserId);
+    }
+    if (role === UserRole.STAFF && partnerUserId) {
+      const branchId = await resolvePortalBranchId(this.userModel, partnerUserId, role);
+      applyStaffBranchFilter(filter, role, branchId);
     }
 
     const items = await this.orderModel

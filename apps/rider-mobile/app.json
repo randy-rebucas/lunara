@@ -7,7 +7,44 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "plugins": ["expo-router", "expo-location"],
+    "ios": {
+      "bundleIdentifier": "com.lunara.rider",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "com.lunara.rider"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "../../packages/brand/assets/icon.png",
+          "color": "#6366f1",
+          "defaultChannel": "default",
+          "sounds": []
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Lunara Rider uses your location while you are on shift and during active pickup or delivery tasks."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Lunara Rider uses your camera to capture proof-of-pickup and proof-of-delivery photos.",
+          "photosPermission": "Lunara Rider can access photos when you choose an image for task proof."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Lunara Rider uses your camera to scan customer and order QR codes for fast handoff verification."
+        }
+      ]
+    ],
     "experiments": { "typedRoutes": true }
   }
 }

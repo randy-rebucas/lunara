@@ -217,7 +217,7 @@ export function RouteGuideCarousel({ progressIndex }: RouteGuideCarouselProps) {
 }
 
 const styles = StyleSheet.create({
-  card: { marginTop: spacing.xl, borderWidth: 0, paddingBottom: spacing.md },
+  card: { marginTop: spacing.lg, borderWidth: 0, paddingBottom: spacing.md },
   header: {
     flexDirection: 'row',
     alignItems: 'baseline',

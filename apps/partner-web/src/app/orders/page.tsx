@@ -1,23 +1,18 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import type { PartnerQueueOrder } from '@lunara/types';
+import { UserRole } from '@lunara/types';
 import { LAUNDRY_PROCESSING_STEPS } from '@lunara/utils';
+import { AuthLoading } from '../../components/auth-loading';
 import { DataPageStatus } from '../../components/data-page-status';
 import { PageHeader } from '../../components/ui/page-header';
-import { partnerFetch } from '../../lib/partner-api';
+import { LiveBadge } from '../../components/ui/card';
+import { useProtectedPage } from '../../hooks/use-protected-page';
+import { getPortalUser, partnerFetch } from '../../lib/partner-api';
 import { usePartnerQuery } from '../../lib/use-partner-query';
-
-interface QueueOrder {
-  _id: string;
-  status: string;
-  bookingType: string;
-  total: number;
-  currentStepLabel: string;
-  progress: number;
-  assignedStaffId?: string;
-  isAssigned?: boolean;
-}
+import { usePartnerPipelineSocket } from '../../lib/use-partner-pipeline-socket';
 
 const STAFF_JOURNEY = [
   'Login',
@@ -30,12 +25,13 @@ const STAFF_JOURNEY = [
 ];
 
 export default function StaffOrdersPage() {
+  const { ready } = useProtectedPage({ roles: [UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN] });
   const [mineOnly, setMineOnly] = useState(false);
   const [actionError, setActionError] = useState('');
 
   const loadQueue = useCallback(async () => {
     const query = mineOnly ? '?mine=true' : '';
-    return partnerFetch<{ items: QueueOrder[]; counts: Record<string, number> }>(
+    return partnerFetch<{ items: PartnerQueueOrder[]; counts: Record<string, number> }>(
       `/partner/orders/queue${query}`,
     );
   }, [mineOnly]);
@@ -43,6 +39,18 @@ export default function StaffOrdersPage() {
   const { data, loading, error, reload } = usePartnerQuery(loadQueue, [mineOnly]);
   const orders = data?.items ?? [];
   const counts = data?.counts ?? {};
+
+  const branchIds = useMemo(() => {
+    const user = getPortalUser();
+    if (user?.branchId) return [user.branchId];
+    return [...new Set((data?.items ?? []).map((o) => o.branchId).filter(Boolean))] as string[];
+  }, [data?.items]);
+
+  const { connected: socketLive } = usePartnerPipelineSocket(branchIds, {
+    onPipelineUpdated: () => {
+      void reload();
+    },
+  });
 
   async function acceptJob(orderId: string, e: React.MouseEvent) {
     e.preventDefault();
@@ -56,11 +64,14 @@ export default function StaffOrdersPage() {
     }
   }
 
+  if (!ready) return <AuthLoading message="Loading queue…" />;
+
   return (
     <div>
       <PageHeader
         title="Processing queue"
         description={STAFF_JOURNEY.join(' → ')}
+        badge={socketLive ? <LiveBadge /> : undefined}
         actions={
           <>
             <button

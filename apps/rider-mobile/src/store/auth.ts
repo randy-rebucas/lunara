@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createApiClient } from '@lunara/hooks';
 import type { AuthTokens, User } from '@lunara/types';
 import { UserRole } from '@lunara/types';
 import { getApiV1BaseUrl } from '../api-config';
@@ -8,13 +7,70 @@ import { parseApiError } from '../lib/api-error';
 
 const STORAGE_KEY = 'lunara_rider_auth';
 
-const api = createApiClient({
-  baseUrl: getApiV1BaseUrl(),
-  getAccessToken: () => useAuthStore.getState().tokens?.accessToken ?? null,
-  onUnauthorized: () => {
-    void useAuthStore.getState().logout();
-  },
-});
+async function authRequest<T>(
+  path: string,
+  init?: RequestInit,
+  token?: string | null,
+  onUnauthorized?: () => void,
+): Promise<T> {
+  const baseUrl = getApiV1BaseUrl();
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}${path}`, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init?.headers ?? {}),
+      },
+    });
+  } catch {
+    throw new Error(
+      `Cannot reach API at ${baseUrl}. Start the API (npm run dev --workspace=@lunara/api) and use the same Wi‑Fi as your phone.`,
+    );
+  }
+  const body = await res.json();
+  if (res.status === 401 && token) {
+    onUnauthorized?.();
+    throw new Error('Session expired. Please sign in again.');
+  }
+  if (!res.ok || body.success === false) {
+    throw new Error(parseApiError(body));
+  }
+  return body.data as T;
+}
+
+async function authUpload<T>(
+  path: string,
+  formData: FormData,
+  token?: string | null,
+  onUnauthorized?: () => void,
+): Promise<T> {
+  const baseUrl = getApiV1BaseUrl();
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}${path}`, {
+      method: 'POST',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: formData,
+    });
+  } catch {
+    throw new Error(
+      `Cannot reach API at ${baseUrl}. Start the API (npm run dev --workspace=@lunara/api) and use the same Wi‑Fi as your phone.`,
+    );
+  }
+  const body = await res.json();
+  if (res.status === 401 && token) {
+    onUnauthorized?.();
+    throw new Error('Session expired. Please sign in again.');
+  }
+  if (!res.ok || body.success === false) {
+    throw new Error(parseApiError(body));
+  }
+  return body.data as T;
+}
 
 interface AuthStore {
   user: User | null;
@@ -22,8 +78,13 @@ interface AuthStore {
   isLoading: boolean;
   hydrate: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
+  loginWithOtp: (phone: string, otp: string) => Promise<void>;
+  requestOtp: (phone: string) => Promise<{ phone: string; devOtp?: string }>;
+  forgotPassword: (email: string) => Promise<{ message: string; phone: string | null }>;
+  resetPassword: (phone: string, otp: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
+  apiUpload: <T>(path: string, formData: FormData) => Promise<T>;
 }
 
 export const useAuthStore = create<AuthStore>((set, get) => ({
@@ -49,32 +110,54 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   login: async (email, password) => {
-    let res: Response;
-    const baseUrl = getApiV1BaseUrl();
-    try {
-      res = await fetch(`${baseUrl}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-    } catch {
-      throw new Error(
-        `Cannot reach API at ${baseUrl}. Start the API (npm run dev --workspace=@lunara/api) and use the same Wi‑Fi as your phone.`,
-      );
+    const data = await authRequest<{ user: User; tokens: AuthTokens }>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+    if (data.user.role !== UserRole.RIDER) {
+      throw new Error('This account is not a rider account.');
     }
-    const body = await res.json();
-    if (!body.success) throw new Error(parseApiError(body, 'Login failed'));
-    if (body.data.user.role !== UserRole.RIDER) {
-      throw new Error('This account is not a rider. Use rider@lunara.dev');
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    set({ user: data.user, tokens: data.tokens });
+  },
+
+  loginWithOtp: async (phone, otp) => {
+    const data = await authRequest<{ user: User; tokens: AuthTokens }>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ phone, otp }),
+    });
+    if (data.user.role !== UserRole.RIDER) {
+      throw new Error('This account is not a rider account.');
     }
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(body.data));
-    set({ user: body.data.user, tokens: body.data.tokens });
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    set({ user: data.user, tokens: data.tokens });
+  },
+
+  requestOtp: async (phone) => {
+    return authRequest<{ phone: string; devOtp?: string; message: string }>('/auth/otp/request', {
+      method: 'POST',
+      body: JSON.stringify({ phone }),
+    });
+  },
+
+  forgotPassword: async (email) => {
+    return authRequest<{ message: string; phone: string | null }>('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  },
+
+  resetPassword: async (phone, otp, password) => {
+    await authRequest<{ message: string }>('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ phone, otp, password }),
+    });
   },
 
   logout: async () => {
     const { tokens } = get();
     if (tokens?.accessToken) {
-      await fetch(`${getApiV1BaseUrl()}/auth/logout`, {
+      await authRequest('/auth/logout', {
         method: 'POST',
         headers: { Authorization: `Bearer ${tokens.accessToken}` },
       }).catch(() => {});
@@ -85,30 +168,21 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   apiFetch: async <T>(path: string, init?: RequestInit) => {
     const { tokens } = get();
-    let res: Response;
-    try {
-      res = await fetch(`${getApiV1BaseUrl()}${path}`, {
-        ...init,
-        headers: {
-          'Content-Type': 'application/json',
-          ...(tokens?.accessToken ? { Authorization: `Bearer ${tokens.accessToken}` } : {}),
-          ...(init?.headers ?? {}),
-        },
-      });
-    } catch {
-      throw new Error(
-        `Cannot reach API at ${getApiV1BaseUrl()}. Start the API: npm run dev --workspace=@lunara/api`,
-      );
+    if (!tokens?.accessToken) {
+      throw new Error('Please sign in to continue.');
     }
-    const body = await res.json();
-    if (res.status === 401) {
-      await get().logout();
-      throw new Error('Session expired. Please sign in again.');
+    return authRequest<T>(path, init, tokens.accessToken, () => {
+      void get().logout();
+    });
+  },
+
+  apiUpload: async <T>(path: string, formData: FormData) => {
+    const { tokens } = get();
+    if (!tokens?.accessToken) {
+      throw new Error('Please sign in to continue.');
     }
-    if (!body.success) throw new Error(parseApiError(body));
-    return body.data as T;
+    return authUpload<T>(path, formData, tokens.accessToken, () => {
+      void get().logout();
+    });
   },
 }));
-
-/** Typed fetch using the shared API client (GET/POST helpers). */
-export { api as riderApi };

@@ -4,11 +4,12 @@ import { useCallback, useState } from 'react';
 import { Button } from '@lunara/ui';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { formatCurrency } from '@lunara/utils';
+import { AuthLoading } from '../../components/auth-loading';
 import { DataPageStatus } from '../../components/data-page-status';
 import { PageShell } from '../../components/page-shell';
 import { Card, CardBody } from '../../components/ui/card';
 import { PageHeader } from '../../components/ui/page-header';
-import { useRequireOnboardingComplete } from '../../hooks/use-require-onboarding';
+import { useProtectedPage } from '../../hooks/use-protected-page';
 import { useCustomerQuery } from '../../lib/use-customer-query';
 
 interface WalletData {
@@ -18,7 +19,7 @@ interface WalletData {
 
 export default function WalletPage() {
   const { api } = useAuthContext();
-  const { isLoading, ready } = useRequireOnboardingComplete();
+  const { isLoading, ready } = useProtectedPage({ requireOnboarding: true });
   const [topUpError, setTopUpError] = useState('');
   const [topUpLoading, setTopUpLoading] = useState(false);
 
@@ -49,7 +50,9 @@ export default function WalletPage() {
     }
   }
 
-  if (isLoading || !ready) return null;
+  if (isLoading || !ready) {
+    return <AuthLoading message="Loading wallet…" />;
+  }
 
   const balance = data?.balance ?? 0;
   const transactions = data?.transactions ?? [];
@@ -79,7 +82,7 @@ export default function WalletPage() {
         <h2 className="text-lg font-semibold tracking-tight">Transactions</h2>
         <div className="mt-4 list-stack">
           {transactions.map((t, i) => (
-            <Card key={i}>
+            <Card key={`${t.createdAt}-${i}`}>
               <CardBody className="flex justify-between py-3 text-sm">
                 <span>{t.description}</span>
                 <span className={t.type === 'credit' ? 'font-medium text-accent' : 'font-medium text-red-500'}>

@@ -1,13 +1,13 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { NotificationChannel, OrderStatus } from '@lunara/types';
+import { OrderStatus } from '@lunara/types';
 import { isShopAssignedStatus, rankRidersForDelivery, rankRidersForPickup } from '@lunara/utils';
 import { Address, AddressDocument } from '../addresses/schemas/address.schema';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
-import { Notification, NotificationDocument } from '../reviews/schemas/notification.schema';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import { RiderNotificationService } from './rider-notification.service';
 import { Rider, RiderDocument } from './schemas/rider.schema';
 
 function phoneVerificationHint(phone?: string) {
@@ -23,7 +23,7 @@ export class RiderAssignmentService {
     @InjectModel(Rider.name) private riderModel: Model<RiderDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Address.name) private addressModel: Model<AddressDocument>,
-    @InjectModel(Notification.name) private notificationModel: Model<NotificationDocument>,
+    private riderNotificationService: RiderNotificationService,
     private trackingGateway: TrackingGateway,
   ) {}
 
@@ -423,54 +423,10 @@ export class RiderAssignmentService {
   }
 
   private async notifyRiderDeliveryAssigned(order: OrderDocument, riderUserId: string) {
-    const title = 'New delivery assignment';
-    const body = `Delivery assigned — ${order.branchName ?? 'shop'} → customer · ${order.bookingType.replace(/_/g, ' ')}`;
-
-    await this.notificationModel.create({
-      userId: new Types.ObjectId(riderUserId),
-      title,
-      body,
-      channel: NotificationChannel.IN_APP,
-      data: {
-        type: 'delivery_assignment',
-        orderId: order._id.toString(),
-        status: OrderStatus.RIDER_ASSIGNED_DELIVERY,
-        branchName: order.branchName,
-      },
-    });
-
-    this.trackingGateway.emitDeliveryAssignment(riderUserId, {
-      type: 'delivery_assignment',
-      orderId: order._id.toString(),
-      title,
-      body,
-      status: OrderStatus.RIDER_ASSIGNED_DELIVERY,
-    });
+    await this.riderNotificationService.notifyDeliveryAssigned(riderUserId, order);
   }
 
   private async notifyRiderPickupAssigned(order: OrderDocument, riderUserId: string) {
-    const title = 'New pickup assignment';
-    const body = `Pickup assigned — ${order.branchName ?? 'laundry shop'} · ${order.bookingType.replace(/_/g, ' ')}`;
-
-    await this.notificationModel.create({
-      userId: new Types.ObjectId(riderUserId),
-      title,
-      body,
-      channel: NotificationChannel.IN_APP,
-      data: {
-        type: 'pickup_assignment',
-        orderId: order._id.toString(),
-        status: OrderStatus.RIDER_ASSIGNED_PICKUP,
-        branchName: order.branchName,
-      },
-    });
-
-    this.trackingGateway.emitRiderAssignment(riderUserId, {
-      type: 'pickup_assignment',
-      orderId: order._id.toString(),
-      title,
-      body,
-      status: OrderStatus.RIDER_ASSIGNED_PICKUP,
-    });
+    await this.riderNotificationService.notifyPickupAssigned(riderUserId, order);
   }
 }

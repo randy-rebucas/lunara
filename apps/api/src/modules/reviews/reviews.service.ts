@@ -1,8 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { NotificationChannel, OrderStatus } from '@lunara/types';
+import { OrderStatus } from '@lunara/types';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
+import { NotificationDispatchService } from '../push/notification-dispatch.service';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { Notification, NotificationDocument } from './schemas/notification.schema';
@@ -15,6 +16,7 @@ export class ReviewsService {
     @InjectModel(Notification.name) private notificationModel: Model<NotificationDocument>,
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     private trackingGateway: TrackingGateway,
+    private notificationDispatch: NotificationDispatchService,
   ) {}
 
   async notifyOrderCompleted(orderId: string) {
@@ -28,12 +30,11 @@ export class ReviewsService {
     });
     if (existing) return;
 
-    const notification = await this.notificationModel.create({
-      userId: order.customerId,
+    const notification = await this.notificationDispatch.dispatch({
+      userId: order.customerId.toString(),
       title: 'How was your laundry?',
       body: 'Your order is complete. Rate your experience to help us improve.',
-      channel: NotificationChannel.IN_APP,
-      read: false,
+      channelId: 'orders',
       data: { type: 'review_request', orderId },
     });
 

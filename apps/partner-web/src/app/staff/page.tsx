@@ -1,35 +1,25 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback } from 'react';
+import type { PartnerStaffMember } from '@lunara/types';
+import { AuthLoading } from '../../components/auth-loading';
 import { DataPageStatus } from '../../components/data-page-status';
 import { PageHeader } from '../../components/ui/page-header';
-import { isPartnerRole, partnerFetch } from '../../lib/partner-api';
+import { useRequirePartner } from '../../hooks/use-protected-page';
+import { partnerFetch } from '../../lib/partner-api';
 import { usePartnerQuery } from '../../lib/use-partner-query';
 
-interface StaffMember {
-  _id: string;
-  email?: string;
-  phone?: string;
-  activeJobs: number;
-}
-
 export default function AssignStaffPage() {
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!isPartnerRole()) router.replace('/orders');
-  }, [router]);
+  const { ready } = useRequirePartner();
 
   const load = useCallback(async () => {
-    if (!isPartnerRole()) return [] as StaffMember[];
-    return partnerFetch<StaffMember[]>('/partner/staff');
+    return partnerFetch<PartnerStaffMember[]>('/partner/staff');
   }, []);
 
   const { data: staff, loading, error } = usePartnerQuery(load, []);
 
-  if (!isPartnerRole()) return null;
+  if (!ready) return <AuthLoading message="Loading staff…" />;
 
   return (
     <div>

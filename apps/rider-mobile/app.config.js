@@ -17,9 +17,13 @@ module.exports = {
     backgroundColor: '#ffffff',
   },
   android: {
+    ...require('./app.json').expo.android,
     adaptiveIcon: {
       foregroundImage: icon,
       backgroundColor: '#ffffff',
     },
+  },
+  ios: {
+    ...require('./app.json').expo.ios,
   },
 };

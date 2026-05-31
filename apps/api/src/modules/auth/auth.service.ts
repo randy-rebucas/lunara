@@ -26,7 +26,7 @@ import { CustomersService } from '../customers/customers.service';
 
 import { User, UserDocument } from '../users/schemas/user.schema';
 
-import { LoginDto, RegisterDto } from './dto/auth.dto';
+import { LoginDto, RegisterDto, ResetPasswordDto } from './dto/auth.dto';
 
 import { OtpService } from './otp.service';
 
@@ -206,6 +206,37 @@ export class AuthService {
 
   }
 
+  async forgotPassword(email: string) {
+    const user = await this.userModel.findOne({ email });
+    if (user?.phone) {
+      await this.requestOtp(user.phone);
+    }
+    return {
+      success: true,
+      data: {
+        message:
+          'If an account exists, a verification code was sent to your registered mobile number.',
+        phone: user?.phone ?? null,
+      },
+    };
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    const valid = await this.otpService.verify(dto.phone, dto.otp);
+    if (!valid) throw new UnauthorizedException('Invalid OTP');
+
+    const user = await this.userModel.findOne({ phone: dto.phone });
+    if (!user) throw new UnauthorizedException('Invalid OTP');
+
+    user.passwordHash = await bcrypt.hash(dto.password, 12);
+    await user.save();
+
+    return {
+      success: true,
+      data: { message: 'Password updated. You can sign in with your new password.' },
+    };
+  }
+
 
 
   async refreshTokens(refreshToken: string) {
@@ -301,6 +332,8 @@ export class AuthService {
           phone: user.phone,
 
           role: user.role,
+
+          branchId: user.branchId?.toString(),
 
           isActive: user.isActive,
 

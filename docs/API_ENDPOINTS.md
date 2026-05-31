@@ -60,6 +60,8 @@ Example response (healthy):
 | Method | Path | Roles | Description |
 |--------|------|-------|-------------|
 | GET | `/users/me` | Any | Auth user profile |
+| POST | `/users/me/push-token` | Any | Register FCM device token (`token`, `platform`: `ios` \| `android`, optional `deviceId`) |
+| DELETE | `/users/me/push-token` | Any | Unregister device token on logout (`token`) |
 | GET | `/users` | admin | List users |
 | GET | `/customers/me` | customer | Customer profile |
 | PATCH | `/customers/me` | customer | Update profile |
@@ -110,6 +112,7 @@ Admin branch network and CRUD live under **`/admin/branches`** (see Admin).
 | GET | `/orders/:id` | Owner / assigned / admin | Order detail |
 | PATCH | `/orders/:id/status` | partner, staff, rider, admin | Update status |
 | POST | `/orders/:id/assign-rider` | admin | Assign pickup/delivery rider |
+| GET | `/orders/:id/handoff-qr?context=pickup\|delivery` | customer | Customer handoff QR for rider scan |
 | GET | `/orders/:id/delivery` | customer | Delivery verify/sign UI state |
 | POST | `/orders/:id/delivery/verify` | customer | Verify delivery code |
 | POST | `/orders/:id/delivery/sign` | customer | Sign for delivery |
@@ -210,22 +213,30 @@ Base: `/riders` — JWT + `rider` role unless noted.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/riders/me` | Rider profile + online state |
-| GET | `/riders/notifications` | Rider notifications |
+| GET | `/riders/me` | Rider profile, vehicle, KYC documents, compliance checklist |
+| PATCH | `/riders/me` | Update profile (name, phone, home address, vehicle, plate/OR-CR) |
+| POST | `/riders/me/documents/:type` | Upload KYC document (`drivers_license`, `or_cr`, `nbi_clearance`, `selfie`) — multipart field `document` |
+| GET | `/riders/notifications` | Rider notifications (categories: assignment, reminder, earnings, system) |
 | GET | `/riders/tasks` | Active tasks |
-| GET | `/riders/earnings` | Earnings summary |
-| PATCH | `/riders/location` | Update GPS location |
-| POST | `/riders/online` | Go online |
+| GET | `/riders/earnings` | Earnings dashboard (today/week/month/lifetime + breakdown) |
+| GET | `/riders/wallet` | Wallet balances (current, pending hold, withdrawable) + recent ledger |
+| GET | `/riders/wallet/withdrawals` | Rider withdrawal request history |
+| POST | `/riders/wallet/withdraw` | Submit withdrawal request (`{ amount }`, min ₱100) |
+| GET | `/riders/payout-method` | Saved payout method (GCash / Maya / bank) |
+| PATCH | `/riders/payout-method` | Update payout method and account details |
+| PATCH | `/riders/location` | Update GPS location — body: `{ latitude, longitude, speed?, heading?, timestamp? }` or legacy `{ lat, lng, … }`; rider app sends every **15s** during active pickup/delivery tasks |
+| POST | `/riders/online` | Go online (403 if profile/documents incomplete or unapproved) |
 | POST | `/riders/offline` | Go offline |
 | GET | `/riders/pickup-offers` | Open pickup offers |
 | GET | `/riders/pickup-tasks/:orderId` | Pickup task detail |
 | POST | `/riders/pickup-offers/:orderId/accept` | Accept pickup |
 | POST | `/riders/pickup-tasks/:orderId/arrive` | Mark arrived at customer |
-| POST | `/riders/pickup-tasks/:orderId/verify` | Verify customer code |
+| POST | `/riders/pickup-tasks/:orderId/verify` | Verify customer (4-digit code or `{ qrPayload }`) |
 | POST | `/riders/pickup-tasks/:orderId/collect` | Collect laundry |
 | POST | `/riders/pickup-tasks/:orderId/photo` | Upload pickup photo URL |
 | POST | `/riders/pickup-tasks/:orderId/generate-receipt` | Generate pickup receipt |
-| POST | `/riders/pickup-tasks/:orderId/drop-at-shop` | Drop at shop |
+| GET | `/riders/pickup-tasks/:orderId/order-qr` | Order handover QR payload (rider) |
+| POST | `/riders/pickup-tasks/:orderId/drop-at-shop` | Drop at shop (optional `{ qrPayload }` for scan handover) |
 | POST | `/riders/pickup-tasks/:orderId/complete` | Complete pickup leg |
 | GET | `/riders/delivery-offers` | Open delivery offers |
 | GET | `/riders/delivery-tasks/:orderId` | Delivery task detail |
@@ -234,9 +245,13 @@ Base: `/riders` — JWT + `rider` role unless noted.
 | POST | `/riders/delivery-tasks/:orderId/out-for-delivery` | Out for delivery |
 | POST | `/riders/delivery-tasks/:orderId/start` | Start delivery |
 | POST | `/riders/delivery-tasks/:orderId/customer-received` | Customer received |
+| POST | `/riders/delivery-tasks/:orderId/verify-customer-qr` | Verify customer via scanned QR (`{ qrPayload }`) |
 | POST | `/riders/delivery-tasks/:orderId/arrive` | Arrived at customer |
 | POST | `/riders/delivery-tasks/:orderId/photo` | Delivery photo URL |
 | POST | `/riders/delivery-tasks/:orderId/complete` | Complete delivery |
+| POST | `/riders/sos/notify` | Notify dispatch of SOS (body: `{ orderId, lat?, lng? }`) |
+| POST | `/riders/sos/location/start` | Start live location sharing with dispatch |
+| POST | `/riders/sos/location/stop` | Stop live location sharing |
 
 ---
 
@@ -251,7 +266,16 @@ Base: `/admin` — JWT + `admin` role.
 | GET | `/admin/dashboard` | Overview stats |
 | GET | `/admin/control-tower` | SLA / conflict watchlist |
 | GET | `/admin/orders?status=&limit=` | All orders |
-| GET | `/admin/riders` | Rider roster |
+| GET | `/admin/riders` | Rider roster with verification status |
+| GET | `/admin/riders/documents/pending` | Pending KYC document review queue |
+| GET | `/admin/riders/withdrawals` | Rider withdrawal queue (`?status=pending`) |
+| POST | `/admin/riders/withdrawals/:id/approve` | Approve payout (debits rider wallet) |
+| POST | `/admin/riders/withdrawals/:id/reject` | Reject payout request |
+| POST | `/admin/riders/:userId/earnings/credit` | Credit bonus or adjustment (`{ type, amount, note? }`) |
+| POST | `/admin/riders/:userId/wallet/hold` | Set admin hold on rider wallet (`{ pendingHold }`) |
+| GET | `/admin/riders/:userId/profile` | Rider profile + documents for review |
+| PATCH | `/admin/riders/:userId/documents/:type` | Approve/reject rider document (`{ status, rejectionReason? }`) |
+| POST | `/admin/riders/announcement` | Broadcast platform announcement to riders (`{ body, title?, userIds? }`) |
 | GET | `/admin/shops` | Partner accounts |
 | GET | `/admin/revenue` | Platform revenue |
 | GET | `/admin/reports?days=` | Analytics report |
@@ -262,6 +286,8 @@ Base: `/admin` — JWT + `admin` role.
 |--------|------|-------------|
 | GET | `/admin/dispatch/dashboard` | Dispatch boards |
 | GET | `/admin/dispatch/queue` | Pending dispatch queue |
+| GET | `/admin/sos/active` | Active rider SOS incidents |
+| PATCH | `/admin/sos/:id/resolve` | Acknowledge / resolve SOS incident |
 | GET | `/admin/dispatch/orders/:orderId/suggestions` | Branch suggestions |
 | POST | `/admin/dispatch/orders/:orderId/assign` | Assign shop to order |
 | GET | `/admin/operations/orders/:orderId` | Order ops detail |
@@ -326,7 +352,8 @@ Unauthenticated connections are disconnected.
 | Event | Roles | Payload | Description |
 |-------|-------|---------|-------------|
 | `joinOrder` | Any authenticated | `{ orderId }` | Join order room for live updates |
-| `riderLocation` | rider | `{ orderId, lat, lng, riderId }` | Emit rider GPS (`riderId` must match JWT sub) |
+| `riderLocation` | rider | `{ orderId, riderId, latitude, longitude, lat, lng, speed?, heading?, timestamp? }` | Emit rider GPS every **15s** during active task (`riderId` must match JWT sub); `timestamp` is device ISO when provided |
+| `sosLocation` | rider | `{ orderId, lat, lng, latitude?, longitude?, speed?, heading?, timestamp? }` | Emit SOS live location to dispatch every **3s** during active sharing |
 | `joinRider` | rider | `{ userId? }` | Join personal rider room |
 | `joinRiders` | rider | — | Join online riders broadcast room |
 | `joinAdminOperations` | admin | — | Join admin dispatcher room |
@@ -337,12 +364,13 @@ Unauthenticated connections are disconnected.
 
 | Event | Description |
 |-------|-------------|
-| `locationUpdate` | Rider location for an order |
+| `locationUpdate` | `{ orderId, riderId, lat, lng, latitude, longitude, speed?, heading?, timestamp }` — rider GPS for an order room |
 | `orderStatusUpdate` | `{ orderId, status }` |
 | `orderEvent` | `{ orderId, event, message?, … }` lifecycle events |
 | `pickupOffer` / `deliveryOffer` | Rider marketplace offers |
 | `pickupAssignment` / `deliveryAssignment` | Rider task assignment |
-| `dispatcherAlert` | Admin control-tower alert (e.g. new paid order, delivery rider needed) |
+| `dispatcherAlert` | Admin control-tower alert (ops queue or `type: rider_sos`) |
+| `sosLocationUpdate` | Live rider GPS during SOS (`incidentId`, `lat`, `lng`, `latitude`, `longitude`, `speed?`, `heading?`, `timestamp`, `mapsUrl`) |
 | `dispatchQueueUpdated` | Admin dispatch dashboard should refresh queue counts |
 | `partnerPipelineUpdated` | Partner portal — laundry pipeline changed for partner shop |
 | `branchPipelineUpdated` | Partner/staff portal — laundry pipeline changed for branch |

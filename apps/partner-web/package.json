@@ -11,13 +11,13 @@
   },
   "dependencies": {
     "@lunara/brand": "*",
-    "@lunara/config": "*",
     "@lunara/types": "*",
     "@lunara/ui": "*",
     "@lunara/utils": "*",
     "next": "^15.3.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-qr-code": "^2.0.21",
     "socket.io-client": "^4.8.3"
   },
   "devDependencies": {

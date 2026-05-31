@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback } from 'react';
 import { DataPageStatus } from '../../components/data-page-status';
 import { PageHeader } from '../../components/ui/page-header';
@@ -8,19 +9,65 @@ import { useAdminQuery } from '../../lib/use-admin-query';
 
 interface RiderRow {
   _id: string;
+  userId: string;
   email?: string;
   phone?: string;
+  firstName?: string;
+  lastName?: string;
   isOnline: boolean;
   isActive: boolean;
   vehicleType: string;
+  verificationStatus: 'incomplete' | 'pending_review' | 'verified';
   totalEarnings: number;
   todayEarnings: number;
   activeTasks: number;
 }
 
+interface PendingDocumentRow {
+  userId: string;
+  riderId: string;
+  email?: string;
+  phone?: string;
+  firstName?: string;
+  lastName?: string;
+  document: {
+    type: string;
+    fileUrl?: string;
+    status?: string;
+    uploadedAt?: string;
+  };
+}
+
+function verificationBadgeClass(status: RiderRow['verificationStatus']) {
+  switch (status) {
+    case 'verified':
+      return 'badge-accent';
+    case 'pending_review':
+      return 'badge-primary';
+    default:
+      return 'badge-neutral';
+  }
+}
+
+function verificationLabel(status: RiderRow['verificationStatus']) {
+  switch (status) {
+    case 'verified':
+      return 'Verified';
+    case 'pending_review':
+      return 'Pending review';
+    default:
+      return 'Incomplete';
+  }
+}
+
 export default function MonitorRidersPage() {
-  const load = useCallback(() => adminFetch<RiderRow[]>('/admin/riders'), []);
-  const { data: riders, loading, error } = useAdminQuery(load, []);
+  const loadRiders = useCallback(() => adminFetch<RiderRow[]>('/admin/riders'), []);
+  const loadPending = useCallback(
+    () => adminFetch<PendingDocumentRow[]>('/admin/riders/documents/pending'),
+    [],
+  );
+  const { data: riders, loading, error } = useAdminQuery(loadRiders, []);
+  const { data: pendingDocs } = useAdminQuery(loadPending, []);
   const online = (riders ?? []).filter((r) => r.isOnline).length;
 
   return (
@@ -32,35 +79,73 @@ export default function MonitorRidersPage() {
             ? 'Loading riders…'
             : `${online} of ${riders?.length ?? 0} riders online · active pickup/delivery tasks`
         }
+        actions={
+          <Link href="/riders/withdrawals" className="btn-secondary btn-sm">
+            Withdrawal queue →
+          </Link>
+        }
       />
 
       <div className="mt-4">
         <DataPageStatus loading={loading} error={error} loadingMessage="Loading riders…" />
       </div>
 
+      {(pendingDocs ?? []).length > 0 ? (
+        <div className="mt-6 card card-body">
+          <h3 className="text-lg font-semibold text-slate-900">Pending document reviews</h3>
+          <p className="mt-1 text-sm text-muted">
+            {pendingDocs?.length} document(s) waiting for admin approval
+          </p>
+          <ul className="mt-4 space-y-2">
+            {(pendingDocs ?? []).slice(0, 8).map((row) => (
+              <li key={`${row.userId}-${row.document.type}`}>
+                <Link
+                  href={`/riders/${row.userId}`}
+                  className="text-sm font-medium text-primary hover:underline"
+                >
+                  {row.firstName || row.lastName
+                    ? `${row.firstName ?? ''} ${row.lastName ?? ''}`.trim()
+                    : (row.email ?? row.userId)}{' '}
+                  · {row.document.type.replace(/_/g, ' ')}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       <div className="mt-6 space-y-3">
         {(riders ?? []).map((r) => (
-          <div key={r._id} className="card card-body flex flex-wrap items-center justify-between gap-4 !py-5">
-            <div>
-              <p className="font-medium text-slate-900">{r.email ?? r._id}</p>
-              <p className="text-sm text-muted">
-                {r.phone ?? '—'} · {r.vehicleType}
-                {!r.isActive && ' · inactive account'}
-              </p>
+          <Link key={r._id} href={`/riders/${r.userId}`} className="block">
+            <div className="card card-body flex flex-wrap items-center justify-between gap-4 !py-5 transition hover:border-primary/30">
+              <div>
+                <p className="font-medium text-slate-900">
+                  {r.firstName || r.lastName
+                    ? `${r.firstName ?? ''} ${r.lastName ?? ''}`.trim()
+                    : (r.email ?? r._id)}
+                </p>
+                <p className="text-sm text-muted">
+                  {r.phone ?? '—'} · {r.vehicleType}
+                  {!r.isActive && ' · inactive account'}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-6 text-sm">
+                <span className={verificationBadgeClass(r.verificationStatus)}>
+                  {verificationLabel(r.verificationStatus)}
+                </span>
+                <span className="flex items-center gap-2">
+                  <span
+                    className={`inline-block h-2 w-2 rounded-full ${r.isOnline ? 'bg-accent' : 'bg-slate-300'}`}
+                    aria-hidden
+                  />
+                  {r.isOnline ? 'Online' : 'Offline'}
+                </span>
+                <span>{r.activeTasks} active tasks</span>
+                <span>Today ₱{r.todayEarnings}</span>
+                <span>Total ₱{r.totalEarnings}</span>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-6 text-sm">
-              <span className="flex items-center gap-2">
-                <span
-                  className={`inline-block h-2 w-2 rounded-full ${r.isOnline ? 'bg-accent' : 'bg-slate-300'}`}
-                  aria-hidden
-                />
-                {r.isOnline ? 'Online' : 'Offline'}
-              </span>
-              <span>{r.activeTasks} active tasks</span>
-              <span>Today ₱{r.todayEarnings}</span>
-              <span>Total ₱{r.totalEarnings}</span>
-            </div>
-          </div>
+          </Link>
         ))}
         {!loading && !error && (riders ?? []).length === 0 && (
           <p className="text-sm text-muted">No riders. Seed rider@lunara.dev and run API seed.</p>

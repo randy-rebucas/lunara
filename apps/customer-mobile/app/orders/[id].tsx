@@ -1,8 +1,9 @@
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Pressable,
+  Linking,
   Platform,
+  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
@@ -16,10 +17,12 @@ import {
   formatCurrency,
   formatOrderStatusLabel,
 } from '@lunara/utils';
+import { Button } from '../../src/components/ui/button';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import { useOrderTrackingSocket } from '../../src/hooks/use-order-tracking-socket';
 import { DataLoadState } from '../../src/components/data-load-state';
 import { OrderTimeline } from '../../src/components/order-timeline';
+import { HandoffQrCard } from '../../src/components/handoff-qr-card';
 import { branchTypeLabel } from '../../src/components/nearest-branches';
 import { useAuthStore } from '../../src/store/auth';
 
@@ -32,6 +35,8 @@ interface OrderDetail {
   scheduledPickupAt?: string;
   branchName?: string;
   branchCode?: string;
+  pickup?: { receiptCode?: string };
+  delivery?: { receiptCode?: string; signatureName?: string };
   statusHistory: { status: string; timestamp: string; note?: string }[];
 }
 
@@ -46,11 +51,22 @@ interface LiveNotification {
   at: string;
 }
 
+function openMaps(lat: number, lng: number) {
+  const url = Platform.select({
+    ios: `http://maps.apple.com/?ll=${lat},${lng}`,
+    default: `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`,
+  });
+  if (url) void Linking.openURL(url);
+}
+
 export default function OrderTrackScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
+  const { id, booked } = useLocalSearchParams<{ id: string; booked?: string }>();
   const apiFetch = useAuthStore((s) => s.apiFetch);
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [deliveryUi, setDeliveryUi] = useState<DeliveryUiState | null>(null);
+  const [canReview, setCanReview] = useState(false);
+  const [hasReview, setHasReview] = useState(false);
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [notifications, setNotifications] = useState<LiveNotification[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -59,14 +75,16 @@ export default function OrderTrackScreen() {
   const [deliveryError, setDeliveryError] = useState('');
   const [loadError, setLoadError] = useState('');
   const [pageLoading, setPageLoading] = useState(true);
+  const justBooked = booked === '1';
 
   const notificationSeq = useRef(0);
+  const bookedBannerShown = useRef(false);
 
   const pushNotification = useCallback((message: string) => {
     notificationSeq.current += 1;
-    const id = `${Date.now()}-${notificationSeq.current}`;
+    const notifId = `${Date.now()}-${notificationSeq.current}`;
     setNotifications((prev) => [
-      { id, message, at: new Date().toISOString() },
+      { id: notifId, message, at: new Date().toISOString() },
       ...prev.slice(0, 14),
     ]);
   }, []);
@@ -91,6 +109,17 @@ export default function OrderTrackScreen() {
       } else {
         setDeliveryUi(null);
       }
+
+      try {
+        const reviewRes = await apiFetch<{ canReview: boolean; review: { _id: string } | null }>(
+          `/reviews/orders/${id}`,
+        );
+        setCanReview(reviewRes.canReview);
+        setHasReview(Boolean(reviewRes.review));
+      } catch {
+        setCanReview(false);
+        setHasReview(false);
+      }
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Failed to load order');
       setOrder(null);
@@ -103,6 +132,15 @@ export default function OrderTrackScreen() {
     setPageLoading(true);
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (justBooked && !bookedBannerShown.current) {
+      bookedBannerShown.current = true;
+      pushNotification(
+        'Payment received — Lunara is assigning your laundry partner. Pickup starts after dispatch.',
+      );
+    }
+  }, [justBooked, pushNotification]);
 
   const { connected: socketLive } = useOrderTrackingSocket(id, {
     onStatusUpdate: (data) => {
@@ -182,6 +220,14 @@ export default function OrderTrackScreen() {
   const showDeliveryActions =
     order.status === OrderStatus.OUT_FOR_DELIVERY ||
     order.status === OrderStatus.RIDER_ASSIGNED_DELIVERY;
+  const showPickupQr =
+    order.status === OrderStatus.RIDER_ASSIGNED_PICKUP ||
+    order.status === OrderStatus.RIDER_ASSIGNED;
+  const showDeliveryQr = order.status === OrderStatus.OUT_FOR_DELIVERY;
+  const isTerminalCompleted =
+    timeline.isTerminal && order.status === OrderStatus.COMPLETED;
+  const showLostItemHint =
+    order.status === OrderStatus.DELIVERED || order.status === OrderStatus.COMPLETED;
 
   return (
     <KeyboardSafeScrollView
@@ -204,6 +250,20 @@ export default function OrderTrackScreen() {
         <View style={[styles.progressFill, { width: `${timeline.progressPercent}%` }]} />
       </View>
       <Text style={styles.progressLabel}>{timeline.progressPercent}% complete</Text>
+
+      {order.status === OrderStatus.PENDING && (
+        <View style={styles.pendingCard}>
+          <Text style={styles.pendingTitle}>Payment required</Text>
+          <Text style={styles.pendingText}>
+            Complete payment to move your order to pending dispatch.
+          </Text>
+          <Button
+            label="Go to checkout"
+            onPress={() => router.push(`/checkout/${id}` as Href)}
+            style={styles.pendingBtn}
+          />
+        </View>
+      )}
 
       {awaitingBranch && (
         <View style={styles.banner}>
@@ -240,8 +300,19 @@ export default function OrderTrackScreen() {
           <Text style={styles.locationText}>
             {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
           </Text>
+          <Pressable onPress={() => openMaps(location.lat, location.lng)} style={styles.mapsLink}>
+            <Text style={styles.mapsLinkText}>Open in maps →</Text>
+          </Pressable>
         </View>
       )}
+
+      {showPickupQr && id ? (
+        <HandoffQrCard orderId={id} context="pickup" apiFetch={apiFetch} />
+      ) : null}
+
+      {showDeliveryQr && id ? (
+        <HandoffQrCard orderId={id} context="delivery" apiFetch={apiFetch} />
+      ) : null}
 
       {showDeliveryActions && deliveryUi?.needsVerify && (
         <View style={styles.actionCard}>
@@ -278,6 +349,61 @@ export default function OrderTrackScreen() {
 
       {deliveryError ? <Text style={styles.error}>{deliveryError}</Text> : null}
 
+      {(order.pickup?.receiptCode || order.delivery?.receiptCode) && (
+        <View style={styles.receiptRow}>
+          {order.pickup?.receiptCode ? (
+            <View style={styles.receiptCard}>
+              <Text style={styles.receiptLabel}>Pickup receipt</Text>
+              <Text style={styles.receiptCode}>{order.pickup.receiptCode}</Text>
+            </View>
+          ) : null}
+          {order.delivery?.receiptCode ? (
+            <View style={styles.receiptCard}>
+              <Text style={styles.receiptLabel}>Delivery receipt</Text>
+              <Text style={styles.receiptCode}>{order.delivery.receiptCode}</Text>
+              {order.delivery.signatureName ? (
+                <Text style={styles.receiptSigned}>Signed: {order.delivery.signatureName}</Text>
+              ) : null}
+            </View>
+          ) : null}
+        </View>
+      )}
+
+      {isTerminalCompleted && (
+        <View style={styles.doneCard}>
+          <Text style={styles.doneTitle}>All done!</Text>
+          <Text style={styles.doneSub}>Thanks for using Lunara.</Text>
+          {canReview ? (
+            <Button label="Rate your experience" onPress={() => router.push(`/review/${id}`)} />
+          ) : null}
+          {hasReview && !canReview ? (
+            <Pressable onPress={() => router.push(`/review/${id}`)}>
+              <Text style={styles.viewReviewLink}>View your published review →</Text>
+            </Pressable>
+          ) : null}
+          <Button
+            label="Report missing item"
+            variant="outline"
+            onPress={() => router.push(`/orders/${id}/lost-item` as Href)}
+            style={styles.doneAction}
+          />
+          <Button
+            label="Request refund"
+            variant="outline"
+            onPress={() => router.push(`/orders/${id}/refund` as Href)}
+            style={styles.doneAction}
+          />
+        </View>
+      )}
+
+      {showLostItemHint && !isTerminalCompleted ? (
+        <Pressable onPress={() => router.push(`/orders/${id}/lost-item` as Href)}>
+          <Text style={styles.lostItemHint}>
+            Something missing? File a lost-item complaint →
+          </Text>
+        </Pressable>
+      ) : null}
+
       <Text style={styles.sectionTitle}>Progress</Text>
       <OrderTimeline status={order.status} statusHistory={order.statusHistory} />
     </KeyboardSafeScrollView>
@@ -288,7 +414,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surfaceMuted },
   content: { padding: spacing.xl, paddingBottom: spacing.xxxl + spacing.sm },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  muted: { color: colors.mutedForeground },
   statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   status: { ...typography.title, flex: 1, letterSpacing: -0.3, textTransform: 'capitalize' },
   live: { fontSize: 12, fontWeight: '600', color: colors.accent },
@@ -302,6 +427,17 @@ const styles = StyleSheet.create({
   },
   progressFill: { height: '100%', backgroundColor: colors.primary },
   progressLabel: { marginTop: spacing.sm - 2, fontSize: 12, color: colors.muted },
+  pendingCard: {
+    marginTop: spacing.lg,
+    padding: spacing.lg - 2,
+    borderRadius: radius.lg,
+    backgroundColor: colors.warningBg,
+    borderWidth: 1,
+    borderColor: colors.warningBorder,
+  },
+  pendingTitle: { fontWeight: '600', color: colors.warning },
+  pendingText: { marginTop: spacing.sm - 2, fontSize: 13, color: colors.warning, lineHeight: 20 },
+  pendingBtn: { marginTop: spacing.md },
   banner: {
     marginTop: spacing.lg,
     padding: spacing.lg - 2,
@@ -342,6 +478,8 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   locationText: { marginTop: spacing.xs, fontSize: 13, color: colors.slate700 },
+  mapsLink: { marginTop: spacing.sm },
+  mapsLinkText: { fontSize: 13, fontWeight: '600', color: colors.primary },
   actionCard: {
     marginTop: spacing.lg,
     padding: spacing.lg - 2,
@@ -371,5 +509,39 @@ const styles = StyleSheet.create({
   },
   actionBtnText: { color: colors.onPrimary, fontWeight: '600' },
   error: { marginTop: spacing.sm, color: colors.destructive, fontSize: 13 },
+  receiptRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg, flexWrap: 'wrap' },
+  receiptCard: {
+    flex: 1,
+    minWidth: 140,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.accent + '11',
+    borderWidth: 1,
+    borderColor: colors.accent + '33',
+  },
+  receiptLabel: { fontSize: 11, fontWeight: '600', color: colors.muted },
+  receiptCode: { marginTop: spacing.xs, fontFamily: 'monospace', fontSize: 14, fontWeight: '600' },
+  receiptSigned: { marginTop: spacing.xs, fontSize: 11, color: colors.muted },
+  doneCard: {
+    marginTop: spacing.lg,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.primaryLight,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  doneTitle: { fontSize: 18, fontWeight: '700', color: colors.primary },
+  doneSub: { ...typography.bodySm, textAlign: 'center', marginBottom: spacing.sm },
+  doneAction: { width: '100%' },
+  viewReviewLink: { color: colors.primary, fontWeight: '600', fontSize: 14, marginVertical: spacing.sm },
+  lostItemHint: {
+    marginTop: spacing.lg,
+    textAlign: 'center',
+    fontSize: 13,
+    color: colors.primary,
+    fontWeight: '600',
+  },
   sectionTitle: { marginTop: spacing.xxl, ...typography.subheading, marginBottom: spacing.sm },
 });
