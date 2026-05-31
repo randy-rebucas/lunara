@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import { appConfig } from '@lunara/config';
 import { fetchOnboardingStatus, getOnboardingPath } from '@lunara/hooks/onboarding';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
+import { BrandMark } from '@lunara/ui';
 import { ButtonLink } from '../components/ui/button-link';
 export default function HomePage() {
   const { isAuthenticated, isLoading, api } = useAuthContext();
@@ -25,12 +26,7 @@ export default function HomePage() {
     <div className="laundry-bg flex min-h-screen flex-col">
       <header className="page-container flex items-center justify-between py-6">
         <div className="flex items-center gap-2.5">
-          <span
-            className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-sm font-bold text-white shadow-[var(--shadow-card)]"
-            aria-hidden
-          >
-            L
-          </span>
+          <BrandMark variant="customer" compact size="sm" />
           <span className="font-bold tracking-tight text-primary">{appConfig.name}</span>
         </div>
         <Link href="/login" className="link-primary text-sm">
@@ -41,21 +37,8 @@ export default function HomePage() {
       <main className="page-container flex flex-1 flex-col items-center justify-center pb-16 pt-8">
         <div className="card-elevated page-content-narrow text-center">
           <div className="card-body space-y-6">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/10 via-secondary/10 to-accent/10">
-              <svg
-                className="h-8 w-8 text-primary"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={1.5}
-                aria-hidden
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"
-                />
-              </svg>
+            <div className="mx-auto">
+              <BrandMark variant="customer" compact size="lg" />
             </div>
             <div>
               <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">

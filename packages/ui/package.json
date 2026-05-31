@@ -6,6 +6,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./brand-mark": "./src/brand-mark.tsx",
     "./globals.css": "./src/globals.css"
   },
   "scripts": {
@@ -17,6 +18,7 @@
     "react-dom": "^19.0.0"
   },
   "dependencies": {
+    "@lunara/brand": "*",
     "@lunara/config": "*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

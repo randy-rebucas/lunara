@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { appConfig } from '@lunara/config';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
+import { BrandMark } from '@lunara/ui';
 
 const links = [
   { href: '/dashboard', label: 'Home' },
@@ -28,12 +29,7 @@ export function CustomerNav() {
     <header className="sticky top-0 z-50 bg-surface/95 shadow-[var(--shadow-card)] backdrop-blur-sm">
       <div className="page-container flex items-center justify-between gap-4 py-3">
         <Link href="/dashboard" className="flex items-center gap-2.5">
-          <span
-            className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-white"
-            aria-hidden
-          >
-            L
-          </span>
+          <BrandMark variant="customer" compact size="sm" />
           <span className="hidden font-bold tracking-tight text-primary sm:inline">{appConfig.name}</span>
         </Link>
 

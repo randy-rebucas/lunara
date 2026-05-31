@@ -1,24 +1,7 @@
 import Link from 'next/link';
-import { appConfig } from '@lunara/config';
+import { BrandMark } from '@lunara/ui';
 
-export function BrandMark({ compact }: { compact?: boolean }) {
-  return (
-    <div className={`flex items-center gap-3 ${compact ? '' : 'justify-center'}`}>
-      <div
-        className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-lg font-bold text-white shadow-[var(--shadow-card)]"
-        aria-hidden
-      >
-        L
-      </div>
-      {!compact && (
-        <div className="text-left">
-          <p className="text-lg font-bold tracking-tight text-slate-900">{appConfig.name}</p>
-          <p className="text-xs text-muted">Fresh laundry, delivered</p>
-        </div>
-      )}
-    </div>
-  );
-}
+export { BrandMark };
 
 export function AuthShell({
   children,
@@ -32,7 +15,7 @@ export function AuthShell({
       <div className="page-container flex w-full flex-col items-center">
         {showBrand && (
           <Link href="/" className="mb-8 transition-opacity hover:opacity-90">
-            <BrandMark />
+            <BrandMark variant="customer" />
           </Link>
         )}
         <div className="card-elevated page-content-narrow">
@@ -48,7 +31,7 @@ export function AuthShellWide({ children }: { children: React.ReactNode }) {
     <div className="laundry-bg min-h-screen py-8 sm:py-12">
       <div className="page-container">
         <Link href="/" className="mb-8 inline-block transition-opacity hover:opacity-90">
-          <BrandMark compact />
+          <BrandMark variant="customer" compact />
         </Link>
         <div className="page-content-narrow">{children}</div>
       </div>

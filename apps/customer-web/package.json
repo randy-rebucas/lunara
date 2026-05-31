@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@lunara/brand": "*",
     "@lunara/config": "*",
     "@lunara/hooks": "*",
     "@lunara/types": "*",

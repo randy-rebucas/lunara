@@ -15,6 +15,7 @@ Production-ready laundry management platform — customers, riders, partners, st
 
 ## Packages
 
+- `@lunara/brand` — Shared app icon (`packages/brand/assets/icon.png`, sourced from repo root `icon.png`)
 - `@lunara/types` — Shared TypeScript types & enums
 - `@lunara/validation` — Zod schemas
 - `@lunara/utils` — Business logic helpers (RBAC, order flow)

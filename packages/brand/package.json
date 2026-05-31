@@ -1,0 +1,16 @@
+{
+  "name": "@lunara/brand",
+  "version": "0.1.0",
+  "private": true,
+  "types": "./icon.d.ts",
+  "exports": {
+    "./icon": {
+      "types": "./icon.d.ts",
+      "default": "./assets/icon.png"
+    },
+    "./assets/icon.png": {
+      "types": "./icon.d.ts",
+      "default": "./assets/icon.png"
+    }
+  }
+}

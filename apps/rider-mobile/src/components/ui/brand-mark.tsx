@@ -1,5 +1,6 @@
-import { StyleSheet, Text, View, type ViewStyle } from 'react-native';
-import { colors, radius, shadow } from '../../theme';
+import { Image, StyleSheet, View, type ViewStyle } from 'react-native';
+import brandIcon from '@lunara/brand/assets/icon.png';
+import { radius, shadow } from '../../theme';
 
 interface BrandMarkProps {
   size?: 'sm' | 'md' | 'lg';
@@ -7,35 +8,30 @@ interface BrandMarkProps {
 }
 
 const sizes = {
-  sm: { box: 36, text: 14, radius: radius.lg },
-  md: { box: 48, text: 18, radius: radius.xl },
-  lg: { box: 64, text: 24, radius: radius.xxl },
+  sm: 36,
+  md: 48,
+  lg: 64,
 };
 
 export function BrandMark({ size = 'md', style }: BrandMarkProps) {
-  const s = sizes[size];
+  const box = sizes[size];
   return (
     <View
       style={[
         styles.mark,
         shadow.card,
-        { width: s.box, height: s.box, borderRadius: s.radius },
+        { width: box, height: box, borderRadius: size === 'lg' ? radius.xxl : radius.xl },
         style,
       ]}
     >
-      <Text style={[styles.letter, { fontSize: s.text }]}>L</Text>
+      <Image source={brandIcon} style={{ width: box, height: box }} resizeMode="contain" accessibilityLabel="Lunara" />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   mark: {
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  letter: {
-    color: colors.onPrimary,
-    fontWeight: '700',
+    overflow: 'hidden',
+    backgroundColor: 'transparent',
   },
 });

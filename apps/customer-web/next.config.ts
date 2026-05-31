@@ -6,7 +6,7 @@ import { loadEnvConfig } from '@next/env';
 loadEnvConfig(path.join(__dirname, '../..'));
 
 const nextConfig: NextConfig = {
-  transpilePackages: ['@lunara/ui', '@lunara/hooks', '@lunara/config', '@lunara/utils'],
+  transpilePackages: ['@lunara/brand', '@lunara/ui', '@lunara/hooks', '@lunara/config', '@lunara/utils'],
 };
 
 export default nextConfig;

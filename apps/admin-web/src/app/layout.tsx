@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
+import brandIcon from '@lunara/brand/icon';
 import { AuthGuard } from '../components/auth-guard';
 import { AdminShell } from '../components/admin-shell';
 import './globals.css';
@@ -13,6 +14,10 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: 'Lunara Admin',
   description: 'Platform administration — orders, riders, shops, revenue, support',
+  icons: {
+    icon: brandIcon.src,
+    apple: brandIcon.src,
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
