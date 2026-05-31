@@ -17,6 +17,7 @@ interface AuthStore {
   requestOtp: (phone: string) => Promise<string | undefined>;
   logout: () => Promise<void>;
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
+  apiUpload: <T>(path: string, formData: FormData) => Promise<T>;
 }
 
 async function authRequest<T>(
@@ -47,6 +48,36 @@ async function authRequest<T>(
     throw new Error('Session expired. Please sign in again.');
   }
   if (!body.success) throw new Error(body.error?.message ?? 'Request failed');
+  return body.data as T;
+}
+
+async function authUpload<T>(
+  path: string,
+  formData: FormData,
+  token?: string | null,
+  onUnauthorized?: () => void,
+): Promise<T> {
+  const baseUrl = getApiV1BaseUrl();
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}${path}`, {
+      method: 'POST',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: formData,
+    });
+  } catch {
+    throw new Error(
+      `Cannot reach API at ${baseUrl}. Start the API (npm run dev --workspace=@lunara/api) and use the same Wi‑Fi as your phone.`,
+    );
+  }
+  const body = await res.json();
+  if (res.status === 401 && token) {
+    onUnauthorized?.();
+    throw new Error('Session expired. Please sign in again.');
+  }
+  if (!body.success) throw new Error(body.error?.message ?? 'Upload failed');
   return body.data as T;
 }
 
@@ -121,6 +152,16 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       throw new Error('Please sign in to continue.');
     }
     return authRequest<T>(path, init, tokens.accessToken, () => {
+      void get().logout();
+    });
+  },
+
+  apiUpload: async <T>(path: string, formData: FormData) => {
+    const { tokens } = get();
+    if (!tokens?.accessToken) {
+      throw new Error('Please sign in to continue.');
+    }
+    return authUpload<T>(path, formData, tokens.accessToken, () => {
       void get().logout();
     });
   },

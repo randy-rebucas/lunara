@@ -16,7 +16,7 @@ import {
   formatCurrency,
   formatOrderStatusLabel,
 } from '@lunara/utils';
-import { theme } from '@lunara/config';
+import { colors, radius, spacing, typography } from '../../src/theme';
 import { getApiOrigin } from '../../src/api-config';
 import { DataLoadState } from '../../src/components/data-load-state';
 import { OrderTimeline } from '../../src/components/order-timeline';
@@ -207,7 +207,7 @@ export default function OrderTrackScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
       <View style={styles.statusRow}>
-        <Text style={styles.status}>{formatOrderStatusLabel(order.status)}</Text>
+        <Text style={styles.status}>{timeline.currentStepLabel}</Text>
         {socketLive ? <Text style={styles.live}>● Live</Text> : null}
       </View>
       <Text style={styles.meta}>
@@ -218,9 +218,7 @@ export default function OrderTrackScreen() {
       <View style={styles.progressTrack}>
         <View style={[styles.progressFill, { width: `${timeline.progressPercent}%` }]} />
       </View>
-      <Text style={styles.progressLabel}>
-        {timeline.currentStepLabel} · {timeline.progressPercent}%
-      </Text>
+      <Text style={styles.progressLabel}>{timeline.progressPercent}% complete</Text>
 
       {awaitingBranch && (
         <View style={styles.banner}>
@@ -302,87 +300,91 @@ export default function OrderTrackScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  content: { padding: 20, paddingBottom: 40 },
+  container: { flex: 1, backgroundColor: colors.surfaceMuted },
+  content: { padding: spacing.xl, paddingBottom: spacing.xxxl + spacing.sm },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  muted: { color: '#94a3b8' },
+  muted: { color: colors.mutedForeground },
   statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  status: { fontSize: 24, fontWeight: '700', flex: 1 },
-  live: { fontSize: 12, fontWeight: '600', color: theme.colors.accent },
-  meta: { marginTop: 6, color: '#64748b', fontSize: 15 },
+  status: { ...typography.title, flex: 1, letterSpacing: -0.3 },
+  live: { fontSize: 12, fontWeight: '600', color: colors.accent },
+  meta: { marginTop: spacing.sm - 2, color: colors.muted, fontSize: 15 },
   progressTrack: {
-    marginTop: 16,
+    marginTop: spacing.lg,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#e2e8f0',
+    backgroundColor: colors.border,
     overflow: 'hidden',
   },
-  progressFill: { height: '100%', backgroundColor: theme.colors.primary },
-  progressLabel: { marginTop: 6, fontSize: 12, color: '#64748b' },
+  progressFill: { height: '100%', backgroundColor: colors.primary },
+  progressLabel: { marginTop: spacing.sm - 2, fontSize: 12, color: colors.muted },
   banner: {
-    marginTop: 16,
-    padding: 14,
-    borderRadius: 12,
-    backgroundColor: '#fef3c7',
+    marginTop: spacing.lg,
+    padding: spacing.lg - 2,
+    borderRadius: radius.lg,
+    backgroundColor: colors.warningBg,
     borderWidth: 1,
-    borderColor: '#fcd34d',
+    borderColor: colors.warningBorder,
   },
-  bannerTitle: { fontWeight: '600', color: '#92400e' },
-  bannerText: { marginTop: 6, fontSize: 13, color: '#78350f', lineHeight: 20 },
+  bannerTitle: { fontWeight: '600', color: colors.warning },
+  bannerText: { marginTop: spacing.sm - 2, fontSize: 13, color: colors.warning, lineHeight: 20, opacity: 0.9 },
   branchCard: {
-    marginTop: 16,
-    padding: 14,
-    borderRadius: 12,
-    backgroundColor: '#eef2ff',
+    marginTop: spacing.lg,
+    padding: spacing.lg - 2,
+    borderRadius: radius.lg,
+    backgroundColor: colors.primaryLight,
     borderWidth: 1,
-    borderColor: '#c7d2fe',
+    borderColor: colors.primaryBorder,
   },
-  branchLabel: { fontSize: 12, fontWeight: '600', color: '#4338ca', textTransform: 'uppercase' },
-  branchName: { marginTop: 4, fontSize: 18, fontWeight: '700', color: '#1e293b' },
-  branchCode: { fontFamily: 'monospace', fontSize: 12, color: '#6366f1', marginTop: 2 },
-  branchHint: { marginTop: 6, fontSize: 12, color: '#64748b' },
+  branchLabel: { ...typography.label, color: colors.primaryDark },
+  branchName: { marginTop: spacing.xs, fontSize: 18, fontWeight: '700', color: colors.slate800 },
+  branchCode: { fontFamily: 'monospace', fontSize: 12, color: colors.primary, marginTop: 2 },
+  branchHint: { marginTop: spacing.sm - 2, fontSize: 12, color: colors.muted },
   notifCard: {
-    marginTop: 16,
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: '#f8fafc',
+    marginTop: spacing.lg,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: colors.border,
   },
-  notifLine: { fontSize: 13, color: '#475569', marginTop: 4 },
+  notifLine: { fontSize: 13, color: colors.slate700, marginTop: spacing.xs },
   locationCard: {
-    marginTop: 12,
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: '#f1f5f9',
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  locationText: { marginTop: 4, fontSize: 13, color: '#334155' },
+  locationText: { marginTop: spacing.xs, fontSize: 13, color: colors.slate700 },
   actionCard: {
-    marginTop: 16,
-    padding: 14,
-    borderRadius: 12,
+    marginTop: spacing.lg,
+    padding: spacing.lg - 2,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: theme.colors.primary,
-    backgroundColor: '#fafafa',
+    borderColor: colors.primary,
+    backgroundColor: colors.surface,
   },
-  actionTitle: { fontWeight: '600', fontSize: 16 },
-  actionHint: { marginTop: 4, fontSize: 13, color: '#64748b' },
+  actionTitle: { fontWeight: '600', fontSize: 16, color: colors.foreground },
+  actionHint: { marginTop: spacing.xs, fontSize: 13, color: colors.muted },
   input: {
-    marginTop: 10,
+    marginTop: spacing.md - 2,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 8,
-    padding: 12,
-    backgroundColor: '#fff',
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+    backgroundColor: colors.surface,
+    fontSize: 16,
+    color: colors.foreground,
   },
   actionBtn: {
-    marginTop: 10,
-    backgroundColor: theme.colors.primary,
-    padding: 12,
-    borderRadius: 8,
+    marginTop: spacing.md - 2,
+    backgroundColor: colors.primary,
+    padding: spacing.md,
+    borderRadius: radius.sm,
     alignItems: 'center',
   },
-  actionBtnText: { color: '#fff', fontWeight: '600' },
-  error: { marginTop: 8, color: '#ef4444', fontSize: 13 },
-  sectionTitle: { marginTop: 24, fontSize: 16, fontWeight: '600', marginBottom: 8 },
+  actionBtnText: { color: colors.onPrimary, fontWeight: '600' },
+  error: { marginTop: spacing.sm, color: colors.destructive, fontSize: 13 },
+  sectionTitle: { marginTop: spacing.xxl, ...typography.subheading, marginBottom: spacing.sm },
 });

@@ -8,8 +8,12 @@ import {
   Text,
   View,
 } from 'react-native';
-import { formatCurrency, formatOrderStatusLabel } from '@lunara/utils';
+import { buildCustomerTimeline, formatCurrency } from '@lunara/utils';
+import { Card } from '../../src/components/ui/card';
+import { Screen } from '../../src/components/ui/screen';
+import { colors, spacing, typography } from '../../src/theme';
 import { DataLoadState } from '../../src/components/data-load-state';
+import { useTabScreenPadding } from '../../src/hooks/use-tab-bar-height';
 import { useAuthStore } from '../../src/store/auth';
 
 interface OrderRow {
@@ -23,6 +27,7 @@ interface OrderRow {
 
 export default function OrdersScreen() {
   const router = useRouter();
+  const tabPadding = useTabScreenPadding();
   const apiFetch = useAuthStore((s) => s.apiFetch);
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,8 +61,12 @@ export default function OrdersScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.heading}>Order history</Text>
+    <Screen inTab padded={false}>
+      <View style={styles.header}>
+        <Text style={styles.heading}>Order history</Text>
+        <Text style={styles.sub}>Track active and past laundry orders</Text>
+      </View>
+
       <DataLoadState
         loading={loading && !refreshing}
         error={error}
@@ -67,55 +76,66 @@ export default function OrdersScreen() {
           load();
         }}
       />
+
       {!loading && !error && orders.length === 0 ? (
-        <Text style={styles.empty}>No orders yet — book laundry from Home</Text>
+        <Card style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>No orders yet</Text>
+          <Text style={styles.empty}>Book laundry from Home to get started</Text>
+        </Card>
       ) : null}
+
       <FlatList
         data={orders}
         keyExtractor={(item) => item._id}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        renderItem={({ item }) => (
-          <Pressable
-            style={styles.card}
-            onPress={() => router.push(`/orders/${item._id}`)}
-          >
-            <View style={styles.cardMain}>
-              <Text style={styles.status}>{formatOrderStatusLabel(item.status)}</Text>
-              <Text style={styles.type}>{item.bookingType.replace(/_/g, ' ')}</Text>
-              {item.branchName ? (
-                <Text style={styles.branch}>
-                  {item.branchName}
-                  {item.branchCode ? ` (${item.branchCode})` : ''}
-                </Text>
-              ) : (
-                <Text style={styles.branchPending}>Partner branch pending assignment</Text>
-              )}
-            </View>
-            <Text style={styles.total}>{formatCurrency(item.total)}</Text>
+        style={styles.listContainer}
+        contentContainerStyle={[styles.list, { paddingBottom: tabPadding }]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+        renderItem={({ item }) => {
+          const { currentStepLabel } = buildCustomerTimeline(item.status);
+          return (
+          <Pressable onPress={() => router.push(`/orders/${item._id}`)}>
+            <Card muted style={styles.card}>
+              <View style={styles.cardMain}>
+                <Text style={styles.status}>{currentStepLabel}</Text>
+                <Text style={styles.type}>{item.bookingType.replace(/_/g, ' ')}</Text>
+                {item.branchName ? (
+                  <Text style={styles.branch}>
+                    {item.branchName}
+                    {item.branchCode ? ` (${item.branchCode})` : ''}
+                  </Text>
+                ) : (
+                  <Text style={styles.branchPending}>Partner branch pending assignment</Text>
+                )}
+              </View>
+              <Text style={styles.total}>{formatCurrency(item.total)}</Text>
+            </Card>
           </Pressable>
-        )}
+          );
+        }}
       />
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20 },
-  heading: { fontSize: 24, fontWeight: '700', marginBottom: 16 },
+  header: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.sm },
+  heading: { ...typography.title },
+  sub: { ...typography.bodySm, marginTop: spacing.xs },
+  listContainer: { flex: 1 },
+  list: { paddingHorizontal: spacing.xl, gap: spacing.sm, flexGrow: 1 },
   card: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    padding: 16,
-    backgroundColor: '#f8fafc',
-    borderRadius: 10,
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
-  cardMain: { flex: 1, marginRight: 12 },
-  status: { fontWeight: '600' },
-  type: { marginTop: 4, fontSize: 13, color: '#64748b' },
-  branch: { marginTop: 6, fontSize: 12, color: '#4338ca' },
-  branchPending: { marginTop: 6, fontSize: 12, color: '#b45309', fontStyle: 'italic' },
-  total: { fontWeight: '600', color: '#0f172a' },
-  empty: { textAlign: 'center', color: '#94a3b8', marginTop: 40 },
+  cardMain: { flex: 1, marginRight: spacing.md },
+  status: { ...typography.subheading },
+  type: { marginTop: spacing.xs, fontSize: 13, color: colors.muted },
+  branch: { marginTop: spacing.sm - 2, fontSize: 12, color: colors.primaryDark, fontWeight: '500' },
+  branchPending: { marginTop: spacing.sm - 2, fontSize: 12, color: colors.warning, fontStyle: 'italic' },
+  total: { fontWeight: '700', color: colors.foreground, fontSize: 15 },
+  emptyCard: { marginHorizontal: spacing.xl, alignItems: 'center', paddingVertical: spacing.xxxl },
+  emptyTitle: { ...typography.subheading, marginBottom: spacing.xs },
+  empty: { ...typography.bodySm, textAlign: 'center' },
 });

@@ -1,7 +1,23 @@
 import { useEffect } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { colors } from '../src/theme';
 import { useAuthStore } from '../src/store/auth';
+
+const stackHeaderOptions = {
+  headerStyle: {
+    backgroundColor: colors.surfaceMuted,
+  },
+  headerShadowVisible: false,
+  headerTitleStyle: {
+    fontWeight: '700' as const,
+    fontSize: 17,
+    color: colors.foreground,
+  },
+  headerTintColor: colors.primary,
+  headerBackTitleVisible: false,
+};
 
 function isPublicRoute(segments: string[]): boolean {
   if (segments.length === 0) return true;
@@ -38,21 +54,31 @@ export default function RootLayout() {
   if (isLoading) return null;
 
   return (
-    <>
-      <StatusBar style="auto" />
+    <SafeAreaProvider>
+      <StatusBar style="dark" />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="(auth)/login" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen
           name="book"
-          options={{ headerShown: true, title: 'Book laundry', presentation: 'card' }}
+          options={{
+            ...stackHeaderOptions,
+            headerShown: true,
+            title: 'Book laundry',
+            presentation: 'card',
+          }}
         />
         <Stack.Screen
           name="orders/[id]"
-          options={{ headerShown: true, title: 'Track order', presentation: 'card' }}
+          options={{
+            ...stackHeaderOptions,
+            headerShown: true,
+            title: 'Track order',
+            presentation: 'card',
+          }}
         />
       </Stack>
-    </>
+    </SafeAreaProvider>
   );
 }

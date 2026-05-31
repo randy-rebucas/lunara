@@ -1,7 +1,27 @@
 import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { theme } from '@lunara/config';
+import { StyleSheet, Text, View } from 'react-native';
+import { Button } from '../../src/components/ui/button';
+import { Card } from '../../src/components/ui/card';
+import { Screen } from '../../src/components/ui/screen';
+import { colors, spacing, typography } from '../../src/theme';
 import { useAuthStore } from '../../src/store/auth';
+
+const QUICK_ACTIONS = [
+  {
+    title: 'Book laundry',
+    desc: 'Schedule pickup & delivery',
+    color: colors.primary,
+    route: '/book' as const,
+    variant: 'primary' as const,
+  },
+  {
+    title: 'View orders',
+    desc: 'Track active & past orders',
+    color: colors.secondary,
+    route: '/(tabs)/orders' as const,
+    variant: 'outline' as const,
+  },
+] as const;
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -9,37 +29,50 @@ export default function HomeScreen() {
   const greeting = user?.email?.split('@')[0] ?? user?.phone ?? 'there';
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.heading}>Hello, {greeting}</Text>
+    <Screen inTab>
+      <Text style={styles.greeting}>Hello, {greeting}</Text>
       <Text style={styles.sub}>
         Lunara assigns the best partner branch for your area. Book pickup and delivery in a few
         steps.
       </Text>
-      <Pressable style={styles.button} onPress={() => router.push('/book')}>
-        <Text style={styles.buttonText}>Book laundry</Text>
-      </Pressable>
-      <Pressable style={styles.secondary} onPress={() => router.push('/(tabs)/orders')}>
-        <Text style={styles.secondaryText}>View orders</Text>
-      </Pressable>
-    </View>
+
+      <View style={styles.actions}>
+        {QUICK_ACTIONS.map((action) => (
+          <Button
+            key={action.title}
+            label={action.title}
+            variant={action.variant}
+            onPress={() => router.push(action.route)}
+            style={styles.actionBtn}
+          />
+        ))}
+      </View>
+
+      <View style={styles.cards}>
+        <Card style={styles.infoCard}>
+          <Text style={[styles.cardLabel, { color: colors.primary }]}>Book pickup</Text>
+          <Text style={styles.cardDesc}>Choose service, address, and time slot</Text>
+        </Card>
+        <Card style={styles.infoCard}>
+          <Text style={[styles.cardLabel, { color: colors.secondary }]}>Track orders</Text>
+          <Text style={styles.cardDesc}>Live status updates from pickup to delivery</Text>
+        </Card>
+        <Card style={styles.infoCard}>
+          <Text style={[styles.cardLabel, { color: colors.accent }]}>Pay securely</Text>
+          <Text style={styles.cardDesc}>GCash, card, cash, or Lunara wallet</Text>
+        </Card>
+      </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: theme.colors.background },
-  heading: { fontSize: 24, fontWeight: '700' },
-  sub: { marginTop: 8, color: '#64748b', marginBottom: 24, lineHeight: 22 },
-  button: {
-    backgroundColor: theme.colors.primary,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  buttonText: { color: '#fff', fontWeight: '600', fontSize: 16 },
-  secondary: {
-    marginTop: 12,
-    padding: 14,
-    alignItems: 'center',
-  },
-  secondaryText: { color: theme.colors.primary, fontWeight: '600' },
+  greeting: { ...typography.title },
+  sub: { ...typography.bodySm, marginTop: spacing.sm, marginBottom: spacing.xxl },
+  actions: { gap: spacing.md },
+  actionBtn: { width: '100%' },
+  cards: { gap: spacing.md, marginTop: spacing.xxxl },
+  infoCard: { padding: spacing.lg },
+  cardLabel: { fontSize: 14, fontWeight: '600' },
+  cardDesc: { ...typography.caption, marginTop: spacing.xs },
 });

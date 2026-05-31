@@ -1,43 +1,425 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { theme } from '@lunara/config';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  Alert,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { AddressFormModal } from '../../src/components/address-form-modal';
+import { ProfileAvatar } from '../../src/components/profile-avatar';
+import { Button } from '../../src/components/ui/button';
+import { Card } from '../../src/components/ui/card';
+import { Input } from '../../src/components/ui/input';
+import { Screen } from '../../src/components/ui/screen';
+import { DataLoadState } from '../../src/components/data-load-state';
+import { useTabScreenPadding } from '../../src/hooks/use-tab-bar-height';
+import type { AddressFormValues, CustomerAddress, CustomerProfile } from '../../src/lib/profile-types';
 import { useAuthStore } from '../../src/store/auth';
+import { colors, radius, spacing, typography } from '../../src/theme';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const apiFetch = useAuthStore((s) => s.apiFetch);
+  const apiUpload = useAuthStore((s) => s.apiUpload);
   const logout = useAuthStore((s) => s.logout);
+  const tabPadding = useTabScreenPadding();
+
+  const [profile, setProfile] = useState<CustomerProfile | null>(null);
+  const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState('');
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState('');
+  const [profileSaved, setProfileSaved] = useState(false);
+  const [addressModalOpen, setAddressModalOpen] = useState(false);
+  const [editingAddress, setEditingAddress] = useState<CustomerAddress | null>(null);
+  const [addressSaving, setAddressSaving] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+
+  const load = useCallback(async () => {
+    setError('');
+    try {
+      const [profileData, addressList] = await Promise.all([
+        apiFetch<CustomerProfile>('/customers/me'),
+        apiFetch<CustomerAddress[]>('/addresses'),
+      ]);
+      setProfile(profileData);
+      setFirstName(profileData.firstName);
+      setLastName(profileData.lastName);
+      setAddresses(addressList);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load profile');
+    } finally {
+      setLoading(false);
+    }
+  }, [apiFetch]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function onRefresh() {
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  async function uploadAvatar(formData: FormData) {
+    setAvatarUploading(true);
+    try {
+      const updated = await apiUpload<CustomerProfile>('/customers/me/avatar', formData);
+      setProfile(updated);
+    } finally {
+      setAvatarUploading(false);
+    }
+  }
+
+  async function saveProfile() {
+    setProfileError('');
+    setProfileSaved(false);
+    if (!firstName.trim() || !lastName.trim()) {
+      setProfileError('First and last name are required.');
+      return;
+    }
+    setProfileSaving(true);
+    try {
+      const updated = await apiFetch<CustomerProfile>('/customers/me', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+        }),
+      });
+      setProfile(updated);
+      setProfileSaved(true);
+    } catch (e) {
+      setProfileError(e instanceof Error ? e.message : 'Could not save profile');
+    } finally {
+      setProfileSaving(false);
+    }
+  }
+
+  function openAddAddress() {
+    setEditingAddress(null);
+    setAddressModalOpen(true);
+  }
+
+  function openEditAddress(address: CustomerAddress) {
+    setEditingAddress(address);
+    setAddressModalOpen(true);
+  }
+
+  async function saveAddress(values: AddressFormValues) {
+    setAddressSaving(true);
+    try {
+      const payload = {
+        label: values.label.trim(),
+        line1: values.line1.trim(),
+        line2: values.line2.trim() || undefined,
+        city: values.city.trim(),
+        province: values.province.trim(),
+        postalCode: values.postalCode.trim(),
+        isDefault: values.isDefault,
+        ...(values.latitude != null && values.longitude != null
+          ? { latitude: values.latitude, longitude: values.longitude }
+          : {}),
+      };
+
+      if (editingAddress) {
+        await apiFetch<CustomerAddress>(`/addresses/${editingAddress._id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            label: payload.label,
+            line1: payload.line1,
+            line2: payload.line2,
+            city: payload.city,
+            province: payload.province,
+            postalCode: payload.postalCode,
+            isDefault: payload.isDefault,
+          }),
+        });
+      } else {
+        await apiFetch<CustomerAddress>('/addresses', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+      }
+      await load();
+    } finally {
+      setAddressSaving(false);
+    }
+  }
+
+  function confirmDeleteAddress(address: CustomerAddress) {
+    Alert.alert('Remove address', `Delete "${address.label}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await apiFetch(`/addresses/${address._id}`, { method: 'DELETE' });
+            await load();
+          } catch (e) {
+            Alert.alert('Could not delete', e instanceof Error ? e.message : 'Try again');
+          }
+        },
+      },
+    ]);
+  }
+
+  async function setDefaultAddress(address: CustomerAddress) {
+    if (address.isDefault) return;
+    try {
+      await apiFetch(`/addresses/${address._id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isDefault: true }),
+      });
+      await load();
+    } catch (e) {
+      Alert.alert('Could not update', e instanceof Error ? e.message : 'Try again');
+    }
+  }
 
   async function handleLogout() {
     await logout();
     router.replace('/(auth)/login');
   }
 
+  const displayName =
+    profile && profile.firstName !== 'Customer'
+      ? `${profile.firstName} ${profile.lastName}`.trim()
+      : user?.email?.split('@')[0] ?? user?.phone ?? 'Customer';
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.heading}>Profile</Text>
-      {user?.email ? <Text style={styles.meta}>{user.email}</Text> : null}
-      {user?.phone ? <Text style={styles.meta}>{user.phone}</Text> : null}
-      <Text style={styles.hint}>Addresses and notification settings are managed on the web app.</Text>
-      <Pressable style={styles.logoutBtn} onPress={handleLogout}>
-        <Text style={styles.logoutText}>Sign out</Text>
-      </Pressable>
-    </View>
+    <Screen inTab padded={false}>
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: tabPadding }]}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+        }
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.header}>
+          <Text style={styles.heading}>Profile</Text>
+          <Text style={styles.sub}>Manage your account, addresses, and preferences</Text>
+        </View>
+
+        <DataLoadState
+          loading={loading && !refreshing}
+          error={error}
+          loadingMessage="Loading profile…"
+          onRetry={() => {
+            setLoading(true);
+            load();
+          }}
+        />
+
+        {!loading && !error ? (
+          <>
+            <Card style={styles.heroCard}>
+              <ProfileAvatar
+                name={displayName}
+                avatarUrl={profile?.avatarUrl}
+                uploading={avatarUploading}
+                onUpload={uploadAvatar}
+              />
+              <Text style={styles.heroName}>{displayName}</Text>
+              {user?.email ? <Text style={styles.heroMeta}>{user.email}</Text> : null}
+              {user?.phone ? <Text style={styles.heroMeta}>{user.phone}</Text> : null}
+            </Card>
+
+            <Text style={styles.sectionTitle}>Personal details</Text>
+            <Card style={styles.sectionCard}>
+              <Text style={styles.fieldLabel}>First name</Text>
+              <Input value={firstName} onChangeText={setFirstName} placeholder="First name" />
+              <Text style={[styles.fieldLabel, styles.fieldLabelSpaced]}>Last name</Text>
+              <Input value={lastName} onChangeText={setLastName} placeholder="Last name" />
+              {profileError ? <Text style={styles.inlineError}>{profileError}</Text> : null}
+              {profileSaved ? (
+                <Text style={styles.inlineSuccess}>Profile saved</Text>
+              ) : null}
+              <Button
+                label={profileSaving ? 'Saving…' : 'Save profile'}
+                onPress={saveProfile}
+                disabled={profileSaving}
+                style={styles.sectionBtn}
+              />
+            </Card>
+
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Saved addresses</Text>
+              <Pressable onPress={openAddAddress} style={styles.addLink}>
+                <Ionicons name="add-circle-outline" size={18} color={colors.primary} />
+                <Text style={styles.addLinkText}>Add</Text>
+              </Pressable>
+            </View>
+
+            {addresses.length === 0 ? (
+              <Card muted style={styles.emptyAddressCard}>
+                <Text style={styles.emptyTitle}>No addresses yet</Text>
+                <Text style={styles.emptyHint}>
+                  Add a pickup address with GPS for accurate routing on mobile.
+                </Text>
+                <Button label="Add address" variant="outline" onPress={openAddAddress} style={styles.sectionBtn} />
+              </Card>
+            ) : (
+              addresses.map((address) => (
+                <Card key={address._id} style={styles.addressCard}>
+                  <View style={styles.addressTop}>
+                    <View style={styles.addressMain}>
+                      <View style={styles.addressLabelRow}>
+                        <Text style={styles.addressLabel}>{address.label}</Text>
+                        {address.isDefault ? (
+                          <View style={styles.defaultBadge}>
+                            <Text style={styles.defaultBadgeText}>Default</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <Text style={styles.addressLine}>{address.line1}</Text>
+                      {address.line2 ? <Text style={styles.addressLine}>{address.line2}</Text> : null}
+                      <Text style={styles.addressMeta}>
+                        {address.city}, {address.province} {address.postalCode}
+                      </Text>
+                      {address.latitude != null && address.longitude != null ? (
+                        <View style={styles.gpsRow}>
+                          <Ionicons name="location-sharp" size={12} color={colors.accent} />
+                          <Text style={styles.gpsText}>GPS pinned</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  </View>
+                  <View style={styles.addressActions}>
+                    {!address.isDefault ? (
+                      <Pressable onPress={() => setDefaultAddress(address)} style={styles.actionChip}>
+                        <Text style={styles.actionChipText}>Set default</Text>
+                      </Pressable>
+                    ) : null}
+                    <Pressable onPress={() => openEditAddress(address)} style={styles.actionChip}>
+                      <Text style={styles.actionChipText}>Edit</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => confirmDeleteAddress(address)}
+                      style={[styles.actionChip, styles.actionChipDanger]}
+                    >
+                      <Text style={[styles.actionChipText, styles.actionChipDangerText]}>Delete</Text>
+                    </Pressable>
+                  </View>
+                </Card>
+              ))
+            )}
+
+            <Text style={[styles.sectionTitle, styles.sectionTitleSpaced]}>Preferences</Text>
+            <Card muted style={styles.sectionCard}>
+              <View style={styles.prefRow}>
+                <Ionicons name="notifications-outline" size={20} color={colors.primary} />
+                <View style={styles.prefCopy}>
+                  <Text style={styles.prefTitle}>Order updates</Text>
+                  <Text style={styles.prefHint}>
+                    SMS and in-app alerts for pickup, laundry progress, and delivery
+                  </Text>
+                </View>
+              </View>
+              <View style={[styles.prefRow, styles.prefRowBorder]}>
+                <Ionicons name="shield-checkmark-outline" size={20} color={colors.secondary} />
+                <View style={styles.prefCopy}>
+                  <Text style={styles.prefTitle}>Secure payments</Text>
+                  <Text style={styles.prefHint}>
+                    Pay with GCash, card, cash, or your Lunara wallet at checkout
+                  </Text>
+                </View>
+              </View>
+            </Card>
+
+            <Button label="Sign out" variant="outline" onPress={handleLogout} style={styles.logoutBtn} />
+          </>
+        ) : null}
+      </ScrollView>
+
+      <AddressFormModal
+        visible={addressModalOpen}
+        editing={editingAddress}
+        hasAddresses={addresses.length > 0}
+        saving={addressSaving}
+        onClose={() => setAddressModalOpen(false)}
+        onSave={saveAddress}
+      />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: theme.colors.background },
-  heading: { fontSize: 24, fontWeight: '700', marginBottom: 8 },
-  meta: { fontSize: 15, color: '#334155', marginTop: 4 },
-  hint: { marginTop: 20, fontSize: 13, color: '#94a3b8', lineHeight: 20 },
-  logoutBtn: {
-    marginTop: 32,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    padding: 14,
-    borderRadius: 10,
+  content: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm },
+  header: { marginBottom: spacing.lg },
+  heading: { ...typography.title },
+  sub: { ...typography.bodySm, marginTop: spacing.xs },
+  heroCard: { alignItems: 'center', paddingVertical: spacing.xxl, marginBottom: spacing.lg },
+  heroName: { ...typography.subheading },
+  heroMeta: { ...typography.caption, marginTop: spacing.xs },
+  sectionTitle: { ...typography.subheading, fontSize: 16, marginBottom: spacing.sm },
+  sectionTitleSpaced: { marginTop: spacing.lg },
+  sectionHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
   },
-  logoutText: { color: '#64748b', fontWeight: '600' },
+  addLink: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  addLinkText: { color: colors.primary, fontWeight: '600', fontSize: 14 },
+  sectionCard: { marginBottom: spacing.lg, gap: spacing.sm },
+  fieldLabel: { ...typography.label, marginBottom: -spacing.xs },
+  fieldLabelSpaced: { marginTop: spacing.sm },
+  sectionBtn: { marginTop: spacing.sm },
+  inlineError: { color: colors.destructive, fontSize: 13 },
+  inlineSuccess: { color: colors.accent, fontSize: 13, fontWeight: '600' },
+  emptyAddressCard: { alignItems: 'center', marginBottom: spacing.lg, paddingVertical: spacing.xxl },
+  emptyTitle: { ...typography.body, fontWeight: '600' },
+  emptyHint: { ...typography.caption, textAlign: 'center', marginTop: spacing.xs, marginBottom: spacing.lg },
+  addressCard: { marginBottom: spacing.sm },
+  addressTop: { flexDirection: 'row' },
+  addressMain: { flex: 1 },
+  addressLabelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
+  addressLabel: { fontSize: 16, fontWeight: '700', color: colors.foreground },
+  defaultBadge: {
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+  },
+  defaultBadgeText: { fontSize: 10, fontWeight: '700', color: colors.primaryDark },
+  addressLine: { fontSize: 14, color: colors.slate700, marginTop: spacing.xs },
+  addressMeta: { ...typography.caption, marginTop: spacing.xs },
+  gpsRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.sm - 2 },
+  gpsText: { fontSize: 11, fontWeight: '600', color: colors.accentDark },
+  addressActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
+  actionChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm - 2,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  actionChipText: { fontSize: 12, fontWeight: '600', color: colors.primary },
+  actionChipDanger: { borderColor: colors.destructive + '33' },
+  actionChipDangerText: { color: colors.destructive },
+  prefRow: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' },
+  prefRowBorder: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.md, marginTop: spacing.md },
+  prefCopy: { flex: 1 },
+  prefTitle: { fontSize: 14, fontWeight: '600', color: colors.foreground },
+  prefHint: { ...typography.caption, marginTop: spacing.xs },
+  logoutBtn: { marginTop: spacing.xxxl },
 });

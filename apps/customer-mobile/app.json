@@ -7,7 +7,21 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Lunara uses your location to pin pickup and delivery addresses accurately."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Lunara uses your photo library so you can set a profile picture."
+        }
+      ]
+    ],
     "experiments": { "typedRoutes": true }
   }
 }

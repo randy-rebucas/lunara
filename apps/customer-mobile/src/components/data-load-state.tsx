@@ -1,5 +1,5 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { theme } from '@lunara/config';
+import { colors, radius, spacing } from '../theme';
 
 export function DataLoadState({
   loading,
@@ -18,7 +18,7 @@ export function DataLoadState({
     <View style={styles.wrap}>
       {loading && !error ? (
         <>
-          <ActivityIndicator color={theme.colors.primary} />
+          <ActivityIndicator color={colors.primary} />
           <Text style={styles.muted}>{loadingMessage}</Text>
         </>
       ) : null}
@@ -37,16 +37,16 @@ export function DataLoadState({
 }
 
 const styles = StyleSheet.create({
-  wrap: { alignItems: 'center', paddingVertical: 24, gap: 10 },
-  muted: { color: '#94a3b8', fontSize: 14 },
-  error: { color: '#ef4444', fontSize: 14, textAlign: 'center', paddingHorizontal: 16 },
+  wrap: { alignItems: 'center', paddingVertical: spacing.xxl, gap: spacing.md - 2 },
+  muted: { color: colors.mutedForeground, fontSize: 14 },
+  error: { color: colors.destructive, fontSize: 14, textAlign: 'center', paddingHorizontal: spacing.lg },
   retryBtn: {
-    marginTop: 4,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: theme.colors.primary,
+    borderColor: colors.primary,
   },
-  retryText: { color: theme.colors.primary, fontWeight: '600', fontSize: 14 },
+  retryText: { color: colors.primary, fontWeight: '600', fontSize: 14 },
 });

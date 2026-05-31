@@ -20,11 +20,11 @@ import {
   type PickupSlot,
   type QuoteBreakdown,
 } from '@lunara/utils';
-import { theme } from '@lunara/config';
+import { colors, radius, spacing, typography } from '../src/theme';
+import { BookingProgress } from '../src/components/booking-progress';
 import { NearestBranchesCard, type NearestBranchRow } from '../src/components/nearest-branches';
 import { PaymentMethodPicker } from '../src/components/payment-method-picker';
 import {
-  BOOKING_STEPS,
   initialBookingForm,
   nextStep,
   prevStep,
@@ -285,7 +285,6 @@ export default function BookScreen() {
     }
   }
 
-  const stepIdx = BOOKING_STEPS.findIndex((s) => s.id === step);
   const addons = config?.addons ?? [];
   const activeQuote = quote ?? localQuote;
   const reviewBlocked = step === 'review' && activeQuote ? !activeQuote.meetsMinimum : false;
@@ -301,22 +300,14 @@ export default function BookScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.progress}>
-        {BOOKING_STEPS.map((s, i) => (
-          <Text
-            key={s.id}
-            style={[styles.progressDot, i <= stepIdx && styles.progressDotActive]}
-          >
-            {s.label}
-          </Text>
-        ))}
-      </View>
+    <View style={styles.container}>
+      <BookingProgress current={step} />
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      {configLoading && !config ? (
-        <Text style={styles.sub}>Loading services…</Text>
-      ) : null}
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {configLoading && !config ? (
+          <Text style={styles.sub}>Loading services…</Text>
+        ) : null}
 
       {step === 'service' && config && (
         <View>
@@ -593,100 +584,101 @@ export default function BookScreen() {
           </Pressable>
         )}
       </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  content: { padding: 20, paddingBottom: 40 },
-  progress: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 16 },
-  progressDot: { fontSize: 10, color: '#94a3b8', backgroundColor: '#f1f5f9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  progressDotActive: { color: '#fff', backgroundColor: theme.colors.primary },
-  heading: { fontSize: 22, fontWeight: '700', marginBottom: 12 },
-  sub: { color: '#64748b', marginBottom: 12 },
-  error: { color: '#ef4444', marginBottom: 12 },
+  container: { flex: 1, backgroundColor: colors.surfaceMuted },
+  scroll: { flex: 1 },
+  content: { padding: spacing.xl, paddingBottom: spacing.xxxl + spacing.sm },
+  heading: { ...typography.heading, marginBottom: spacing.md },
+  sub: { ...typography.bodySm, marginBottom: spacing.md },
+  error: { color: colors.destructive, marginBottom: spacing.md },
   option: {
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    padding: spacing.lg - 2,
+    marginBottom: spacing.md - 2,
+    backgroundColor: colors.surface,
   },
-  optionSelected: { borderColor: theme.colors.primary, backgroundColor: '#eef2ff' },
+  optionSelected: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
   optionDisabled: { opacity: 0.4 },
-  optionTitle: { fontWeight: '600', fontSize: 16 },
-  optionSub: { marginTop: 4, fontSize: 13, color: '#64748b' },
-  optionPrice: { marginTop: 6, fontSize: 13, color: theme.colors.primary, fontWeight: '500' },
+  optionTitle: { fontWeight: '600', fontSize: 16, color: colors.foreground },
+  optionSub: { marginTop: spacing.xs, fontSize: 13, color: colors.muted },
+  optionPrice: { marginTop: spacing.sm - 2, fontSize: 13, color: colors.primary, fontWeight: '500' },
   addonRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  addonPrice: { fontSize: 15, fontWeight: '600', color: theme.colors.primary },
+  addonPrice: { fontSize: 15, fontWeight: '600', color: colors.primary },
   weightHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginVertical: 16,
+    marginVertical: spacing.lg,
   },
-  weightService: { fontSize: 13, color: '#64748b' },
-  weightRange: { textAlign: 'center', fontSize: 12, color: '#94a3b8', marginTop: 8 },
+  weightService: { fontSize: 13, color: colors.muted },
+  weightRange: { textAlign: 'center', fontSize: 12, color: colors.mutedForeground, marginTop: spacing.sm },
   estimateCard: {
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
-    padding: 16,
-    backgroundColor: '#fff',
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    backgroundColor: colors.surface,
   },
-  estimateRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  estimateLabel: { fontSize: 14, flex: 1, paddingRight: 8 },
-  estimateLabelMuted: { fontSize: 14, color: '#64748b', flex: 1, paddingRight: 8 },
+  estimateRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm },
+  estimateLabel: { fontSize: 14, flex: 1, paddingRight: spacing.sm, color: colors.foreground },
+  estimateLabelMuted: { fontSize: 14, color: colors.muted, flex: 1, paddingRight: spacing.sm },
   estimateDivider: {
     borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
-    paddingTop: 10,
-    marginTop: 4,
-    marginBottom: 10,
+    borderTopColor: colors.border,
+    paddingTop: spacing.md - 2,
+    marginTop: spacing.xs,
+    marginBottom: spacing.md - 2,
   },
-  estimateTotalLabel: { fontSize: 16, fontWeight: '700' },
-  estimateTotal: { fontSize: 16, fontWeight: '700', color: theme.colors.primary },
+  estimateTotalLabel: { fontSize: 16, fontWeight: '700', color: colors.foreground },
+  estimateTotal: { fontSize: 16, fontWeight: '700', color: colors.primary },
   summaryCard: {
-    backgroundColor: '#f8fafc',
-    borderRadius: 12,
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    padding: 14,
-    gap: 8,
-    marginBottom: 12,
+    borderColor: colors.border,
+    padding: spacing.lg - 2,
+    gap: spacing.sm,
+    marginBottom: spacing.md,
   },
-  summaryLine: { fontSize: 14, color: '#1e293b' },
-  summaryMuted: { color: '#64748b' },
+  summaryLine: { fontSize: 14, color: colors.slate800 },
+  summaryMuted: { color: colors.muted },
   summaryTotal: { fontWeight: '700' },
-  confirmNote: { fontSize: 12, color: '#64748b', lineHeight: 18, marginBottom: 12 },
+  confirmNote: { ...typography.caption, lineHeight: 18, marginBottom: spacing.md },
   infoBox: {
-    backgroundColor: '#eef2ff',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 12,
+    backgroundColor: colors.primaryLight,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
   },
-  infoText: { fontSize: 13, color: '#334155', lineHeight: 20 },
-  weightValue: { fontSize: 32, fontWeight: '700', color: theme.colors.primary },
-  weightRow: { flexDirection: 'row', justifyContent: 'center', gap: 32, marginBottom: 16 },
-  weightBtn: { fontSize: 32, fontWeight: '600', color: theme.colors.primary, padding: 12 },
-  actions: { flexDirection: 'row', gap: 12, marginTop: 24 },
+  infoText: { fontSize: 13, color: colors.slate700, lineHeight: 20 },
+  weightValue: { fontSize: 32, fontWeight: '700', color: colors.primary },
+  weightRow: { flexDirection: 'row', justifyContent: 'center', gap: spacing.xxxl, marginBottom: spacing.lg },
+  weightBtn: { fontSize: 32, fontWeight: '600', color: colors.primary, padding: spacing.md },
+  actions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xxl },
   secondaryBtn: {
     flex: 1,
-    padding: 14,
-    borderRadius: 12,
+    padding: spacing.lg - 2,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: colors.border,
     alignItems: 'center',
+    backgroundColor: colors.surface,
   },
-  secondaryBtnText: { fontWeight: '600' },
+  secondaryBtnText: { fontWeight: '600', color: colors.foreground },
   primaryBtn: {
     flex: 2,
-    backgroundColor: theme.colors.primary,
-    padding: 14,
-    borderRadius: 12,
+    backgroundColor: colors.primary,
+    padding: spacing.lg - 2,
+    borderRadius: radius.lg,
     alignItems: 'center',
   },
-  primaryBtnText: { color: '#fff', fontWeight: '600' },
+  primaryBtnText: { color: colors.onPrimary, fontWeight: '600' },
   btnDisabled: { opacity: 0.6 },
 });

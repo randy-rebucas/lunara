@@ -37,3 +37,6 @@ coverage/
 
 # Docker
 docker/data/
+
+# API uploads (local dev storage)
+apps/api/uploads/

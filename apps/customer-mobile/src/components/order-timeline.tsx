@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { buildCustomerTimeline } from '@lunara/utils';
+import { colors, spacing } from '../theme';
 
 interface Props {
   status: string;
@@ -48,21 +49,27 @@ export function OrderTimeline({ status, statusHistory }: Props) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { marginTop: 8 },
-  row: { flexDirection: 'row', marginBottom: 14 },
+  wrap: { marginTop: spacing.sm },
+  row: { flexDirection: 'row', marginBottom: spacing.lg - 2 },
   dot: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#cbd5e1',
+    backgroundColor: colors.border,
     marginTop: 5,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
-  dotDone: { backgroundColor: '#22c55e' },
-  dotCurrent: { backgroundColor: '#6366f1', width: 12, height: 12, borderRadius: 6, marginTop: 4 },
+  dotDone: { backgroundColor: colors.accent },
+  dotCurrent: {
+    backgroundColor: colors.primary,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginTop: 4,
+  },
   content: { flex: 1 },
-  label: { fontSize: 14, color: '#94a3b8' },
-  labelDone: { color: '#334155' },
-  labelCurrent: { color: '#312e81', fontWeight: '600' },
-  time: { fontSize: 11, color: '#94a3b8', marginTop: 2 },
+  label: { fontSize: 14, color: colors.mutedForeground },
+  labelDone: { color: colors.slate700 },
+  labelCurrent: { color: colors.primaryDark, fontWeight: '600' },
+  time: { fontSize: 11, color: colors.mutedForeground, marginTop: 2 },
 });

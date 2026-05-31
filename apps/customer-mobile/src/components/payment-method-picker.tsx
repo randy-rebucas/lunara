@@ -1,12 +1,13 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { PaymentMethod } from '@lunara/types';
-import { theme } from '@lunara/config';
 import {
   CUSTOMER_PAYMENT_OPTIONS,
   formatCashTimingLabel,
   formatCurrency,
   type CashTiming,
 } from '@lunara/utils';
+import { SelectableOption } from './ui/selectable-option';
+import { colors, radius, spacing, typography } from '../theme';
 
 interface PaymentMethodPickerProps {
   method: PaymentMethod;
@@ -37,24 +38,22 @@ export function PaymentMethodPicker({
 
       <Text style={styles.groupLabel}>PayMongo</Text>
       {paymongoOptions.map((opt) => (
-        <Pressable
+        <SelectableOption
           key={opt.method}
-          style={[styles.option, method === opt.method && styles.optionSelected]}
+          title={opt.label}
+          subtitle={opt.description}
+          selected={method === opt.method}
           onPress={() => onMethodChange(opt.method)}
-        >
-          <Text style={styles.optionTitle}>{opt.label}</Text>
-          <Text style={styles.optionSub}>{opt.description}</Text>
-        </Pressable>
+        />
       ))}
 
       <Text style={styles.groupLabel}>Cash</Text>
-      <Pressable
-        style={[styles.option, method === PaymentMethod.CASH && styles.optionSelected]}
+      <SelectableOption
+        title="Cash"
+        subtitle="Pay when we pick up or deliver your laundry"
+        selected={method === PaymentMethod.CASH}
         onPress={() => onMethodChange(PaymentMethod.CASH)}
-      >
-        <Text style={styles.optionTitle}>Cash</Text>
-        <Text style={styles.optionSub}>Pay when we pick up or deliver your laundry</Text>
-      </Pressable>
+      />
       {method === PaymentMethod.CASH && (
         <View style={styles.timingRow}>
           {(['pickup', 'delivery'] as CashTiming[]).map((t) => (
@@ -74,13 +73,12 @@ export function PaymentMethodPicker({
       )}
 
       <Text style={styles.groupLabel}>Wallet</Text>
-      <Pressable
-        style={[styles.option, method === PaymentMethod.WALLET && styles.optionSelected]}
+      <SelectableOption
+        title="Lunara Wallet"
+        subtitle={`Balance: ${formatCurrency(walletBalance)}`}
+        selected={method === PaymentMethod.WALLET}
         onPress={() => onMethodChange(PaymentMethod.WALLET)}
-      >
-        <Text style={styles.optionTitle}>Lunara Wallet</Text>
-        <Text style={styles.optionSub}>Balance: {formatCurrency(walletBalance)}</Text>
-      </Pressable>
+      />
       {insufficientWallet && (
         <Text style={styles.warning}>
           Insufficient balance.{' '}
@@ -98,38 +96,20 @@ export function PaymentMethodPicker({
 }
 
 const styles = StyleSheet.create({
-  container: { marginTop: 8 },
-  heading: { fontSize: 18, fontWeight: '700', marginBottom: 4 },
-  sub: { color: '#64748b', marginBottom: 12, fontSize: 13 },
-  groupLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#94a3b8',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginTop: 8,
-    marginBottom: 8,
-  },
-  option: {
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
-  },
-  optionSelected: { borderColor: theme.colors.primary, backgroundColor: '#eef2ff' },
-  optionTitle: { fontWeight: '600', fontSize: 16 },
-  optionSub: { marginTop: 4, fontSize: 13, color: '#64748b' },
-  timingRow: { flexDirection: 'row', gap: 8, marginBottom: 10, paddingLeft: 4 },
+  container: { marginTop: spacing.sm },
+  heading: { ...typography.subheading, marginBottom: spacing.xs },
+  sub: { ...typography.bodySm, marginBottom: spacing.md },
+  groupLabel: { ...typography.label, marginTop: spacing.sm, marginBottom: spacing.sm },
+  timingRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md - 2, paddingLeft: spacing.xs },
   timingChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#f1f5f9',
+    paddingHorizontal: spacing.lg - 2,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.full,
+    backgroundColor: colors.surfaceMuted,
   },
-  timingChipActive: { backgroundColor: theme.colors.primary },
-  timingChipText: { fontSize: 13, fontWeight: '500', color: '#64748b' },
-  timingChipTextActive: { color: '#fff' },
-  warning: { fontSize: 13, color: '#b45309', marginBottom: 8 },
-  link: { color: theme.colors.primary, fontWeight: '600' },
+  timingChipActive: { backgroundColor: colors.primary },
+  timingChipText: { fontSize: 13, fontWeight: '500', color: colors.muted },
+  timingChipTextActive: { color: colors.onPrimary },
+  warning: { fontSize: 13, color: colors.warning, marginBottom: spacing.sm },
+  link: { color: colors.primary, fontWeight: '600' },
 });

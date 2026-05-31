@@ -48,11 +48,92 @@ npm run dev --workspace=@lunara/api
 npm run dev --workspace=@lunara/customer-web
 npm run dev --workspace=@lunara/admin-web
 npm run dev --workspace=@lunara/partner-web
+
+# Run mobile apps (separate terminals — see Mobile Apps below)
+npm run dev --workspace=@lunara/customer-mobile
+npm run dev --workspace=@lunara/rider-mobile
 ```
+
+## Mobile Apps
+
+Both mobile apps are **Expo 54** projects using **Expo Router** and share packages from the monorepo (`@lunara/types`, `@lunara/utils`, `@lunara/hooks`, `@lunara/config`).
+
+### Prerequisites
+
+- Node 20+ (same as the rest of the monorepo)
+- [Expo Go](https://expo.dev/go) on a physical device, **or** Android Studio / Xcode for emulators
+- API running (`npm run dev --workspace=@lunara/api`) and Docker services up
+- Phone and dev machine on the **same Wi‑Fi** when testing on a physical device
+
+### Environment
+
+Mobile apps read the monorepo root `.env` via `app.config.js`. Set:
+
+```bash
+EXPO_PUBLIC_API_URL=http://localhost:3001
+```
+
+On a physical device, `localhost` points at the phone — not your PC. Both apps automatically rewrite `localhost` / `127.0.0.1` in `EXPO_PUBLIC_API_URL` to your dev machine’s LAN IP (derived from the Expo dev-server host). No manual IP editing is required when using Expo Go on the same network.
+
+### Run locally
+
+| App | Command | Metro port | Dev login |
+|-----|---------|------------|-----------|
+| Customer | `npm run dev --workspace=@lunara/customer-mobile` | 8081 | Phone OTP → `123456`, or `customer@lunara.dev` / `password123` |
+| Rider | `npm run dev --workspace=@lunara/rider-mobile` | 8082 | `rider@lunara.dev` / `password123` |
+
+Platform shortcuts (from each app directory or via `--workspace`):
+
+```bash
+npm run android --workspace=@lunara/customer-mobile
+npm run ios --workspace=@lunara/rider-mobile
+```
+
+Scan the QR code in the terminal with Expo Go (Android) or the Camera app (iOS).
+
+### Customer mobile (`apps/customer-mobile`)
+
+Expo slug: `lunara-customer` · scheme: `lunara`
+
+| Screen | Route | Description |
+|--------|-------|-------------|
+| Splash | `/` | Welcome → Get Started |
+| Login | `/(auth)/login` | Phone OTP or email/password |
+| Home | `/(tabs)` | Book laundry, quick links |
+| Orders | `/(tabs)/orders` | Order list |
+| Wallet | `/(tabs)/wallet` | Balance & top-up |
+| Profile | `/(tabs)/profile` | Account info |
+| Book | `/book` | Full booking flow (service → address → schedule → weight → add-ons → payment) |
+| Track order | `/orders/[id]` | Timeline, live WebSocket updates, delivery verify/sign |
+
+Features mirror customer-web: managed-network booking (no shop picker), PayMongo / cash / wallet payment, order tracking with rider GPS when en route, and delivery verification (last 4 digits of phone + signature).
+
+### Rider mobile (`apps/rider-mobile`)
+
+Expo slug: `lunara-rider` · scheme: `lunara-rider` · requires **location** permission for GPS tracking
+
+| Screen | Route | Description |
+|--------|-------|-------------|
+| Login | `/login` | Email/password |
+| Operations | `/` | Go online/offline, pickup & delivery offers, active tasks, earnings summary |
+| Pickup task | `/pickup/[id]` | Arrive → verify customer → collect → photo → receipt → drop at shop |
+| Delivery task | `/delivery/[id]` | Pick up from shop → navigate → customer verify/sign → photo → complete |
+| Earnings | `/earnings` | Today & total earnings |
+| Notifications | `/notifications` | Rider alerts |
+
+Real-time task offers and location updates use Socket.IO (`/tracking` namespace). See [End-to-End Test Flow → Rider daily operations](#rider-daily-operations-mobile-port-8082) for the full pickup/delivery walkthrough.
+
+### Monorepo notes
+
+- `metro.config.js` in each app pins a single `react` / `react-native` instance from the repo root to avoid invalid hook errors.
+- Shared business logic lives in `@lunara/utils`; API calls use `@lunara/hooks` with the mobile-specific base URL from `src/api-config.ts`.
+- Production builds: use [EAS Build](https://docs.expo.dev/build/introduction/) (`npm run build` prints a placeholder message).
 
 ## End-to-End Test Flow
 
 ### Customer sign-up (OTP)
+
+Works on **customer-web** (http://localhost:3000) or **customer-mobile** (Expo, port 8081) — same API and dev OTP.
 
 1. **Sign up** at http://localhost:3000/signup — enter mobile → OTP `123456` (dev)
 2. **Complete profile** and **add address** (onboarding screens)
@@ -74,9 +155,7 @@ npm run dev --workspace=@lunara/partner-web
 
 ### Rider daily operations (mobile port 8082)
 
-**Expo Go on a phone:** run the API (`npm run dev --workspace=@lunara/api`) and the mobile app on the same Wi‑Fi. Both apps rewrite `localhost` in `EXPO_PUBLIC_API_URL` to your PC’s LAN IP automatically in dev.
-
-**Customer mobile (port 8081):** `npm run dev --workspace=@lunara/customer-mobile` — OTP `123456`, or `customer@lunara.dev` / `password123` after seed.
+See [Mobile Apps](#mobile-apps) for setup (Expo Go, Wi‑Fi, env). Then:
 
 1. Open rider app → **Login** (`rider@lunara.dev` / `password123`)
 2. **Go online** on the Operations screen
@@ -106,7 +185,7 @@ npm run dev --workspace=@lunara/partner-web
 
 | Role | Portal | Can | Cannot |
 |------|--------|-----|--------|
-| **Customer** | customer-web (3000) | Book service; choose service type, schedule, address, payment | Choose laundry shop |
+| **Customer** | customer-web (3000), customer-mobile (8081) | Book service; choose service type, schedule, address, payment | Choose laundry shop |
 | **Admin dispatcher** | admin-web (3002) — Control tower, Dispatch, Orders | Review orders; assign shop & rider; monitor SLA & progress; resolve conflicts | Process laundry; accept rider jobs |
 | **Laundry partner** | partner-web (3003) | Accept assigned orders; process laundry; request pickup/delivery | Browse or compete for unassigned orders |
 | **Shop staff** | partner-web | Processing queue; advance steps; photos | Accept franchise orders (partner only) |
@@ -188,7 +267,7 @@ OTP login (dev): any phone → OTP is always `123456`
 
 ## Documentation
 
-See [`docs/`](./docs/) for architecture, database schemas, API reference, and development roadmap.
+See [`docs/`](./docs/) for architecture, database schemas, API reference, and development roadmap. Mobile app setup and screen reference are in [Mobile Apps](#mobile-apps) above.
 
 ## Theme
 

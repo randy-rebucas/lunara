@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { BRANCH_TYPE_LABELS, type BranchNetworkType } from '@lunara/utils';
+import { colors, radius, spacing, typography } from '../theme';
 
 export interface NearestBranchRow {
   branchId: string;
@@ -42,18 +43,14 @@ export function NearestBranchesCard({ branches, note }: NearestBranchesProps) {
           <Text
             style={[
               styles.badge,
-              b.capacityAvailable && b.withinRadius
-                ? styles.badgeOk
-                : styles.badgeWarn,
+              b.capacityAvailable && b.withinRadius ? styles.badgeOk : styles.badgeWarn,
             ]}
           >
             {b.capacityAvailable && b.withinRadius ? 'Available' : 'Limited'}
           </Text>
         </View>
       ))}
-      <Text style={styles.footer}>
-        Lunara HQ → franchise & partner shops serve your area
-      </Text>
+      <Text style={styles.footer}>Lunara HQ → franchise & partner shops serve your area</Text>
     </View>
   );
 }
@@ -65,29 +62,29 @@ export function branchTypeLabel(type?: string) {
 
 const styles = StyleSheet.create({
   card: {
-    marginTop: 12,
-    padding: 14,
-    borderRadius: 12,
-    backgroundColor: '#eef2ff',
+    marginTop: spacing.md,
+    padding: spacing.lg - 2,
+    borderRadius: radius.lg,
+    backgroundColor: colors.primaryLight,
     borderWidth: 1,
-    borderColor: '#c7d2fe',
+    borderColor: colors.primaryBorder,
   },
-  title: { fontSize: 15, fontWeight: '600', color: '#312e81' },
-  sub: { marginTop: 4, fontSize: 12, color: '#475569' },
-  note: { marginTop: 8, fontSize: 12, color: '#334155', fontStyle: 'italic' },
+  title: { fontSize: 15, fontWeight: '600', color: colors.primaryDark },
+  sub: { marginTop: spacing.xs, fontSize: 12, color: colors.muted },
+  note: { marginTop: spacing.sm, fontSize: 12, color: colors.slate700, fontStyle: 'italic' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 10,
-    paddingTop: 10,
+    marginTop: spacing.md - 2,
+    paddingTop: spacing.md - 2,
     borderTopWidth: 1,
-    borderTopColor: '#c7d2fe',
+    borderTopColor: colors.primaryBorder,
   },
   rowMain: { flex: 1 },
-  name: { fontSize: 14, fontWeight: '500', color: '#1e293b' },
-  meta: { fontSize: 11, color: '#64748b', marginTop: 2 },
-  badge: { fontSize: 10, fontWeight: '600', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  badgeOk: { backgroundColor: '#dcfce7', color: '#166534' },
-  badgeWarn: { backgroundColor: '#fef3c7', color: '#92400e' },
-  footer: { marginTop: 12, fontSize: 11, color: '#64748b' },
+  name: { fontSize: 14, fontWeight: '500', color: colors.slate800 },
+  meta: { fontSize: 11, color: colors.muted, marginTop: 2 },
+  badge: { fontSize: 10, fontWeight: '600', paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.sm },
+  badgeOk: { backgroundColor: colors.accentLight, color: colors.accentDark },
+  badgeWarn: { backgroundColor: colors.warningBg, color: colors.warning },
+  footer: { marginTop: spacing.md, fontSize: 11, color: colors.muted },
 });
