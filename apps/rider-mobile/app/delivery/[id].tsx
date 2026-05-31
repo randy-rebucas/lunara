@@ -1,22 +1,17 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import {
-  Alert,
-  Linking,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Alert, Linking, StyleSheet, Text } from 'react-native';
 import {
   DELIVERY_WORKFLOW_STEPS,
   formatCurrency,
   getDeliveryWorkflowStepIndex,
 } from '@lunara/utils';
-import { theme } from '@lunara/config';
 import { OpsStepper } from '../../src/components/ops-stepper';
+import { Button } from '../../src/components/ui/button';
+import { Card } from '../../src/components/ui/card';
+import { Screen } from '../../src/components/ui/screen';
 import { riderFetch } from '../../src/api';
+import { colors, spacing, typography } from '../../src/theme';
 
 interface DeliveryTask {
   _id: string;
@@ -63,7 +58,9 @@ export default function DeliveryScreen() {
   }, [id]);
 
   useEffect(() => {
-    load().catch(() => Alert.alert('Error', 'Could not load delivery'));
+    load().catch((e) =>
+      Alert.alert('Error', e instanceof Error ? e.message : 'Could not load delivery'),
+    );
   }, [load]);
 
   useEffect(() => {
@@ -100,9 +97,9 @@ export default function DeliveryScreen() {
 
   if (!task) {
     return (
-      <View style={styles.container}>
-        <Text>Loading…</Text>
-      </View>
+      <Screen inStack>
+        <Text style={typography.body}>Loading…</Text>
+      </Screen>
     );
   }
 
@@ -118,8 +115,8 @@ export default function DeliveryScreen() {
   const done = task.status === 'delivered' || task.status === 'completed';
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Customer delivery</Text>
+    <Screen scroll inStack contentStyle={styles.content}>
+      <Text style={styles.title}>Delivery route</Text>
       <Text style={styles.subtitle}>
         {task.bookingType.replace(/_/g, ' ')} · {task.status.replace(/_/g, ' ')}
         {task.branchName ? ` · ${task.branchName}` : ''}
@@ -127,34 +124,34 @@ export default function DeliveryScreen() {
       <OpsStepper steps={steps} currentIndex={stepIndex} />
 
       {task.branchName && (
-        <View style={styles.card}>
+        <Card elevated style={styles.card}>
           <Text style={styles.cardTitle}>Pickup from shop</Text>
           <Text style={styles.cardBody}>{task.branchName}</Text>
-        </View>
+        </Card>
       )}
 
       {task.deliveryAddress && (
-        <View style={styles.card}>
+        <Card elevated style={styles.card}>
           <Text style={styles.cardTitle}>Deliver to · {task.deliveryAddress.label}</Text>
           <Text style={styles.cardBody}>
             {task.deliveryAddress.line1}, {task.deliveryAddress.city}
           </Text>
-        </View>
+        </Card>
       )}
 
       {isOffer && (
-        <View style={styles.card}>
+        <Card muted style={styles.card}>
           <Text style={styles.cardTitle}>Awaiting Lunara assignment</Text>
           <Text style={styles.hint}>
             This order is ready at the shop. Operations will assign you — check Active tasks on
             the home screen.
           </Text>
-        </View>
+        </Card>
       )}
 
       {isAssigned && !d.acceptedAt && (
-        <Pressable
-          style={styles.primaryBtn}
+        <Button
+          label="Acknowledge assignment"
           disabled={loading}
           onPress={() =>
             run(
@@ -162,16 +159,15 @@ export default function DeliveryScreen() {
               'Assignment acknowledged',
             )
           }
-        >
-          <Text style={styles.primaryBtnText}>Acknowledge assignment</Text>
-        </Pressable>
+          style={styles.action}
+        />
       )}
 
       {d.acceptedAt && !done && (
         <>
           {task.canPickupFromShop && (
-            <Pressable
-              style={styles.primaryBtn}
+            <Button
+              label="Rider pickup from shop"
               disabled={loading}
               onPress={() =>
                 run(
@@ -182,14 +178,13 @@ export default function DeliveryScreen() {
                   'Picked up from shop',
                 )
               }
-            >
-              <Text style={styles.primaryBtnText}>Rider pickup from shop</Text>
-            </Pressable>
+              style={styles.action}
+            />
           )}
 
           {task.canGoOutForDelivery && (
-            <Pressable
-              style={styles.primaryBtn}
+            <Button
+              label="Out for delivery"
               disabled={loading}
               onPress={() =>
                 run(
@@ -200,25 +195,22 @@ export default function DeliveryScreen() {
                   'Status: out_for_delivery',
                 )
               }
-            >
-              <Text style={styles.primaryBtnText}>Out for delivery</Text>
-            </Pressable>
+              style={styles.action}
+            />
           )}
 
           {task.status === 'out_for_delivery' && d.pickedUpFromShopAt && (
-            <Pressable
-              style={styles.secondaryBtn}
-              onPress={() =>
-                task.deliveryAddress && openMaps(task.deliveryAddress)
-              }
-            >
-              <Text style={styles.secondaryBtnText}>Navigate to customer</Text>
-            </Pressable>
+            <Button
+              label="Navigate to customer"
+              variant="secondary"
+              onPress={() => task.deliveryAddress && openMaps(task.deliveryAddress)}
+              style={styles.action}
+            />
           )}
 
           {task.canMarkCustomerReceived && (
-            <Pressable
-              style={styles.primaryBtn}
+            <Button
+              label="Customer receives"
               disabled={loading}
               onPress={() =>
                 run(
@@ -229,13 +221,12 @@ export default function DeliveryScreen() {
                   'Or customer verifies in their app',
                 )
               }
-            >
-              <Text style={styles.primaryBtnText}>Customer receives</Text>
-            </Pressable>
+              style={styles.action}
+            />
           )}
 
           {(task.customerReceived || d.customerReceivedAt) && (
-            <View style={styles.card}>
+            <Card elevated style={styles.card}>
               <Text style={styles.cardTitle}>Customer handoff</Text>
               {task.customerPhoneMasked && (
                 <Text style={styles.hint}>Customer phone ends in {task.customerPhoneMasked}</Text>
@@ -247,12 +238,12 @@ export default function DeliveryScreen() {
                 Received: {task.customerReceived ? 'Yes ✓' : 'Waiting…'} · Signed:{' '}
                 {task.customerSigned ? 'Yes ✓' : 'Waiting…'}
               </Text>
-            </View>
+            </Card>
           )}
 
           {task.canCapturePhoto && (
-            <Pressable
-              style={styles.primaryBtn}
+            <Button
+              label="Photo proof"
               disabled={loading}
               onPress={() =>
                 run(
@@ -266,14 +257,14 @@ export default function DeliveryScreen() {
                   'Photo proof saved',
                 )
               }
-            >
-              <Text style={styles.primaryBtnText}>Photo proof</Text>
-            </Pressable>
+              style={styles.action}
+            />
           )}
 
           {task.canComplete && (
-            <Pressable
-              style={[styles.primaryBtn, { backgroundColor: theme.colors.accent }]}
+            <Button
+              label="Complete (delivered)"
+              variant="accent"
               disabled={loading}
               onPress={() =>
                 run(async () => {
@@ -293,63 +284,46 @@ export default function DeliveryScreen() {
                   router.back();
                 })
               }
-            >
-              <Text style={styles.primaryBtnText}>Complete (delivered)</Text>
-            </Pressable>
+              style={styles.action}
+            />
           )}
         </>
       )}
 
       {d.receiptCode && (
-        <View style={[styles.card, styles.receipt]}>
+        <Card accent style={styles.card}>
           <Text style={styles.cardTitle}>Delivery receipt</Text>
           <Text style={styles.receiptCode}>{d.receiptCode}</Text>
-        </View>
+        </Card>
       )}
 
       {done && (
-        <View style={[styles.card, { borderColor: theme.colors.accent }]}>
+        <Card accent style={styles.card}>
           <Text style={styles.cardTitle}>Delivery complete</Text>
           <Text style={styles.cardBody}>Order delivered and completed.</Text>
-        </View>
+        </Card>
       )}
-    </ScrollView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
-  content: { padding: 16, paddingBottom: 40 },
-  title: { fontSize: 22, fontWeight: '700' },
-  subtitle: { marginTop: 4, fontSize: 14, color: '#64748b', textTransform: 'capitalize' },
-  card: {
-    marginTop: 16,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+  content: { paddingBottom: spacing.xxxl },
+  title: { ...typography.title, fontSize: 22 },
+  subtitle: {
+    marginTop: spacing.xs,
+    ...typography.bodySm,
+    textTransform: 'capitalize',
   },
-  cardTitle: { fontWeight: '600', fontSize: 16 },
-  cardBody: { marginTop: 6, color: '#64748b' },
-  hint: { marginTop: 8, fontSize: 13, color: '#64748b' },
-  primaryBtn: {
-    marginTop: 16,
-    backgroundColor: theme.colors.primary,
-    padding: 14,
-    borderRadius: 10,
-    alignItems: 'center',
+  card: { marginTop: spacing.lg },
+  cardTitle: { ...typography.subheading, fontSize: 16 },
+  cardBody: { marginTop: spacing.xs + 2, ...typography.bodySm },
+  hint: { marginTop: spacing.sm, ...typography.bodySm },
+  action: { marginTop: spacing.lg },
+  receiptCode: {
+    marginTop: spacing.sm,
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.foreground,
   },
-  primaryBtnText: { color: '#fff', fontWeight: '600' },
-  secondaryBtn: {
-    marginTop: 16,
-    borderWidth: 1,
-    borderColor: theme.colors.primary,
-    padding: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  secondaryBtnText: { color: theme.colors.primary, fontWeight: '600' },
-  receipt: { borderColor: theme.colors.accent },
-  receiptCode: { marginTop: 8, fontSize: 20, fontWeight: '700' },
 });

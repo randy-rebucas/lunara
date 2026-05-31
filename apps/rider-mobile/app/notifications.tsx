@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import { theme } from '@lunara/config';
+import { FlatList, RefreshControl, StyleSheet, Text } from 'react-native';
+import { Card } from '../src/components/ui/card';
+import { Screen } from '../src/components/ui/screen';
 import { riderFetch } from '../src/api';
+import { spacing, typography } from '../src/theme';
 
 interface RiderNotification {
   _id: string;
@@ -34,13 +36,14 @@ export default function NotificationsScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <Screen inStack>
       <FlatList
+        style={styles.list}
         data={items}
         keyExtractor={(item) => item._id}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         renderItem={({ item }) => (
-          <View style={[styles.card, !item.read && styles.unread]}>
+          <Card primary={!item.read} style={styles.card}>
             <Text style={styles.title}>{item.title}</Text>
             <Text style={styles.body}>{item.body}</Text>
             <Text style={styles.date}>
@@ -51,29 +54,21 @@ export default function NotificationsScreen() {
                 minute: '2-digit',
               })}
             </Text>
-          </View>
+          </Card>
         )}
         ListEmptyComponent={
           <Text style={styles.empty}>No notifications yet — assignments appear here</Text>
         }
       />
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: '#f8fafc' },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  unread: { borderColor: theme.colors.primary, backgroundColor: '#eef2ff' },
-  title: { fontWeight: '700', fontSize: 15 },
-  body: { marginTop: 6, color: '#64748b', lineHeight: 20 },
-  date: { marginTop: 8, fontSize: 11, color: '#94a3b8' },
-  empty: { textAlign: 'center', color: '#94a3b8', marginTop: 40 },
+  card: { marginBottom: spacing.sm + 2 },
+  title: { ...typography.subheading, fontSize: 15 },
+  body: { marginTop: spacing.xs + 2, ...typography.bodySm, lineHeight: 20 },
+  date: { marginTop: spacing.sm, ...typography.caption },
+  empty: { ...typography.caption, textAlign: 'center', marginTop: spacing.xxxl },
+  list: { flex: 1 },
 });

@@ -5,6 +5,7 @@
   "main": "expo-router/entry",
   "scripts": {
     "dev": "expo start --port 8082",
+    "dev:clear": "expo start --clear --port 8082",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "build": "echo \"Use EAS Build for production\"",

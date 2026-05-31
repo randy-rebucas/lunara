@@ -123,6 +123,18 @@ Expo slug: `lunara-rider` · scheme: `lunara-rider` · requires **location** per
 
 Real-time task offers and location updates use Socket.IO (`/tracking` namespace). See [End-to-End Test Flow → Rider daily operations](#rider-daily-operations-mobile-port-8082) for the full pickup/delivery walkthrough.
 
+### Troubleshooting (Metro / Expo)
+
+If you see **`Unable to deserialize cloned data`** or **`Error while reading cache, falling back to a full crawl`**, Metro’s file-map cache is stale (common after a Node or Expo upgrade). It is usually harmless once Metro finishes the full crawl, but you can clear it:
+
+```bash
+npm run dev:clear --workspace=@lunara/customer-mobile
+# or rider-mobile
+npm run dev:clear --workspace=@lunara/rider-mobile
+```
+
+That runs `expo start --clear`. You can also delete `apps/<mobile-app>/.expo` and restart.
+
 ### Monorepo notes
 
 - `metro.config.js` in each app pins a single `react` / `react-native` instance from the repo root to avoid invalid hook errors.

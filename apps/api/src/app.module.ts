@@ -19,6 +19,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { SupportModule } from './modules/support/support.module';
 import { RefundsModule } from './modules/refunds/refunds.module';
 import { BranchesModule } from './modules/branches/branches.module';
+import { DealsModule } from './modules/deals/deals.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { BranchesModule } from './modules/branches/branches.module';
     SupportModule,
     RefundsModule,
     BranchesModule,
+    DealsModule,
     RealtimeModule,
   ],
 })

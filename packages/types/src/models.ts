@@ -32,6 +32,7 @@ export interface CustomerProfile extends BaseDocument {
 export interface Address extends BaseDocument {
   userId: string;
   label: string;
+  addressType?: string;
   line1: string;
   line2?: string;
   city: string;
@@ -116,4 +117,15 @@ export interface Review extends BaseDocument {
   partnerId: string;
   rating: number;
   comment?: string;
+}
+
+export interface Deal {
+  _id: string;
+  code: string;
+  title: string;
+  description?: string;
+  discountType: 'percent' | 'fixed';
+  discountValue: number;
+  minOrderAmount: number;
+  endsAt?: string;
 }

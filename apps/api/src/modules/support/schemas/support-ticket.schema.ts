@@ -19,6 +19,7 @@ export enum TicketPriority {
 export enum TicketType {
   GENERAL = 'general',
   LOST_ITEM = 'lost_item',
+  AREA_COVERAGE = 'area_coverage',
 }
 
 export enum TicketOutcome {

@@ -147,11 +147,15 @@ export class PickupService {
 
   async verifyCustomer(orderId: string, riderUserId: string, dto: VerifyCustomerDto) {
     const order = await this.getActivePickupOrder(orderId, riderUserId, true);
-    const expected = order.pickup?.verificationHint ?? '0000';
+    const customer = await this.userModel.findById(order.customerId).select('phone');
+    const expected = phoneVerificationHint(customer?.phone);
     if (dto.code !== expected) {
       throw new BadRequestException('Verification code does not match customer phone');
     }
     if (!order.pickup) order.pickup = {};
+    if (!order.pickup.verificationHint) {
+      order.pickup.verificationHint = expected;
+    }
     order.pickup.customerVerifiedAt = new Date();
     await order.save();
 

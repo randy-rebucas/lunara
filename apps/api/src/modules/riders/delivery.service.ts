@@ -395,8 +395,13 @@ export class DeliveryService {
       order.status === OrderStatus.READY_FOR_DELIVERY &&
       !order.deliveryRiderId &&
       !!order.delivery?.offeredAt;
+    const isPickupRiderAwaitingDelivery =
+      order.status === OrderStatus.READY_FOR_DELIVERY &&
+      order.pickupRiderId?.toString() === riderUserId;
 
-    if (!isOffer && !isAssigned) throw new ForbiddenException();
+    if (!isOffer && !isAssigned && !isPickupRiderAwaitingDelivery) {
+      throw new ForbiddenException();
+    }
     return order;
   }
 

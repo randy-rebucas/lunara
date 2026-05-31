@@ -14,6 +14,7 @@ import {
   BOOKING_MIN_ORDER_AMOUNT,
   calculateQuote,
   formatCurrency,
+  formatAddressTypeLabel,
   type BookingAddonOption,
   type CashTiming,
   type LaundryServiceOption,
@@ -22,6 +23,8 @@ import {
 } from '@lunara/utils';
 import { colors, radius, spacing, typography } from '../src/theme';
 import { BookingProgress } from '../src/components/booking-progress';
+import { Button } from '../src/components/ui/button';
+import { ScheduleSupportPrompt } from '../src/components/schedule-support-prompt';
 import { NearestBranchesCard, type NearestBranchRow } from '../src/components/nearest-branches';
 import { PaymentMethodPicker } from '../src/components/payment-method-picker';
 import {
@@ -36,10 +39,17 @@ import { useAuthStore } from '../src/store/auth';
 interface AddressOption {
   _id: string;
   label: string;
+  addressType?: string;
   line1: string;
   city: string;
   province: string;
   postalCode: string;
+  latitude?: number;
+  longitude?: number;
+}
+
+function addressHasCoords(address?: AddressOption | null) {
+  return address?.latitude != null && address?.longitude != null;
 }
 
 interface BookingConfig {
@@ -71,6 +81,7 @@ export default function BookScreen() {
   const [configLoading, setConfigLoading] = useState(true);
   const [addressesError, setAddressesError] = useState('');
   const [availabilityError, setAvailabilityError] = useState('');
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
 
   useEffect(() => {
     setConfigLoading(true);
@@ -105,6 +116,7 @@ export default function BookScreen() {
   const loadAvailability = useCallback(
     async (addressId: string) => {
       setAvailabilityError('');
+      setAvailabilityLoading(true);
       try {
         const avail = await apiFetch<{
           areaLabel: string;
@@ -114,17 +126,23 @@ export default function BookScreen() {
         setAreaLabel(avail.areaLabel);
         setSlots(avail.slots);
         setDispatchNote(avail.dispatchNote ?? '');
-        if (avail.slots[0] && !form.scheduledPickupAt) {
-          setForm((f) => ({ ...f, scheduledPickupAt: avail.slots[0].startAt }));
-        }
+        setForm((f) => {
+          const stillValid = avail.slots.some((s) => s.startAt === f.scheduledPickupAt && s.available);
+          if (stillValid) return f;
+          const first = avail.slots.find((s) => s.available);
+          return { ...f, scheduledPickupAt: first?.startAt ?? '' };
+        });
       } catch (e) {
         setAvailabilityError(
           e instanceof Error ? e.message : 'Could not load pickup slots',
         );
         setSlots([]);
+        setAreaLabel('');
+      } finally {
+        setAvailabilityLoading(false);
       }
     },
-    [apiFetch, form.scheduledPickupAt],
+    [apiFetch],
   );
 
   const loadNearestBranches = useCallback(
@@ -174,15 +192,29 @@ export default function BookScreen() {
     return q;
   }
 
+  const selectedAddress = addresses.find((a) => a._id === form.addressId);
+  const showScheduleSupport =
+    step === 'schedule' &&
+    Boolean(form.addressId) &&
+    !availabilityLoading &&
+    (Boolean(availabilityError) || slots.length === 0);
+
   async function goNext() {
     setError('');
     if (step === 'service' && !form.bookingType) {
       setError('Select a service');
       return;
     }
-    if (step === 'address' && !form.addressId) {
-      setError('Select an address');
-      return;
+    if (step === 'address') {
+      if (!form.addressId) {
+        setError('Select an address');
+        return;
+      }
+      const selected = addresses.find((a) => a._id === form.addressId);
+      if (!addressHasCoords(selected)) {
+        setError('Selected address has no GPS pin. Update it in Profile with "Use current location".');
+        return;
+      }
     }
     if (step === 'schedule' && !form.scheduledPickupAt) {
       setError('Select a pickup slot');
@@ -341,25 +373,11 @@ export default function BookScreen() {
             </View>
           ) : null}
           {addresses.length === 0 ? (
-            <Pressable
-              style={styles.option}
-              onPress={async () => {
-                const addr = await apiFetch<AddressOption>('/addresses', {
-                  method: 'POST',
-                  body: JSON.stringify({
-                    label: 'Home',
-                    line1: '123 Mobile St',
-                    city: 'Makati',
-                    province: 'Metro Manila',
-                    postalCode: '1200',
-                    isDefault: true,
-                  }),
-                });
-                setAddresses([addr]);
-                setForm((f) => ({ ...f, addressId: addr._id }));
-              }}
-            >
-              <Text style={styles.optionTitle}>Add demo address (Makati)</Text>
+            <Pressable style={styles.option} onPress={() => router.push('/(tabs)/profile')}>
+              <Text style={styles.optionTitle}>Add address in Profile</Text>
+              <Text style={styles.optionSub}>
+                Save a pickup address with GPS so riders can navigate to you
+              </Text>
             </Pressable>
           ) : (
             addresses.map((a) => (
@@ -368,6 +386,7 @@ export default function BookScreen() {
                 style={[
                   styles.option,
                   form.addressId === a._id && styles.optionSelected,
+                  !addressHasCoords(a) && styles.optionDisabled,
                 ]}
                 onPress={() =>
                   setForm((f) => ({ ...f, addressId: a._id, scheduledPickupAt: '' }))
@@ -375,8 +394,15 @@ export default function BookScreen() {
               >
                 <Text style={styles.optionTitle}>{a.label}</Text>
                 <Text style={styles.optionSub}>
-                  {a.line1}, {a.city}
+                  {formatAddressTypeLabel(a.addressType)} · {a.line1}, {a.city}
                 </Text>
+                {addressHasCoords(a) ? (
+                  <Text style={styles.optionGps}>GPS pinned for rider navigation</Text>
+                ) : (
+                  <Text style={styles.optionGpsMissing}>
+                    No GPS pin — update in Profile before booking
+                  </Text>
+                )}
               </Pressable>
             ))
           )}
@@ -389,7 +415,19 @@ export default function BookScreen() {
       {step === 'schedule' && (
         <View>
           <Text style={styles.heading}>Pickup time</Text>
-          {availabilityError ? <Text style={styles.error}>{availabilityError}</Text> : null}
+          {availabilityError ? (
+            <View style={styles.errorBlock}>
+              <Text style={styles.error}>{availabilityError}</Text>
+              {form.addressId ? (
+                <Button
+                  label="Try again"
+                  variant="secondary"
+                  onPress={() => loadAvailability(form.addressId)}
+                  style={styles.retryBtn}
+                />
+              ) : null}
+            </View>
+          ) : null}
           {areaLabel ? <Text style={styles.sub}>Serving: {areaLabel}</Text> : null}
           {slots.length === 0 && !availabilityError ? (
             <Text style={styles.sub}>No pickup slots available for this address.</Text>
@@ -408,6 +446,12 @@ export default function BookScreen() {
               <Text style={styles.optionTitle}>{slot.label}</Text>
             </Pressable>
           ))}
+          {showScheduleSupport ? (
+            <ScheduleSupportPrompt
+              address={selectedAddress}
+              reason={availabilityError || 'No pickup slots are available for this address yet.'}
+            />
+          ) : null}
         </View>
       )}
 
@@ -596,6 +640,8 @@ const styles = StyleSheet.create({
   heading: { ...typography.heading, marginBottom: spacing.md },
   sub: { ...typography.bodySm, marginBottom: spacing.md },
   error: { color: colors.destructive, marginBottom: spacing.md },
+  errorBlock: { marginBottom: spacing.md, gap: spacing.sm },
+  retryBtn: { alignSelf: 'flex-start' },
   option: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -609,6 +655,8 @@ const styles = StyleSheet.create({
   optionTitle: { fontWeight: '600', fontSize: 16, color: colors.foreground },
   optionSub: { marginTop: spacing.xs, fontSize: 13, color: colors.muted },
   optionPrice: { marginTop: spacing.sm - 2, fontSize: 13, color: colors.primary, fontWeight: '500' },
+  optionGps: { marginTop: spacing.sm - 2, fontSize: 12, color: colors.accentDark, fontWeight: '500' },
+  optionGpsMissing: { marginTop: spacing.sm - 2, fontSize: 12, color: colors.warning, fontWeight: '500' },
   addonRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   addonPrice: { fontSize: 15, fontWeight: '600', color: colors.primary },
   weightHeader: {

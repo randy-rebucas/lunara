@@ -1,12 +1,26 @@
-import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import Redis from 'ioredis';
 
 @Injectable()
 export class RedisService implements OnModuleDestroy {
+  private readonly logger = new Logger(RedisService.name);
   private client: Redis;
+  private lastErrorLogAt = 0;
 
   constructor() {
-    this.client = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379');
+    const url = process.env.REDIS_URL ?? 'redis://localhost:6379';
+    this.client = new Redis(url, {
+      maxRetriesPerRequest: null,
+      retryStrategy: (times) => Math.min(times * 500, 5000),
+    });
+    this.client.on('error', (err) => {
+      const now = Date.now();
+      if (now - this.lastErrorLogAt < 10_000) return;
+      this.lastErrorLogAt = now;
+      this.logger.error(
+        `Redis unavailable (${url}): ${err.message}. Start infrastructure: docker compose up -d`,
+      );
+    });
   }
 
   getClient() {

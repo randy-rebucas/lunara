@@ -10,6 +10,7 @@ import { formatCurrency } from '@lunara/utils';
 import { DataPageStatus } from '../../components/data-page-status';
 import { PageShell } from '../../components/page-shell';
 import { ReviewNotifications } from '../../components/review/review-notifications';
+import { DashboardDeals, ShareInviteCard } from '../../components/share/share-sections';
 import { Card, CardBody } from '../../components/ui/card';
 import { PageHeader } from '../../components/ui/page-header';
 import { useCustomerQuery } from '../../lib/use-customer-query';
@@ -101,6 +102,10 @@ export default function DashboardPage() {
       </div>
 
       <ReviewNotifications />
+
+      <DashboardDeals />
+
+      <ShareInviteCard />
 
       <section className="mt-10">
         <div className="mb-4 flex items-center justify-between">

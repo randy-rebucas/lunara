@@ -14,6 +14,7 @@ import { Screen } from '../../src/components/ui/screen';
 import { colors, spacing, typography } from '../../src/theme';
 import { DataLoadState } from '../../src/components/data-load-state';
 import { useTabScreenPadding } from '../../src/hooks/use-tab-bar-height';
+import { useOrderRealtimeStore } from '../../src/store/order-realtime';
 import { useAuthStore } from '../../src/store/auth';
 
 interface OrderRow {
@@ -29,6 +30,7 @@ export default function OrdersScreen() {
   const router = useRouter();
   const tabPadding = useTabScreenPadding();
   const apiFetch = useAuthStore((s) => s.apiFetch);
+  const realtimeTick = useOrderRealtimeStore((s) => s.tick);
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -50,6 +52,11 @@ export default function OrdersScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (realtimeTick === 0) return;
+    load().catch(() => {});
+  }, [realtimeTick, load]);
 
   async function onRefresh() {
     setRefreshing(true);
@@ -130,8 +137,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   cardMain: { flex: 1, marginRight: spacing.md },
-  status: { ...typography.subheading },
-  type: { marginTop: spacing.xs, fontSize: 13, color: colors.muted },
+  status: { ...typography.heading, textTransform: 'capitalize' },
+  type: {
+    marginTop: spacing.xs,
+    fontSize: 13,
+    color: colors.muted,
+    textTransform: 'capitalize',
+  },
   branch: { marginTop: spacing.sm - 2, fontSize: 12, color: colors.primaryDark, fontWeight: '500' },
   branchPending: { marginTop: spacing.sm - 2, fontSize: 12, color: colors.warning, fontStyle: 'italic' },
   total: { fontWeight: '700', color: colors.foreground, fontSize: 15 },

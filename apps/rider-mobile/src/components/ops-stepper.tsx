@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { theme } from '@lunara/config';
+import { colors, radius, spacing } from '../theme';
 
 export function OpsStepper({ steps, currentIndex }: { steps: string[]; currentIndex: number }) {
   return (
@@ -35,20 +35,28 @@ export function OpsStepper({ steps, currentIndex }: { steps: string[]; currentIn
 }
 
 const styles = StyleSheet.create({
-  wrap: { marginTop: 12, gap: 8 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  wrap: {
+    marginTop: spacing.md,
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm + 2 },
   dot: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#e2e8f0',
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dotDone: { backgroundColor: theme.colors.accent },
-  dotCurrent: { backgroundColor: theme.colors.primary },
-  dotText: { fontSize: 11, fontWeight: '700', color: '#fff' },
-  label: { fontSize: 13, color: '#94a3b8', flex: 1 },
-  labelDone: { color: '#334155' },
-  labelCurrent: { color: theme.colors.primary, fontWeight: '600' },
+  dotDone: { backgroundColor: colors.accent },
+  dotCurrent: { backgroundColor: colors.primary },
+  dotText: { fontSize: 11, fontWeight: '700', color: colors.onPrimary },
+  label: { fontSize: 13, color: colors.mutedForeground, flex: 1 },
+  labelDone: { color: colors.slate700 },
+  labelCurrent: { color: colors.primary, fontWeight: '600' },
 });

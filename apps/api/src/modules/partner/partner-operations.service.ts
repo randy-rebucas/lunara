@@ -143,11 +143,8 @@ export class PartnerOperationsService {
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
 
-    if (
-      order.status !== OrderStatus.SHOP_ASSIGNED &&
-      order.status !== OrderStatus.CONFIRMED
-    ) {
-      throw new BadRequestException('Order is not in shop-assigned status');
+    if (!INCOMING_STATUSES.includes(order.status)) {
+      throw new BadRequestException('Order is no longer available to accept');
     }
     if (!order.branchId) {
       throw new BadRequestException('Order has not been assigned to a shop yet');

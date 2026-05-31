@@ -8,20 +8,27 @@ import {
 } from '@nestjs/websockets';
 import { Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
 import { Server, Socket } from 'socket.io';
 import type { JwtPayload } from '@lunara/types';
 import { UserRole } from '@lunara/types';
 import { getJwtSecret } from '../../common/config/jwt-config';
+import { Order, OrderDocument } from '../orders/schemas/order.schema';
 
 @Injectable()
 @WebSocketGateway({ cors: { origin: '*' }, namespace: '/tracking' })
 export class TrackingGateway implements OnGatewayConnection {
   private readonly logger = new Logger(TrackingGateway.name);
+  private readonly customerIdByOrderId = new Map<string, string>();
 
   @WebSocketServer()
   server!: Server;
 
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
+  ) {}
 
   handleConnection(client: Socket) {
     const token = this.extractToken(client);
@@ -56,15 +63,37 @@ export class TrackingGateway implements OnGatewayConnection {
   }
 
   @SubscribeMessage('joinOrder')
-  handleJoinOrder(
+  async handleJoinOrder(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { orderId: string },
   ) {
-    if (!this.getUser(client)) {
+    const user = this.getUser(client);
+    if (!user) {
       return { success: false, error: 'Unauthorized' };
     }
+    if (!data?.orderId) {
+      return { success: false, error: 'orderId required' };
+    }
+
+    if (user.role === UserRole.CUSTOMER) {
+      const customerId = await this.resolveCustomerId(data.orderId);
+      if (!customerId || customerId !== user.sub) {
+        return { success: false, error: 'Forbidden' };
+      }
+    }
+
     client.join(`order:${data.orderId}`);
     return { success: true, room: `order:${data.orderId}` };
+  }
+
+  @SubscribeMessage('joinCustomer')
+  handleJoinCustomer(@ConnectedSocket() client: Socket) {
+    const user = this.getUser(client);
+    if (!user || user.role !== UserRole.CUSTOMER) {
+      return { success: false, error: 'Forbidden' };
+    }
+    client.join(`customer:${user.sub}`);
+    return { success: true, room: `customer:${user.sub}` };
   }
 
   @SubscribeMessage('riderLocation')
@@ -92,11 +121,37 @@ export class TrackingGateway implements OnGatewayConnection {
   }
 
   emitOrderStatus(orderId: string, status: string) {
-    this.server.to(`order:${orderId}`).emit('orderStatusUpdate', { orderId, status });
+    const payload = { orderId, status };
+    this.server.to(`order:${orderId}`).emit('orderStatusUpdate', payload);
+    void this.emitToCustomerRoom(orderId, 'orderStatusUpdate', payload);
   }
 
   emitOrderEvent(orderId: string, event: string, payload: Record<string, unknown>) {
-    this.server.to(`order:${orderId}`).emit('orderEvent', { orderId, event, ...payload });
+    const full = { orderId, event, ...payload };
+    this.server.to(`order:${orderId}`).emit('orderEvent', full);
+    void this.emitToCustomerRoom(orderId, 'orderEvent', full);
+  }
+
+  private async resolveCustomerId(orderId: string): Promise<string | undefined> {
+    const cached = this.customerIdByOrderId.get(orderId);
+    if (cached) return cached;
+
+    const order = await this.orderModel.findById(orderId).select('customerId').lean();
+    const customerId = order?.customerId?.toString();
+    if (customerId) {
+      this.customerIdByOrderId.set(orderId, customerId);
+    }
+    return customerId;
+  }
+
+  private async emitToCustomerRoom(
+    orderId: string,
+    event: 'orderStatusUpdate' | 'orderEvent',
+    payload: Record<string, unknown>,
+  ) {
+    const customerId = await this.resolveCustomerId(orderId);
+    if (!customerId) return;
+    this.server.to(`customer:${customerId}`).emit(event, payload);
   }
 
   emitPickupOffer(offer: Record<string, unknown>) {

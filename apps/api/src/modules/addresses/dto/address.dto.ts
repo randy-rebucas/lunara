@@ -1,10 +1,17 @@
-import { IsBoolean, IsNumber, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsIn, IsNumber, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { AddressType } from '@lunara/types';
+
+const ADDRESS_TYPES = Object.values(AddressType);
 
 export class CreateAddressDto {
   @IsString()
   @MinLength(1)
   @MaxLength(50)
   label!: string;
+
+  @IsOptional()
+  @IsIn(ADDRESS_TYPES)
+  addressType?: AddressType;
 
   @IsString()
   @MinLength(1)
@@ -42,6 +49,10 @@ export class UpdateAddressDto {
   label?: string;
 
   @IsOptional()
+  @IsIn(ADDRESS_TYPES)
+  addressType?: AddressType;
+
+  @IsOptional()
   @IsString()
   line1?: string;
 
@@ -64,4 +75,12 @@ export class UpdateAddressDto {
   @IsOptional()
   @IsBoolean()
   isDefault?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  latitude?: number;
+
+  @IsOptional()
+  @IsNumber()
+  longitude?: number;
 }

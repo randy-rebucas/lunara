@@ -374,6 +374,25 @@ export class AdminService {
     return { success: true, data: items.map((p) => this.serializePromotion(p)) };
   }
 
+  async getActiveDeals() {
+    await this.ensureSeeded();
+    const now = new Date();
+    const items = await this.promotionModel
+      .find({
+        isActive: true,
+        $and: [
+          { $or: [{ startsAt: { $exists: false } }, { startsAt: null }, { startsAt: { $lte: now } }] },
+          { $or: [{ endsAt: { $exists: false } }, { endsAt: null }, { endsAt: { $gte: now } }] },
+        ],
+      })
+      .sort({ createdAt: -1 });
+
+    return {
+      success: true,
+      data: items.map((p) => this.serializeDeal(p)),
+    };
+  }
+
   async createPromotion(dto: CreatePromotionDto) {
     const promo = await this.promotionModel.create({
       code: dto.code.toUpperCase(),
@@ -424,6 +443,19 @@ export class AdminService {
       endsAt: p.endsAt,
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
+    };
+  }
+
+  private serializeDeal(p: PromotionDocument) {
+    return {
+      _id: p._id.toString(),
+      code: p.code,
+      title: p.title,
+      description: p.description,
+      discountType: p.discountType,
+      discountValue: p.discountValue,
+      minOrderAmount: p.minOrderAmount,
+      endsAt: p.endsAt?.toISOString(),
     };
   }
 }

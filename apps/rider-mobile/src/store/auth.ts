@@ -4,6 +4,7 @@ import { createApiClient } from '@lunara/hooks';
 import type { AuthTokens, User } from '@lunara/types';
 import { UserRole } from '@lunara/types';
 import { getApiV1BaseUrl } from '../api-config';
+import { parseApiError } from '../lib/api-error';
 
 const STORAGE_KEY = 'lunara_rider_auth';
 
@@ -62,7 +63,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       );
     }
     const body = await res.json();
-    if (!body.success) throw new Error(body.error?.message ?? 'Login failed');
+    if (!body.success) throw new Error(parseApiError(body, 'Login failed'));
     if (body.data.user.role !== UserRole.RIDER) {
       throw new Error('This account is not a rider. Use rider@lunara.dev');
     }
@@ -104,7 +105,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       await get().logout();
       throw new Error('Session expired. Please sign in again.');
     }
-    if (!body.success) throw new Error(body.error?.message ?? 'Request failed');
+    if (!body.success) throw new Error(parseApiError(body));
     return body.data as T;
   },
 }));

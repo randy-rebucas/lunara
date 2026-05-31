@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { AuthTokens, User } from '@lunara/types';
 import { UserRole } from '@lunara/types';
 import { getApiV1BaseUrl } from '../api-config';
+import { parseApiError } from '../lib/api-error';
 
 const STORAGE_KEY = 'lunara_auth';
 
@@ -47,7 +48,9 @@ async function authRequest<T>(
     onUnauthorized?.();
     throw new Error('Session expired. Please sign in again.');
   }
-  if (!body.success) throw new Error(body.error?.message ?? 'Request failed');
+  if (!res.ok || body.success === false) {
+    throw new Error(parseApiError(body));
+  }
   return body.data as T;
 }
 
@@ -77,7 +80,9 @@ async function authUpload<T>(
     onUnauthorized?.();
     throw new Error('Session expired. Please sign in again.');
   }
-  if (!body.success) throw new Error(body.error?.message ?? 'Upload failed');
+  if (!res.ok || body.success === false) {
+    throw new Error(parseApiError(body));
+  }
   return body.data as T;
 }
 

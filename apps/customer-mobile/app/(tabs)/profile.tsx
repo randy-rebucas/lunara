@@ -5,16 +5,19 @@ import {
   Alert,
   Pressable,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { appConfig, getShareWebsiteUrl } from '@lunara/config';
+import { buildAppSharePayload, formatAddressTypeLabel } from '@lunara/utils';
 import { AddressFormModal } from '../../src/components/address-form-modal';
 import { ProfileAvatar } from '../../src/components/profile-avatar';
+import { ShareInviteCard } from '../../src/components/social-share-buttons';
 import { Button } from '../../src/components/ui/button';
 import { Card } from '../../src/components/ui/card';
 import { Input } from '../../src/components/ui/input';
+import { KeyboardSafeScrollView } from '../../src/components/ui/keyboard-safe-scroll-view';
 import { Screen } from '../../src/components/ui/screen';
 import { DataLoadState } from '../../src/components/data-load-state';
 import { useTabScreenPadding } from '../../src/hooks/use-tab-bar-height';
@@ -126,6 +129,7 @@ export default function ProfileScreen() {
     try {
       const payload = {
         label: values.label.trim(),
+        addressType: values.addressType,
         line1: values.line1.trim(),
         line2: values.line2.trim() || undefined,
         city: values.city.trim(),
@@ -140,15 +144,7 @@ export default function ProfileScreen() {
       if (editingAddress) {
         await apiFetch<CustomerAddress>(`/addresses/${editingAddress._id}`, {
           method: 'PATCH',
-          body: JSON.stringify({
-            label: payload.label,
-            line1: payload.line1,
-            line2: payload.line2,
-            city: payload.city,
-            province: payload.province,
-            postalCode: payload.postalCode,
-            isDefault: payload.isDefault,
-          }),
+          body: JSON.stringify(payload),
         });
       } else {
         await apiFetch<CustomerAddress>('/addresses', {
@@ -205,13 +201,11 @@ export default function ProfileScreen() {
 
   return (
     <Screen inTab padded={false}>
-      <ScrollView
+      <KeyboardSafeScrollView
         contentContainerStyle={[styles.content, { paddingBottom: tabPadding }]}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
           <Text style={styles.heading}>Profile</Text>
@@ -283,6 +277,11 @@ export default function ProfileScreen() {
                     <View style={styles.addressMain}>
                       <View style={styles.addressLabelRow}>
                         <Text style={styles.addressLabel}>{address.label}</Text>
+                        <View style={styles.typeBadge}>
+                          <Text style={styles.typeBadgeText}>
+                            {formatAddressTypeLabel(address.addressType)}
+                          </Text>
+                        </View>
                         {address.isDefault ? (
                           <View style={styles.defaultBadge}>
                             <Text style={styles.defaultBadgeText}>Default</Text>
@@ -324,15 +323,16 @@ export default function ProfileScreen() {
 
             <Text style={[styles.sectionTitle, styles.sectionTitleSpaced]}>Preferences</Text>
             <Card muted style={styles.sectionCard}>
-              <View style={styles.prefRow}>
+              <Pressable style={styles.prefRow} onPress={() => router.push('/notifications')}>
                 <Ionicons name="notifications-outline" size={20} color={colors.primary} />
                 <View style={styles.prefCopy}>
-                  <Text style={styles.prefTitle}>Order updates</Text>
+                  <Text style={styles.prefTitle}>Notifications</Text>
                   <Text style={styles.prefHint}>
-                    SMS and in-app alerts for pickup, laundry progress, and delivery
+                    Order updates, review requests, and refund alerts
                   </Text>
                 </View>
-              </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
+              </Pressable>
               <View style={[styles.prefRow, styles.prefRowBorder]}>
                 <Ionicons name="shield-checkmark-outline" size={20} color={colors.secondary} />
                 <View style={styles.prefCopy}>
@@ -344,10 +344,16 @@ export default function ProfileScreen() {
               </View>
             </Card>
 
+            <ShareInviteCard
+              payload={buildAppSharePayload(getShareWebsiteUrl(), appConfig.name)}
+              title="Invite friends"
+              description="Share Lunara on WhatsApp, Facebook, or X so friends can book laundry too."
+            />
+
             <Button label="Sign out" variant="outline" onPress={handleLogout} style={styles.logoutBtn} />
           </>
         ) : null}
-      </ScrollView>
+      </KeyboardSafeScrollView>
 
       <AddressFormModal
         visible={addressModalOpen}
@@ -400,6 +406,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
   },
   defaultBadgeText: { fontSize: 10, fontWeight: '700', color: colors.primaryDark },
+  typeBadge: {
+    backgroundColor: colors.secondaryLight,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+  },
+  typeBadgeText: { fontSize: 10, fontWeight: '700', color: colors.secondary },
   addressLine: { fontSize: 14, color: colors.slate700, marginTop: spacing.xs },
   addressMeta: { ...typography.caption, marginTop: spacing.xs },
   gpsRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.sm - 2 },

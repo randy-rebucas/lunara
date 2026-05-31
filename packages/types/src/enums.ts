@@ -73,3 +73,10 @@ export enum NotificationChannel {
   EMAIL = 'email',
   IN_APP = 'in_app',
 }
+
+export enum AddressType {
+  HOME = 'home',
+  WORK = 'work',
+  APARTMENT = 'apartment',
+  OTHER = 'other',
+}

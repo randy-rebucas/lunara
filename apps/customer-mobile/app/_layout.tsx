@@ -3,6 +3,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from '../src/theme';
+import { CustomerTrackingSync } from '../src/components/customer-tracking-sync';
 import { useAuthStore } from '../src/store/auth';
 
 const stackHeaderOptions = {
@@ -56,6 +57,7 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />
+      {tokens?.accessToken ? <CustomerTrackingSync /> : null}
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="(auth)/login" />
@@ -75,6 +77,24 @@ export default function RootLayout() {
             ...stackHeaderOptions,
             headerShown: true,
             title: 'Track order',
+            presentation: 'card',
+          }}
+        />
+        <Stack.Screen
+          name="notifications"
+          options={{
+            ...stackHeaderOptions,
+            headerShown: true,
+            title: 'Notifications',
+            presentation: 'card',
+          }}
+        />
+        <Stack.Screen
+          name="review/[id]"
+          options={{
+            ...stackHeaderOptions,
+            headerShown: true,
+            title: 'Leave a review',
             presentation: 'card',
           }}
         />

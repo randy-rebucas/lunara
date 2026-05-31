@@ -11,6 +11,9 @@ export class Address {
   @Prop({ required: true })
   label!: string;
 
+  @Prop({ default: 'home', enum: ['home', 'work', 'apartment', 'other'] })
+  addressType!: string;
+
   @Prop({ required: true })
   line1!: string;
 

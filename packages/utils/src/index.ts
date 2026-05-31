@@ -18,5 +18,8 @@ export * from './lost-item.js';
 export * from './refund-flow.js';
 export * from './branch.js';
 export * from './branch-network.js';
+export * from './address.js';
+export * from './deals.js';
+export * from './share.js';
 export * from './user-roles.js';
 export * from './sla.js';

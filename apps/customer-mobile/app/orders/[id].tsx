@@ -1,15 +1,15 @@
 import { useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Pressable,
+  Platform,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
-import { io } from 'socket.io-client';
+import { KeyboardSafeScrollView } from '../../src/components/ui/keyboard-safe-scroll-view';
 import { OrderStatus } from '@lunara/types';
 import {
   buildCustomerTimeline,
@@ -17,11 +17,10 @@ import {
   formatOrderStatusLabel,
 } from '@lunara/utils';
 import { colors, radius, spacing, typography } from '../../src/theme';
-import { getApiOrigin } from '../../src/api-config';
+import { useOrderTrackingSocket } from '../../src/hooks/use-order-tracking-socket';
 import { DataLoadState } from '../../src/components/data-load-state';
 import { OrderTimeline } from '../../src/components/order-timeline';
 import { branchTypeLabel } from '../../src/components/nearest-branches';
-import { ORDER_EVENT_MESSAGES } from '../../src/lib/order-events';
 import { useAuthStore } from '../../src/store/auth';
 
 interface OrderDetail {
@@ -50,12 +49,10 @@ interface LiveNotification {
 export default function OrderTrackScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const apiFetch = useAuthStore((s) => s.apiFetch);
-  const accessToken = useAuthStore((s) => s.tokens?.accessToken);
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [deliveryUi, setDeliveryUi] = useState<DeliveryUiState | null>(null);
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [notifications, setNotifications] = useState<LiveNotification[]>([]);
-  const [socketLive, setSocketLive] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [verifyCode, setVerifyCode] = useState('');
   const [signatureName, setSignatureName] = useState('');
@@ -63,9 +60,13 @@ export default function OrderTrackScreen() {
   const [loadError, setLoadError] = useState('');
   const [pageLoading, setPageLoading] = useState(true);
 
+  const notificationSeq = useRef(0);
+
   const pushNotification = useCallback((message: string) => {
+    notificationSeq.current += 1;
+    const id = `${Date.now()}-${notificationSeq.current}`;
     setNotifications((prev) => [
-      { id: `${Date.now()}`, message, at: new Date().toISOString() },
+      { id, message, at: new Date().toISOString() },
       ...prev.slice(0, 14),
     ]);
   }, []);
@@ -103,38 +104,20 @@ export default function OrderTrackScreen() {
     load();
   }, [load]);
 
-  useEffect(() => {
-    if (!id || !accessToken) return;
-
-    const apiUrl = getApiOrigin();
-    const socket = io(`${apiUrl}/tracking`, {
-      transports: ['websocket'],
-      auth: { token: accessToken },
-    });
-    socket.emit('joinOrder', { orderId: id });
-    setSocketLive(true);
-
-    socket.on('orderStatusUpdate', (data: { status: string }) => {
+  const { connected: socketLive } = useOrderTrackingSocket(id, {
+    onStatusUpdate: (data) => {
       setOrder((prev) => (prev ? { ...prev, status: data.status } : prev));
       pushNotification(`Status: ${formatOrderStatusLabel(data.status)}`);
       void load();
-    });
-
-    socket.on('orderEvent', (data: { event: string; message?: string }) => {
-      const msg = data.message ?? ORDER_EVENT_MESSAGES[data.event];
-      if (msg) pushNotification(msg);
+    },
+    onOrderEvent: (data) => {
+      if (data.message) pushNotification(data.message);
       void load();
-    });
-
-    socket.on('locationUpdate', (data: { lat: number; lng: number }) => {
+    },
+    onLocationUpdate: (data) => {
       setLocation({ lat: data.lat, lng: data.lng });
-    });
-
-    return () => {
-      setSocketLive(false);
-      socket.disconnect();
-    };
-  }, [id, accessToken, load, pushNotification]);
+    },
+  });
 
   async function onRefresh() {
     setRefreshing(true);
@@ -201,9 +184,11 @@ export default function OrderTrackScreen() {
     order.status === OrderStatus.RIDER_ASSIGNED_DELIVERY;
 
   return (
-    <ScrollView
+    <KeyboardSafeScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
+      useTopSafeInset={false}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 44 : 0}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
       <View style={styles.statusRow}>
@@ -295,7 +280,7 @@ export default function OrderTrackScreen() {
 
       <Text style={styles.sectionTitle}>Progress</Text>
       <OrderTimeline status={order.status} statusHistory={order.statusHistory} />
-    </ScrollView>
+    </KeyboardSafeScrollView>
   );
 }
 
@@ -305,9 +290,9 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   muted: { color: colors.mutedForeground },
   statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  status: { ...typography.title, flex: 1, letterSpacing: -0.3 },
+  status: { ...typography.title, flex: 1, letterSpacing: -0.3, textTransform: 'capitalize' },
   live: { fontSize: 12, fontWeight: '600', color: colors.accent },
-  meta: { marginTop: spacing.sm - 2, color: colors.muted, fontSize: 15 },
+  meta: { marginTop: spacing.sm - 2, color: colors.muted, fontSize: 15, textTransform: 'capitalize' },
   progressTrack: {
     marginTop: spacing.lg,
     height: 8,

@@ -1,4 +1,5 @@
 import { resolveApiV1BaseUrl } from '@lunara/utils';
+import { parseApiError } from './api-error';
 
 const API_URL = resolveApiV1BaseUrl(process.env.NEXT_PUBLIC_API_URL);
 const STORAGE_KEY = 'lunara_portal_token';
@@ -41,7 +42,7 @@ export async function staffLogin(email: string, password: string) {
     body: JSON.stringify({ email, password }),
   });
   const body = await res.json();
-  if (!body.success) throw new Error(body.error?.message ?? 'Login failed');
+  if (!body.success) throw new Error(parseApiError(body, 'Login failed'));
   const role = body.data.user.role as string;
   if (role !== 'staff' && role !== 'partner' && role !== 'admin') {
     throw new Error('Staff or partner account required');
@@ -88,6 +89,6 @@ export async function partnerFetch<T>(path: string, init?: RequestInit): Promise
     }
     throw new Error('Session expired. Please sign in again.');
   }
-  if (!body.success) throw new Error(body.error?.message ?? 'Request failed');
+  if (!body.success) throw new Error(parseApiError(body));
   return body.data as T;
 }

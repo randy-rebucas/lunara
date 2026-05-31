@@ -9,9 +9,11 @@ import { Model, Types } from 'mongoose';
 import { OrderStatus } from '@lunara/types';
 import { getProcessingStep, LAUNDRY_PROCESSING_STEPS, LOST_ITEM_FLOW } from '@lunara/utils';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
+import { AddressesService } from '../addresses/addresses.service';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { WalletsService } from '../wallets/wallets.service';
 import { CreateLostItemDto } from './dto/create-lost-item.dto';
+import { CreateAreaRequestDto } from './dto/create-area-request.dto';
 import { InvestigateAction, InvestigateTicketDto } from './dto/investigate-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
 import {
@@ -60,6 +62,7 @@ export class SupportService {
     @InjectModel(SupportTicket.name) private ticketModel: Model<SupportTicketDocument>,
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    private addressesService: AddressesService,
     private walletsService: WalletsService,
   ) {}
 
@@ -122,6 +125,64 @@ export class SupportService {
     });
 
     return { success: true, data: this.serializeTicket(ticket) };
+  }
+
+  async createAreaCoverageRequest(customerId: string, dto: CreateAreaRequestDto) {
+    const addressRes = await this.addressesService.findAll(customerId);
+    const address = addressRes.data.find((a) => a._id.toString() === dto.addressId);
+    if (!address) throw new NotFoundException('Address not found');
+
+    const existing = await this.ticketModel.findOne({
+      customerId: new Types.ObjectId(customerId),
+      type: TicketType.AREA_COVERAGE,
+      status: { $in: [TicketStatus.OPEN, TicketStatus.IN_PROGRESS] },
+    });
+    if (existing) {
+      return {
+        success: true,
+        data: this.serializeTicket(existing),
+        message: 'We already received your pickup area request and will contact you soon.',
+      };
+    }
+
+    const user = await this.userModel.findById(customerId).select('email phone');
+    const addressLine = `${address.line1}, ${address.city}, ${address.province} ${address.postalCode}`;
+    const gps =
+      address.latitude != null && address.longitude != null
+        ? `GPS: ${address.latitude}, ${address.longitude}`
+        : null;
+    const customerNote = dto.message?.trim() ? `Customer note: ${dto.message.trim()}` : null;
+
+    const ticket = await this.ticketModel.create({
+      subject: `Pickup not available — ${address.city}`,
+      description: [
+        'Customer could not schedule pickup for this address during booking.',
+        `Address: ${addressLine}`,
+        gps,
+        customerNote,
+        `Address ID: ${dto.addressId}`,
+      ]
+        .filter(Boolean)
+        .join('\n'),
+      type: TicketType.AREA_COVERAGE,
+      status: TicketStatus.OPEN,
+      priority: TicketPriority.MEDIUM,
+      customerId: new Types.ObjectId(customerId),
+      customerEmail: user?.email,
+      timeline: [
+        {
+          stage: 'area_request',
+          label: 'Pickup area request submitted',
+          at: new Date(),
+        },
+      ],
+    });
+
+    return {
+      success: true,
+      data: this.serializeTicket(ticket),
+      message: 'Thanks — our team will review your address and follow up.',
+    };
   }
 
   async listCustomerTickets(customerId: string) {

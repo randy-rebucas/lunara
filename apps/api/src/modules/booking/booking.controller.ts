@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, Req, UseGuards, BadRequestException } from '@nestjs/common';
 import { UserRole } from '@lunara/types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -28,7 +28,10 @@ export class BookingController {
     @Req() req: { user: { sub: string } },
     @Query('addressId') addressId: string,
   ) {
-    return this.bookingService.getAvailability(req.user.sub, addressId);
+    if (!addressId?.trim()) {
+      throw new BadRequestException('Select a pickup address first');
+    }
+    return this.bookingService.getAvailability(req.user.sub, addressId.trim());
   }
 
   @Post('quote')

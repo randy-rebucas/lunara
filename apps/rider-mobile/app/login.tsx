@@ -1,16 +1,13 @@
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { useState } from 'react';
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-import { theme, appConfig } from '@lunara/config';
+import { Alert, StyleSheet, Text, View } from 'react-native';
+import { appConfig } from '@lunara/config';
+import { BrandMark } from '../src/components/ui/brand-mark';
+import { Button } from '../src/components/ui/button';
+import { Card } from '../src/components/ui/card';
+import { Input } from '../src/components/ui/input';
+import { Screen } from '../src/components/ui/screen';
+import { colors, spacing, typography } from '../src/theme';
 import { riderLogin } from '../src/auth';
 
 export default function LoginScreen() {
@@ -23,7 +20,7 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await riderLogin(email.trim(), password);
-      router.replace('/');
+      router.replace('/(tabs)' as Href);
     } catch (e) {
       Alert.alert('Login failed', e instanceof Error ? e.message : 'Try again');
     } finally {
@@ -32,57 +29,81 @@ export default function LoginScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <Text style={styles.brand}>{appConfig.name} Rider</Text>
-      <Text style={styles.subtitle}>Daily operations — pickups & deliveries</Text>
+    <Screen scroll centered>
+      <View style={styles.header}>
+        <BrandMark size="lg" />
+        <View>
+          <Text style={styles.brand}>{appConfig.name}</Text>
+          <Text style={styles.brandSub}>Rider · Field ops</Text>
+        </View>
+      </View>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        autoCapitalize="none"
-        keyboardType="email-address"
-        value={email}
-        onChangeText={setEmail}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-      />
+      <Card elevated style={styles.formCard}>
+        <Text style={styles.title}>Sign in to your shift</Text>
+        <Text style={styles.subtitle}>
+          Access pickups, deliveries, and earnings for today&apos;s route.
+        </Text>
 
-      <Pressable style={styles.btn} onPress={handleLogin} disabled={loading}>
-        <Text style={styles.btnText}>{loading ? 'Signing in…' : 'Login'}</Text>
-      </Pressable>
+        <Input
+          style={styles.field}
+          placeholder="Work email"
+          autoCapitalize="none"
+          keyboardType="email-address"
+          value={email}
+          onChangeText={setEmail}
+        />
+        <Input
+          style={styles.field}
+          placeholder="Password"
+          secureTextEntry
+          value={password}
+          onChangeText={setPassword}
+        />
+
+        <Button
+          label={loading ? 'Signing in…' : 'Start session'}
+          onPress={handleLogin}
+          disabled={loading}
+          size="lg"
+          style={styles.submitBtn}
+        />
+      </Card>
 
       <Text style={styles.devHint}>Dev: rider@lunara.dev / password123</Text>
-    </KeyboardAvoidingView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: '#f8fafc' },
-  brand: { fontSize: 28, fontWeight: '800', color: theme.colors.primary, textAlign: 'center' },
-  subtitle: { marginTop: 8, marginBottom: 32, textAlign: 'center', color: '#64748b' },
-  input: {
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 12,
-    backgroundColor: '#fff',
-  },
-  btn: {
-    backgroundColor: theme.colors.primary,
-    padding: 16,
-    borderRadius: 10,
+  header: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
+    gap: spacing.lg,
+    marginBottom: spacing.xxxl,
   },
-  btnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  devHint: { marginTop: 24, textAlign: 'center', fontSize: 12, color: '#94a3b8' },
+  brand: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  brandSub: {
+    ...typography.caption,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.secondaryDark,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginTop: 2,
+  },
+  formCard: { borderWidth: 0, width: '100%' },
+  title: { ...typography.title, fontSize: 22 },
+  subtitle: { ...typography.bodySm, marginTop: spacing.xs, marginBottom: spacing.xl },
+  field: { marginBottom: spacing.md },
+  submitBtn: { marginTop: spacing.sm },
+  devHint: {
+    ...typography.caption,
+    textAlign: 'center',
+    marginTop: spacing.xxl,
+    paddingHorizontal: spacing.lg,
+  },
 });

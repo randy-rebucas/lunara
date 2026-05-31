@@ -1,7 +1,30 @@
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments, type Href } from 'expo-router';
 import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { colors } from '../src/theme';
 import { useAuthStore } from '../src/store/auth';
+
+const stackHeaderOptions = {
+  headerStyle: {
+    backgroundColor: colors.surfaceMuted,
+  },
+  headerShadowVisible: false,
+  headerTitleStyle: {
+    fontWeight: '700' as const,
+    fontSize: 17,
+    color: colors.foreground,
+  },
+  headerTintColor: colors.primary,
+  headerBackTitleVisible: false,
+};
+
+function isPublicRoute(segments: string[]): boolean {
+  if (segments.length === 0) return true;
+  if (segments[0] === 'index') return true;
+  if (segments[0] === 'login') return true;
+  return false;
+}
 
 export default function RootLayout() {
   const router = useRouter();
@@ -16,24 +39,32 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (isLoading) return;
-    const onLogin = segments[0] === 'login';
-    if (!tokens?.accessToken && !onLogin) router.replace('/login');
-    if (tokens?.accessToken && onLogin) router.replace('/');
+    const signedIn = Boolean(tokens?.accessToken);
+    const publicRoute = isPublicRoute(segments as string[]);
+
+    if (!signedIn && !publicRoute) {
+      router.replace('/login');
+      return;
+    }
+    if (signedIn && segments[0] === 'login') {
+      router.replace('/(tabs)' as Href);
+    }
   }, [isLoading, tokens, segments, router]);
 
   if (isLoading) return null;
 
   return (
-    <>
-      <StatusBar style="auto" />
-      <Stack>
+    <SafeAreaProvider>
+      <StatusBar style="dark" />
+      <Stack screenOptions={stackHeaderOptions}>
+        <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
-        <Stack.Screen name="index" options={{ title: 'Operations' }} />
-        <Stack.Screen name="pickup/[id]" options={{ title: 'Pickup' }} />
-        <Stack.Screen name="delivery/[id]" options={{ title: 'Delivery' }} />
-        <Stack.Screen name="earnings" options={{ title: 'Earnings' }} />
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="pickup/[id]" options={{ title: 'Pickup task' }} />
+        <Stack.Screen name="delivery/[id]" options={{ title: 'Delivery task' }} />
+        <Stack.Screen name="earnings" options={{ title: 'My earnings' }} />
         <Stack.Screen name="notifications" options={{ title: 'Notifications' }} />
       </Stack>
-    </>
+    </SafeAreaProvider>
   );
 }

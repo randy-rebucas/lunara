@@ -1,7 +1,8 @@
-import { ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type ViewStyle } from 'react-native';
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 import { spacing } from '../../theme';
 import { LaundryBackground } from './laundry-background';
+import { KeyboardSafeScrollView } from './keyboard-safe-scroll-view';
 
 interface ScreenProps {
   children: React.ReactNode;
@@ -44,17 +45,15 @@ export function Screen({
       <LaundryBackground />
       <SafeAreaView style={styles.safe} edges={edges}>
         {scroll ? (
-          <ScrollView
+          <KeyboardSafeScrollView
             contentContainerStyle={[styles.scrollContent, centered && styles.centered]}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
           >
             {padded ? (
               <View style={[paddingStyle, contentStyle]}>{children}</View>
             ) : (
               children
             )}
-          </ScrollView>
+          </KeyboardSafeScrollView>
         ) : (
           inner
         )}

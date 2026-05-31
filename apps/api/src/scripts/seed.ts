@@ -1,11 +1,24 @@
 /**
- * Seed dev users: partner, rider, admin, staff
+ * Seed dev users: partner, rider, admin, staff, customer (+ Metro Manila address)
  * Run: npm run seed --workspace=@lunara/api
  */
 import mongoose from 'mongoose';
 import * as bcrypt from 'bcrypt';
 
 const MONGODB_URI = process.env.MONGODB_URI ?? 'mongodb://localhost:27017/lunara';
+
+const CUSTOMER_HOME_ADDRESS = {
+  label: 'Home',
+  addressType: 'home',
+  line1: '123 Ayala Avenue',
+  line2: 'Unit 12B',
+  city: 'Makati',
+  province: 'Metro Manila',
+  postalCode: '1226',
+  latitude: 14.5547,
+  longitude: 121.0244,
+  isDefault: true,
+} as const;
 
 async function seed() {
   await mongoose.connect(MONGODB_URI);
@@ -52,6 +65,45 @@ async function seed() {
         },
       },
       { upsert: true },
+    );
+  }
+
+  const customerUser = await users.findOne({ email: 'customer@lunara.dev' });
+  if (customerUser) {
+    await db.collection('customers').updateOne(
+      { userId: customerUser._id },
+      {
+        $set: {
+          firstName: 'Demo',
+          lastName: 'Customer',
+          loyaltyPoints: 100,
+          updatedAt: new Date(),
+        },
+        $setOnInsert: { createdAt: new Date() },
+      },
+      { upsert: true },
+    );
+    console.log('Seeded customer profile: Demo Customer');
+
+    await db.collection('addresses').updateMany(
+      { userId: customerUser._id },
+      { $set: { isDefault: false } },
+    );
+
+    await db.collection('addresses').updateOne(
+      { userId: customerUser._id, label: CUSTOMER_HOME_ADDRESS.label },
+      {
+        $set: {
+          userId: customerUser._id,
+          ...CUSTOMER_HOME_ADDRESS,
+          updatedAt: new Date(),
+        },
+        $setOnInsert: { createdAt: new Date() },
+      },
+      { upsert: true },
+    );
+    console.log(
+      `Seeded customer address: ${CUSTOMER_HOME_ADDRESS.line1}, ${CUSTOMER_HOME_ADDRESS.city}`,
     );
   }
 

@@ -10,6 +10,12 @@ import { TrackingGateway } from '../realtime/tracking.gateway';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { Rider, RiderDocument } from './schemas/rider.schema';
 
+function phoneVerificationHint(phone?: string) {
+  if (!phone) return '0000';
+  const digits = phone.replace(/\D/g, '');
+  return digits.slice(-4) || '0000';
+}
+
 @Injectable()
 export class RiderAssignmentService {
   constructor(
@@ -132,6 +138,7 @@ export class RiderAssignmentService {
     const rider = await this.riderModel.findOne({ userId: new Types.ObjectId(riderUserId) });
     if (!rider) throw new NotFoundException('Rider not found');
 
+    const customer = await this.userModel.findById(order.customerId).select('phone');
     const now = new Date();
     order.pickupRiderId = new Types.ObjectId(riderUserId);
     order.status = OrderStatus.RIDER_ASSIGNED_PICKUP;
@@ -140,6 +147,7 @@ export class RiderAssignmentService {
       : undefined;
     if (!order.pickup) order.pickup = {};
     order.pickup.acceptedAt = now;
+    order.pickup.verificationHint = phoneVerificationHint(customer?.phone);
     order.statusHistory.push({
       status: OrderStatus.RIDER_ASSIGNED_PICKUP,
       timestamp: now,

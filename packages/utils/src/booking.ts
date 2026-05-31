@@ -124,8 +124,26 @@ export const SERVICE_AREAS: ServiceAreaRule[] = [
   {
     id: 'metro-manila',
     label: 'Metro Manila',
-    cities: ['Manila', 'Makati', 'Quezon City', 'Pasig', 'Taguig', 'Mandaluyong', 'San Juan'],
-    provinces: ['Metro Manila', 'NCR'],
+    cities: [
+      'Manila',
+      'Makati',
+      'Quezon City',
+      'Pasig',
+      'Taguig',
+      'Mandaluyong',
+      'San Juan',
+      'Marikina',
+      'Parañaque',
+      'Las Piñas',
+      'Muntinlupa',
+      'Caloocan',
+      'Valenzuela',
+      'Pasay',
+      'Pateros',
+      'Navotas',
+      'Malabon',
+    ],
+    provinces: ['Metro Manila', 'NCR', 'National Capital Region'],
     postalPrefixes: ['10', '11', '12', '13', '14', '15', '16', '17'],
     services: [
       BookingType.WASH_FOLD,
@@ -147,6 +165,31 @@ export function normalizeAreaText(value: string) {
   return value.trim().toLowerCase();
 }
 
+const NCR_PROVINCE_ALIASES = new Set([
+  'metro manila',
+  'ncr',
+  'national capital region',
+  'manila',
+]);
+
+function isNcrProvince(province: string) {
+  return NCR_PROVINCE_ALIASES.has(normalizeAreaText(province));
+}
+
+function cityMatches(areaCity: string, addressCity: string) {
+  const area = normalizeAreaText(areaCity);
+  const city = normalizeAreaText(addressCity);
+  if (!area || !city) return false;
+  return city === area || city.includes(area) || area.includes(city);
+}
+
+function provinceMatches(areaProvince: string, addressProvince: string) {
+  const area = normalizeAreaText(areaProvince);
+  const province = normalizeAreaText(addressProvince);
+  if (area === province) return true;
+  return isNcrProvince(area) && isNcrProvince(province);
+}
+
 export function validateServiceArea(address: AddressInput): {
   valid: boolean;
   areaId?: string;
@@ -154,13 +197,11 @@ export function validateServiceArea(address: AddressInput): {
   message?: string;
   availableServices: BookingType[];
 } {
-  const city = normalizeAreaText(address.city);
-  const province = normalizeAreaText(address.province);
   const postal = address.postalCode.trim();
 
   for (const area of SERVICE_AREAS) {
-    const cityMatch = area.cities.some((c) => normalizeAreaText(c) === city);
-    const provinceMatch = area.provinces.some((p) => normalizeAreaText(p) === province);
+    const cityMatch = area.cities.some((c) => cityMatches(c, address.city));
+    const provinceMatch = area.provinces.some((p) => provinceMatches(p, address.province));
     const postalMatch = area.postalPrefixes.some((prefix) => postal.startsWith(prefix));
 
     if (cityMatch || provinceMatch || postalMatch) {

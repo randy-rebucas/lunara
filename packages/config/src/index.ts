@@ -14,13 +14,25 @@ export const theme = {
   },
 } as const;
 
+export const marketingConfig = {
+  websiteUrl: 'https://lunara.app',
+  shareHashtag: 'LunaraLaundry',
+} as const;
+
 export const appConfig = {
   name: 'Lunara',
   tagline: 'Laundry made simple',
   defaultCurrency: 'PHP',
   defaultLocale: 'en-PH',
+  supportEmail: 'support@lunara.dev',
+  marketing: marketingConfig,
   pagination: {
     defaultLimit: 20,
     maxLimit: 100,
   },
 } as const;
+
+/** Share URL with fallback for stale bundles missing appConfig.marketing. */
+export function getShareWebsiteUrl(): string {
+  return appConfig.marketing?.websiteUrl ?? marketingConfig.websiteUrl;
+}

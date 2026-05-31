@@ -1,23 +1,18 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  Alert,
-  Linking,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
 import {
   formatCurrency,
   getPickupWorkflowStepIndex,
   PICKUP_WORKFLOW_STEPS,
 } from '@lunara/utils';
-import { theme } from '@lunara/config';
 import { OpsStepper } from '../../src/components/ops-stepper';
+import { Button } from '../../src/components/ui/button';
+import { Card } from '../../src/components/ui/card';
+import { Input } from '../../src/components/ui/input';
+import { Screen } from '../../src/components/ui/screen';
 import { riderFetch } from '../../src/api';
+import { colors, spacing, typography } from '../../src/theme';
 
 interface ShopLocation {
   name: string;
@@ -122,9 +117,9 @@ export default function PickupScreen() {
 
   if (!task) {
     return (
-      <View style={styles.container}>
-        <Text>Loading…</Text>
-      </View>
+      <Screen inStack>
+        <Text style={typography.body}>Loading…</Text>
+      </Screen>
     );
   }
 
@@ -138,32 +133,32 @@ export default function PickupScreen() {
   const shop = task.shopLocation;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Pickup workflow</Text>
+    <Screen scroll inStack contentStyle={styles.content}>
+      <Text style={styles.title}>Pickup route</Text>
       <Text style={styles.subtitle}>
         {task.bookingType.replace(/_/g, ' ')} · {task.status.replace(/_/g, ' ')}
       </Text>
       <OpsStepper steps={steps} currentIndex={stepIndex} />
 
       {task.pickupAddress && (
-        <View style={styles.card}>
+        <Card elevated style={styles.card}>
           <Text style={styles.cardTitle}>Customer · {task.pickupAddress.label}</Text>
           <Text style={styles.cardBody}>
             {task.pickupAddress.line1}, {task.pickupAddress.city}
           </Text>
-        </View>
+        </Card>
       )}
 
       {task.branchName && (
-        <View style={styles.card}>
+        <Card elevated style={styles.card}>
           <Text style={styles.cardTitle}>Assigned shop</Text>
           <Text style={styles.cardBody}>{task.branchName}</Text>
-        </View>
+        </Card>
       )}
 
       {isOffer && (
-        <Pressable
-          style={styles.primaryBtn}
+        <Button
+          label="Rider accepts"
           disabled={loading}
           onPress={() =>
             run(
@@ -171,46 +166,44 @@ export default function PickupScreen() {
               'Task accepted — navigate to customer',
             )
           }
-        >
-          <Text style={styles.primaryBtnText}>Rider accepts</Text>
-        </Pressable>
+          style={styles.action}
+        />
       )}
 
       {isActivePickup && !done && (
         <>
-          <Pressable
-            style={styles.secondaryBtn}
+          <Button
+            label="Navigate to customer"
+            variant="outline"
             onPress={() => task.pickupAddress && openMaps(task.pickupAddress)}
-          >
-            <Text style={styles.secondaryBtnText}>Navigate to customer</Text>
-          </Pressable>
+            style={styles.action}
+          />
 
           {!p.arrivedAt && p.acceptedAt && (
-            <Pressable
-              style={styles.primaryBtn}
+            <Button
+              label="I've arrived"
               disabled={loading}
               onPress={() => run(() => riderFetch(`/riders/pickup-tasks/${id}/arrive`, { method: 'POST' }))}
-            >
-              <Text style={styles.primaryBtnText}>I&apos;ve arrived</Text>
-            </Pressable>
+              style={styles.action}
+            />
           )}
 
           {p.arrivedAt && !p.customerVerifiedAt && (
-            <View style={styles.card}>
+            <Card elevated style={styles.card}>
               <Text style={styles.cardTitle}>Verify customer</Text>
               {task.customerPhoneMasked && (
                 <Text style={styles.statusHint}>Phone ends in {task.customerPhoneMasked}</Text>
               )}
-              <TextInput
-                style={styles.input}
+              <Input
+                style={styles.field}
                 placeholder="Last 4 digits of phone"
                 keyboardType="number-pad"
                 maxLength={4}
                 value={verifyCode}
                 onChangeText={setVerifyCode}
               />
-              <Pressable
-                style={styles.primaryBtn}
+              <Button
+                label="Verify"
                 disabled={loading || verifyCode.length !== 4}
                 onPress={() =>
                   run(() =>
@@ -220,31 +213,29 @@ export default function PickupScreen() {
                     }),
                   )
                 }
-              >
-                <Text style={styles.primaryBtnText}>Verify</Text>
-              </Pressable>
-            </View>
+              />
+            </Card>
           )}
 
           {p.customerVerifiedAt && !p.collectedAt && (
-            <View style={styles.card}>
+            <Card elevated style={styles.card}>
               <Text style={styles.cardTitle}>Pickup laundry</Text>
               <Text style={styles.statusHint}>Status will become picked_up</Text>
-              <TextInput
-                style={styles.input}
+              <Input
+                style={styles.field}
                 placeholder="Actual weight (kg)"
                 keyboardType="decimal-pad"
                 value={weight}
                 onChangeText={setWeight}
               />
-              <TextInput
-                style={styles.input}
+              <Input
+                style={styles.field}
                 placeholder="Notes (optional)"
                 value={notes}
                 onChangeText={setNotes}
               />
-              <Pressable
-                style={styles.primaryBtn}
+              <Button
+                label="Confirm pickup"
                 disabled={loading}
                 onPress={() =>
                   run(
@@ -259,15 +250,13 @@ export default function PickupScreen() {
                     'Laundry picked up',
                   )
                 }
-              >
-                <Text style={styles.primaryBtnText}>Confirm pickup</Text>
-              </Pressable>
-            </View>
+              />
+            </Card>
           )}
 
           {p.collectedAt && !p.photoUrl && task.status === 'picked_up' && (
-            <Pressable
-              style={styles.primaryBtn}
+            <Button
+              label="Take photo"
               disabled={loading}
               onPress={() =>
                 run(() =>
@@ -279,14 +268,13 @@ export default function PickupScreen() {
                   }),
                 )
               }
-            >
-              <Text style={styles.primaryBtnText}>Take photo</Text>
-            </Pressable>
+              style={styles.action}
+            />
           )}
 
           {p.photoUrl && !p.receiptCode && task.status === 'picked_up' && (
-            <Pressable
-              style={styles.primaryBtn}
+            <Button
+              label="Generate pickup receipt"
               disabled={loading}
               onPress={() =>
                 run(async () => {
@@ -297,25 +285,28 @@ export default function PickupScreen() {
                   Alert.alert('Receipt', res.receiptCode);
                 })
               }
-            >
-              <Text style={styles.primaryBtnText}>Generate pickup receipt</Text>
-            </Pressable>
+              style={styles.action}
+            />
           )}
 
           {p.receiptCode && !p.droppedAtShop && task.status === 'picked_up' && shop && (
             <>
-              <View style={styles.card}>
+              <Card elevated style={styles.card}>
                 <Text style={styles.cardTitle}>Deliver to assigned shop · {shop.name}</Text>
                 <Text style={styles.cardBody}>
                   {shop.line1}, {shop.city}
                 </Text>
                 <Text style={styles.statusHint}>Status will become in_transit_to_shop</Text>
-              </View>
-              <Pressable style={styles.secondaryBtn} onPress={() => openMaps(shop)}>
-                <Text style={styles.secondaryBtnText}>Navigate to laundry shop</Text>
-              </Pressable>
-              <Pressable
-                style={styles.primaryBtn}
+              </Card>
+              <Button
+                label="Navigate to laundry shop"
+                variant="secondary"
+                onPress={() => openMaps(shop)}
+                style={styles.action}
+              />
+              <Button
+                label="Deliver to assigned shop"
+                variant="accent"
                 disabled={loading}
                 onPress={() =>
                   run(async () => {
@@ -332,72 +323,49 @@ export default function PickupScreen() {
                     router.back();
                   })
                 }
-              >
-                <Text style={styles.primaryBtnText}>Deliver to assigned shop</Text>
-              </Pressable>
+                style={styles.action}
+              />
             </>
           )}
         </>
       )}
 
       {p.receiptCode && (
-        <View style={[styles.card, styles.receiptCard]}>
+        <Card accent style={styles.card}>
           <Text style={styles.cardTitle}>Pickup receipt</Text>
           <Text style={styles.receiptCode}>{p.receiptCode}</Text>
-        </View>
+        </Card>
       )}
 
       {done && (
-        <View style={[styles.card, { borderColor: theme.colors.accent }]}>
+        <Card accent style={styles.card}>
           <Text style={styles.cardTitle}>Pickup leg complete</Text>
           <Text style={styles.cardBody}>Laundry is at the partner shop for processing.</Text>
-        </View>
+        </Card>
       )}
-    </ScrollView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
-  content: { padding: 16, paddingBottom: 40 },
-  title: { fontSize: 22, fontWeight: '700' },
-  subtitle: { marginTop: 4, fontSize: 14, color: '#64748b', textTransform: 'capitalize' },
-  statusHint: { marginTop: 4, fontSize: 12, color: theme.colors.accent },
-  card: {
-    marginTop: 16,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+  content: { paddingBottom: spacing.xxxl },
+  title: { ...typography.title, fontSize: 22 },
+  subtitle: {
+    marginTop: spacing.xs,
+    ...typography.bodySm,
+    textTransform: 'capitalize',
   },
-  cardTitle: { fontWeight: '600', fontSize: 16 },
-  cardBody: { marginTop: 6, color: '#64748b' },
-  input: {
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 8,
-    padding: 12,
-    backgroundColor: '#fff',
+  statusHint: { marginTop: spacing.xs, fontSize: 12, color: colors.accentDark, fontWeight: '500' },
+  card: { marginTop: spacing.lg },
+  cardTitle: { ...typography.subheading, fontSize: 16 },
+  cardBody: { marginTop: spacing.xs + 2, ...typography.bodySm },
+  field: { marginTop: spacing.md },
+  action: { marginTop: spacing.lg },
+  receiptCode: {
+    marginTop: spacing.sm,
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: 1,
+    color: colors.foreground,
   },
-  primaryBtn: {
-    marginTop: 16,
-    backgroundColor: theme.colors.primary,
-    padding: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  primaryBtnText: { color: '#fff', fontWeight: '600' },
-  secondaryBtn: {
-    marginTop: 16,
-    borderWidth: 1,
-    borderColor: theme.colors.primary,
-    padding: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  secondaryBtnText: { color: theme.colors.primary, fontWeight: '600' },
-  receiptCard: { borderColor: theme.colors.accent },
-  receiptCode: { marginTop: 8, fontSize: 20, fontWeight: '700', letterSpacing: 1 },
 });

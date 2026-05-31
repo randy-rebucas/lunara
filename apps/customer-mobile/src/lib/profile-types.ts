@@ -1,6 +1,9 @@
+import { AddressType } from '@lunara/types';
+
 export interface CustomerAddress {
   _id: string;
   label: string;
+  addressType?: AddressType | string;
   line1: string;
   line2?: string;
   city: string;
@@ -20,6 +23,7 @@ export interface CustomerProfile {
 
 export interface AddressFormValues {
   label: string;
+  addressType: AddressType;
   line1: string;
   line2: string;
   city: string;
@@ -32,6 +36,7 @@ export interface AddressFormValues {
 
 export const emptyAddressForm = (): AddressFormValues => ({
   label: 'Home',
+  addressType: AddressType.HOME,
   line1: '',
   line2: '',
   city: '',
@@ -43,6 +48,7 @@ export const emptyAddressForm = (): AddressFormValues => ({
 export function addressToForm(address: CustomerAddress): AddressFormValues {
   return {
     label: address.label,
+    addressType: (address.addressType as AddressType) ?? AddressType.HOME,
     line1: address.line1,
     line2: address.line2 ?? '',
     city: address.city,
