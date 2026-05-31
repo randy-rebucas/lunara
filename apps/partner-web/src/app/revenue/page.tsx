@@ -3,6 +3,8 @@
 import { useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { DataPageStatus } from '../../components/data-page-status';
+import { Card, CardBody, StatCard } from '../../components/ui/card';
+import { PageHeader } from '../../components/ui/page-header';
 import { isPartnerRole, partnerFetch } from '../../lib/partner-api';
 import { usePartnerQuery } from '../../lib/use-partner-query';
 
@@ -34,7 +36,7 @@ export default function RevenuePage() {
   if (loading || error || !data) {
     return (
       <div>
-        <h2 className="text-2xl font-bold">Monitor revenue</h2>
+        <PageHeader title="Revenue" description="Today, month-to-date, and last 7 days." />
         <DataPageStatus loading={loading} error={error} loadingMessage="Loading revenue…" />
       </div>
     );
@@ -44,42 +46,36 @@ export default function RevenuePage() {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold">Monitor revenue</h2>
-      <p className="mt-1 text-sm text-slate-500">Today, month-to-date, and last 7 days.</p>
+      <PageHeader title="Revenue" description="Today, month-to-date, and last 7 days." />
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-3">
-        <div className="rounded-xl border bg-white p-6">
-          <p className="text-sm text-slate-500">Today</p>
-          <p className="mt-1 text-3xl font-bold text-accent">₱{data.today.toFixed(2)}</p>
-          <p className="text-xs text-slate-400">{data.todayOrders} orders</p>
-        </div>
-        <div className="rounded-xl border bg-white p-6">
-          <p className="text-sm text-slate-500">This month</p>
-          <p className="mt-1 text-3xl font-bold text-primary">₱{data.month.toFixed(2)}</p>
-          <p className="text-xs text-slate-400">{data.monthOrders} orders</p>
-        </div>
-        <div className="rounded-xl border bg-white p-6">
-          <p className="text-sm text-slate-500">All-time completed</p>
-          <p className="mt-1 text-3xl font-bold">{data.allTimeCompletedOrders}</p>
-        </div>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard label="Today" value={`₱${data.today.toFixed(2)}`} accent="accent" />
+        <StatCard label="This month" value={`₱${data.month.toFixed(2)}`} />
+        <StatCard label="All-time completed" value={data.allTimeCompletedOrders} accent="secondary" />
+      </div>
+      <div className="mt-2 grid gap-4 text-xs text-muted-foreground sm:grid-cols-2">
+        <p>{data.todayOrders} orders today</p>
+        <p>{data.monthOrders} orders this month</p>
       </div>
 
-      <section className="mt-10 rounded-xl border bg-white p-6">
-        <h3 className="font-semibold">Last 7 days</h3>
-        <div className="mt-6 flex items-end gap-2" style={{ minHeight: 160 }}>
-          {data.daily.map((d) => (
-            <div key={d.date} className="flex flex-1 flex-col items-center gap-1">
-              <span className="text-xs font-medium">₱{d.revenue.toFixed(0)}</span>
-              <div
-                className="w-full rounded-t bg-primary/80"
-                style={{ height: `${Math.max(8, (d.revenue / maxDaily) * 120)}px` }}
-                title={`${d.orders} orders`}
-              />
-              <span className="text-[10px] text-slate-500">{d.date.slice(5)}</span>
-            </div>
-          ))}
-        </div>
-      </section>
+      <Card className="mt-10">
+        <CardBody>
+          <h3 className="font-semibold text-slate-900">Last 7 days</h3>
+          <div className="mt-6 flex items-end gap-2" style={{ minHeight: 160 }}>
+            {data.daily.map((d) => (
+              <div key={d.date} className="flex flex-1 flex-col items-center gap-1">
+                <span className="text-xs font-medium text-slate-700">₱{d.revenue.toFixed(0)}</span>
+                <div
+                  className="w-full rounded-t bg-primary/80"
+                  style={{ height: `${Math.max(8, (d.revenue / maxDaily) * 120)}px` }}
+                  title={`${d.orders} orders`}
+                />
+                <span className="text-[10px] text-muted-foreground">{d.date.slice(5)}</span>
+              </div>
+            ))}
+          </div>
+        </CardBody>
+      </Card>
     </div>
   );
 }

@@ -2,6 +2,9 @@
 
 import { useCallback } from 'react';
 import { DataPageStatus } from '../../components/data-page-status';
+import { Card, CardBody } from '../../components/ui/card';
+import { PageHeader } from '../../components/ui/page-header';
+import { StatCard } from '../../components/ui/stat-card';
 import { adminFetch } from '../../lib/admin-api';
 import { useAdminQuery } from '../../lib/use-admin-query';
 
@@ -22,7 +25,7 @@ export default function MonitorRevenuePage() {
   if (loading || error || !data) {
     return (
       <div>
-        <h2 className="text-2xl font-bold">Monitor revenue</h2>
+        <PageHeader title="Revenue" description="Platform-wide completed order revenue." />
         <DataPageStatus loading={loading} error={error} loadingMessage="Loading revenue…" />
       </div>
     );
@@ -32,55 +35,52 @@ export default function MonitorRevenuePage() {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold">Monitor revenue</h2>
-      <p className="mt-1 text-sm text-slate-500">Platform-wide completed order revenue.</p>
+      <PageHeader title="Revenue" description="Platform-wide completed order revenue." />
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-3">
-        <div className="rounded-xl bg-white p-6 shadow-sm">
-          <p className="text-sm text-slate-500">Today</p>
-          <p className="mt-1 text-3xl font-bold text-green-600">₱{data.today.toFixed(2)}</p>
-          <p className="text-xs text-slate-400">{data.todayOrders} orders</p>
-        </div>
-        <div className="rounded-xl bg-white p-6 shadow-sm">
-          <p className="text-sm text-slate-500">This month</p>
-          <p className="mt-1 text-3xl font-bold text-indigo-600">₱{data.month.toFixed(2)}</p>
-          <p className="text-xs text-slate-400">{data.monthOrders} orders</p>
-        </div>
-        <div className="rounded-xl bg-white p-6 shadow-sm">
-          <p className="text-sm text-slate-500">All-time completed</p>
-          <p className="mt-1 text-3xl font-bold">{data.allTimeCompleted}</p>
-        </div>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard label="Today" value={`₱${data.today.toFixed(2)}`} accent="accent" />
+        <StatCard label="This month" value={`₱${data.month.toFixed(2)}`} />
+        <StatCard label="All-time completed" value={data.allTimeCompleted} accent="secondary" />
+      </div>
+      <div className="mt-2 grid gap-4 sm:grid-cols-2 text-xs text-muted-foreground sm:grid-cols-3">
+        <p>{data.todayOrders} orders today</p>
+        <p>{data.monthOrders} orders this month</p>
+        <p className="hidden sm:block" />
       </div>
 
-      <section className="mt-10 rounded-xl border bg-white p-6 shadow-sm">
-        <h3 className="font-semibold">Last 7 days</h3>
-        <div className="mt-6 flex items-end gap-2" style={{ minHeight: 140 }}>
-          {data.daily.map((d) => (
-            <div key={d.date} className="flex flex-1 flex-col items-center gap-1">
-              <span className="text-xs font-medium">₱{d.revenue.toFixed(0)}</span>
-              <div
-                className="w-full rounded-t bg-indigo-500"
-                style={{ height: `${Math.max(8, (d.revenue / maxDaily) * 100)}px` }}
-              />
-              <span className="text-[10px] text-slate-500">{d.date.slice(5)}</span>
-            </div>
-          ))}
-        </div>
-      </section>
+      <Card className="mt-10">
+        <CardBody>
+          <h3 className="font-semibold text-slate-900">Last 7 days</h3>
+          <div className="mt-6 flex items-end gap-2" style={{ minHeight: 140 }}>
+            {data.daily.map((d) => (
+              <div key={d.date} className="flex flex-1 flex-col items-center gap-1">
+                <span className="text-xs font-medium text-slate-700">₱{d.revenue.toFixed(0)}</span>
+                <div
+                  className="w-full rounded-t bg-primary"
+                  style={{ height: `${Math.max(8, (d.revenue / maxDaily) * 100)}px` }}
+                />
+                <span className="text-[10px] text-muted-foreground">{d.date.slice(5)}</span>
+              </div>
+            ))}
+          </div>
+        </CardBody>
+      </Card>
 
-      <section className="mt-8 rounded-xl border bg-white p-6 shadow-sm">
-        <h3 className="font-semibold">Revenue by service (MTD)</h3>
-        <ul className="mt-4 space-y-2 text-sm">
-          {data.byService.map((s) => (
-            <li key={s.service} className="flex justify-between capitalize">
-              <span>{s.service.replace(/_/g, ' ')}</span>
-              <span>
-                ₱{s.revenue.toFixed(0)} ({s.count})
-              </span>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <Card className="mt-8">
+        <CardBody>
+          <h3 className="font-semibold text-slate-900">Revenue by service (MTD)</h3>
+          <ul className="mt-4 space-y-2 text-sm">
+            {data.byService.map((s) => (
+              <li key={s.service} className="flex justify-between capitalize">
+                <span className="text-muted">{s.service.replace(/_/g, ' ')}</span>
+                <span className="font-medium text-slate-900">
+                  ₱{s.revenue.toFixed(0)} ({s.count})
+                </span>
+              </li>
+            ))}
+          </ul>
+        </CardBody>
+      </Card>
     </div>
   );
 }

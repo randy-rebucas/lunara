@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { getPortalUser, isPartnerRole, staffLogout } from '../lib/partner-api';
+import { BrandMark } from './ui/brand-mark';
 
 const partnerNav = [
   { href: '/', label: 'Dashboard' },
@@ -15,22 +16,49 @@ const partnerNav = [
   { href: '/revenue', label: 'Revenue' },
 ];
 
-const staffNav = [
-  { href: '/orders', label: 'Processing queue' },
-];
+const staffNav = [{ href: '/orders', label: 'Processing queue' }];
+
+function isActive(pathname: string, href: string) {
+  return pathname === href || (href !== '/' && pathname.startsWith(`${href}/`));
+}
+
+function SidebarNav({
+  items,
+  onNavigate,
+}: {
+  items: { href: string; label: string }[];
+  onNavigate?: () => void;
+}) {
+  const pathname = usePathname();
+
+  return (
+    <nav className="space-y-0.5">
+      {items.map((item) => (
+        <Link
+          key={item.href}
+          href={item.href}
+          onClick={onNavigate}
+          className={isActive(pathname, item.href) ? 'nav-link-active' : 'nav-link'}
+        >
+          {item.label}
+        </Link>
+      ))}
+    </nav>
+  );
+}
 
 export function PortalShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [partner, setPartner] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const user = getPortalUser();
 
   useEffect(() => {
     setPartner(isPartnerRole());
   }, [pathname]);
 
-  if (pathname === '/login') {
-    return <>{children}</>;
-  }
+  if (pathname === '/login') return <>{children}</>;
 
   async function logout() {
     await staffLogout();
@@ -38,41 +66,65 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   }
 
   const nav = partner ? partnerNav : staffNav;
+  const title = partner ? 'Partner Portal' : 'Lunara Staff';
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
-      <aside className="flex w-56 flex-col border-r bg-white p-4">
-        <h1 className="font-bold text-primary">
-          {partner ? 'Partner Portal' : 'Lunara Staff'}
-        </h1>
-        <p className="mt-1 text-xs text-slate-500">
-          {partner ? 'Shop operations' : 'Laundry processing'}
-        </p>
-        <p className="mt-2 truncate text-xs text-slate-400">{getPortalUser()?.email}</p>
-        <nav className="mt-6 flex-1 space-y-1">
-          {nav.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`block rounded px-3 py-2 text-sm ${
-                pathname === item.href || pathname.startsWith(`${item.href}/`)
-                  ? 'bg-indigo-50 font-medium text-primary'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
+    <div className="portal-bg flex min-h-screen">
+      {sidebarOpen && (
         <button
           type="button"
-          onClick={logout}
-          className="mt-4 text-left text-sm text-slate-500 hover:text-primary"
-        >
-          Sign out
-        </button>
+          className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm lg:hidden"
+          aria-label="Close sidebar"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex w-[var(--width-sidebar)] flex-col bg-sidebar shadow-[var(--shadow-sidebar)] transition-transform lg:static lg:translate-x-0 ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        <div className="flex h-full flex-col p-4">
+          <div className="mb-6 px-1">
+            <BrandMark partner={partner} />
+          </div>
+
+          {user?.email && (
+            <p className="mb-4 truncate rounded-lg bg-slate-50 px-3 py-2 text-xs text-muted">{user.email}</p>
+          )}
+
+          <div className="flex-1 overflow-y-auto">
+            <SidebarNav items={nav} onNavigate={() => setSidebarOpen(false)} />
+          </div>
+
+          <button type="button" onClick={logout} className="btn-ghost mt-4 w-full justify-start text-left">
+            Sign out
+          </button>
+        </div>
       </aside>
-      <main className="flex-1 p-6">{children}</main>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-border/60 bg-surface/95 px-4 py-3 backdrop-blur-sm lg:hidden">
+          <button
+            type="button"
+            className="inline-flex rounded-lg p-2 text-muted hover:bg-slate-100"
+            aria-expanded={sidebarOpen}
+            aria-label="Toggle menu"
+            onClick={() => setSidebarOpen((open) => !open)}
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              {sidebarOpen ? (
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              )}
+            </svg>
+          </button>
+          <span className="text-sm font-semibold text-slate-900">{title}</span>
+        </header>
+
+        <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
+      </div>
     </div>
   );
 }

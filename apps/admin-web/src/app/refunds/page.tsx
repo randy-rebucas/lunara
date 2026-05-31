@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useCallback, useState } from 'react';
 import { formatRefundStatus } from '@lunara/utils';
 import { DataPageStatus } from '../../components/data-page-status';
+import { PageHeader } from '../../components/ui/page-header';
 import { adminFetch } from '../../lib/admin-api';
 import { useAdminQuery } from '../../lib/use-admin-query';
 
@@ -30,21 +31,19 @@ export default function AdminRefundsPage() {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold">Refund requests</h2>
-      <p className="mt-1 text-sm text-slate-500">
-        Review → verify order → approve/reject → process → notify customer
-      </p>
+      <PageHeader
+        title="Refund requests"
+        description="Review → verify order → approve/reject → process → notify customer"
+      />
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2">
         {['', 'pending', 'under_review', 'verified', 'approved', 'rejected', 'processed', 'closed'].map(
           (s) => (
             <button
               key={s || 'all'}
               type="button"
               onClick={() => setFilter(s)}
-              className={`rounded-lg px-3 py-1.5 text-sm capitalize ${
-                filter === s ? 'bg-indigo-600 text-white' : 'border bg-white'
-              }`}
+              className={`capitalize ${filter === s ? 'filter-chip-active' : 'filter-chip'}`}
             >
               {s ? formatRefundStatus(s) : 'All'}
             </button>
@@ -58,16 +57,12 @@ export default function AdminRefundsPage() {
 
       <div className="mt-6 space-y-2">
         {items.map((r) => (
-          <Link
-            key={r._id}
-            href={`/refunds/${r._id}`}
-            className="block rounded-xl border bg-white p-4 shadow-sm hover:border-indigo-300"
-          >
-            <div className="flex justify-between">
-              <p className="font-medium">Order …{r.orderId.slice(-6)}</p>
-              <p className="font-medium">₱{r.requestedAmount}</p>
+          <Link key={r._id} href={`/refunds/${r._id}`} className="list-row block">
+            <div className="flex w-full justify-between">
+              <p className="font-medium text-slate-900">Order …{r.orderId.slice(-6)}</p>
+              <p className="font-medium text-slate-900">₱{r.requestedAmount}</p>
             </div>
-            <p className="mt-1 text-sm capitalize text-slate-500">
+            <p className="mt-1 text-sm capitalize text-muted">
               {formatRefundStatus(r.status)}
               {r.bookingType ? ` · ${r.bookingType.replace(/_/g, ' ')}` : ''}
             </p>
@@ -75,7 +70,7 @@ export default function AdminRefundsPage() {
           </Link>
         ))}
         {!loading && !error && items.length === 0 && (
-          <p className="text-slate-500">No refund requests.</p>
+          <p className="text-sm text-muted">No refund requests.</p>
         )}
       </div>
     </div>

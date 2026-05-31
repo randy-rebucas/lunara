@@ -175,7 +175,7 @@ export default function StaffOrderProcessingPage() {
       )}
 
       {partner && (
-        <div className="mt-6 rounded-xl border bg-white p-5">
+        <div className="card card-body !py-5">
           <h3 className="font-semibold">Assign staff</h3>
           <p className="mt-1 text-sm text-slate-500">
             {view.assignedStaffId
@@ -199,7 +199,7 @@ export default function StaffOrderProcessingPage() {
             <button
               type="button"
               disabled={loading || !assignStaffId}
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              className="btn-primary disabled:opacity-50"
               onClick={assignStaff}
             >
               {view.assignedStaffId ? 'Reassign' : 'Assign'}
@@ -255,7 +255,7 @@ export default function StaffOrderProcessingPage() {
             <li
               key={step.id}
               className={`rounded-lg border px-4 py-3 text-sm ${
-                active ? 'border-primary bg-indigo-50' : done ? 'border-accent/30 bg-green-50' : 'bg-white'
+                active ? 'border-primary bg-primary/5' : done ? 'border-accent/30 bg-green-50' : 'bg-white'
               }`}
             >
               <span className="font-medium">
@@ -272,7 +272,7 @@ export default function StaffOrderProcessingPage() {
       </ol>
 
       {!view.isComplete && !needsAccept && (
-        <div className="mt-8 rounded-xl border bg-white p-6">
+        <div className="card card-body mt-8">
           <h3 className="font-semibold">Mark complete: {view.currentStep.label}</h3>
           <p className="mt-1 text-xs text-slate-500">
             Completing this stage forwards the order to the next step

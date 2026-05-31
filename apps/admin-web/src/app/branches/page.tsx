@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { DataPageStatus } from '../../components/data-page-status';
+import { PageHeader } from '../../components/ui/page-header';
 import { adminFetch } from '../../lib/admin-api';
 import { useAdminQuery } from '../../lib/use-admin-query';
 
@@ -92,11 +93,11 @@ function TreeNode({
         onClick={() => onSelect(node.id)}
         className={`mb-1 w-full rounded-lg border px-3 py-2 text-left text-sm transition ${
           selectedId === node.id
-            ? 'border-indigo-400 bg-indigo-50'
+            ? 'border-primary/40 bg-primary/5'
             : 'border-transparent bg-white hover:border-slate-200'
         }`}
       >
-        <span className="font-mono text-xs text-indigo-600">{node.code}</span>
+        <span className="font-mono text-xs text-primary">{node.code}</span>
         <span className="ml-2 font-medium">{node.name}</span>
         <span className="mt-0.5 block text-xs text-slate-500">
           {node.branchTypeLabel}
@@ -175,11 +176,10 @@ export default function BranchNetworkPage() {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold">Franchise & branch network</h2>
-      <p className="mt-1 max-w-2xl text-sm text-slate-500">
-        Lunara HQ sits at the root. Franchise branches or partner laundry shops chain below —
-        each with a manager, staff, machines, capacity, daily quota, and performance metrics.
-      </p>
+      <PageHeader
+        title="Branch network"
+        description="Lunara HQ sits at the root. Franchise branches or partner laundry shops chain below — each with a manager, staff, machines, capacity, daily quota, and performance metrics."
+      />
 
       <div className="mt-4">
         <DataPageStatus loading={loading} error={error} loadingMessage="Loading branch network…" />
@@ -192,16 +192,16 @@ export default function BranchNetworkPage() {
         <span>
           <strong>{stats.operationalCount}</strong> operational shops
         </span>
-        <Link href="/dispatch" className="text-indigo-600 hover:underline">
+        <Link href="/dispatch" className="link-primary">
           Open dispatch dashboard →
         </Link>
-        <Link href="/shops" className="text-indigo-600 hover:underline">
+        <Link href="/shops" className="link-primary">
           Partner accounts →
         </Link>
       </div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-5">
-        <div className="rounded-xl border bg-white p-4 shadow-sm lg:col-span-2">
+        <div className="card card-body !py-4 lg:col-span-2">
           <h3 className="font-semibold text-slate-800">Branch structure</h3>
           <p className="mt-1 text-xs text-slate-500">
             HQ → franchise or partner shop chains (multi-level supported)
@@ -223,7 +223,7 @@ export default function BranchNetworkPage() {
           </div>
         </div>
 
-        <div className="rounded-xl border bg-white p-5 shadow-sm lg:col-span-3">
+        <div className="card card-body lg:col-span-3">
           {loadingProfile && <p className="text-slate-500">Loading branch…</p>}
           {profileError && <p className="text-sm text-red-500">{profileError}</p>}
           {!loadingProfile && !profile && !profileError && (
@@ -233,7 +233,7 @@ export default function BranchNetworkPage() {
             <>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <p className="font-mono text-xs text-indigo-600">{profile.branch.code}</p>
+                  <p className="font-mono text-xs text-primary">{profile.branch.code}</p>
                   <h3 className="text-xl font-semibold">{profile.branch.name}</h3>
                   <p className="text-sm text-slate-500">
                     {profile.branch.branchTypeLabel} · {profile.branch.line1},{' '}
@@ -258,7 +258,7 @@ export default function BranchNetworkPage() {
                   Reports to:{' '}
                   <button
                     type="button"
-                    className="text-indigo-600 hover:underline"
+                    className="text-primary hover:underline"
                     onClick={() => setSelectedId(profile.hierarchy.parent!.id)}
                   >
                     {profile.hierarchy.parent.name}
@@ -356,7 +356,7 @@ export default function BranchNetworkPage() {
                   </p>
                   <div className="mt-1 h-1.5 rounded bg-slate-200">
                     <div
-                      className="h-1.5 rounded bg-indigo-500"
+                      className="h-1.5 rounded bg-primary"
                       style={{ width: `${profile.dailyQuota.ordersQuotaPercent}%` }}
                     />
                   </div>

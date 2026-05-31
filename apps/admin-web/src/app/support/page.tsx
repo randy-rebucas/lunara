@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useState } from 'react';
 import { DataPageStatus } from '../../components/data-page-status';
+import { PageHeader } from '../../components/ui/page-header';
 import { adminFetch } from '../../lib/admin-api';
 import { useAdminQuery } from '../../lib/use-admin-query';
 
@@ -36,18 +37,16 @@ export default function SupportTicketsPage() {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold">Support tickets</h2>
-      <p className="mt-1 text-sm text-slate-500">
-        Open: {counts.open} · In progress: {counts.inProgress} · Resolved: {counts.resolved}
-      </p>
+      <PageHeader
+        title="Support tickets"
+        description={`Open: ${counts.open} · In progress: ${counts.inProgress} · Resolved: ${counts.resolved}`}
+      />
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2">
         <button
           type="button"
           onClick={() => setTypeFilter(typeFilter === 'lost_item' ? '' : 'lost_item')}
-          className={`rounded-lg px-3 py-1.5 text-sm ${
-            typeFilter === 'lost_item' ? 'bg-amber-600 text-white' : 'border bg-white'
-          }`}
+          className={typeFilter === 'lost_item' ? 'filter-chip-active bg-amber-600 hover:bg-amber-600' : 'filter-chip'}
         >
           Lost items
         </button>
@@ -56,9 +55,7 @@ export default function SupportTicketsPage() {
             key={s || 'all'}
             type="button"
             onClick={() => setFilter(s)}
-            className={`rounded-lg px-3 py-1.5 text-sm capitalize ${
-              filter === s ? 'bg-indigo-600 text-white' : 'border bg-white'
-            }`}
+            className={`capitalize ${filter === s ? 'filter-chip-active' : 'filter-chip'}`}
           >
             {s ? s.replace(/_/g, ' ') : 'All'}
           </button>
@@ -71,26 +68,22 @@ export default function SupportTicketsPage() {
 
       <div className="mt-6 space-y-2">
         {items.map((t) => (
-          <Link
-            key={t._id}
-            href={`/support/${t._id}`}
-            className="block rounded-xl border bg-white p-4 shadow-sm hover:border-indigo-300"
-          >
-            <div className="flex justify-between gap-4">
-              <p className="font-medium">{t.subject}</p>
+          <Link key={t._id} href={`/support/${t._id}`} className="list-row block">
+            <div className="flex w-full justify-between gap-4">
+              <p className="font-medium text-slate-900">{t.subject}</p>
               <span
-                className={`shrink-0 rounded px-2 py-0.5 text-xs capitalize ${
+                className={
                   t.priority === 'high'
-                    ? 'bg-red-100 text-red-800'
+                    ? 'badge-danger shrink-0 capitalize'
                     : t.priority === 'medium'
-                      ? 'bg-amber-100 text-amber-800'
-                      : 'bg-slate-100'
-                }`}
+                      ? 'badge-warning shrink-0 capitalize'
+                      : 'badge-neutral shrink-0 capitalize'
+                }
               >
                 {t.priority}
               </span>
             </div>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-muted">
               {t.customerEmail ?? 'No email'} ·{' '}
               <span className="capitalize">{t.status.replace(/_/g, ' ')}</span>
               {t.type === 'lost_item' && ' · Lost item'}
@@ -98,7 +91,7 @@ export default function SupportTicketsPage() {
           </Link>
         ))}
         {!loading && !error && items.length === 0 && (
-          <p className="text-sm text-slate-500">No tickets match this filter.</p>
+          <p className="text-sm text-muted">No tickets match this filter.</p>
         )}
       </div>
     </div>

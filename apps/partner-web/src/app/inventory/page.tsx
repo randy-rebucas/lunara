@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { DataPageStatus } from '../../components/data-page-status';
+import { PageHeader } from '../../components/ui/page-header';
 import { isPartnerRole, partnerFetch } from '../../lib/partner-api';
 import { usePartnerQuery } from '../../lib/use-partner-query';
 
@@ -52,15 +53,15 @@ export default function InventoryPage() {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold">Manage inventory</h2>
-      <p className="mt-1 text-sm text-slate-500">
-        Detergent, bags, tags, and shop supplies. Low-stock items are highlighted on the dashboard.
-      </p>
+      <PageHeader
+        title="Inventory"
+        description="Detergent, bags, tags, and shop supplies. Low-stock items are highlighted on the dashboard."
+      />
 
       <div className="mt-4">
         <DataPageStatus loading={loading} error={error} loadingMessage="Loading inventory…" />
       </div>
-      {actionError && <p className="mt-2 text-sm text-red-500">{actionError}</p>}
+      {actionError && <div className="alert-error mt-2">{actionError}</div>}
 
       <div className="mt-6 space-y-3">
         {(items ?? []).map((item) => {
@@ -68,31 +69,29 @@ export default function InventoryPage() {
           return (
             <div
               key={item._id}
-              className={`flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-white p-4 ${
-                low ? 'border-amber-300 bg-amber-50' : ''
-              }`}
+              className={`list-row flex-wrap ${low ? 'ring-amber-300/60 bg-amber-50/40' : ''}`}
             >
               <div>
-                <p className="font-medium">{item.name}</p>
-                <p className="text-xs text-slate-500">
+                <p className="font-medium text-slate-900">{item.name}</p>
+                <p className="text-xs text-muted">
                   {item.sku} · {item.category} · alert at ≤ {item.lowStockThreshold} {item.unit}
                 </p>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  className="rounded border px-3 py-1 text-sm"
+                  className="btn-outline btn-sm min-w-[2.5rem]"
                   disabled={saving === item._id}
                   onClick={() => updateQty(item._id, Math.max(0, item.quantity - 1))}
                 >
                   −
                 </button>
-                <span className="min-w-[4rem] text-center font-semibold">
+                <span className="min-w-[4rem] text-center font-semibold text-slate-900">
                   {item.quantity} {item.unit}
                 </span>
                 <button
                   type="button"
-                  className="rounded border px-3 py-1 text-sm"
+                  className="btn-outline btn-sm min-w-[2.5rem]"
                   disabled={saving === item._id}
                   onClick={() => updateQty(item._id, item.quantity + 1)}
                 >
@@ -103,7 +102,7 @@ export default function InventoryPage() {
           );
         })}
         {!loading && !error && (items ?? []).length === 0 && (
-          <p className="text-slate-500">No inventory items found.</p>
+          <p className="text-sm text-muted">No inventory items found.</p>
         )}
       </div>
     </div>

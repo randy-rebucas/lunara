@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
+import { PageHeader } from '../../components/ui/page-header';
+import { LiveBadge } from '../../components/ui/stat-card';
 import { adminFetch } from '../../lib/admin-api';
 import {
   type DispatcherAlert,
@@ -63,10 +65,10 @@ interface DispatchDashboard {
 }
 
 const RIDER_STATUS_CLASS: Record<string, string> = {
-  Available: 'bg-emerald-100 text-emerald-800',
-  Pickup: 'bg-amber-100 text-amber-800',
-  Delivery: 'bg-indigo-100 text-indigo-800',
-  Offline: 'bg-slate-100 text-slate-600',
+  Available: 'badge-accent',
+  Pickup: 'badge-warning',
+  Delivery: 'badge-primary',
+  Offline: 'badge-neutral',
 };
 
 export default function AdminDispatchDashboardPage() {
@@ -150,87 +152,68 @@ export default function AdminDispatchDashboardPage() {
     }
   }
 
-  if (loading) return <p className="text-slate-500">Loading dispatch dashboard…</p>;
-  if (!data) return <p className="text-red-600">{error || 'No data'}</p>;
+  if (loading) {
+    return (
+      <div>
+        <PageHeader title="Dispatch" description="Incoming queue, shop capacity, and rider availability." />
+        <p className="text-sm text-muted">Loading dispatch dashboard…</p>
+      </div>
+    );
+  }
+  if (!data) return <div className="alert-error">{error || 'No data'}</div>;
 
   return (
     <div className="space-y-10">
-      <div>
-        <div className="flex flex-wrap items-center gap-3">
-          <h2 className="text-2xl font-bold text-slate-900">Admin dispatch dashboard</h2>
-          {socketLive ? (
-            <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
-              ● Live
-            </span>
-          ) : null}
-        </div>
-        <p className="mt-1 text-sm text-slate-500">
-          Incoming queue, shop capacity (kg), and rider availability — balance workload across
-          branches.
-        </p>
-        <div className="mt-4 flex flex-wrap gap-3 text-sm">
-          <span className="rounded-lg bg-white px-3 py-1.5 shadow-sm ring-1 ring-slate-200">
-            {data.counts.incoming} in queue
-          </span>
-          <span className="rounded-lg bg-amber-50 px-3 py-1.5 text-amber-900 ring-1 ring-amber-200">
-            {data.counts.needsShop} need shop
-          </span>
-          <span className="rounded-lg bg-indigo-50 px-3 py-1.5 text-indigo-900 ring-1 ring-indigo-200">
-            {data.counts.needsPickupRider} need pickup rider
-          </span>
-          <span className="rounded-lg bg-emerald-50 px-3 py-1.5 text-emerald-900 ring-1 ring-emerald-200">
-            {data.counts.needsDeliveryRider} need delivery rider
-          </span>
-          <button
-            type="button"
-            onClick={load}
-            className="rounded-lg border px-3 py-1.5 text-slate-600 hover:bg-slate-50"
-          >
+      <PageHeader
+        title="Dispatch"
+        description="Incoming queue, shop capacity (kg), and rider availability — balance workload across branches."
+        badge={socketLive ? <LiveBadge /> : undefined}
+        actions={
+          <button type="button" onClick={load} className="btn-outline btn-sm">
             Refresh
           </button>
-        </div>
+        }
+      />
+
+      <div className="flex flex-wrap gap-3 text-sm">
+        <span className="filter-chip">{data.counts.incoming} in queue</span>
+        <span className="badge-warning px-3 py-1.5">{data.counts.needsShop} need shop</span>
+        <span className="badge-primary px-3 py-1.5">{data.counts.needsPickupRider} need pickup rider</span>
+        <span className="badge-accent px-3 py-1.5">{data.counts.needsDeliveryRider} need delivery rider</span>
       </div>
 
       {liveAlert?.message && (
-        <div className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
+        <div className="alert-info flex flex-wrap items-start justify-between gap-3">
           <p>
             <span className="font-medium">Dispatcher alert:</span> {liveAlert.message}
             {liveAlert.orderId ? (
               <>
                 {' '}
-                <Link href={`/orders/${liveAlert.orderId}`} className="underline">
+                <Link href={`/orders/${liveAlert.orderId}`} className="link-primary underline">
                   View order
                 </Link>
               </>
             ) : null}
           </p>
-          <button
-            type="button"
-            className="text-indigo-700 hover:text-indigo-900"
-            onClick={() => setLiveAlert(null)}
-          >
+          <button type="button" className="link-primary" onClick={() => setLiveAlert(null)}>
             Dismiss
           </button>
         </div>
       )}
 
-      {error && (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">
-          {error}
-        </p>
-      )}
+      {error && <div className="alert-error">{error}</div>}
 
-      <section className="rounded-xl bg-white shadow-sm ring-1 ring-slate-200">
-        <div className="border-b px-6 py-4">
-          <h3 className="text-lg font-semibold">Incoming orders queue</h3>
-          <p className="text-sm text-slate-500">
+      <section className="section-panel">
+        <div className="section-panel-header">
+          <h3 className="text-lg font-semibold text-slate-900">Incoming orders queue</h3>
+          <p className="text-sm text-muted">
             Orders needing shop assignment, pickup rider, or delivery rider
           </p>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[800px] text-left text-sm">
+          <table className="data-table min-w-[800px]">
             <thead>
-              <tr className="border-b bg-slate-50 text-slate-600">
+              <tr>
                 <th className="px-6 py-3 font-medium">Order</th>
                 <th className="px-4 py-3 font-medium">Customer</th>
                 <th className="px-4 py-3 font-medium">Area</th>
@@ -248,8 +231,8 @@ export default function AdminDispatchDashboardPage() {
                 </tr>
               ) : (
                 data.incomingOrders.map((row) => (
-                  <tr key={row.orderId} className="border-b last:border-0 hover:bg-slate-50/50">
-                    <td className="px-6 py-3">
+                  <tr key={row.orderId}>
+                    <td className="!pl-6">
                       <span className="font-mono text-xs text-slate-500">{row.orderLabel}</span>
                       {row.branchName && (
                         <p className="text-xs text-slate-400">{row.branchName}</p>
@@ -259,19 +242,16 @@ export default function AdminDispatchDashboardPage() {
                     <td className="px-4 py-3">{row.area}</td>
                     <td className="px-4 py-3">{row.weightKg} kg</td>
                     <td className="px-4 py-3 capitalize">{row.statusLabel}</td>
-                    <td className="px-6 py-3">
+                    <td className="!pr-6">
                       <div className="flex flex-wrap gap-2">
-                        <Link
-                          href={`/orders/${row.orderId}`}
-                          className="rounded border px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-50"
-                        >
+                        <Link href={`/orders/${row.orderId}`} className="btn-outline btn-sm">
                           View order
                         </Link>
                         {row.canAssignShop && (
                           <button
                             type="button"
                             onClick={() => openShopAssign(row.orderId)}
-                            className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-900"
+                            className="badge-warning px-2 py-1 text-xs font-medium hover:opacity-90"
                           >
                             Assign shop
                           </button>
@@ -279,7 +259,7 @@ export default function AdminDispatchDashboardPage() {
                         {(row.canAssignPickupRider || row.canAssignDeliveryRider) && (
                           <Link
                             href={`/orders/${row.orderId}`}
-                            className="rounded border border-indigo-300 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-900"
+                            className="badge-primary px-2 py-1 text-xs font-medium hover:opacity-90"
                           >
                             Assign rider
                           </Link>
@@ -295,11 +275,11 @@ export default function AdminDispatchDashboardPage() {
       </section>
 
       {shopAssignOrderId && (
-        <section className="rounded-xl border-2 border-amber-200 bg-amber-50/30 p-6">
+        <section className="rounded-xl border-2 border-amber-200/80 bg-amber-50/40 p-6 ring-1 ring-amber-100">
           <h3 className="font-semibold text-amber-900">Assign laundry shop</h3>
-          <p className="mt-1 text-sm text-slate-600">Order {shopAssignOrderId.slice(-8)}</p>
+          <p className="mt-1 text-sm text-muted">Order {shopAssignOrderId.slice(-8)}</p>
           <select
-            className="mt-4 w-full max-w-md rounded border bg-white px-3 py-2 text-sm"
+            className="input-field mt-4 max-w-md"
             value={selectedBranch}
             onChange={(e) => setSelectedBranch(e.target.value)}
           >
@@ -320,15 +300,11 @@ export default function AdminDispatchDashboardPage() {
               type="button"
               disabled={assigning || !selectedBranch}
               onClick={assignShop}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              className="btn-primary"
             >
               Confirm assign shop
             </button>
-            <button
-              type="button"
-              onClick={() => setShopAssignOrderId(null)}
-              className="rounded-lg border px-4 py-2 text-sm"
-            >
+            <button type="button" onClick={() => setShopAssignOrderId(null)} className="btn-outline">
               Cancel
             </button>
           </div>
@@ -336,15 +312,15 @@ export default function AdminDispatchDashboardPage() {
       )}
 
       <div className="grid gap-8 lg:grid-cols-2">
-        <section className="rounded-xl bg-white shadow-sm ring-1 ring-slate-200">
-          <div className="border-b px-6 py-4">
-            <h3 className="text-lg font-semibold">Shop capacity board</h3>
-            <p className="text-sm text-slate-500">Balance workload by weight (kg)</p>
+        <section className="section-panel">
+          <div className="section-panel-header">
+            <h3 className="text-lg font-semibold text-slate-900">Shop capacity board</h3>
+            <p className="text-sm text-muted">Balance workload by weight (kg)</p>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="data-table">
               <thead>
-                <tr className="border-b bg-slate-50 text-slate-600">
+                <tr>
                   <th className="px-6 py-3 font-medium">Shop</th>
                   <th className="px-4 py-3 font-medium">Capacity</th>
                   <th className="px-4 py-3 font-medium">Current load</th>
@@ -353,11 +329,8 @@ export default function AdminDispatchDashboardPage() {
               </thead>
               <tbody>
                 {data.shopCapacityBoard.map((s) => (
-                  <tr
-                    key={s.branchId}
-                    className={`border-b last:border-0 ${s.isOverCapacity ? 'bg-red-50' : ''}`}
-                  >
-                    <td className="px-6 py-3 font-medium">
+                  <tr key={s.branchId} className={s.isOverCapacity ? 'bg-red-50/80' : ''}>
+                    <td className="!pl-6 font-medium">
                       {s.shop}
                       <span className="ml-1 text-xs font-normal text-slate-400">{s.code}</span>
                     </td>
@@ -367,7 +340,7 @@ export default function AdminDispatchDashboardPage() {
                       <div className="flex items-center gap-2">
                         <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-200">
                           <div
-                            className={`h-full ${s.isOverCapacity ? 'bg-red-500' : 'bg-indigo-500'}`}
+                            className={`h-full ${s.isOverCapacity ? 'bg-destructive' : 'bg-primary'}`}
                             style={{ width: `${Math.min(100, s.utilizationPercent)}%` }}
                           />
                         </div>
@@ -381,15 +354,15 @@ export default function AdminDispatchDashboardPage() {
           </div>
         </section>
 
-        <section className="rounded-xl bg-white shadow-sm ring-1 ring-slate-200">
-          <div className="border-b px-6 py-4">
-            <h3 className="text-lg font-semibold">Rider board</h3>
-            <p className="text-sm text-slate-500">Live assignment status</p>
+        <section className="section-panel">
+          <div className="section-panel-header">
+            <h3 className="text-lg font-semibold text-slate-900">Rider board</h3>
+            <p className="text-sm text-muted">Live assignment status</p>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="data-table">
               <thead>
-                <tr className="border-b bg-slate-50 text-slate-600">
+                <tr>
                   <th className="px-6 py-3 font-medium">Rider</th>
                   <th className="px-4 py-3 font-medium">Status</th>
                   <th className="px-4 py-3 font-medium">Active order</th>
@@ -397,19 +370,15 @@ export default function AdminDispatchDashboardPage() {
               </thead>
               <tbody>
                 {data.riderBoard.map((r) => (
-                  <tr key={r.riderId} className="border-b last:border-0">
-                    <td className="px-6 py-3">
+                  <tr key={r.riderId}>
+                    <td className="!pl-6">
                       <span className="font-medium">{r.rider}</span>
                       {!r.isOnline && (
                         <span className="ml-2 text-xs text-slate-400">offline</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                          RIDER_STATUS_CLASS[r.boardStatus] ?? RIDER_STATUS_CLASS.Offline
-                        }`}
-                      >
+                      <span className={RIDER_STATUS_CLASS[r.boardStatus] ?? RIDER_STATUS_CLASS.Offline}>
                         {r.boardStatus}
                       </span>
                     </td>
@@ -417,7 +386,7 @@ export default function AdminDispatchDashboardPage() {
                       {r.activeOrderId ? (
                         <Link
                           href={`/orders/${r.activeOrderId}`}
-                          className="font-mono text-xs text-indigo-600 hover:underline"
+                          className="link-primary font-mono text-xs"
                         >
                           {r.activeOrderId.slice(-8)}
                         </Link>

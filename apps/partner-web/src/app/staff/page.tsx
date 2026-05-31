@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { DataPageStatus } from '../../components/data-page-status';
+import { PageHeader } from '../../components/ui/page-header';
 import { isPartnerRole, partnerFetch } from '../../lib/partner-api';
 import { usePartnerQuery } from '../../lib/use-partner-query';
 
@@ -32,51 +33,43 @@ export default function AssignStaffPage() {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold">Assign staff</h2>
-      <p className="mt-1 text-sm text-slate-500">
-        View team workload. Open an incoming order to assign a staff member.
-      </p>
-
-      <Link
-        href="/orders/incoming"
-        className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white"
-      >
-        View incoming orders →
-      </Link>
+      <PageHeader
+        title="Assign staff"
+        description="View team workload. Open an incoming order to assign a staff member."
+        actions={
+          <Link href="/orders/incoming" className="btn-primary">
+            View incoming orders →
+          </Link>
+        }
+      />
 
       <div className="mt-4">
         <DataPageStatus loading={loading} error={error} loadingMessage="Loading staff…" />
       </div>
 
-      <div className="mt-8 overflow-hidden rounded-xl border bg-white">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b bg-slate-50">
+      <div className="section-panel mt-8 overflow-hidden">
+        <table className="data-table">
+          <thead>
             <tr>
-              <th className="px-4 py-3 font-medium">Staff</th>
-              <th className="px-4 py-3 font-medium">Phone</th>
-              <th className="px-4 py-3 font-medium">Active jobs</th>
+              <th>Staff</th>
+              <th>Phone</th>
+              <th>Active jobs</th>
             </tr>
           </thead>
           <tbody>
             {(staff ?? []).map((s) => (
-              <tr key={s._id} className="border-b last:border-0">
-                <td className="px-4 py-3">{s.email ?? s._id}</td>
-                <td className="px-4 py-3 text-slate-500">{s.phone ?? '—'}</td>
-                <td className="px-4 py-3">
-                  <span
-                    className={
-                      s.activeJobs > 3 ? 'font-medium text-amber-600' : 'text-slate-700'
-                    }
-                  >
-                    {s.activeJobs}
-                  </span>
+              <tr key={s._id}>
+                <td className="text-slate-900">{s.email ?? s._id}</td>
+                <td className="text-muted">{s.phone ?? '—'}</td>
+                <td>
+                  <span className={s.activeJobs > 3 ? 'badge-warning' : 'badge-neutral'}>{s.activeJobs}</span>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
         {!loading && !error && (staff ?? []).length === 0 && (
-          <p className="p-6 text-slate-500">No staff accounts. Run API seed.</p>
+          <p className="p-6 text-sm text-muted">No staff accounts. Run API seed.</p>
         )}
       </div>
     </div>

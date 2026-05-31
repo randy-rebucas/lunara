@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
+import { PageHeader } from '../../../../components/ui/page-header';
 import { partnerFetch } from '../../../../lib/partner-api';
 
 interface ReceivingView {
@@ -76,7 +77,7 @@ export default function ShopReceivingPage() {
   }
 
   if (!view) {
-    return error ? <p className="text-red-500">{error}</p> : <p>Loading…</p>;
+    return error ? <div className="alert-error">{error}</div> : <p className="text-sm text-muted">Loading…</p>;
   }
 
   const est = view.order.estimatedWeightKg;
@@ -84,29 +85,33 @@ export default function ShopReceivingPage() {
 
   return (
     <div>
-      <Link href="/orders/incoming" className="text-sm text-slate-500 hover:text-primary">
-        ← Incoming orders
-      </Link>
+      <PageHeader
+        title="Shop receiving"
+        backHref="/orders/incoming"
+        backLabel="Incoming orders"
+        description={
+          <>
+            <span className="capitalize">{view.order.bookingType.replace(/_/g, ' ')}</span>
+            {' · '}
+            <span className="capitalize">{view.order.status.replace(/_/g, ' ')}</span>
+            {view.order.branchName ? ` · ${view.order.branchName}` : ''}
+          </>
+        }
+      />
 
-      <h2 className="mt-4 text-2xl font-bold">Shop receiving</h2>
-      <p className="mt-1 text-sm capitalize text-slate-500">
-        {view.order.bookingType.replace(/_/g, ' ')} · {view.order.status.replace(/_/g, ' ')}
-        {view.order.branchName ? ` · ${view.order.branchName}` : ''}
-      </p>
-
-      <ol className="mt-6 space-y-2">
+      <ol className="space-y-2">
         {view.workflowSteps.map((label, i) => {
           const state =
             i < view.workflowStep ? 'done' : i === view.workflowStep ? 'current' : 'upcoming';
           return (
             <li
               key={label}
-              className={`rounded-lg border px-4 py-3 text-sm ${
+              className={`rounded-lg px-4 py-3 text-sm ring-1 ${
                 state === 'current'
-                  ? 'border-primary bg-primary/5 font-medium'
+                  ? 'bg-primary/5 font-medium text-primary ring-primary/30'
                   : state === 'done'
-                    ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                    : 'border-slate-200 text-slate-400'
+                    ? 'bg-accent/10 text-accent ring-accent/30'
+                    : 'text-muted-foreground ring-border/50'
               }`}
             >
               {i + 1}. {label}
@@ -116,19 +121,20 @@ export default function ShopReceivingPage() {
       </ol>
 
       {view.order.pickup?.receiptCode && (
-        <p className="mt-4 text-sm text-slate-600">
-          Pickup receipt: <span className="font-mono font-semibold">{view.order.pickup.receiptCode}</span>
+        <p className="mt-4 text-sm text-muted">
+          Pickup receipt:{' '}
+          <span className="font-mono font-semibold text-slate-900">{view.order.pickup.receiptCode}</span>
         </p>
       )}
 
-      {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
+      {error && <div className="alert-error mt-4">{error}</div>}
 
       {view.canReceive && (
-        <div className="mt-6 rounded-xl border bg-white p-5">
-          <h3 className="font-semibold">Receive laundry</h3>
-          <p className="mt-1 text-sm text-slate-500">Confirm bags arrived from the rider.</p>
+        <div className="card card-body mt-6 !py-5">
+          <h3 className="font-semibold text-slate-900">Receive laundry</h3>
+          <p className="mt-1 text-sm text-muted">Confirm bags arrived from the rider.</p>
           <input
-            className="mt-3 w-full rounded-lg border px-3 py-2 text-sm"
+            className="input-field mt-3"
             placeholder="Note (optional)"
             value={note}
             onChange={(e) => setNote(e.target.value)}
@@ -136,7 +142,7 @@ export default function ShopReceivingPage() {
           <button
             type="button"
             disabled={loading}
-            className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white"
+            className="btn-primary mt-4"
             onClick={() => run('receive', { note: note || undefined })}
           >
             Receive laundry
@@ -145,14 +151,14 @@ export default function ShopReceivingPage() {
       )}
 
       {view.canVerifyWeight && (
-        <div className="mt-6 rounded-xl border bg-white p-5">
-          <h3 className="font-semibold">Verify weight</h3>
-          <p className="mt-1 text-sm text-slate-500">
+        <div className="card card-body mt-6 !py-5">
+          <h3 className="font-semibold text-slate-900">Verify weight</h3>
+          <p className="mt-1 text-sm text-muted">
             {est != null && `Customer estimate: ${est} kg`}
             {riderWt != null && ` · Rider weighed: ${riderWt} kg`}
           </p>
           <input
-            className="mt-3 w-full rounded-lg border px-3 py-2 text-sm"
+            className="input-field mt-3"
             type="number"
             step="0.1"
             placeholder="Verified weight (kg)"
@@ -162,7 +168,7 @@ export default function ShopReceivingPage() {
           <button
             type="button"
             disabled={loading || !weight}
-            className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white"
+            className="btn-primary mt-4"
             onClick={() =>
               run('verify-weight', { verifiedWeightKg: Number(weight), note: note || undefined })
             }
@@ -173,13 +179,13 @@ export default function ShopReceivingPage() {
       )}
 
       {view.canConfirmItems && (
-        <div className="mt-6 rounded-xl border bg-white p-5">
-          <h3 className="font-semibold">Confirm items</h3>
-          <p className="mt-1 text-sm text-slate-500">
+        <div className="card card-body mt-6 !py-5">
+          <h3 className="font-semibold text-slate-900">Confirm items</h3>
+          <p className="mt-1 text-sm text-muted">
             Count bags/pieces. Status becomes <span className="font-mono">received_at_shop</span>.
           </p>
           <input
-            className="mt-3 w-full rounded-lg border px-3 py-2 text-sm"
+            className="input-field mt-3"
             type="number"
             min={1}
             value={itemCount}
@@ -188,7 +194,7 @@ export default function ShopReceivingPage() {
           <button
             type="button"
             disabled={loading}
-            className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white"
+            className="btn-primary mt-4"
             onClick={() =>
               run('confirm-items', {
                 itemCount: Number(itemCount),
@@ -202,17 +208,14 @@ export default function ShopReceivingPage() {
       )}
 
       {view.isComplete && (
-        <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-5">
-          <p className="font-semibold text-emerald-800">Received at shop</p>
-          <p className="mt-1 text-sm text-emerald-700">
+        <div className="mt-6 rounded-xl bg-accent/10 p-5 ring-1 ring-accent/30">
+          <p className="font-semibold text-accent">Received at shop</p>
+          <p className="mt-1 text-sm text-muted">
             {view.shopReceiving?.verifiedWeightKg != null &&
               `Verified ${view.shopReceiving.verifiedWeightKg} kg`}
             {view.shopReceiving?.itemCount != null && ` · ${view.shopReceiving.itemCount} item(s)`}
           </p>
-          <Link
-            href={`/orders/${id}`}
-            className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white"
-          >
+          <Link href={`/orders/${id}`} className="btn-primary mt-4 inline-flex">
             Start laundry processing →
           </Link>
         </div>

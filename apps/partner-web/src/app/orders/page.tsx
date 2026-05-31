@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useCallback, useState } from 'react';
 import { LAUNDRY_PROCESSING_STEPS } from '@lunara/utils';
 import { DataPageStatus } from '../../components/data-page-status';
+import { PageHeader } from '../../components/ui/page-header';
 import { partnerFetch } from '../../lib/partner-api';
 import { usePartnerQuery } from '../../lib/use-partner-query';
 
@@ -57,82 +58,70 @@ export default function StaffOrdersPage() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold">Processing queue</h2>
-          <p className="mt-1 text-sm text-slate-500">{STAFF_JOURNEY.join(' → ')}</p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            className={`rounded px-4 py-2 text-sm ${mineOnly ? 'bg-primary text-white' : 'border bg-white'}`}
-            onClick={() => setMineOnly((m) => !m)}
-          >
-            {mineOnly ? 'My jobs' : 'All jobs'}
-          </button>
-          <button
-            type="button"
-            className="rounded bg-primary px-4 py-2 text-sm text-white"
-            onClick={() => reload()}
-          >
-            Refresh
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Processing queue"
+        description={STAFF_JOURNEY.join(' → ')}
+        actions={
+          <>
+            <button
+              type="button"
+              className={mineOnly ? 'filter-chip-active' : 'filter-chip'}
+              onClick={() => setMineOnly((m) => !m)}
+            >
+              {mineOnly ? 'My jobs' : 'All jobs'}
+            </button>
+            <button type="button" className="btn-primary btn-sm" onClick={() => reload()}>
+              Refresh
+            </button>
+          </>
+        }
+      />
 
       <div className="mt-4">
         <DataPageStatus loading={loading} error={error} loadingMessage="Loading queue…" />
       </div>
-      {actionError && <p className="mt-2 text-sm text-red-500">{actionError}</p>}
+      {actionError && <div className="alert-error mt-2">{actionError}</div>}
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {LAUNDRY_PROCESSING_STEPS.filter((s) => s.orderStatus).map((step) => (
-          <div key={step.id} className="rounded-lg border bg-white p-3">
-            <p className="text-xs capitalize text-slate-500">{step.orderStatus!.replace(/_/g, ' ')}</p>
-            <p className="text-xl font-semibold">{counts[step.orderStatus!] ?? 0}</p>
+          <div key={step.id} className="stat-card !p-3">
+            <p className="text-xs capitalize text-muted">{step.orderStatus!.replace(/_/g, ' ')}</p>
+            <p className="text-xl font-semibold text-slate-900">{counts[step.orderStatus!] ?? 0}</p>
           </div>
         ))}
-        <div className="rounded-lg border bg-amber-50 p-3">
-          <p className="text-xs text-slate-500">Awaiting intake</p>
-          <p className="text-xl font-semibold">{counts.picked_up ?? 0}</p>
+        <div className="stat-card-warning !p-3">
+          <p className="text-xs text-muted">Awaiting intake</p>
+          <p className="text-xl font-semibold text-slate-900">{counts.picked_up ?? 0}</p>
         </div>
       </div>
 
       <div className="mt-8 space-y-3">
         {orders.length === 0 ? (
-          <p className="text-slate-500">No orders in the processing queue.</p>
+          <p className="text-sm text-muted">No orders in the processing queue.</p>
         ) : (
           orders.map((o) => (
-            <div
-              key={o._id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-white p-4"
-            >
+            <div key={o._id} className="list-row flex-wrap">
               <Link href={`/orders/${o._id}`} className="min-w-0 flex-1 hover:text-primary">
-                <p className="font-medium capitalize">{o.bookingType.replace(/_/g, ' ')}</p>
-                <p className="text-sm capitalize text-slate-500">
+                <p className="font-medium capitalize text-slate-900">{o.bookingType.replace(/_/g, ' ')}</p>
+                <p className="text-sm capitalize text-muted">
                   {o.status.replace(/_/g, ' ')} · {o.currentStepLabel}
                 </p>
-                <p className="mt-1 text-xs text-slate-400">
+                <p className="mt-1 text-xs text-muted-foreground">
                   {o.isAssigned ? 'Assigned' : 'Open — accept to start'}
                 </p>
               </Link>
               <div className="flex items-center gap-3">
-                <div className="text-right">
-                  <p className="text-sm font-medium text-primary">{o.progress}%</p>
-                </div>
+                <p className="text-sm font-medium text-primary">{o.progress}%</p>
                 {!o.isAssigned && (
                   <button
                     type="button"
-                    className="rounded-lg bg-accent px-3 py-2 text-xs font-medium text-white"
+                    className="btn-accent btn-sm"
                     onClick={(e) => acceptJob(o._id, e)}
                   >
                     Accept job
                   </button>
                 )}
-                <Link
-                  href={`/orders/${o._id}`}
-                  className="rounded-lg border border-primary px-3 py-2 text-xs font-medium text-primary"
-                >
+                <Link href={`/orders/${o._id}`} className="btn-outline btn-sm text-primary ring-primary/30">
                   Process →
                 </Link>
               </div>

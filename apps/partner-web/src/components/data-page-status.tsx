@@ -7,7 +7,19 @@ export function DataPageStatus({
   error: string;
   loadingMessage?: string;
 }) {
-  if (error) return <p className="text-sm text-red-500">{error}</p>;
-  if (loading) return <p className="text-sm text-slate-500">{loadingMessage}</p>;
+  if (error) {
+    return <div className="alert-error">{error}</div>;
+  }
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-muted">
+        <span
+          className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary/30 border-t-primary"
+          aria-hidden
+        />
+        {loadingMessage}
+      </div>
+    );
+  }
   return null;
 }

@@ -2,6 +2,8 @@
 
 import { useCallback, useState } from 'react';
 import { DataPageStatus } from '../../components/data-page-status';
+import { Card, CardBody } from '../../components/ui/card';
+import { PageHeader } from '../../components/ui/page-header';
 import { adminFetch } from '../../lib/admin-api';
 import { useAdminQuery } from '../../lib/use-admin-query';
 
@@ -70,78 +72,71 @@ export default function PromotionsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold">Manage promotions</h2>
-          <p className="mt-1 text-sm text-slate-500">Create and enable promo codes for customers.</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setShowForm(!showForm)}
-          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white"
-        >
-          {showForm ? 'Cancel' : 'New promotion'}
-        </button>
-      </div>
+      <PageHeader
+        title="Promotions"
+        description="Create and enable promo codes for customers."
+        actions={
+          <button type="button" onClick={() => setShowForm(!showForm)} className="btn-primary">
+            {showForm ? 'Cancel' : 'New promotion'}
+          </button>
+        }
+      />
 
       <div className="mt-4">
         <DataPageStatus loading={loading} error={error} loadingMessage="Loading promotions…" />
       </div>
-      {actionError && <p className="mt-2 text-sm text-red-500">{actionError}</p>}
+      {actionError && <div className="alert-error mt-2">{actionError}</div>}
 
       {showForm && (
-        <form onSubmit={create} className="mt-6 max-w-md space-y-3 rounded-xl border bg-white p-6 shadow-sm">
-          <input
-            className="w-full rounded border px-3 py-2 text-sm"
-            placeholder="Code (e.g. SUMMER20)"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            required
-          />
-          <input
-            className="w-full rounded border px-3 py-2 text-sm"
-            placeholder="Title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            required
-          />
-          <div className="flex gap-2">
-            <select
-              className="rounded border px-3 py-2 text-sm"
-              value={discountType}
-              onChange={(e) => setDiscountType(e.target.value as 'percent' | 'fixed')}
-            >
-              <option value="percent">Percent</option>
-              <option value="fixed">Fixed ₱</option>
-            </select>
-            <input
-              className="flex-1 rounded border px-3 py-2 text-sm"
-              type="number"
-              value={discountValue}
-              onChange={(e) => setDiscountValue(e.target.value)}
-              required
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={saving}
-            className="w-full rounded-lg bg-indigo-600 py-2 text-sm text-white disabled:opacity-50"
-          >
-            Create
-          </button>
-        </form>
+        <Card className="mt-6 max-w-md">
+          <CardBody>
+            <form onSubmit={create} className="space-y-3">
+              <input
+                className="input-field"
+                placeholder="Code (e.g. SUMMER20)"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                required
+              />
+              <input
+                className="input-field"
+                placeholder="Title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                required
+              />
+              <div className="flex gap-2">
+                <select
+                  className="input-field w-auto"
+                  value={discountType}
+                  onChange={(e) => setDiscountType(e.target.value as 'percent' | 'fixed')}
+                >
+                  <option value="percent">Percent</option>
+                  <option value="fixed">Fixed ₱</option>
+                </select>
+                <input
+                  className="input-field flex-1"
+                  type="number"
+                  value={discountValue}
+                  onChange={(e) => setDiscountValue(e.target.value)}
+                  required
+                />
+              </div>
+              <button type="submit" disabled={saving} className="btn-primary w-full">
+                Create
+              </button>
+            </form>
+          </CardBody>
+        </Card>
       )}
 
       <div className="mt-6 space-y-3">
         {(items ?? []).map((p) => (
-          <div
-            key={p._id}
-            className="flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-white p-5 shadow-sm"
-          >
+          <div key={p._id} className="card card-body flex flex-wrap items-center justify-between gap-4 !py-5">
             <div>
-              <p className="font-mono font-bold text-indigo-600">{p.code}</p>
-              <p className="font-medium">{p.title}</p>
-              <p className="text-sm text-slate-500">
+              <p className="font-mono font-bold text-primary">{p.code}</p>
+              <p className="font-medium text-slate-900">{p.title}</p>
+              <p className="text-sm text-muted">
                 {p.discountType === 'percent' ? `${p.discountValue}%` : `₱${p.discountValue}`} off
                 {p.minOrderAmount > 0 ? ` · min ₱${p.minOrderAmount}` : ''}
               </p>
@@ -149,18 +144,14 @@ export default function PromotionsPage() {
             <button
               type="button"
               onClick={() => toggleActive(p)}
-              className={`rounded-lg px-4 py-2 text-sm font-medium ${
-                p.isActive
-                  ? 'bg-green-100 text-green-800'
-                  : 'bg-slate-100 text-slate-600'
-              }`}
+              className={p.isActive ? 'badge-accent px-4 py-2 text-sm' : 'badge-neutral px-4 py-2 text-sm'}
             >
               {p.isActive ? 'Active' : 'Inactive'}
             </button>
           </div>
         ))}
         {!loading && !error && (items ?? []).length === 0 && (
-          <p className="text-slate-500">No promotions yet.</p>
+          <p className="text-sm text-muted">No promotions yet.</p>
         )}
       </div>
     </div>

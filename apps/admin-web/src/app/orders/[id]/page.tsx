@@ -82,7 +82,7 @@ export default function AdminOrderOpsPage() {
   if (loading || loadError || !data) {
     return (
       <div>
-        <Link href="/orders" className="text-sm text-indigo-600">
+        <Link href="/orders" className="text-sm text-primary">
           ← Orders
         </Link>
         <DataPageStatus loading={loading} error={loadError} loadingMessage="Loading order…" />
@@ -94,7 +94,7 @@ export default function AdminOrderOpsPage() {
 
   return (
     <div>
-      <Link href="/orders" className="text-sm text-indigo-600">
+      <Link href="/orders" className="text-sm text-primary">
         ← Orders
       </Link>
       <h2 className="mt-4 text-2xl font-bold">Order operations</h2>
@@ -130,7 +130,7 @@ export default function AdminOrderOpsPage() {
             </div>
           </dl>
           {o.status === 'pending_dispatch' && (
-            <Link href="/dispatch" className="mt-4 inline-block text-sm font-medium text-indigo-600">
+            <Link href="/dispatch" className="mt-4 inline-block text-sm font-medium text-primary">
               Dispatch to shop →
             </Link>
           )}
@@ -252,7 +252,7 @@ export default function AdminOrderOpsPage() {
                 <button
                   type="button"
                   disabled={busy}
-                  className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                  className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
                   onClick={() =>
                     run(() =>
                       adminFetch(`/admin/operations/orders/${id}/confirm-pickup-rider`, {
@@ -385,7 +385,7 @@ export default function AdminOrderOpsPage() {
         >
           Resolve conflict
         </button>
-        <Link href="/support" className="mt-3 block text-sm text-indigo-600">
+        <Link href="/support" className="mt-3 block text-sm text-primary">
           Open support tickets →
         </Link>
       </div>

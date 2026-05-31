@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { DataPageStatus } from '../../components/data-page-status';
+import { Card, CardBody, StatCard } from '../../components/ui/card';
+import { PageHeader } from '../../components/ui/page-header';
 import { isPartnerRole, partnerFetch } from '../../lib/partner-api';
 import { usePartnerQuery } from '../../lib/use-partner-query';
 
@@ -36,18 +38,15 @@ export default function ReportsPage() {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold">Generate reports</h2>
-      <p className="mt-1 text-sm text-slate-500">Operational summary for the selected period.</p>
+      <PageHeader title="Reports" description="Operational summary for the selected period." />
 
-      <div className="mt-4 flex gap-2">
+      <div className="flex gap-2">
         {[7, 14, 30].map((d) => (
           <button
             key={d}
             type="button"
             onClick={() => setDays(d)}
-            className={`rounded-lg px-4 py-2 text-sm ${
-              days === d ? 'bg-primary text-white' : 'border bg-white text-slate-600'
-            }`}
+            className={days === d ? 'filter-chip-active' : 'filter-chip'}
           >
             {d} days
           </button>
@@ -61,35 +60,15 @@ export default function ReportsPage() {
       {report && (
         <>
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Metric label="Total orders" value={String(report.totalOrders)} />
-            <Metric label="Completed" value={String(report.completedOrders)} />
-            <Metric label="Revenue" value={`₱${report.revenue.toFixed(2)}`} />
-            <Metric label="Avg order value" value={`₱${report.averageOrderValue}`} />
+            <StatCard label="Total orders" value={report.totalOrders} />
+            <StatCard label="Completed" value={report.completedOrders} accent="accent" />
+            <StatCard label="Revenue" value={`₱${report.revenue.toFixed(2)}`} />
+            <StatCard label="Avg order value" value={`₱${report.averageOrderValue}`} accent="secondary" />
           </div>
 
           <div className="mt-8 grid gap-6 lg:grid-cols-2">
-            <section className="rounded-xl border bg-white p-6">
-              <h3 className="font-semibold">Orders by status</h3>
-              <ul className="mt-4 space-y-2 text-sm">
-                {Object.entries(report.ordersByStatus).map(([status, count]) => (
-                  <li key={status} className="flex justify-between capitalize">
-                    <span>{status.replace(/_/g, ' ')}</span>
-                    <span className="font-medium">{count}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-            <section className="rounded-xl border bg-white p-6">
-              <h3 className="font-semibold">Completed by service</h3>
-              <ul className="mt-4 space-y-2 text-sm">
-                {Object.entries(report.completedByService).map(([type, count]) => (
-                  <li key={type} className="flex justify-between capitalize">
-                    <span>{type.replace(/_/g, ' ')}</span>
-                    <span className="font-medium">{count}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
+            <ReportList title="Orders by status" data={report.ordersByStatus} />
+            <ReportList title="Completed by service" data={report.completedByService} />
           </div>
         </>
       )}
@@ -97,11 +76,20 @@ export default function ReportsPage() {
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function ReportList({ title, data }: { title: string; data: Record<string, number> }) {
   return (
-    <div className="rounded-xl border bg-white p-5">
-      <p className="text-sm text-slate-500">{label}</p>
-      <p className="mt-1 text-2xl font-bold">{value}</p>
-    </div>
+    <Card>
+      <CardBody>
+        <h3 className="font-semibold text-slate-900">{title}</h3>
+        <ul className="mt-4 space-y-2 text-sm">
+          {Object.entries(data).map(([key, count]) => (
+            <li key={key} className="flex justify-between capitalize">
+              <span className="text-muted">{key.replace(/_/g, ' ')}</span>
+              <span className="font-medium text-slate-900">{count}</span>
+            </li>
+          ))}
+        </ul>
+      </CardBody>
+    </Card>
   );
 }
