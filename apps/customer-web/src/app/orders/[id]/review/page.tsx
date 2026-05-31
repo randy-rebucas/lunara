@@ -1,11 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Button } from '@lunara/ui';
+import { ButtonLink } from '../../../../components/ui/button-link';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
-import { CustomerNav } from '../../../../components/customer-nav';
+import { PageShell } from '../../../../components/page-shell';
 import { ReviewForm } from '../../../../components/review/review-form';
 import { StarRating } from '../../../../components/review/star-rating';
 import { useRequireOnboardingComplete } from '../../../../hooks/use-require-onboarding';
@@ -25,7 +25,6 @@ interface ReviewStatus {
 
 export default function OrderReviewPage() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
   const { api } = useAuthContext();
   const { isLoading, ready } = useRequireOnboardingComplete();
   const [status, setStatus] = useState<ReviewStatus | null>(null);
@@ -74,12 +73,10 @@ export default function OrderReviewPage() {
   const showPublished = published ?? status?.review;
 
   return (
-    <>
-      <CustomerNav />
-      <main className="mx-auto max-w-lg px-6 py-10">
-        <Link href={`/orders/${id}`} className="text-sm text-slate-500 hover:text-primary">
-          ← Back to order
-        </Link>
+    <PageShell narrow>
+      <Link href={`/orders/${id}`} className="text-sm text-muted transition-colors hover:text-primary">
+        ← Back to order
+      </Link>
 
         <h1 className="mt-4 text-2xl font-bold">Rate your experience</h1>
         <p className="mt-1 text-sm text-slate-500">
@@ -89,7 +86,7 @@ export default function OrderReviewPage() {
         {loadError && <p className="mt-4 text-sm text-red-500">{loadError}</p>}
 
         {status && !status.canReview && !showPublished && (
-          <div className="mt-8 rounded-lg border bg-slate-50 p-5 text-sm text-slate-600">
+          <div className="panel mt-8 bg-slate-50 text-sm text-muted">
             Reviews are available after your order is completed.
             <p className="mt-1 capitalize">Current status: {status.orderStatus.replace(/_/g, ' ')}</p>
             <Link href={`/orders/${id}`} className="mt-3 inline-block text-primary">
@@ -99,13 +96,13 @@ export default function OrderReviewPage() {
         )}
 
         {showForm && (
-          <div className="mt-8 rounded-xl border bg-white p-6">
+          <div className="panel mt-8">
             <ReviewForm onSubmit={handleSubmit} loading={submitting} />
           </div>
         )}
 
         {showPublished && (
-          <div className="mt-8 rounded-xl border border-accent/30 bg-green-50/50 p-6">
+          <div className="panel mt-8 bg-accent/5 ring-1 ring-accent/20">
             <p className="text-center text-sm font-semibold text-accent">Review published</p>
             <p className="mt-2 text-center text-xs text-slate-500">
               Published{' '}
@@ -123,19 +120,16 @@ export default function OrderReviewPage() {
             {showPublished.comment && (
               <p className="mt-4 text-center text-sm text-slate-700">&ldquo;{showPublished.comment}&rdquo;</p>
             )}
-            <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
-              <Link href={`/orders/${id}`}>
-                <Button variant="outline" className="w-full sm:w-auto">
-                  Track order
-                </Button>
-              </Link>
-              <Button className="w-full sm:w-auto" onClick={() => router.push('/orders')}>
+            <div className="mt-6 btn-row sm:justify-center">
+              <ButtonLink href={`/orders/${id}`} variant="outline" size="lg" className="w-full sm:min-w-[180px]">
+                Track order
+              </ButtonLink>
+              <ButtonLink href="/orders" size="lg" className="w-full sm:min-w-[180px]">
                 My orders
-              </Button>
+              </ButtonLink>
             </div>
           </div>
         )}
-      </main>
-    </>
+    </PageShell>
   );
 }

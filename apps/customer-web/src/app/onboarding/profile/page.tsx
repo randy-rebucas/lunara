@@ -5,7 +5,9 @@ import { useEffect, useState } from 'react';
 import { Button } from '@lunara/ui';
 import { fetchOnboardingStatus, getOnboardingPath } from '@lunara/hooks/onboarding';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
+import { AuthShellWide } from '../../../components/auth-shell';
 import { OnboardingProgress } from '../../../components/onboarding-progress';
+import { Input } from '../../../components/ui/input';
 
 export default function OnboardingProfilePage() {
   const { isAuthenticated, isLoading, api } = useAuthContext();
@@ -47,39 +49,42 @@ export default function OnboardingProfilePage() {
   if (isLoading || !isAuthenticated) return null;
 
   return (
-    <main className="mx-auto max-w-md px-6 py-12">
-      <OnboardingProgress current="profile" />
-      <h1 className="mt-8 text-2xl font-bold">Complete your profile</h1>
-      <p className="mt-2 text-sm text-slate-500">Tell us your name so we can personalize your orders</p>
-      <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <input
-            className="rounded-lg border px-4 py-2"
-            placeholder="First name"
-            value={form.firstName}
-            onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-            required
-          />
-          <input
-            className="rounded-lg border px-4 py-2"
-            placeholder="Last name"
-            value={form.lastName}
-            onChange={(e) => setForm({ ...form, lastName: e.target.value })}
-            required
-          />
+    <AuthShellWide>
+      <div className="card-elevated">
+        <div className="card-body">
+          <OnboardingProgress current="profile" />
+          <h1 className="mt-8 text-2xl font-bold tracking-tight">Complete your profile</h1>
+          <p className="mt-1 text-sm text-muted">Tell us your name so we can personalize your orders</p>
+          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                placeholder="First name"
+                value={form.firstName}
+                onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                required
+              />
+              <Input
+                placeholder="Last name"
+                value={form.lastName}
+                onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+                required
+              />
+            </div>
+            <Input
+              placeholder="Email (optional)"
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+            />
+            {error && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+            )}
+            <Button type="submit" className="w-full" size="lg" disabled={submitting}>
+              {submitting ? 'Saving…' : 'Continue'}
+            </Button>
+          </form>
         </div>
-        <input
-          className="w-full rounded-lg border px-4 py-2"
-          placeholder="Email (optional)"
-          type="email"
-          value={form.email}
-          onChange={(e) => setForm({ ...form, email: e.target.value })}
-        />
-        {error && <p className="text-sm text-red-500">{error}</p>}
-        <Button type="submit" className="w-full" disabled={submitting}>
-          {submitting ? 'Saving…' : 'Continue'}
-        </Button>
-      </form>
-    </main>
+      </div>
+    </AuthShellWide>
   );
 }

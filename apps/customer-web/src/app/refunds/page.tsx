@@ -4,8 +4,10 @@ import Link from 'next/link';
 import { useCallback } from 'react';
 import { formatRefundStatus } from '@lunara/utils';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
-import { CustomerNav } from '../../components/customer-nav';
 import { DataPageStatus } from '../../components/data-page-status';
+import { PageShell } from '../../components/page-shell';
+import { Card, CardBody } from '../../components/ui/card';
+import { PageHeader } from '../../components/ui/page-header';
 import { useCustomerQuery } from '../../lib/use-customer-query';
 
 interface RefundRow {
@@ -29,34 +31,33 @@ export default function RefundsListPage() {
   const { data: items, loading, error } = useCustomerQuery(load, [api]);
 
   return (
-    <>
-      <CustomerNav />
-      <main className="mx-auto max-w-lg px-4 py-8">
-        <h1 className="text-2xl font-bold">Refund requests</h1>
-        <p className="mt-1 text-sm text-slate-500">Track status from submission through payout.</p>
+    <PageShell>
+      <PageHeader
+        title="Refund requests"
+        description="Track status from submission through payout."
+      />
 
-        <div className="mt-4">
-          <DataPageStatus loading={loading} error={error} loadingMessage="Loading refunds…" />
-        </div>
+      <DataPageStatus loading={loading} error={error} loadingMessage="Loading refunds…" />
 
-        <div className="mt-6 space-y-2">
-          {(items ?? []).map((r) => (
-            <Link
-              key={r._id}
-              href={`/refunds/${r._id}`}
-              className="block rounded-xl border bg-white p-4 hover:border-primary"
-            >
-              <p className="font-medium">Order …{r.orderId.slice(-6)}</p>
-              <p className="text-sm capitalize text-slate-500">
-                {formatRefundStatus(r.status)} · ₱{r.requestedAmount}
-              </p>
-            </Link>
-          ))}
-          {!loading && !error && (items ?? []).length === 0 && (
-            <p className="text-slate-500">No refund requests yet.</p>
-          )}
-        </div>
-      </main>
-    </>
+      <div className="mt-6 list-stack">
+        {(items ?? []).map((r) => (
+          <Link key={r._id} href={`/refunds/${r._id}`}>
+            <Card className="transition-shadow hover:shadow-[var(--shadow-elevated)]">
+              <CardBody>
+                <p className="font-medium text-slate-900">Order …{r.orderId.slice(-6)}</p>
+                <p className="mt-1 text-sm capitalize text-muted">
+                  {formatRefundStatus(r.status)} · ₱{r.requestedAmount}
+                </p>
+              </CardBody>
+            </Card>
+          </Link>
+        ))}
+        {!loading && !error && (items ?? []).length === 0 && (
+          <Card>
+            <CardBody className="text-muted">No refund requests yet.</CardBody>
+          </Card>
+        )}
+      </div>
+    </PageShell>
   );
 }

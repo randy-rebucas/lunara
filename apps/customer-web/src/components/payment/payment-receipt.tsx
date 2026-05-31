@@ -28,7 +28,7 @@ export function PaymentReceipt({
   const isCashPending = payment.method === 'cash' && payment.status === 'pending';
 
   return (
-    <div className="rounded-xl border-2 border-dashed border-accent/40 bg-green-50/50 p-6">
+    <div className="rounded-xl bg-green-50/50 p-6 ring-1 ring-dashed ring-accent/30">
       <p className="text-center text-xs font-semibold uppercase tracking-widest text-accent">
         {isCashPending ? 'Payment reference' : 'Payment receipt'}
       </p>

@@ -54,14 +54,14 @@ export function ReviewForm({
           placeholder="Tell us about pickup, wash quality, delivery…"
           value={comment}
           onChange={(e) => setComment(e.target.value)}
-          className="mt-2 w-full rounded-lg border px-4 py-3 text-sm"
+          className="input-field mt-2 min-h-[100px] resize-y"
         />
         <p className="mt-1 text-xs text-slate-400">{comment.length}/2000</p>
       </div>
 
       {error && <p className="text-sm text-red-500">{error}</p>}
 
-      <Button type="submit" className="w-full" disabled={loading || rating < 1}>
+      <Button type="submit" className="w-full" size="lg" disabled={loading || rating < 1}>
         {loading ? 'Publishing…' : 'Submit review'}
       </Button>
     </form>

@@ -11,25 +11,33 @@ export function OnboardingProgress({ current }: { current: OnboardingStep }) {
   const currentIndex = steps.findIndex((s) => s.key === current);
 
   return (
-    <ol className="flex items-center justify-center gap-2 text-xs sm:gap-4 sm:text-sm">
+    <ol className="flex items-center justify-center gap-1 text-xs sm:gap-3 sm:text-sm">
       {steps.map((step, index) => {
         const done = index < currentIndex;
         const active = index === currentIndex;
         return (
-          <li key={step.key} className="flex items-center gap-2">
+          <li key={step.key} className="flex items-center gap-1.5 sm:gap-2">
             <span
-              className={`flex h-7 w-7 items-center justify-center rounded-full font-medium ${
+              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-colors ${
                 done
                   ? 'bg-accent text-white'
                   : active
-                    ? 'bg-primary text-white'
-                    : 'bg-slate-200 text-slate-500'
+                    ? 'bg-primary text-white shadow-sm'
+                    : 'bg-slate-200 text-muted'
               }`}
             >
               {done ? '✓' : index + 1}
             </span>
-            <span className={active ? 'font-medium text-slate-900' : 'text-slate-500'}>{step.label}</span>
-            {index < steps.length - 1 && <span className="hidden h-px w-6 bg-slate-200 sm:block" />}
+            <span
+              className={`hidden sm:inline ${active ? 'font-semibold text-slate-900' : 'text-muted'}`}
+            >
+              {step.label}
+            </span>
+            {index < steps.length - 1 && (
+              <span
+                className={`hidden h-px w-4 sm:block sm:w-6 ${done ? 'bg-accent/40' : 'bg-border'}`}
+              />
+            )}
           </li>
         );
       })}

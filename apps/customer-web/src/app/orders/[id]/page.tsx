@@ -6,10 +6,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { OrderStatus } from '@lunara/types';
 import { Button } from '@lunara/ui';
+import { ButtonLink } from '../../../components/ui/button-link';
 import { resolveApiOrigin } from '@lunara/hooks';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { buildCustomerTimeline, formatCurrency, formatOrderStatusLabel } from '@lunara/utils';
-import { CustomerNav } from '../../../components/customer-nav';
+import { PageShell } from '../../../components/page-shell';
 import { DataPageStatus } from '../../../components/data-page-status';
 import { OrderNotifications, type OrderNotification } from '../../../components/order-notifications';
 import { OrderTimeline } from '../../../components/order-timeline';
@@ -214,29 +215,23 @@ export default function OrderTrackPage() {
 
   if (isLoading || pageLoading) {
     return (
-      <>
-        <CustomerNav />
-        <main className="mx-auto max-w-lg px-6 py-10">
-          <Link href="/orders" className="text-sm text-slate-500 hover:text-primary">
-            ← My orders
-          </Link>
-          <p className="mt-4 text-sm text-slate-500">Loading order…</p>
-        </main>
-      </>
+      <PageShell narrow>
+        <Link href="/orders" className="text-sm text-muted transition-colors hover:text-primary">
+          ← My orders
+        </Link>
+        <p className="mt-4 text-sm text-muted">Loading order…</p>
+      </PageShell>
     );
   }
 
   if (loadError || !order) {
     return (
-      <>
-        <CustomerNav />
-        <main className="mx-auto max-w-lg px-6 py-10">
-          <Link href="/orders" className="text-sm text-slate-500 hover:text-primary">
-            ← My orders
-          </Link>
-          <DataPageStatus loading={false} error={loadError || 'Order not found'} loadingMessage="" />
-        </main>
-      </>
+      <PageShell narrow>
+        <Link href="/orders" className="text-sm text-muted transition-colors hover:text-primary">
+          ← My orders
+        </Link>
+        <DataPageStatus loading={false} error={loadError || 'Order not found'} loadingMessage="" />
+      </PageShell>
     );
   }
 
@@ -246,12 +241,10 @@ export default function OrderTrackPage() {
     order.status === OrderStatus.RIDER_ASSIGNED_DELIVERY;
 
   return (
-    <>
-      <CustomerNav />
-      <main className="mx-auto max-w-lg px-6 py-10">
-        <Link href="/orders" className="text-sm text-slate-500 hover:text-primary">
-          ← My orders
-        </Link>
+    <PageShell>
+      <Link href="/orders" className="text-sm text-muted transition-colors hover:text-primary">
+        ← My orders
+      </Link>
 
         <div className="mt-4 flex items-start justify-between gap-4">
           <div>
@@ -268,7 +261,7 @@ export default function OrderTrackPage() {
         </div>
 
         {order.branchName && (
-          <div className="mt-4 rounded-lg border border-indigo-200 bg-indigo-50 p-4 text-sm">
+          <div className="mt-4 rounded-lg bg-primary/5 p-4 text-sm ring-1 ring-primary/15">
             <p className="font-medium text-primary">
               {order.status === OrderStatus.SHOP_ASSIGNED ? 'Shop assigned' : 'Assigned branch'}
             </p>
@@ -280,7 +273,7 @@ export default function OrderTrackPage() {
         )}
 
         {order.status === OrderStatus.PENDING && (
-          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <div className="mt-4 rounded-lg bg-amber-50 p-4 ring-1 ring-amber-200/60">
             <p className="text-sm font-medium text-amber-900">Order created — payment required</p>
             <p className="mt-1 text-sm text-amber-800">
               Complete payment to move your order to pending dispatch.
@@ -292,7 +285,7 @@ export default function OrderTrackPage() {
         )}
 
         {order.status === OrderStatus.PENDING_DISPATCH && !order.branchName && (
-          <div className="mt-4 rounded-lg border border-indigo-200 bg-indigo-50 p-4 text-sm">
+          <div className="mt-4 rounded-lg bg-primary/5 p-4 text-sm ring-1 ring-primary/15">
             <p className="font-medium text-primary">Pending dispatch</p>
             <p className="mt-1 text-slate-700">
               Payment received. Lunara operations is assigning your laundry partner. Pickup starts
@@ -315,7 +308,7 @@ export default function OrderTrackPage() {
         <section className="mt-8">
           <h2 className="text-lg font-semibold">Timeline</h2>
           <p className="mt-1 text-sm text-slate-500">Live updates as your order moves through each step</p>
-          <div className="mt-6 rounded-xl border bg-white p-6">
+          <div className="mt-6 panel">
             <OrderTimeline steps={timeline.steps} />
           </div>
         </section>
@@ -328,37 +321,37 @@ export default function OrderTrackPage() {
         )}
 
         {showDeliveryActions && deliveryUi?.needsVerify && (
-          <div className="mt-6 rounded-xl border bg-white p-5">
+          <div className="panel mt-6">
             <p className="font-medium">Customer receives</p>
             <p className="mt-1 text-sm text-slate-600">
               Enter the last 4 digits of your mobile number to confirm you received your laundry
             </p>
             <input
-              className="mt-3 w-full rounded-lg border px-4 py-2"
+              className="input-field mt-3"
               placeholder="4-digit code"
               value={verifyCode}
               onChange={(e) => setVerifyCode(e.target.value)}
               maxLength={4}
             />
-            <Button className="mt-3 w-full" onClick={handleVerify}>
+            <Button className="mt-3 w-full" size="lg" onClick={handleVerify}>
               Verify
             </Button>
           </div>
         )}
 
         {deliveryUi?.needsSign && (
-          <div className="mt-6 rounded-xl border bg-white p-5">
+          <div className="panel mt-6">
             <p className="font-medium">Signature</p>
             <p className="mt-1 text-sm text-slate-600">
               Sign after the rider captures photo proof of delivery
             </p>
             <input
-              className="mt-3 w-full rounded-lg border px-4 py-2"
+              className="input-field mt-3"
               placeholder="Your full name"
               value={signatureName}
               onChange={(e) => setSignatureName(e.target.value)}
             />
-            <Button className="mt-3 w-full" onClick={handleSign}>
+            <Button className="mt-3 w-full" size="lg" onClick={handleSign}>
               Sign & confirm
             </Button>
           </div>
@@ -369,13 +362,13 @@ export default function OrderTrackPage() {
         {(order.pickup?.receiptCode || order.delivery?.receiptCode) && (
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
             {order.pickup?.receiptCode && (
-              <div className="rounded-lg border bg-green-50 p-4">
+              <div className="rounded-lg bg-accent/5 p-4 ring-1 ring-accent/15">
                 <p className="text-xs font-medium text-slate-500">Pickup receipt</p>
                 <p className="mt-1 font-mono text-sm">{order.pickup.receiptCode}</p>
               </div>
             )}
             {order.delivery?.receiptCode && (
-              <div className="rounded-lg border bg-green-50 p-4">
+              <div className="rounded-lg bg-accent/5 p-4 ring-1 ring-accent/15">
                 <p className="text-xs font-medium text-slate-500">Delivery receipt</p>
                 <p className="mt-1 font-mono text-sm">{order.delivery.receiptCode}</p>
                 {order.delivery.signatureName && (
@@ -387,13 +380,13 @@ export default function OrderTrackPage() {
         )}
 
         {timeline.isTerminal && order.status === OrderStatus.COMPLETED && (
-          <div className="mt-6 rounded-xl border border-primary/30 bg-indigo-50 p-5 text-center">
+          <div className="panel mt-6 bg-primary/5 text-center ring-1 ring-primary/15">
             <p className="font-semibold text-primary">All done!</p>
             <p className="mt-1 text-sm text-slate-600">Thanks for using Lunara.</p>
             {canReview && (
-              <Link href={`/orders/${id}/review`} className="mt-4 inline-block">
-                <Button>Rate your experience</Button>
-              </Link>
+              <ButtonLink href={`/orders/${id}/review`} className="mt-4">
+                Rate your experience
+              </ButtonLink>
             )}
             {hasReview && !canReview && (
               <Link
@@ -403,17 +396,13 @@ export default function OrderTrackPage() {
                 View your published review →
               </Link>
             )}
-            <div className="mt-4 flex flex-col gap-2">
-              <Link href={`/orders/${id}/lost-item`}>
-                <Button variant="outline" className="w-full">
-                  Report missing item
-                </Button>
-              </Link>
-              <Link href={`/orders/${id}/refund`}>
-                <Button variant="outline" className="w-full">
-                  Request refund
-                </Button>
-              </Link>
+            <div className="mt-4 list-stack-sm">
+              <ButtonLink href={`/orders/${id}/lost-item`} variant="outline" className="w-full">
+                Report missing item
+              </ButtonLink>
+              <ButtonLink href={`/orders/${id}/refund`} variant="outline" className="w-full">
+                Request refund
+              </ButtonLink>
             </div>
           </div>
         )}
@@ -427,15 +416,14 @@ export default function OrderTrackPage() {
           </p>
         )}
 
-        <div className="mt-8 flex gap-3">
-          <Link href="/orders">
-            <Button variant="outline">My orders</Button>
-          </Link>
-          <Link href="/dashboard">
-            <Button variant="ghost">Dashboard</Button>
-          </Link>
+        <div className="mt-8 btn-row">
+          <ButtonLink href="/orders" variant="outline">
+            My orders
+          </ButtonLink>
+          <ButtonLink href="/dashboard" variant="ghost">
+            Dashboard
+          </ButtonLink>
         </div>
-      </main>
-    </>
+    </PageShell>
   );
 }

@@ -117,7 +117,7 @@ export function PaymentCheckout({ orderId }: PaymentCheckoutProps) {
 
   return (
     <div className="space-y-8">
-      <section className="rounded-xl border bg-white p-5">
+      <section className="panel">
         <h2 className="text-lg font-semibold">Order summary</h2>
         <p className="mt-1 capitalize text-slate-600">{order.bookingType.replace(/_/g, ' ')}</p>
         <p className="mt-4 text-3xl font-bold text-primary">{formatCurrency(order.total)}</p>
@@ -133,15 +133,15 @@ export function PaymentCheckout({ orderId }: PaymentCheckoutProps) {
         <h2 className="text-lg font-semibold">Choose payment method</h2>
         <p className="mt-1 text-sm text-slate-500">PayMongo for online payments, cash, or wallet</p>
 
-        <div className="mt-4 space-y-2">
+        <div className="mt-4 list-stack-sm">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">PayMongo</p>
           {paymongoOptions.map((opt) => (
             <button
               key={opt.method}
               type="button"
               onClick={() => setMethod(opt.method)}
-              className={`w-full rounded-lg border p-4 text-left ${
-                method === opt.method ? 'border-primary bg-indigo-50' : ''
+              className={`selectable-item ${
+                method === opt.method ? 'selectable-item-active' : ''
               }`}
             >
               <p className="font-medium">{opt.label}</p>
@@ -150,13 +150,13 @@ export function PaymentCheckout({ orderId }: PaymentCheckoutProps) {
           ))}
         </div>
 
-        <div className="mt-4 space-y-2">
+        <div className="mt-4 list-stack-sm">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Cash</p>
           <button
             type="button"
             onClick={() => setMethod(PaymentMethod.CASH)}
-            className={`w-full rounded-lg border p-4 text-left ${
-              method === PaymentMethod.CASH ? 'border-primary bg-indigo-50' : ''
+            className={`selectable-item ${
+              method === PaymentMethod.CASH ? 'selectable-item-active' : ''
             }`}
           >
             <p className="font-medium">Cash</p>
@@ -180,13 +180,13 @@ export function PaymentCheckout({ orderId }: PaymentCheckoutProps) {
           )}
         </div>
 
-        <div className="mt-4 space-y-2">
+        <div className="mt-4 list-stack-sm">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Wallet</p>
           <button
             type="button"
             onClick={() => setMethod(PaymentMethod.WALLET)}
-            className={`w-full rounded-lg border p-4 text-left ${
-              method === PaymentMethod.WALLET ? 'border-primary bg-indigo-50' : ''
+            className={`selectable-item ${
+              method === PaymentMethod.WALLET ? 'selectable-item-active' : ''
             }`}
           >
             <div className="flex justify-between">
@@ -218,6 +218,7 @@ export function PaymentCheckout({ orderId }: PaymentCheckoutProps) {
 
       <Button
         className="w-full"
+        size="lg"
         disabled={paying || insufficientWallet}
         onClick={handlePay}
       >

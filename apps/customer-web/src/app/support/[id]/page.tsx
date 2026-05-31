@@ -4,9 +4,9 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback } from 'react';
 import { LOST_ITEM_FLOW, formatLostItemOutcome, lostItemFlowIndex } from '@lunara/utils';
-import { Button } from '@lunara/ui';
+import { ButtonLink } from '../../../components/ui/button-link';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
-import { CustomerNav } from '../../../components/customer-nav';
+import { PageShell } from '../../../components/page-shell';
 import { DataPageStatus } from '../../../components/data-page-status';
 import { useCustomerQuery } from '../../../lib/use-customer-query';
 
@@ -49,15 +49,12 @@ export default function CustomerTicketPage() {
 
   if (loading || error || !data) {
     return (
-      <>
-        <CustomerNav />
-        <main className="mx-auto max-w-lg px-4 py-8">
-          <Link href="/support" className="text-sm text-slate-500 hover:text-primary">
-            ← My support tickets
-          </Link>
-          <DataPageStatus loading={loading} error={error} loadingMessage="Loading ticket…" />
-        </main>
-      </>
+      <PageShell narrow>
+        <Link href="/support" className="text-sm text-muted transition-colors hover:text-primary">
+          ← My support tickets
+        </Link>
+        <DataPageStatus loading={loading} error={error} loadingMessage="Loading ticket…" />
+      </PageShell>
     );
   }
 
@@ -65,12 +62,10 @@ export default function CustomerTicketPage() {
   const stageIdx = lostItemFlowIndex(currentStage);
 
   return (
-    <>
-      <CustomerNav />
-      <main className="mx-auto max-w-lg px-4 py-8">
-        <Link href="/support" className="text-sm text-slate-500 hover:text-primary">
-          ← My support tickets
-        </Link>
+    <PageShell narrow>
+      <Link href="/support" className="text-sm text-muted transition-colors hover:text-primary">
+        ← My support tickets
+      </Link>
         <h1 className="mt-4 text-2xl font-bold">{ticket.subject}</h1>
         <p className="mt-1 text-sm capitalize text-slate-500">
           Status: {ticket.status.replace(/_/g, ' ')}
@@ -78,15 +73,15 @@ export default function CustomerTicketPage() {
 
         {ticket.type === 'lost_item' && (
           <>
-            <ol className="mt-8 space-y-3">
+            <ol className="mt-8 list-stack">
               {LOST_ITEM_FLOW.map((step, i) => {
                 const done = i < stageIdx || ticket.status === 'closed';
                 const active = i === stageIdx && ticket.status !== 'closed';
                 return (
                   <li
                     key={step.id}
-                    className={`rounded-lg border px-4 py-3 text-sm ${
-                      active ? 'border-primary bg-indigo-50' : done ? 'bg-green-50' : 'bg-white'
+                    className={`rounded-lg px-4 py-3 text-sm ring-1 ${
+                      active ? 'ring-2 ring-primary/30 bg-primary/5' : done ? 'bg-accent/5 ring-accent/20' : 'bg-surface ring-border/40'
                     }`}
                   >
                     <span className="font-medium">
@@ -99,7 +94,7 @@ export default function CustomerTicketPage() {
             </ol>
 
             {ticket.outcome && ticket.outcome !== 'pending' && (
-              <div className="mt-6 rounded-xl border border-accent/40 bg-green-50 p-4">
+              <div className="mt-6 rounded-xl bg-accent/5 p-4 ring-1 ring-accent/20">
                 <p className="font-medium text-accent">Outcome: {formatLostItemOutcome(ticket.outcome)}</p>
                 {(ticket.compensationAmount ?? 0) > 0 && (
                   <p className="mt-1 text-sm text-slate-600">
@@ -112,7 +107,7 @@ export default function CustomerTicketPage() {
           </>
         )}
 
-        <div className="mt-6 rounded-xl border bg-white p-4 text-sm text-slate-700">
+        <div className="panel mt-6 text-sm text-slate-700">
           <p className="font-medium">Your report</p>
           <p className="mt-2">{ticket.description}</p>
           {ticket.missingItems && ticket.missingItems.length > 0 && (
@@ -123,7 +118,7 @@ export default function CustomerTicketPage() {
         {ticket.timeline && ticket.timeline.length > 0 && (
           <div className="mt-6">
             <p className="text-sm font-medium text-slate-700">Updates</p>
-            <ul className="mt-2 space-y-2 text-sm text-slate-600">
+            <ul className="mt-2 list-stack-sm text-sm text-slate-600">
               {ticket.timeline.map((e, i) => (
                 <li key={i}>
                   {new Date(e.at).toLocaleString()} — {e.label}
@@ -134,17 +129,16 @@ export default function CustomerTicketPage() {
           </div>
         )}
 
-        <div className="mt-8 flex gap-3">
-          <Link href="/support">
-            <Button variant="outline">All tickets</Button>
-          </Link>
+        <div className="mt-8 btn-row">
+          <ButtonLink href="/support" variant="outline">
+            All tickets
+          </ButtonLink>
           {ticket.orderId && (
-            <Link href={`/orders/${ticket.orderId}`}>
-              <Button variant="ghost">View order</Button>
-            </Link>
+            <ButtonLink href={`/orders/${ticket.orderId}`} variant="ghost">
+              View order
+            </ButtonLink>
           )}
         </div>
-      </main>
-    </>
+    </PageShell>
   );
 }

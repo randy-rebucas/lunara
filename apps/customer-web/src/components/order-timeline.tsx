@@ -21,7 +21,7 @@ export function OrderTimeline({ steps }: { steps: CustomerTimelineStep[] }) {
                 ? 'bg-accent text-white'
                 : step.state === 'current'
                   ? 'bg-primary text-white ring-4 ring-indigo-100'
-                  : 'border-2 border-slate-200 bg-white text-slate-400'
+                  : 'ring-2 ring-border/60 bg-surface text-slate-400'
             }`}
           >
             {step.state === 'done' ? '✓' : step.state === 'current' ? '●' : ''}

@@ -4,9 +4,9 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback } from 'react';
 import { REFUND_FLOW, formatRefundStatus, refundFlowIndex } from '@lunara/utils';
-import { Button } from '@lunara/ui';
+import { ButtonLink } from '../../../components/ui/button-link';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
-import { CustomerNav } from '../../../components/customer-nav';
+import { PageShell } from '../../../components/page-shell';
 import { DataPageStatus } from '../../../components/data-page-status';
 import { useCustomerQuery } from '../../../lib/use-customer-query';
 
@@ -38,41 +38,36 @@ export default function RefundDetailPage() {
 
   if (loading || error || !refund) {
     return (
-      <>
-        <CustomerNav />
-        <main className="mx-auto max-w-lg px-4 py-8">
-          <Link href="/refunds" className="text-sm text-slate-500 hover:text-primary">
-            ← All refunds
-          </Link>
-          <DataPageStatus loading={loading} error={error} loadingMessage="Loading refund…" />
-        </main>
-      </>
+      <PageShell narrow>
+        <Link href="/refunds" className="text-sm text-muted transition-colors hover:text-primary">
+          ← All refunds
+        </Link>
+        <DataPageStatus loading={loading} error={error} loadingMessage="Loading refund…" />
+      </PageShell>
     );
   }
 
   const stageIdx = refundFlowIndex(refund.stage);
 
   return (
-    <>
-      <CustomerNav />
-      <main className="mx-auto max-w-lg px-4 py-8">
-        <Link href="/refunds" className="text-sm text-slate-500 hover:text-primary">
-          ← All refunds
-        </Link>
+    <PageShell narrow>
+      <Link href="/refunds" className="text-sm text-muted transition-colors hover:text-primary">
+        ← All refunds
+      </Link>
         <h1 className="mt-4 text-2xl font-bold">Refund request</h1>
         <p className="mt-1 text-sm capitalize text-slate-500">
           {formatRefundStatus(refund.status)}
         </p>
 
-        <ol className="mt-8 space-y-2">
+        <ol className="mt-8 list-stack">
           {REFUND_FLOW.map((step, i) => {
             const done = i < stageIdx || refund.status === 'closed';
             const active = i === stageIdx && refund.status !== 'closed';
             return (
               <li
                 key={step.id}
-                className={`rounded-lg border px-4 py-3 text-sm ${
-                  active ? 'border-primary bg-indigo-50' : done ? 'bg-green-50' : 'bg-white'
+                className={`rounded-lg px-4 py-3 text-sm ring-1 ${
+                  active ? 'ring-2 ring-primary/30 bg-primary/5' : done ? 'bg-accent/5 ring-accent/20' : 'bg-surface ring-border/40'
                 }`}
               >
                 {done ? '✓ ' : active ? '→ ' : '○ '}
@@ -82,7 +77,7 @@ export default function RefundDetailPage() {
           })}
         </ol>
 
-        <div className="mt-6 rounded-xl border bg-white p-4 text-sm">
+        <div className="panel mt-6 text-sm">
           <p className="font-medium">Your request</p>
           <p className="mt-2 text-slate-700">{refund.reason}</p>
           <p className="mt-2 text-slate-500">Requested: ₱{refund.requestedAmount}</p>
@@ -98,7 +93,7 @@ export default function RefundDetailPage() {
         </div>
 
         {refund.timeline && refund.timeline.length > 0 && (
-          <ul className="mt-6 space-y-2 text-sm text-slate-600">
+          <ul className="mt-6 list-stack-sm text-sm text-slate-600">
             {refund.timeline.map((e, i) => (
               <li key={i}>
                 {new Date(e.at).toLocaleString()} — {e.label}
@@ -108,15 +103,14 @@ export default function RefundDetailPage() {
           </ul>
         )}
 
-        <div className="mt-8 flex gap-3">
-          <Link href={`/orders/${refund.orderId}`}>
-            <Button variant="outline">View order</Button>
-          </Link>
-          <Link href="/wallet">
-            <Button variant="ghost">Wallet</Button>
-          </Link>
+        <div className="mt-8 btn-row">
+          <ButtonLink href={`/orders/${refund.orderId}`} variant="outline">
+            View order
+          </ButtonLink>
+          <ButtonLink href="/wallet" variant="ghost">
+            Wallet
+          </ButtonLink>
         </div>
-      </main>
-    </>
+    </PageShell>
   );
 }

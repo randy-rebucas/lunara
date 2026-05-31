@@ -6,6 +6,8 @@ import { useState } from 'react';
 import { Button } from '@lunara/ui';
 import { fetchOnboardingStatus, getOnboardingPath } from '@lunara/hooks/onboarding';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
+import { AuthShell } from '../../components/auth-shell';
+import { Input } from '../../components/ui/input';
 
 export default function LoginPage() {
   const { login, loginWithOtp, requestOtp, api } = useAuthContext();
@@ -45,29 +47,36 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="mx-auto max-w-md px-6 py-16">
-      <h1 className="text-2xl font-bold">Sign In</h1>
-      <div className="mt-4 flex gap-2">
-        <Button variant={mode === 'password' ? 'default' : 'outline'} onClick={() => setMode('password')}>
+    <AuthShell>
+      <h1 className="text-2xl font-bold tracking-tight">Sign in</h1>
+      <p className="mt-1 text-sm text-muted">Welcome back to your laundry hub</p>
+
+      <div className="mt-6 flex gap-2 rounded-lg bg-slate-100 p-1">
+        <button
+          type="button"
+          onClick={() => setMode('password')}
+          className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+            mode === 'password' ? 'bg-surface text-primary shadow-sm' : 'text-muted hover:text-slate-900'
+          }`}
+        >
           Email
-        </Button>
-        <Button variant={mode === 'otp' ? 'default' : 'outline'} onClick={() => setMode('otp')}>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('otp')}
+          className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+            mode === 'otp' ? 'bg-surface text-primary shadow-sm' : 'text-muted hover:text-slate-900'
+          }`}
+        >
           Phone OTP
-        </Button>
+        </button>
       </div>
+
       <form onSubmit={handleSubmit} className="mt-6 space-y-4">
         {mode === 'password' ? (
           <>
-            <input
-              className="w-full rounded-lg border px-4 py-2"
-              placeholder="Email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-            <input
-              className="w-full rounded-lg border px-4 py-2"
+            <Input placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            <Input
               placeholder="Password"
               type="password"
               value={password}
@@ -77,36 +86,30 @@ export default function LoginPage() {
           </>
         ) : (
           <>
-            <input
-              className="w-full rounded-lg border px-4 py-2"
-              placeholder="Phone (+639...)"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              required
-            />
-            <div className="flex gap-2">
-              <input
-                className="flex-1 rounded-lg border px-4 py-2"
-                placeholder="OTP"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                required
-              />
-              <Button type="button" variant="outline" onClick={handleRequestOtp}>
+            <Input placeholder="Phone (+639...)" value={phone} onChange={(e) => setPhone(e.target.value)} required />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <Input placeholder="OTP" value={otp} onChange={(e) => setOtp(e.target.value)} required className="min-w-0 flex-1" />
+              <Button type="button" variant="outline" size="default" className="w-full shrink-0 sm:w-auto" onClick={handleRequestOtp}>
                 Send OTP
               </Button>
             </div>
-            {devOtp && <p className="text-sm text-accent">Dev OTP: {devOtp}</p>}
+            {devOtp && <p className="badge-accent">Dev OTP: {devOtp}</p>}
           </>
         )}
-        {error && <p className="text-sm text-red-500">{error}</p>}
-        <Button type="submit" className="w-full">
-          Sign In
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+        )}
+        <Button type="submit" className="w-full" size="lg">
+          Sign in
         </Button>
       </form>
-      <p className="mt-4 text-center text-sm text-slate-500">
-        No account? <Link href="/signup" className="text-primary">Sign up</Link>
+
+      <p className="mt-6 text-center text-sm text-muted">
+        No account?{' '}
+        <Link href="/signup" className="link-primary">
+          Sign up
+        </Link>
       </p>
-    </main>
+    </AuthShell>
   );
 }

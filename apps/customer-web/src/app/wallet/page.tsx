@@ -4,8 +4,10 @@ import { useCallback, useState } from 'react';
 import { Button } from '@lunara/ui';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { formatCurrency } from '@lunara/utils';
-import { CustomerNav } from '../../components/customer-nav';
 import { DataPageStatus } from '../../components/data-page-status';
+import { PageShell } from '../../components/page-shell';
+import { Card, CardBody } from '../../components/ui/card';
+import { PageHeader } from '../../components/ui/page-header';
 import { useRequireOnboardingComplete } from '../../hooks/use-require-onboarding';
 import { useCustomerQuery } from '../../lib/use-customer-query';
 
@@ -53,37 +55,45 @@ export default function WalletPage() {
   const transactions = data?.transactions ?? [];
 
   return (
-    <>
-      <CustomerNav />
-      <main className="mx-auto max-w-lg px-6 py-12">
-        <h1 className="text-2xl font-bold">Wallet</h1>
+    <PageShell>
+      <PageHeader title="Wallet" description="Top up and view your transaction history." />
 
-        <div className="mt-4">
-          <DataPageStatus loading={loading} error={error} loadingMessage="Loading wallet…" />
-        </div>
+      <DataPageStatus loading={loading} error={error} loadingMessage="Loading wallet…" />
 
-        <p className="mt-4 text-4xl font-bold text-primary">{formatCurrency(balance)}</p>
-        <Button className="mt-6" onClick={topUp} disabled={topUpLoading || loading}>
-          {topUpLoading ? 'Processing…' : 'Top Up ₱500'}
-        </Button>
-        {topUpError && <p className="mt-2 text-sm text-red-500">{topUpError}</p>}
-
-        <h2 className="mt-8 font-semibold">Transactions</h2>
-        <div className="mt-4 space-y-2">
-          {transactions.map((t, i) => (
-            <div key={i} className="flex justify-between rounded border p-3 text-sm">
-              <span>{t.description}</span>
-              <span className={t.type === 'credit' ? 'text-accent' : 'text-red-500'}>
-                {t.type === 'credit' ? '+' : '-'}
-                {formatCurrency(t.amount)}
-              </span>
+      <Card className="mt-6">
+        <CardBody>
+          <p className="text-sm font-medium text-muted">Available balance</p>
+          <p className="mt-2 text-4xl font-bold tracking-tight text-primary">{formatCurrency(balance)}</p>
+          <Button className="mt-6" size="lg" onClick={topUp} disabled={topUpLoading || loading}>
+            {topUpLoading ? 'Processing…' : 'Top Up ₱500'}
+          </Button>
+          {topUpError && (
+            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {topUpError}
             </div>
+          )}
+        </CardBody>
+      </Card>
+
+      <section className="mt-8">
+        <h2 className="text-lg font-semibold tracking-tight">Transactions</h2>
+        <div className="mt-4 list-stack">
+          {transactions.map((t, i) => (
+            <Card key={i}>
+              <CardBody className="flex justify-between py-3 text-sm">
+                <span>{t.description}</span>
+                <span className={t.type === 'credit' ? 'font-medium text-accent' : 'font-medium text-red-500'}>
+                  {t.type === 'credit' ? '+' : '-'}
+                  {formatCurrency(t.amount)}
+                </span>
+              </CardBody>
+            </Card>
           ))}
           {!loading && !error && transactions.length === 0 && (
-            <p className="text-sm text-slate-500">No transactions yet.</p>
+            <p className="text-sm text-muted">No transactions yet.</p>
           )}
         </div>
-      </main>
-    </>
+      </section>
+    </PageShell>
   );
 }

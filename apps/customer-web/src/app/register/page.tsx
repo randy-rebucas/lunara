@@ -6,6 +6,8 @@ import { useState } from 'react';
 import { Button } from '@lunara/ui';
 import { fetchOnboardingStatus, getOnboardingPath } from '@lunara/hooks/onboarding';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
+import { AuthShell } from '../../components/auth-shell';
+import { Input } from '../../components/ui/input';
 
 export default function RegisterPage() {
   const { register, api } = useAuthContext();
@@ -32,54 +34,55 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="mx-auto max-w-md px-6 py-16">
-      <h1 className="text-2xl font-bold">Create Account</h1>
+    <AuthShell>
+      <h1 className="text-2xl font-bold tracking-tight">Create account</h1>
+      <p className="mt-1 text-sm text-muted">Register with your details to get started</p>
       <form onSubmit={handleSubmit} className="mt-6 space-y-4">
         <div className="grid grid-cols-2 gap-4">
-          <input
-            className="rounded-lg border px-4 py-2"
+          <Input
             placeholder="First name"
             value={form.firstName}
             onChange={(e) => setForm({ ...form, firstName: e.target.value })}
             required
           />
-          <input
-            className="rounded-lg border px-4 py-2"
+          <Input
             placeholder="Last name"
             value={form.lastName}
             onChange={(e) => setForm({ ...form, lastName: e.target.value })}
             required
           />
         </div>
-        <input
-          className="w-full rounded-lg border px-4 py-2"
+        <Input
           placeholder="Email"
           type="email"
           value={form.email}
           onChange={(e) => setForm({ ...form, email: e.target.value })}
         />
-        <input
-          className="w-full rounded-lg border px-4 py-2"
+        <Input
           placeholder="Phone"
           value={form.phone}
           onChange={(e) => setForm({ ...form, phone: e.target.value })}
         />
-        <input
-          className="w-full rounded-lg border px-4 py-2"
+        <Input
           placeholder="Password"
           type="password"
           value={form.password}
           onChange={(e) => setForm({ ...form, password: e.target.value })}
           required
         />
-        {error && <p className="text-sm text-red-500">{error}</p>}
-        <Button type="submit" className="w-full">
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+        )}
+        <Button type="submit" className="w-full" size="lg">
           Register
         </Button>
       </form>
-      <p className="mt-4 text-center text-sm text-slate-500">
-        Already have an account? <Link href="/login" className="text-primary">Sign in</Link>
+      <p className="mt-6 text-center text-sm text-muted">
+        Already have an account?{' '}
+        <Link href="/login" className="link-primary">
+          Sign in
+        </Link>
       </p>
-    </main>
+    </AuthShell>
   );
 }

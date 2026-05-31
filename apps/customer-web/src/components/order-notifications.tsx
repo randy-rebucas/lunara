@@ -16,7 +16,7 @@ export function OrderNotifications({
   if (notifications.length === 0) return null;
 
   return (
-    <div className="rounded-xl border border-secondary/30 bg-cyan-50/80 p-4">
+    <div className="panel bg-cyan-50/80 ring-1 ring-secondary/15">
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-semibold text-slate-800">Notifications</p>
         {live && (
@@ -26,7 +26,7 @@ export function OrderNotifications({
           </span>
         )}
       </div>
-      <ul className="mt-3 max-h-40 space-y-2 overflow-y-auto">
+      <ul className="mt-3 list-stack-sm max-h-40 overflow-y-auto">
         {notifications.map((n) => (
           <li key={n.id} className="text-sm text-slate-700">
             <span className="text-slate-400">{n.at}</span> — {n.message}
