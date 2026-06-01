@@ -44,8 +44,6 @@ export default function HomeScreen() {
 
       <DealsCarousel />
 
-      <NotificationsPreview />
-
       <View style={styles.actions}>
         {QUICK_ACTIONS.map((action) => (
           <Button
