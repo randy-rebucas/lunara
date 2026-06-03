@@ -175,6 +175,8 @@ export function initAdminAuthSession() {
   const stored = loadStoredAuth();
   if (stored) {
     authData = stored;
+    // Re-sync session cookie when localStorage still has tokens (e.g. cookie cleared).
+    persistAuth(stored);
     scheduleTokenRefresh();
   }
   return !!stored;

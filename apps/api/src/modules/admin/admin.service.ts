@@ -1,5 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import * as bcrypt from 'bcrypt';
 import { Model } from 'mongoose';
 import { OrderStatus, UserRole } from '@lunara/types';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
@@ -13,7 +14,9 @@ import {
 import { computePickupSla } from '@lunara/utils';
 import { BranchesService } from '../branches/branches.service';
 import { SupportService } from '../support/support.service';
+import { CreatePartnerDto } from './dto/create-partner.dto';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
+import { CreateRiderDto } from './dto/create-rider.dto';
 import { UpdatePromotionDto } from './dto/update-promotion.dto';
 
 const COMPLETED = [OrderStatus.DELIVERED, OrderStatus.COMPLETED];
@@ -177,6 +180,60 @@ export class AdminService {
     };
   }
 
+  async createRider(dto: CreateRiderDto) {
+    const email = dto.email.trim().toLowerCase();
+    const phone = dto.phone?.trim();
+
+    const duplicateFilter: Record<string, unknown>[] = [{ email }];
+    if (phone) duplicateFilter.push({ phone });
+
+    const existing = await this.userModel.findOne({ $or: duplicateFilter });
+    if (existing) {
+      throw new ConflictException('A user with this email or phone already exists');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, 12);
+    const user = await this.userModel.create({
+      email,
+      phone,
+      passwordHash,
+      role: UserRole.RIDER,
+      isActive: true,
+    });
+
+    const rider = await this.riderModel.create({
+      userId: user._id,
+      firstName: dto.firstName?.trim(),
+      lastName: dto.lastName?.trim(),
+      vehicleType: dto.vehicleType ?? 'motorcycle',
+      documents: [],
+      isOnline: false,
+      shiftStatus: 'offline',
+      currentLocation: { type: 'Point', coordinates: [0, 0] },
+    });
+
+    const compliance = isRiderCompliant(rider, user);
+
+    return {
+      success: true,
+      data: {
+        _id: rider._id.toString(),
+        userId: user._id.toString(),
+        email: user.email,
+        phone: user.phone,
+        isActive: user.isActive,
+        isOnline: rider.isOnline,
+        vehicleType: rider.vehicleType,
+        firstName: rider.firstName,
+        lastName: rider.lastName,
+        verificationStatus: compliance.verificationStatus,
+        totalEarnings: rider.totalEarnings,
+        todayEarnings: rider.todayEarnings,
+        activeTasks: 0,
+      },
+    };
+  }
+
   async getRiders() {
     const riders = await this.riderModel.find().sort({ updatedAt: -1 });
     const users = await this.userModel
@@ -241,6 +298,41 @@ export class AdminService {
           activeTasks: (deliveryMap.get(uid) ?? 0) + (pickupMap.get(uid) ?? 0),
         };
       }),
+    };
+  }
+
+  async createPartner(dto: CreatePartnerDto) {
+    const email = dto.email.trim().toLowerCase();
+    const phone = dto.phone?.trim();
+
+    const duplicateFilter: Record<string, unknown>[] = [{ email }];
+    if (phone) duplicateFilter.push({ phone });
+
+    const existing = await this.userModel.findOne({ $or: duplicateFilter });
+    if (existing) {
+      throw new ConflictException('A user with this email or phone already exists');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, 12);
+    const user = await this.userModel.create({
+      email,
+      phone,
+      passwordHash,
+      role: UserRole.PARTNER,
+      isActive: true,
+    });
+
+    return {
+      success: true,
+      data: {
+        _id: user._id.toString(),
+        email: user.email,
+        phone: user.phone,
+        isActive: user.isActive,
+        staffCount: 0,
+        totalOrders: 0,
+        revenue: 0,
+      },
     };
   }
 

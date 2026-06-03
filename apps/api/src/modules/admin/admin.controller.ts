@@ -35,7 +35,9 @@ import { RidersService } from '../riders/riders.service';
 import { RiderNotificationService } from '../riders/rider-notification.service';
 import { RiderWalletService } from '../riders/rider-wallet.service';
 import { ReviewWithdrawalDto, SetWalletHoldDto } from '../riders/dto/rider-wallet.dto';
+import { CreatePartnerDto } from './dto/create-partner.dto';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
+import { CreateRiderDto } from './dto/create-rider.dto';
 import { RiderAnnouncementDto } from './dto/rider-announcement.dto';
 import { UpdatePromotionDto } from './dto/update-promotion.dto';
 
@@ -160,6 +162,11 @@ export class AdminController {
     return this.adminService.getRiders();
   }
 
+  @Post('riders')
+  createRider(@Body() dto: CreateRiderDto) {
+    return this.adminService.createRider(dto);
+  }
+
   @Get('riders/documents/pending')
   getPendingRiderDocuments() {
     return this.ridersService.listPendingDocumentReviews();
@@ -234,6 +241,11 @@ export class AdminController {
   @Get('shops')
   getShops() {
     return this.adminService.getShops();
+  }
+
+  @Post('partners')
+  createPartner(@Body() dto: CreatePartnerDto) {
+    return this.adminService.createPartner(dto);
   }
 
   @Get('branches')

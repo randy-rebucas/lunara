@@ -1,14 +1,16 @@
 'use client';
 
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useState } from 'react';
 import { LOST_ITEM_FLOW, formatLostItemOutcome, lostItemFlowIndex } from '@lunara/utils';
+import { DetailPageHeader } from '../../../components/detail-page-header';
 import { DataPageStatus } from '../../../components/data-page-status';
 import { AuthenticatedImage } from '../../../components/authenticated-image';
-import { Card, CardBody } from '../../../components/ui/card';
-import { PageHeader } from '../../../components/ui/page-header';
+import { DetailRow, OpsPanel } from '../../../components/ui/ops-panel';
 import { adminFetch } from '../../../lib/admin-api';
 import { formatSlugLabel } from '../../../lib/format-label';
+import { formatPeso } from '../../../lib/format-peso';
 import { useAdminQuery } from '../../../lib/use-admin-query';
 
 interface InvestigationData {
@@ -127,7 +129,12 @@ export default function SupportTicketInvestigationPage() {
   if (pageLoading || loadError || !data) {
     return (
       <div>
-        <PageHeader title="Support ticket" backHref="/support" backLabel="Tickets" />
+        <DetailPageHeader
+          backHref="/support"
+          backLabel="Tickets"
+          eyebrow="Customer success"
+          title="Support ticket"
+        />
         <DataPageStatus loading={pageLoading} error={loadError} loadingMessage="Loading ticket…" />
       </div>
     );
@@ -141,17 +148,25 @@ export default function SupportTicketInvestigationPage() {
 
   return (
     <div>
-      <PageHeader
+      <DetailPageHeader
+        backHref="/support"
+        backLabel="Tickets"
+        eyebrow="Customer success"
         title={ticket.subject}
         description={
           <>
             {ticket.customerEmail ?? 'No email'} ·{' '}
             <span className="capitalize">{formatSlugLabel(ticket.status)}</span>
-            {isLostItem ? ` · ${formatSlugLabel(ticket.type ?? 'lost_item')}` : ''}
+            {isLostItem ? ` · ${formatSlugLabel(ticket.type)}` : ''}
           </>
         }
-        backHref="/support"
-        backLabel="Tickets"
+        actions={
+          ticket.orderId ? (
+            <Link href={`/orders/${ticket.orderId}`} className="btn-outline btn-sm">
+              Order ops
+            </Link>
+          ) : undefined
+        }
       />
 
       {error ? (
@@ -160,91 +175,113 @@ export default function SupportTicketInvestigationPage() {
         </div>
       ) : null}
 
-      <Card>
-        <CardBody>
-          <p className="text-sm text-slate-700">{ticket.description}</p>
-        </CardBody>
-      </Card>
-      {ticket.missingItems && ticket.missingItems.length > 0 && (
-        <p className="mt-2 text-sm text-amber-700">Missing: {ticket.missingItems.join(', ')}</p>
-      )}
+      <OpsPanel title="Ticket details">
+        <p className="text-sm text-slate-700">{ticket.description}</p>
+        {ticket.missingItems && ticket.missingItems.length > 0 ? (
+          <p className="mt-3 text-sm text-amber-800">
+            Missing: {ticket.missingItems.join(', ')}
+          </p>
+        ) : null}
+      </OpsPanel>
 
-      {isLostItem && (
-        <>
-          <h3 className="mt-8 font-semibold">Investigation flow</h3>
-          <ol className="mt-4 space-y-2">
-            {LOST_ITEM_FLOW.map((step, i) => {
-              const done = i < stageIdx || ticket.status === 'closed';
-              const active = i === stageIdx;
-              return (
-                <li
-                  key={step.id}
-                  className={`rounded-lg border px-4 py-2 text-sm ${
-                    active ? 'border-indigo-400 bg-indigo-50' : done ? 'bg-green-50' : 'bg-white'
-                  }`}
-                >
-                  {done ? '✓ ' : active ? '→ ' : '○ '}
-                  {step.label}
-                </li>
-              );
-            })}
-          </ol>
+      {isLostItem ? (
+        <div className="mt-4 space-y-4">
+          <OpsPanel title="Investigation flow">
+            <ol className="space-y-2">
+              {LOST_ITEM_FLOW.map((step, i) => {
+                const done = i < stageIdx || ticket.status === 'closed';
+                const active = i === stageIdx;
+                return (
+                  <li
+                    key={step.id}
+                    className={`rounded-lg border px-4 py-2 text-sm ${
+                      active
+                        ? 'border-primary/40 bg-primary/5 font-medium text-primary'
+                        : done
+                          ? 'border-emerald-200/80 bg-emerald-50/50 text-emerald-900'
+                          : 'border-border/60 bg-surface text-muted'
+                    }`}
+                  >
+                    {done ? '✓ ' : active ? '→ ' : '○ '}
+                    {step.label}
+                  </li>
+                );
+              })}
+            </ol>
+          </OpsPanel>
 
-          {data.order && (
-            <section className="mt-8 rounded-xl border bg-white p-5">
-              <h3 className="font-semibold">Linked order</h3>
-              <p className="mt-2 text-sm capitalize">
-                {data.order.bookingType.replace(/_/g, ' ')} · ₱{data.order.total} ·{' '}
-                {data.order.status.replace(/_/g, ' ')}
-              </p>
-              {data.order.pickupReceipt && (
-                <p className="text-xs text-slate-500">Pickup: {data.order.pickupReceipt}</p>
-              )}
-              {data.order.deliveryReceipt && (
-                <p className="text-xs text-slate-500">Delivery: {data.order.deliveryReceipt}</p>
-              )}
-            </section>
-          )}
+          {data.order ? (
+            <OpsPanel
+              title="Linked order"
+              headerAction={
+                data.ticket.orderId ? (
+                  <Link href={`/orders/${data.ticket.orderId}`} className="link-primary text-xs font-medium">
+                    Open order ops →
+                  </Link>
+                ) : undefined
+              }
+            >
+              <dl>
+                <DetailRow
+                  label="Service"
+                  value={<span className="capitalize">{formatSlugLabel(data.order.bookingType)}</span>}
+                />
+                <DetailRow label="Total" value={formatPeso(data.order.total)} />
+                <DetailRow
+                  label="Status"
+                  value={<span className="capitalize">{formatSlugLabel(data.order.status)}</span>}
+                />
+                {data.order.pickupReceipt ? (
+                  <DetailRow label="Pickup receipt" value={data.order.pickupReceipt} />
+                ) : null}
+                {data.order.deliveryReceipt ? (
+                  <DetailRow label="Delivery receipt" value={data.order.deliveryReceipt} />
+                ) : null}
+              </dl>
+            </OpsPanel>
+          ) : null}
 
-          <section className="mt-8 rounded-xl border bg-white p-5">
-            <h3 className="font-semibold">Review photos</h3>
+          <OpsPanel title="Review photos">
             {data.photos.length === 0 ? (
-              <p className="mt-2 text-sm text-slate-500">No photos on file for this order.</p>
+              <p className="text-sm text-muted">No photos on file for this order.</p>
             ) : (
-              <ul className="mt-3 space-y-2 text-sm">
+              <ul className="grid gap-4 sm:grid-cols-2">
                 {data.photos.map((p, i) => (
-                  <li key={i} className="rounded border p-3">
-                    <p className="font-medium">{p.label}</p>
-                    <p className="text-xs text-slate-500">{p.source}</p>
-                    <a href={p.url} target="_blank" rel="noreferrer" className="mt-1 block truncate text-indigo-600">
-                      {p.url}
-                    </a>
+                  <li key={i} className="rounded-lg border border-border/60 p-3">
+                    <p className="font-medium text-slate-900">{p.label}</p>
+                    <p className="text-xs text-muted">{p.source}</p>
+                    <AuthenticatedImage
+                      publicPath={p.url}
+                      alt={p.label}
+                      className="mt-2 max-h-48 w-full rounded border border-border/60 object-cover"
+                    />
                   </li>
                 ))}
               </ul>
             )}
-            <button
-              type="button"
-              disabled={loading}
-              className="mt-4 rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white disabled:opacity-50"
-              onClick={() => investigate('review_photos')}
-            >
-              Mark photos reviewed
-            </button>
-          </section>
+            <div className="dc-form-actions mt-4">
+              <button
+                type="button"
+                disabled={loading}
+                className="btn-primary btn-sm disabled:opacity-50"
+                onClick={() => investigate('review_photos')}
+              >
+                Mark photos reviewed
+              </button>
+            </div>
+          </OpsPanel>
 
-          <section className="mt-6 rounded-xl border bg-white p-5">
-            <h3 className="font-semibold">Review laundry logs</h3>
-            <ul className="mt-3 max-h-64 space-y-2 overflow-y-auto text-sm">
+          <OpsPanel title="Review laundry logs">
+            <ul className="max-h-64 space-y-2 overflow-y-auto text-sm">
               {data.laundryLogs.map((log, i) => (
-                <li key={i} className="rounded border px-3 py-2">
+                <li key={i} className="rounded-lg border border-border/60 px-3 py-2">
                   <p className="font-medium capitalize">{log.label}</p>
-                  {log.at && (
-                    <p className="text-xs text-slate-500">{new Date(log.at).toLocaleString()}</p>
-                  )}
-                  {log.tagCode && <p className="text-xs">Tag: {log.tagCode}</p>}
-                  {log.note && <p className="text-xs text-slate-600">{log.note}</p>}
-                  {log.photoUrl && (
+                  {log.at ? (
+                    <p className="text-xs text-muted">{new Date(log.at).toLocaleString()}</p>
+                  ) : null}
+                  {log.tagCode ? <p className="text-xs">Tag: {log.tagCode}</p> : null}
+                  {log.note ? <p className="text-xs text-muted">{log.note}</p> : null}
+                  {log.photoUrl ? (
                     <div className="mt-2">
                       <AuthenticatedImage
                         publicPath={log.photoUrl}
@@ -252,51 +289,70 @@ export default function SupportTicketInvestigationPage() {
                         className="max-h-32 rounded border object-cover"
                       />
                     </div>
-                  )}
+                  ) : null}
                 </li>
               ))}
             </ul>
-            <button
-              type="button"
-              disabled={loading}
-              className="mt-4 rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white disabled:opacity-50"
-              onClick={() => investigate('review_logs')}
-            >
-              Mark logs reviewed
-            </button>
-          </section>
-
-          <section className="mt-6 rounded-xl border bg-white p-5">
-            <h3 className="font-semibold">Determine outcome & compensation</h3>
-            <select
-              className="mt-3 w-full rounded border px-3 py-2 text-sm"
-              value={outcome}
-              onChange={(e) => setOutcome(e.target.value)}
-            >
-              <option value="found">Item found</option>
-              <option value="compensated">Compensated</option>
-              <option value="no_action">No action</option>
-              <option value="denied">Denied</option>
-            </select>
-            <textarea
-              className="mt-3 w-full rounded border px-3 py-2 text-sm"
-              rows={2}
-              placeholder="Outcome notes"
-              value={outcomeNotes}
-              onChange={(e) => setOutcomeNotes(e.target.value)}
-            />
-            <input
-              className="mt-3 w-full rounded border px-3 py-2 text-sm"
-              type="number"
-              placeholder="Compensation ₱"
-              value={compensationAmount}
-              onChange={(e) => setCompensationAmount(e.target.value)}
-            />
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="dc-form-actions mt-4">
               <button
                 type="button"
                 disabled={loading}
-                className="rounded-lg border px-4 py-2 text-sm"
+                className="btn-primary btn-sm disabled:opacity-50"
+                onClick={() => investigate('review_logs')}
+              >
+                Mark logs reviewed
+              </button>
+            </div>
+          </OpsPanel>
+
+          <OpsPanel title="Outcome & compensation">
+            <div className="dc-form-grid max-w-xl">
+              <div className="sm:col-span-2">
+                <label htmlFor="outcome" className="form-label">
+                  Outcome
+                </label>
+                <select
+                  id="outcome"
+                  className="input-field"
+                  value={outcome}
+                  onChange={(e) => setOutcome(e.target.value)}
+                >
+                  <option value="found">Item found</option>
+                  <option value="compensated">Compensated</option>
+                  <option value="no_action">No action</option>
+                  <option value="denied">Denied</option>
+                </select>
+              </div>
+              <div className="sm:col-span-2">
+                <label htmlFor="outcome-notes" className="form-label">
+                  Outcome notes
+                </label>
+                <textarea
+                  id="outcome-notes"
+                  className="input-field min-h-20"
+                  rows={2}
+                  value={outcomeNotes}
+                  onChange={(e) => setOutcomeNotes(e.target.value)}
+                />
+              </div>
+              <div>
+                <label htmlFor="compensation" className="form-label">
+                  Compensation
+                </label>
+                <input
+                  id="compensation"
+                  className="input-field"
+                  type="number"
+                  value={compensationAmount}
+                  onChange={(e) => setCompensationAmount(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="dc-form-actions mt-4">
+              <button
+                type="button"
+                disabled={loading}
+                className="btn-outline btn-sm"
                 onClick={() =>
                   investigate('determine_outcome', {
                     outcome,
@@ -310,7 +366,7 @@ export default function SupportTicketInvestigationPage() {
               <button
                 type="button"
                 disabled={loading || !!ticket.compensationCreditedAt}
-                className="rounded-lg bg-green-600 px-4 py-2 text-sm text-white disabled:opacity-50"
+                className="btn-primary btn-sm disabled:opacity-50"
                 onClick={() =>
                   investigate('compensate', {
                     outcome: 'compensated',
@@ -318,31 +374,35 @@ export default function SupportTicketInvestigationPage() {
                   })
                 }
               >
-                Credit wallet (₱{compensationAmount})
+                Credit wallet ({formatPeso(Number(compensationAmount))})
               </button>
             </div>
-            {ticket.outcome && ticket.outcome !== 'pending' && (
-              <p className="mt-3 text-sm text-green-700">
+            {ticket.outcome && ticket.outcome !== 'pending' ? (
+              <p className="mt-3 text-sm text-emerald-700">
                 Current outcome: {formatLostItemOutcome(ticket.outcome)}
-                {ticket.compensationCreditedAt && ' · Wallet credited'}
+                {ticket.compensationCreditedAt ? ' · Wallet credited' : ''}
               </p>
-            )}
-          </section>
+            ) : null}
+          </OpsPanel>
 
-          <section className="mt-6 rounded-xl border bg-white p-5">
+          <OpsPanel title="Investigation actions">
+            <label htmlFor="investigation-note" className="form-label">
+              Admin note
+            </label>
             <textarea
-              className="w-full rounded border px-3 py-2 text-sm"
+              id="investigation-note"
+              className="input-field min-h-20"
               rows={2}
-              placeholder="Admin note (optional)"
+              placeholder="Optional note for timeline"
               value={adminNote}
               onChange={(e) => setAdminNote(e.target.value)}
             />
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="dc-form-actions mt-4">
               {!ticket.investigationStage || ticket.investigationStage === 'complaint' ? (
                 <button
                   type="button"
                   disabled={loading}
-                  className="rounded-lg bg-slate-800 px-4 py-2 text-sm text-white"
+                  className="btn-primary btn-sm"
                   onClick={() => investigate('start_investigation')}
                 >
                   Start investigation
@@ -351,24 +411,24 @@ export default function SupportTicketInvestigationPage() {
               <button
                 type="button"
                 disabled={loading || ticket.status === 'closed'}
-                className="rounded-lg border px-4 py-2 text-sm"
+                className="btn-outline btn-sm"
                 onClick={() => investigate('close')}
               >
                 Close ticket
               </button>
             </div>
-          </section>
-        </>
-      )}
-
-      {!isLostItem && (
-        <section className="mt-6 rounded-xl border bg-white p-5">
-          <h3 className="font-semibold">Manage ticket</h3>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <label className="block text-sm">
-              <span className="font-medium text-slate-700">Status</span>
+          </OpsPanel>
+        </div>
+      ) : (
+        <OpsPanel title="Manage ticket" className="mt-4">
+          <div className="dc-form-grid max-w-xl">
+            <div>
+              <label htmlFor="ticket-status" className="form-label">
+                Status
+              </label>
               <select
-                className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                id="ticket-status"
+                className="input-field"
                 value={generalStatus}
                 onChange={(e) => setGeneralStatus(e.target.value)}
               >
@@ -377,11 +437,14 @@ export default function SupportTicketInvestigationPage() {
                 <option value="resolved">Resolved</option>
                 <option value="closed">Closed</option>
               </select>
-            </label>
-            <label className="block text-sm">
-              <span className="font-medium text-slate-700">Priority</span>
+            </div>
+            <div>
+              <label htmlFor="ticket-priority" className="form-label">
+                Priority
+              </label>
               <select
-                className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                id="ticket-priority"
+                className="input-field"
                 value={generalPriority}
                 onChange={(e) => setGeneralPriority(e.target.value)}
               >
@@ -389,30 +452,33 @@ export default function SupportTicketInvestigationPage() {
                 <option value="medium">Medium</option>
                 <option value="high">High</option>
               </select>
-            </label>
+            </div>
+            <div className="sm:col-span-2">
+              <label htmlFor="general-admin-note" className="form-label">
+                Admin note
+              </label>
+              <textarea
+                id="general-admin-note"
+                className="input-field min-h-24"
+                rows={3}
+                placeholder="Internal note for this ticket"
+                value={generalAdminNote}
+                onChange={(e) => setGeneralAdminNote(e.target.value)}
+              />
+            </div>
           </div>
-          <label className="mt-4 block text-sm">
-            <span className="font-medium text-slate-700">Admin note</span>
-            <textarea
-              className="mt-1 w-full rounded border px-3 py-2 text-sm"
-              rows={3}
-              placeholder="Internal note for this ticket"
-              value={generalAdminNote}
-              onChange={(e) => setGeneralAdminNote(e.target.value)}
-            />
-          </label>
-          <button
-            type="button"
-            disabled={loading}
-            className="mt-4 rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white disabled:opacity-50"
-            onClick={() => saveGeneralUpdate()}
-          >
-            Save changes
-          </button>
-        </section>
+          <div className="dc-form-actions mt-4">
+            <button
+              type="button"
+              disabled={loading}
+              className="btn-primary btn-sm disabled:opacity-50"
+              onClick={() => saveGeneralUpdate()}
+            >
+              Save changes
+            </button>
+          </div>
+        </OpsPanel>
       )}
-
-      {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
     </div>
   );
 }

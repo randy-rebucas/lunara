@@ -10,6 +10,8 @@
   --color-muted-foreground: #94a3b8;
   --color-destructive: #ef4444;
   --font-sans: var(--font-inter), 'Inter', system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+    'Courier New', monospace;
   --shadow-card: 0 1px 3px 0 rgb(15 23 42 / 0.06), 0 1px 2px -1px rgb(15 23 42 / 0.06);
   --shadow-elevated: 0 4px 6px -1px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.06);
   --shadow-sidebar: 1px 0 0 0 rgb(226 232 240 / 0.8);
@@ -24,7 +26,7 @@
   }
 
   body {
-    @apply bg-surface-muted text-slate-900 antialiased;
+    @apply bg-surface-muted font-sans text-slate-900 antialiased;
   }
 
   ul,
@@ -196,5 +198,63 @@
 
   .nav-link-active {
     @apply block rounded-lg bg-primary/10 px-3 py-2 text-sm font-medium text-primary;
+  }
+
+  /* Datacenter / metric typography — matches StatCard + PageHeader (sans) */
+  .dc-eyebrow {
+    @apply text-xs font-semibold uppercase tracking-wider text-muted;
+  }
+
+  .dc-label {
+    @apply text-sm font-medium text-muted;
+  }
+
+  .dc-value {
+    @apply text-3xl font-semibold tabular-nums tracking-tight text-slate-900;
+  }
+
+  .dc-value-sm {
+    @apply text-xl font-semibold tabular-nums text-slate-900;
+  }
+
+  .dc-sublabel {
+    @apply text-xs text-muted;
+  }
+
+  .dc-chip {
+    @apply text-xs font-medium text-slate-700;
+  }
+
+  /** IDs, branch codes, promo codes — monospace only where data is machine-readable */
+  .text-code {
+    @apply font-mono text-xs tabular-nums;
+  }
+
+  .dc-metric {
+    @apply rounded-lg p-4 ring-1;
+  }
+
+  .dc-panel {
+    @apply overflow-hidden rounded-lg bg-surface ring-1 ring-border/60;
+  }
+
+  .dc-panel-header {
+    @apply border-b border-border/60 bg-slate-50/90 px-4 py-3;
+  }
+
+  .dc-panel-body {
+    @apply p-4;
+  }
+
+  .dc-panel-empty {
+    @apply px-4 py-10 text-center sm:text-left;
+  }
+
+  .dc-form-grid {
+    @apply grid gap-3 sm:grid-cols-2;
+  }
+
+  .dc-form-actions {
+    @apply flex flex-wrap items-center gap-3 border-t border-border/60 pt-4;
   }
 }

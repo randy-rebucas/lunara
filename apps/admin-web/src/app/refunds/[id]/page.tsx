@@ -1,13 +1,14 @@
 'use client';
 
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useState } from 'react';
 import { REFUND_FLOW, formatRefundStatus, refundFlowIndex } from '@lunara/utils';
+import { DetailPageHeader } from '../../../components/detail-page-header';
 import { DataPageStatus } from '../../../components/data-page-status';
-import { Card, CardBody } from '../../../components/ui/card';
-import { PageHeader } from '../../../components/ui/page-header';
+import { DetailRow, OpsPanel } from '../../../components/ui/ops-panel';
 import { adminFetch } from '../../../lib/admin-api';
-import { formatSlugLabel } from '../../../lib/format-label';
+import { formatOrderId, formatSlugLabel } from '../../../lib/format-label';
 import { formatPeso } from '../../../lib/format-peso';
 import { useAdminQuery } from '../../../lib/use-admin-query';
 
@@ -84,7 +85,12 @@ export default function AdminRefundReviewPage() {
   if (pageLoading || loadError || !data) {
     return (
       <div>
-        <PageHeader title="Refund review" backHref="/refunds" backLabel="Refunds" />
+        <DetailPageHeader
+          backHref="/refunds"
+          backLabel="Refunds"
+          eyebrow="Finance ops"
+          title="Refund review"
+        />
         <DataPageStatus loading={pageLoading} error={loadError} loadingMessage="Loading refund…" />
       </div>
     );
@@ -95,11 +101,21 @@ export default function AdminRefundReviewPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Refund review"
-        description={`Order …${refund.orderId.slice(-6)} · ${formatRefundStatus(refund.status)}`}
+      <DetailPageHeader
         backHref="/refunds"
         backLabel="Refunds"
+        eyebrow="Finance ops"
+        title={`Refund · ${formatOrderId(refund.orderId)}`}
+        description={
+          <>
+            {formatRefundStatus(refund.status)} · requested {formatPeso(refund.requestedAmount)}
+          </>
+        }
+        actions={
+          <Link href={`/orders/${refund.orderId}`} className="btn-outline btn-sm">
+            Order ops
+          </Link>
+        }
       />
 
       {error ? (
@@ -108,166 +124,185 @@ export default function AdminRefundReviewPage() {
         </div>
       ) : null}
 
-      <ol className="space-y-2">
-        {REFUND_FLOW.map((step, i) => {
-          const done = i < stageIdx || refund.status === 'closed';
-          const active = i === stageIdx;
-          return (
-            <li
-              key={step.id}
-              className={`rounded-lg border px-4 py-2.5 text-sm ${
-                active
-                  ? 'border-primary/40 bg-primary/5 font-medium text-primary'
-                  : done
-                    ? 'border-emerald-200/80 bg-emerald-50/50 text-emerald-900'
-                    : 'border-border/60 bg-surface text-muted'
-              }`}
-            >
-              {done ? '✓ ' : active ? '→ ' : '○ '}
-              {step.label}
-            </li>
-          );
-        })}
-      </ol>
+      <OpsPanel title="Workflow" description="Refund review stages">
+        <ol className="space-y-2">
+          {REFUND_FLOW.map((step, i) => {
+            const done = i < stageIdx || refund.status === 'closed';
+            const active = i === stageIdx;
+            return (
+              <li
+                key={step.id}
+                className={`rounded-lg border px-4 py-2.5 text-sm ${
+                  active
+                    ? 'border-primary/40 bg-primary/5 font-medium text-primary'
+                    : done
+                      ? 'border-emerald-200/80 bg-emerald-50/50 text-emerald-900'
+                      : 'border-border/60 bg-surface text-muted'
+                }`}
+              >
+                {done ? '✓ ' : active ? '→ ' : '○ '}
+                {step.label}
+              </li>
+            );
+          })}
+        </ol>
+      </OpsPanel>
 
-      <Card className="mt-6">
-        <CardBody>
-          <p className="text-sm text-slate-700">{refund.reason}</p>
-          <p className="mt-2 text-sm font-semibold text-slate-900">
-            Requested: {formatPeso(refund.requestedAmount)}
-          </p>
-        </CardBody>
-      </Card>
+      <OpsPanel title="Customer request" description={refund.reason} className="mt-4">
+        <dl>
+          <DetailRow label="Requested" value={formatPeso(refund.requestedAmount)} />
+          {refund.approvedAmount != null ? (
+            <DetailRow label="Approved" value={formatPeso(refund.approvedAmount)} />
+          ) : null}
+          {refund.rejectionReason ? (
+            <DetailRow label="Rejection" value={refund.rejectionReason} />
+          ) : null}
+        </dl>
+      </OpsPanel>
 
-      {data.order && (
-        <Card className="mt-6">
-          <CardBody>
-            <h3 className="font-semibold text-slate-900">Verify order</h3>
-            <p className="mt-2 text-sm capitalize text-muted">
-              {formatSlugLabel(data.order.bookingType)} · {formatPeso(data.order.total)} ·{' '}
-              {formatSlugLabel(data.order.status)}
+      {data.order ? (
+        <OpsPanel title="Verify order" description="Confirm payment and eligibility" className="mt-4">
+          <dl>
+            <DetailRow
+              label="Order"
+              value={
+                <Link href={`/orders/${data.order._id}`} className="link-primary">
+                  {formatOrderId(data.order._id)}
+                </Link>
+              }
+            />
+            <DetailRow
+              label="Service"
+              value={<span className="capitalize">{formatSlugLabel(data.order.bookingType)}</span>}
+            />
+            <DetailRow label="Total" value={formatPeso(data.order.total)} />
+            <DetailRow
+              label="Status"
+              value={<span className="capitalize">{formatSlugLabel(data.order.status)}</span>}
+            />
+          </dl>
+          {data.payment ? (
+            <p className="mt-3 text-sm text-muted">
+              Payment: {data.payment.method} · {data.payment.status} ·{' '}
+              {formatPeso(data.payment.amount)}
+              {data.payment.receiptCode ? ` · ${data.payment.receiptCode}` : ''}
             </p>
-            {data.payment && (
-              <p className="mt-2 text-sm text-muted">
-                Payment: {data.payment.method} · {data.payment.status} ·{' '}
-                {formatPeso(data.payment.amount)}
-                {data.payment.receiptCode ? ` · ${data.payment.receiptCode}` : ''}
-              </p>
-            )}
-            {data.verification && (
-              <ul className="mt-3 space-y-1 text-sm">
-                <li>{data.verification.paymentPaid ? '✓' : '✗'} Payment completed</li>
-                <li>{data.verification.paymentMatchesOrder ? '✓' : '✗'} Amount matches order</li>
-                <li>{data.verification.eligibleForRefund ? '✓' : '✗'} Eligible for refund</li>
-              </ul>
-            )}
+          ) : null}
+          {data.verification ? (
+            <ul className="mt-3 space-y-1 text-sm">
+              <li>{data.verification.paymentPaid ? '✓' : '✗'} Payment completed</li>
+              <li>{data.verification.paymentMatchesOrder ? '✓' : '✗'} Amount matches order</li>
+              <li>{data.verification.eligibleForRefund ? '✓' : '✗'} Eligible for refund</li>
+            </ul>
+          ) : null}
+          <div className="dc-form-actions mt-4">
             <button
               type="button"
               disabled={loading || !!refund.orderVerifiedAt}
-              className="btn-primary btn-sm mt-4 disabled:opacity-50"
+              className="btn-primary btn-sm disabled:opacity-50"
               onClick={() => review('verify_order')}
             >
               {refund.orderVerifiedAt ? 'Order verified' : 'Mark order verified'}
             </button>
-          </CardBody>
-        </Card>
-      )}
+          </div>
+        </OpsPanel>
+      ) : null}
 
-      <Card className="mt-6">
-        <CardBody>
-          <h3 className="font-semibold text-slate-900">Approve / reject</h3>
-          <label htmlFor="approved-amount" className="form-label mt-4">
-            Approved amount
-          </label>
-          <input
-            id="approved-amount"
-            className="input-field"
-            type="number"
-            value={approvedAmount}
-            onChange={(e) => setApprovedAmount(e.target.value)}
-          />
-          <label htmlFor="rejection-reason" className="form-label mt-3">
-            Rejection reason
-          </label>
-          <input
-            id="rejection-reason"
-            className="input-field"
-            value={rejectionReason}
-            onChange={(e) => setRejectionReason(e.target.value)}
-            placeholder="Required if rejecting"
-          />
-          <div className="mt-4 flex flex-wrap gap-2">
+      <OpsPanel title="Approve / reject" className="mt-4">
+        <div className="dc-form-grid max-w-xl">
+          <div>
+            <label htmlFor="approved-amount" className="form-label">
+              Approved amount
+            </label>
+            <input
+              id="approved-amount"
+              className="input-field"
+              type="number"
+              value={approvedAmount}
+              onChange={(e) => setApprovedAmount(e.target.value)}
+            />
+          </div>
+          <div>
+            <label htmlFor="rejection-reason" className="form-label">
+              Rejection reason
+            </label>
+            <input
+              id="rejection-reason"
+              className="input-field"
+              value={rejectionReason}
+              onChange={(e) => setRejectionReason(e.target.value)}
+              placeholder="Required if rejecting"
+            />
+          </div>
+        </div>
+        <div className="dc-form-actions mt-4">
+          <button
+            type="button"
+            disabled={loading}
+            className="btn-primary btn-sm"
+            onClick={() => review('approve', { approvedAmount: Number(approvedAmount) })}
+          >
+            Approve
+          </button>
+          <button
+            type="button"
+            disabled={loading}
+            className="btn-outline btn-sm text-destructive"
+            onClick={() => review('reject', { rejectionReason })}
+          >
+            Reject
+          </button>
+        </div>
+      </OpsPanel>
+
+      <OpsPanel title="Process & notify" className="mt-4">
+        <label htmlFor="admin-note" className="form-label">
+          Admin note
+        </label>
+        <textarea
+          id="admin-note"
+          className="input-field min-h-20"
+          rows={2}
+          value={adminNote}
+          onChange={(e) => setAdminNote(e.target.value)}
+        />
+        <div className="dc-form-actions mt-4">
+          {refund.status === 'pending' ? (
             <button
               type="button"
               disabled={loading}
-              className="btn-primary btn-sm"
-              onClick={() => review('approve', { approvedAmount: Number(approvedAmount) })}
+              className="btn-outline btn-sm"
+              onClick={() => review('start_review')}
             >
-              Approve
+              Start review
             </button>
-            <button
-              type="button"
-              disabled={loading}
-              className="btn-outline btn-sm text-destructive"
-              onClick={() => review('reject', { rejectionReason })}
-            >
-              Reject
-            </button>
-          </div>
-        </CardBody>
-      </Card>
-
-      <Card className="mt-6">
-        <CardBody>
-          <h3 className="font-semibold text-slate-900">Process & notify</h3>
-          <label htmlFor="admin-note" className="form-label mt-3">
-            Admin note
-          </label>
-          <textarea
-            id="admin-note"
-            className="input-field min-h-20"
-            rows={2}
-            value={adminNote}
-            onChange={(e) => setAdminNote(e.target.value)}
-          />
-          <div className="mt-4 flex flex-wrap gap-2">
-            {refund.status === 'pending' && (
-              <button
-                type="button"
-                disabled={loading}
-                className="btn-secondary btn-sm"
-                onClick={() => review('start_review')}
-              >
-                Start review
-              </button>
-            )}
-            <button
-              type="button"
-              disabled={loading || refund.status !== 'approved'}
-              className="btn-primary btn-sm disabled:opacity-50"
-              onClick={() => review('process')}
-            >
-              Process refund (wallet)
-            </button>
-            <button
-              type="button"
-              disabled={loading || !!refund.customerNotifiedAt}
-              className="btn-outline btn-sm disabled:opacity-50"
-              onClick={() => review('notify')}
-            >
-              Notify customer
-            </button>
-          </div>
-          {refund.processedAt && (
-            <p className="mt-3 text-sm text-emerald-700">
-              Processed {new Date(refund.processedAt).toLocaleString()}
-            </p>
-          )}
-          {refund.customerNotifiedAt && (
-            <p className="text-sm text-muted">Customer notified</p>
-          )}
-        </CardBody>
-      </Card>
+          ) : null}
+          <button
+            type="button"
+            disabled={loading || refund.status !== 'approved'}
+            className="btn-primary btn-sm disabled:opacity-50"
+            onClick={() => review('process')}
+          >
+            Process refund (wallet)
+          </button>
+          <button
+            type="button"
+            disabled={loading || !!refund.customerNotifiedAt}
+            className="btn-outline btn-sm disabled:opacity-50"
+            onClick={() => review('notify')}
+          >
+            Notify customer
+          </button>
+        </div>
+        {refund.processedAt ? (
+          <p className="mt-3 text-sm text-emerald-700">
+            Processed {new Date(refund.processedAt).toLocaleString()}
+          </p>
+        ) : null}
+        {refund.customerNotifiedAt ? (
+          <p className="text-sm text-muted">Customer notified</p>
+        ) : null}
+      </OpsPanel>
     </div>
   );
 }

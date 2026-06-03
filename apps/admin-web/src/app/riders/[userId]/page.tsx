@@ -3,9 +3,12 @@
 import { useParams } from 'next/navigation';
 import { useCallback, useState } from 'react';
 import { AuthenticatedImage } from '../../../components/authenticated-image';
+import { DetailPageHeader } from '../../../components/detail-page-header';
 import { DataPageStatus } from '../../../components/data-page-status';
-import { PageHeader } from '../../../components/ui/page-header';
+import { DetailRow, OpsPanel } from '../../../components/ui/ops-panel';
 import { adminFetch } from '../../../lib/admin-api';
+import { formatSlugLabel } from '../../../lib/format-label';
+import { formatPeso } from '../../../lib/format-peso';
 import { useAdminQuery } from '../../../lib/use-admin-query';
 
 interface RiderDocument {
@@ -46,7 +49,13 @@ interface RiderProfileData {
 }
 
 function docLabel(type: string) {
-  return type.replace(/_/g, ' ');
+  return formatSlugLabel(type);
+}
+
+function verificationBadge(status?: string) {
+  if (status === 'verified') return 'badge-accent';
+  if (status === 'pending_review') return 'badge-primary';
+  return 'badge-neutral';
 }
 
 export default function RiderProfileReviewPage() {
@@ -105,6 +114,7 @@ export default function RiderProfileReviewPage() {
         body: JSON.stringify({ pendingHold }),
       });
       setWalletHold('');
+      await reload();
     } catch (e) {
       setActionError(e instanceof Error ? e.message : 'Wallet hold failed');
     } finally {
@@ -143,66 +153,71 @@ export default function RiderProfileReviewPage() {
 
   return (
     <div>
-      <PageHeader
-        title={name ?? 'Rider profile'}
-        description="Review profile, KYC documents, wallet hold, and manual credits."
+      <DetailPageHeader
         backHref="/riders"
         backLabel="Riders"
+        eyebrow="Fleet"
+        title={name ?? 'Rider profile'}
+        description="Review profile, KYC documents, wallet hold, and manual credits."
+        actions={
+          data?.compliance ? (
+            <span className={verificationBadge(data.compliance.verificationStatus)}>
+              {formatSlugLabel(data.compliance.verificationStatus)}
+            </span>
+          ) : undefined
+        }
       />
 
-      <div className="mt-4">
-        <DataPageStatus loading={loading} error={error} loadingMessage="Loading rider profile…" />
-      </div>
+      <DataPageStatus loading={loading} error={error} loadingMessage="Loading rider profile…" />
 
       {actionError ? (
-        <p className="mt-4 text-sm text-destructive" role="alert">
+        <div className="alert-error mb-4" role="alert">
           {actionError}
-        </p>
+        </div>
       ) : null}
 
       {data ? (
-        <>
-          <div className="mt-6 grid gap-6 lg:grid-cols-2">
-            <div className="card card-body space-y-3">
-              <h3 className="text-lg font-semibold text-slate-900">Profile</h3>
-              <p className="text-sm">
-                <span className="text-muted">Email:</span> {data.user?.email ?? '—'}
-              </p>
-              <p className="text-sm">
-                <span className="text-muted">Phone:</span> {data.user?.phone ?? '—'}
-              </p>
-              <p className="text-sm">
-                <span className="text-muted">Vehicle:</span> {data.vehicleType ?? '—'} · Plate{' '}
-                {data.plateNumber ?? '—'} · OR/CR {data.orCrNumber ?? '—'}
-              </p>
-              <p className="text-sm">
-                <span className="text-muted">Home:</span>{' '}
-                {data.homeAddress?.line1
-                  ? `${data.homeAddress.line1}${data.homeAddress.line2 ? `, ${data.homeAddress.line2}` : ''}, ${data.homeAddress.city ?? ''}, ${data.homeAddress.province ?? ''} ${data.homeAddress.postalCode ?? ''}`
-                  : '—'}
-              </p>
-              <p className="text-sm">
-                <span className="text-muted">Earnings:</span> Today ₱{data.todayEarnings ?? 0} · Total ₱
-                {data.totalEarnings ?? 0}
-              </p>
-              <p className="text-sm">
-                <span className="text-muted">Status:</span>{' '}
-                {data.compliance?.verificationStatus ?? 'incomplete'}
-                {data.compliance?.profileGaps?.length ? (
-                  <span className="block text-muted">
-                    Missing: {data.compliance.profileGaps.join(', ')}
-                  </span>
-                ) : null}
-              </p>
-            </div>
+        <div className="space-y-4">
+          <div className="grid gap-4 lg:grid-cols-2">
+            <OpsPanel title="Profile">
+              <dl>
+                <DetailRow label="Email" value={data.user?.email ?? '—'} />
+                <DetailRow label="Phone" value={data.user?.phone ?? '—'} />
+                <DetailRow
+                  label="Vehicle"
+                  value={
+                    data.vehicleType
+                      ? `${formatSlugLabel(data.vehicleType)} · ${data.plateNumber ?? '—'}`
+                      : '—'
+                  }
+                />
+                <DetailRow label="OR/CR" value={data.orCrNumber ?? '—'} />
+                <DetailRow
+                  label="Home"
+                  value={
+                    data.homeAddress?.line1
+                      ? `${data.homeAddress.line1}${data.homeAddress.line2 ? `, ${data.homeAddress.line2}` : ''}, ${data.homeAddress.city ?? ''}`
+                      : '—'
+                  }
+                />
+                <DetailRow
+                  label="Earnings"
+                  value={`Today ${formatPeso(data.todayEarnings ?? 0)} · Total ${formatPeso(data.totalEarnings ?? 0)}`}
+                />
+              </dl>
+            </OpsPanel>
 
-            <div className="card card-body">
-              <h3 className="text-lg font-semibold text-slate-900">Compliance</h3>
-              <p className="mt-2 text-sm text-muted">
+            <OpsPanel title="Compliance">
+              <p className="text-sm text-muted">
                 {data.compliance?.isCompliant
                   ? 'Rider can go online.'
                   : 'Rider cannot go online until profile and documents are complete.'}
               </p>
+              {data.compliance?.profileGaps?.length ? (
+                <p className="mt-2 text-sm text-muted">
+                  Profile gaps: {data.compliance.profileGaps.join(', ')}
+                </p>
+              ) : null}
               {data.compliance?.documentGaps?.length ? (
                 <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-muted">
                   {data.compliance.documentGaps.map((gap) => (
@@ -210,38 +225,37 @@ export default function RiderProfileReviewPage() {
                   ))}
                 </ul>
               ) : null}
-            </div>
+            </OpsPanel>
           </div>
 
-          <div className="card card-body mt-6 space-y-4">
-            <h3 className="text-lg font-semibold text-slate-900">Wallet operations</h3>
+          <OpsPanel title="Wallet operations">
             <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
+              <div>
                 <label htmlFor="wallet-hold" className="form-label">
-                  Set pending hold (₱)
+                  Set pending hold
                 </label>
                 <div className="flex gap-2">
                   <input
                     id="wallet-hold"
                     type="number"
                     min={0}
-                    className="input-field flex-1"
+                    className="input-field min-w-0 flex-1"
                     value={walletHold}
                     onChange={(e) => setWalletHold(e.target.value)}
                   />
                   <button
                     type="button"
-                    className="btn-secondary btn-sm"
+                    className="btn-outline btn-sm shrink-0"
                     disabled={walletBusy}
                     onClick={applyWalletHold}
                   >
-                    Apply hold
+                    Apply
                   </button>
                 </div>
               </div>
-              <div className="space-y-2">
+              <div>
                 <label htmlFor="credit-amount" className="form-label">
-                  Manual credit (₱)
+                  Manual credit
                 </label>
                 <div className="flex flex-wrap gap-2">
                   <select
@@ -257,21 +271,21 @@ export default function RiderProfileReviewPage() {
                     id="credit-amount"
                     type="number"
                     min={1}
-                    className="input-field flex-1"
+                    className="input-field min-w-0 flex-1"
                     value={creditAmount}
                     onChange={(e) => setCreditAmount(e.target.value)}
                   />
                 </div>
                 <input
                   id="credit-note"
-                  className="input-field w-full"
+                  className="input-field mt-2 w-full"
                   placeholder="Optional note"
                   value={creditNote}
                   onChange={(e) => setCreditNote(e.target.value)}
                 />
                 <button
                   type="button"
-                  className="btn-primary btn-sm"
+                  className="btn-primary btn-sm mt-3"
                   disabled={walletBusy}
                   onClick={creditEarning}
                 >
@@ -279,29 +293,31 @@ export default function RiderProfileReviewPage() {
                 </button>
               </div>
             </div>
-          </div>
+          </OpsPanel>
 
-          <div className="mt-8">
-            <h3 className="text-lg font-semibold text-slate-900">Documents</h3>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <OpsPanel title="Documents" description="Review uploaded KYC files">
+            <div className="grid gap-4 md:grid-cols-2">
               {(data.documents ?? []).map((doc) => {
                 const reviewing = busyType === doc.type;
 
                 return (
-                  <div key={doc.type} className="card card-body space-y-3">
+                  <div
+                    key={doc.type}
+                    className="rounded-lg border border-border/60 bg-surface p-4 space-y-3"
+                  >
                     <div className="flex items-center justify-between gap-3">
                       <h4 className="font-medium capitalize text-slate-900">{docLabel(doc.type)}</h4>
-                      <span className="badge-primary">{doc.status ?? 'missing'}</span>
+                      <span className="badge-primary capitalize">{doc.status ?? 'missing'}</span>
                     </div>
 
                     {doc.fileUrl ? (
                       <AuthenticatedImage
                         publicPath={doc.fileUrl}
                         alt={doc.type}
-                        className="h-48 w-full rounded-lg border border-slate-200 object-cover"
+                        className="h-48 w-full rounded-lg border border-border/60 object-cover"
                       />
                     ) : (
-                      <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-slate-200 text-sm text-muted">
+                      <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-border/60 text-sm text-muted">
                         Not uploaded
                       </div>
                     )}
@@ -322,7 +338,7 @@ export default function RiderProfileReviewPage() {
                         </button>
                         <button
                           type="button"
-                          className="btn-secondary btn-sm"
+                          className="btn-outline btn-sm"
                           disabled={reviewing}
                           onClick={() => {
                             setRejectType(doc.type);
@@ -335,7 +351,7 @@ export default function RiderProfileReviewPage() {
                     ) : null}
 
                     {rejectType === doc.type ? (
-                      <div className="space-y-2 border-t border-slate-100 pt-3">
+                      <div className="space-y-2 border-t border-border/60 pt-3">
                         <label htmlFor={`reject-${doc.type}`} className="form-label">
                           Rejection reason
                         </label>
@@ -357,7 +373,7 @@ export default function RiderProfileReviewPage() {
                           </button>
                           <button
                             type="button"
-                            className="btn-secondary btn-sm"
+                            className="btn-outline btn-sm"
                             onClick={() => setRejectType(null)}
                           >
                             Cancel
@@ -369,8 +385,8 @@ export default function RiderProfileReviewPage() {
                 );
               })}
             </div>
-          </div>
-        </>
+          </OpsPanel>
+        </div>
       ) : null}
     </div>
   );

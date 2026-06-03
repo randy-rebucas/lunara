@@ -23,7 +23,7 @@ export function StatCard({
   const content = (
     <>
       <p className="text-sm font-medium text-muted">{label}</p>
-      <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">{value}</p>
+      <p className="mt-2 text-3xl font-semibold tabular-nums tracking-tight text-slate-900">{value}</p>
     </>
   );
 
