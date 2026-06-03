@@ -97,3 +97,8 @@ export function formatCashTimingLabel(timing?: CashTiming) {
 export function isPaymongoMethod(method: PaymentMethod) {
   return PAYMONGO_METHODS.includes(method);
 }
+
+/** Wallet and online (PayMongo) payments can be refunded to the Lunara wallet — not cash. */
+export function isRefundablePaymentMethod(method: PaymentMethod) {
+  return method === PaymentMethod.WALLET || isPaymongoMethod(method);
+}

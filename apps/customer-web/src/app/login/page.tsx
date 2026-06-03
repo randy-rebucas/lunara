@@ -109,6 +109,10 @@ export default function LoginPage() {
         <Link href="/signup" className="link-primary">
           Sign up
         </Link>
+        {' · '}
+        <Link href="/register" className="link-primary">
+          Register with email
+        </Link>
       </p>
     </AuthShell>
   );

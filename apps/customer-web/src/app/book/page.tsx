@@ -17,7 +17,7 @@ export default function BookPage() {
     <PageShell>
       <PageHeader
         title="Book laundry"
-        description="Schedule pickup and get a price estimate"
+        description="Schedule pickup, check partner coverage for your area, and get a price estimate"
       />
       <BookingWizard />
     </PageShell>

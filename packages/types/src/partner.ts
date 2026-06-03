@@ -8,9 +8,48 @@ export interface PortalUser {
   branchId?: string;
 }
 
+export interface PartnerPortalSettings {
+  acceptingOrders: boolean;
+  autoAcceptIncoming: boolean;
+  notifyNewOrders: boolean;
+  notifyPickupArriving: boolean;
+  notifyLowStock: boolean;
+  notifyReadyForDelivery: boolean;
+  allowStaffToRequestDelivery: boolean;
+  requireWeightVerificationOnReceive: boolean;
+}
+
+export interface PartnerShopBranchSummary {
+  id: string;
+  code: string;
+  name: string;
+  line1: string;
+  city: string;
+  province: string;
+  isActive: boolean;
+  maxActiveOrders: number;
+  maxWeightCapacityKg: number;
+  dailyQuotaOrders: number;
+  dailyQuotaWeightKg: number;
+  serviceRadiusKm: number;
+}
+
+export interface PartnerSettingsData {
+  branch: PartnerShopBranchSummary;
+  settings: PartnerPortalSettings;
+  canEdit: boolean;
+}
+
+export interface PartnerDashboardShop {
+  name: string;
+  code: string;
+}
+
 export interface PartnerDashboardData {
+  shop?: PartnerDashboardShop;
   counts: {
     incoming: number;
+    awaitingAccept: number;
     inProcessing: number;
     readyForDelivery: number;
     completedToday: number;
@@ -55,6 +94,7 @@ export interface PartnerStaffMember {
   _id: string;
   email?: string;
   phone?: string;
+  createdAt?: string;
   activeJobs: number;
 }
 
@@ -66,6 +106,7 @@ export interface PartnerInventoryItem {
   quantity: number;
   unit: string;
   lowStockThreshold: number;
+  isLowStock?: boolean;
 }
 
 export interface PartnerReportData {
@@ -79,13 +120,24 @@ export interface PartnerReportData {
   completedByService: Record<string, number>;
 }
 
+export interface PartnerRevenueDailyPoint {
+  date: string;
+  revenue: number;
+  orders: number;
+}
+
 export interface PartnerRevenueData {
   today: number;
+  week: number;
   month: number;
   todayOrders: number;
+  weekOrders: number;
   monthOrders: number;
+  avgOrderToday: number;
+  avgOrderMonth: number;
   allTimeCompletedOrders: number;
-  daily: { date: string; revenue: number; orders: number }[];
+  allTimeRevenue: number;
+  daily: PartnerRevenueDailyPoint[];
 }
 
 export interface PartnerReceivingView {
@@ -115,6 +167,8 @@ export interface PartnerReceivingView {
 }
 
 export interface PartnerProcessingView {
+  /** Pickup / transit phase — not yet in the laundry processing queue. */
+  preProcessing?: boolean;
   order: {
     _id: string;
     status: string;

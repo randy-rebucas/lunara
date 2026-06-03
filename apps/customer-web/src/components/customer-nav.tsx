@@ -4,15 +4,15 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { appConfig } from '@lunara/config';
-import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { BrandMark } from '@lunara/ui';
+import { CustomerHeaderMenu } from './customer-header-menu';
+import { NotificationBell } from './notification-bell';
 
-const links = [
+const navLinks = [
   { href: '/dashboard', label: 'Home' },
   { href: '/book', label: 'Book' },
   { href: '/orders', label: 'Orders' },
   { href: '/wallet', label: 'Wallet' },
-  { href: '/profile', label: 'Profile' },
   { href: '/support', label: 'Support' },
   { href: '/refunds', label: 'Refunds' },
 ];
@@ -23,7 +23,6 @@ function isActive(pathname: string, href: string) {
 
 export function CustomerNav() {
   const pathname = usePathname();
-  const { logout, user } = useAuthContext();
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
@@ -35,7 +34,7 @@ export function CustomerNav() {
         </Link>
 
         <nav className="hidden items-center gap-0.5 md:flex">
-          {links.map((link) => (
+          {navLinks.map((link) => (
             <Link
               key={link.href}
               href={link.href}
@@ -50,17 +49,9 @@ export function CustomerNav() {
           ))}
         </nav>
 
-        <div className="flex items-center gap-2 sm:gap-3">
-          {user?.phone && (
-            <span className="hidden text-xs text-muted-foreground sm:inline">{user.phone}</span>
-          )}
-          <button
-            type="button"
-            onClick={() => logout()}
-            className="hidden rounded-lg px-3 py-1.5 text-sm text-muted transition-colors hover:bg-slate-100 hover:text-primary sm:inline-flex"
-          >
-            Sign out
-          </button>
+        <div className="flex items-center gap-1 sm:gap-2">
+          <NotificationBell />
+          <CustomerHeaderMenu />
           <button
             type="button"
             className="inline-flex rounded-lg p-2 text-muted hover:bg-slate-100 md:hidden"
@@ -82,7 +73,7 @@ export function CustomerNav() {
       {menuOpen && (
         <nav className="bg-surface page-container py-3 shadow-[var(--shadow-card)] md:hidden">
           <div className="flex flex-col gap-1">
-            {links.map((link) => (
+            {navLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
@@ -96,16 +87,6 @@ export function CustomerNav() {
                 {link.label}
               </Link>
             ))}
-            <button
-              type="button"
-              onClick={() => {
-                setMenuOpen(false);
-                logout();
-              }}
-              className="rounded-lg px-3 py-2.5 text-left text-sm text-muted hover:bg-slate-100 hover:text-primary"
-            >
-              Sign out
-            </button>
           </div>
         </nav>
       )}

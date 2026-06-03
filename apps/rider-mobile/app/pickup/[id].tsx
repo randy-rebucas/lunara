@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Image, StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import {
   formatCurrency,
   getPickupWorkflowStepIndex,
@@ -22,7 +22,7 @@ import { SosButton } from '../../src/components/sos-button';
 import { loadTaskCache } from '../../src/lib/offline/task-cache';
 import { isOnline } from '../../src/lib/offline/network';
 import { captureTaskPhoto } from '../../src/lib/task-photo';
-import { resolveAuthenticatedMediaSource, resolveMediaUrl } from '../../src/lib/media-url';
+import { AuthenticatedImage } from '../../src/components/authenticated-image';
 import { callPhone, promptNavigate } from '../../src/lib/task-contact';
 import type { RiderShopLocation, RiderTaskAddress } from '../../src/lib/rider-task-types';
 import { colors, spacing, typography } from '../../src/theme';
@@ -129,10 +129,15 @@ export default function PickupScreen() {
     }
   }
 
-  function photoSource(url?: string) {
-    if (!url) return undefined;
-    if (url.startsWith('file://')) return { uri: url };
-    return resolveAuthenticatedMediaSource(url) ?? (resolveMediaUrl(url) ? { uri: resolveMediaUrl(url)! } : undefined);
+  function applyLocalPhotoPreview(localUri: string) {
+    setTask((prev) =>
+      prev
+        ? {
+            ...prev,
+            pickup: { ...prev.pickup, photoUrl: localUri },
+          }
+        : prev,
+    );
   }
 
   function confirmReject() {
@@ -346,6 +351,7 @@ export default function PickupScreen() {
                   run(async () => {
                     const captured = await captureTaskPhoto();
                     if (!captured) return;
+                    applyLocalPhotoPreview(captured.localUri);
                     return riderUpload(
                       `/riders/pickup-tasks/${id}/photo-upload`,
                       captured.formData,
@@ -356,17 +362,6 @@ export default function PickupScreen() {
                 style={styles.action}
               />
             )}
-
-            {p.photoUrl ? (
-              <Card elevated style={styles.card}>
-                <Text style={styles.cardTitle}>Pickup photo proof</Text>
-                <Image
-                  source={photoSource(p.photoUrl)}
-                  style={styles.photoPreview}
-                  accessibilityLabel="Pickup photo proof"
-                />
-              </Card>
-            ) : null}
 
             {p.photoUrl && !p.receiptCode && task.status === 'picked_up' && (
               <Button
@@ -431,6 +426,17 @@ export default function PickupScreen() {
             )}
           </>
         )}
+
+        {p.photoUrl ? (
+          <Card elevated style={styles.card}>
+            <Text style={styles.cardTitle}>Pickup photo proof</Text>
+            <AuthenticatedImage
+              path={p.photoUrl}
+              style={styles.photoPreview}
+              accessibilityLabel="Pickup photo proof"
+            />
+          </Card>
+        ) : null}
 
         {p.receiptCode && (
           <Card accent style={styles.card}>

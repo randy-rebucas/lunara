@@ -279,6 +279,75 @@ function slotCapacityUsed(slotId: string) {
   return hash;
 }
 
+export const PICKUP_SCHEDULE_DAY_COUNT = 7;
+
+export function pickupSlotDayKey(isoOrDate: string | Date) {
+  const d = typeof isoOrDate === 'string' ? new Date(isoOrDate) : isoOrDate;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+export function groupPickupSlotsByDay(slots: PickupSlot[]) {
+  const map = new Map<string, PickupSlot[]>();
+  for (const slot of slots) {
+    const key = pickupSlotDayKey(slot.startAt);
+    const list = map.get(key) ?? [];
+    list.push(slot);
+    map.set(key, list);
+  }
+  for (const list of map.values()) {
+    list.sort((a, b) => a.startAt.localeCompare(b.startAt));
+  }
+  return map;
+}
+
+export interface PickupScheduleDay {
+  key: string;
+  date: Date;
+  weekday: string;
+  dayLabel: string;
+  monthLabel: string;
+  isToday: boolean;
+  slots: PickupSlot[];
+  hasAvailable: boolean;
+}
+
+export function buildPickupScheduleDays(
+  slots: PickupSlot[],
+  fromDate: Date = new Date(),
+  dayCount = PICKUP_SCHEDULE_DAY_COUNT,
+): PickupScheduleDay[] {
+  const byDay = groupPickupSlotsByDay(slots);
+  const start = new Date(fromDate);
+  start.setHours(0, 0, 0, 0);
+  const todayKey = pickupSlotDayKey(start);
+
+  const days: PickupScheduleDay[] = [];
+  for (let i = 0; i < dayCount; i++) {
+    const date = new Date(start);
+    date.setDate(start.getDate() + i);
+    const key = pickupSlotDayKey(date);
+    const daySlots = byDay.get(key) ?? [];
+    days.push({
+      key,
+      date,
+      weekday: date.toLocaleDateString('en-PH', { weekday: 'short' }),
+      dayLabel: String(date.getDate()),
+      monthLabel: date.toLocaleDateString('en-PH', { month: 'short' }),
+      isToday: key === todayKey,
+      slots: daySlots,
+      hasAvailable: daySlots.some((s) => s.available),
+    });
+  }
+  return days;
+}
+
+export function formatPickupSlotTimeWindow(slot: PickupSlot, locale = 'en-PH') {
+  const start = new Date(slot.startAt);
+  const end = new Date(slot.endAt);
+  const opts: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit' };
+  return `${start.toLocaleTimeString(locale, opts)} – ${end.toLocaleTimeString(locale, opts)}`;
+}
+
 export function generatePickupSlots(fromDate: Date = new Date(), days = 7): PickupSlot[] {
   const slots: PickupSlot[] = [];
   const windows = [

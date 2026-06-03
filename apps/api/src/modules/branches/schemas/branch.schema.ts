@@ -4,6 +4,48 @@ import { HydratedDocument, Types } from 'mongoose';
 export type BranchDocument = HydratedDocument<Branch>;
 
 @Schema({ _id: false })
+export class PartnerPortalSettings {
+  /** When false, the shop should not receive new customer orders via dispatch */
+  @Prop({ default: true })
+  acceptingOrders!: boolean;
+
+  /** Automatically accept incoming shop-assigned orders without manual review */
+  @Prop({ default: false })
+  autoAcceptIncoming!: boolean;
+
+  @Prop({ default: true })
+  notifyNewOrders!: boolean;
+
+  @Prop({ default: true })
+  notifyPickupArriving!: boolean;
+
+  @Prop({ default: true })
+  notifyLowStock!: boolean;
+
+  @Prop({ default: true })
+  notifyReadyForDelivery!: boolean;
+
+  /** Staff may request rider delivery from the processing queue */
+  @Prop({ default: true })
+  allowStaffToRequestDelivery!: boolean;
+
+  /** Require weight verification step during shop receiving */
+  @Prop({ default: true })
+  requireWeightVerificationOnReceive!: boolean;
+}
+
+export const DEFAULT_PARTNER_PORTAL_SETTINGS: PartnerPortalSettings = {
+  acceptingOrders: true,
+  autoAcceptIncoming: false,
+  notifyNewOrders: true,
+  notifyPickupArriving: true,
+  notifyLowStock: true,
+  notifyReadyForDelivery: true,
+  allowStaffToRequestDelivery: true,
+  requireWeightVerificationOnReceive: true,
+};
+
+@Schema({ _id: false })
 class BranchMachine {
   @Prop({ required: true })
   id!: string;
@@ -70,6 +112,9 @@ export class Branch {
 
   @Prop({ default: true })
   isActive!: boolean;
+
+  @Prop({ type: PartnerPortalSettings, default: () => ({ ...DEFAULT_PARTNER_PORTAL_SETTINGS }) })
+  portalSettings!: PartnerPortalSettings;
 
   @Prop({
     type: { type: String, enum: ['Point'], default: 'Point' },

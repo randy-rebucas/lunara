@@ -3,9 +3,11 @@
 import Link from 'next/link';
 import { useCallback, useMemo, useState } from 'react';
 import { DataPageStatus } from '../../components/data-page-status';
+import { EmptyState } from '../../components/empty-state';
 import { filterBySearch, ListControls } from '../../components/list-controls';
 import { PageHeader } from '../../components/ui/page-header';
 import { adminFetch } from '../../lib/admin-api';
+import { formatSlugLabel } from '../../lib/format-label';
 import { useAdminQuery } from '../../lib/use-admin-query';
 
 interface Ticket {
@@ -36,16 +38,17 @@ export default function SupportTicketsPage() {
 
   const { data, loading, error } = useAdminQuery(load, [filter, typeFilter]);
   const counts = data?.counts ?? { open: 0, inProgress: 0, resolved: 0 };
+  const items = data?.items ?? [];
+
   const filteredItems = useMemo(() => {
-    const rows = data?.items ?? [];
-    return filterBySearch(rows.slice(0, limit), search, [
+    const searched = filterBySearch(items, search, [
       (t) => t.subject,
       (t) => t.customerEmail,
       (t) => t.status,
       (t) => t.type,
     ]);
-  }, [data?.items, search, limit]);
-  const items = data?.items ?? [];
+    return searched.slice(0, limit);
+  }, [items, search, limit]);
 
   return (
     <div>
@@ -58,7 +61,12 @@ export default function SupportTicketsPage() {
         <button
           type="button"
           onClick={() => setTypeFilter(typeFilter === 'lost_item' ? '' : 'lost_item')}
-          className={typeFilter === 'lost_item' ? 'filter-chip-active bg-amber-600 hover:bg-amber-600' : 'filter-chip'}
+          className={
+            typeFilter === 'lost_item'
+              ? 'filter-chip-active bg-amber-600 hover:bg-amber-600'
+              : 'filter-chip'
+          }
+          aria-pressed={typeFilter === 'lost_item'}
         >
           Lost items
         </button>
@@ -68,8 +76,9 @@ export default function SupportTicketsPage() {
             type="button"
             onClick={() => setFilter(s)}
             className={`capitalize ${filter === s ? 'filter-chip-active' : 'filter-chip'}`}
+            aria-pressed={filter === s}
           >
-            {s ? s.replace(/_/g, ' ') : 'All'}
+            {s ? formatSlugLabel(s) : 'All'}
           </button>
         ))}
       </div>
@@ -88,34 +97,40 @@ export default function SupportTicketsPage() {
         <DataPageStatus loading={loading} error={error} loadingMessage="Loading tickets…" />
       </div>
 
-      <div className="mt-6 space-y-2">
-        {filteredItems.map((t) => (
-          <Link key={t._id} href={`/support/${t._id}`} className="list-row block">
-            <div className="flex w-full justify-between gap-4">
-              <p className="font-medium text-slate-900">{t.subject}</p>
-              <span
-                className={
-                  t.priority === 'high'
-                    ? 'badge-danger shrink-0 capitalize'
-                    : t.priority === 'medium'
-                      ? 'badge-warning shrink-0 capitalize'
-                      : 'badge-neutral shrink-0 capitalize'
-                }
-              >
-                {t.priority}
-              </span>
-            </div>
-            <p className="mt-1 text-sm text-muted">
-              {t.customerEmail ?? 'No email'} ·{' '}
-              <span className="capitalize">{t.status.replace(/_/g, ' ')}</span>
-              {t.type === 'lost_item' && ' · Lost item'}
-            </p>
-          </Link>
-        ))}
-        {!loading && !error && filteredItems.length === 0 && (
-          <p className="text-sm text-muted">No tickets match this filter.</p>
-        )}
-      </div>
+      {!loading && !error && (
+        <div className="mt-6 space-y-2">
+          {filteredItems.length === 0 ? (
+            <EmptyState
+              title="No tickets match"
+              description="Try another filter or search term."
+            />
+          ) : (
+            filteredItems.map((t) => (
+              <Link key={t._id} href={`/support/${t._id}`} className="list-row block">
+                <div className="flex w-full justify-between gap-4">
+                  <p className="font-medium text-slate-900">{t.subject}</p>
+                  <span
+                    className={
+                      t.priority === 'high'
+                        ? 'badge-danger shrink-0 capitalize'
+                        : t.priority === 'medium'
+                          ? 'badge-warning shrink-0 capitalize'
+                          : 'badge-neutral shrink-0 capitalize'
+                    }
+                  >
+                    {t.priority}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-muted">
+                  {t.customerEmail ?? 'No email'} ·{' '}
+                  <span className="capitalize">{formatSlugLabel(t.status)}</span>
+                  {t.type === 'lost_item' && ' · Lost item'}
+                </p>
+              </Link>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -3,7 +3,12 @@
 import { useEffect, useState } from 'react';
 import { AddressType } from '@lunara/types';
 import { Button } from '@lunara/ui';
-import { ADDRESS_TYPE_OPTIONS, defaultLabelForAddressType, formatAddressTypeLabel } from '@lunara/utils';
+import {
+  ADDRESS_TYPE_OPTIONS,
+  defaultLabelForAddressType,
+  formatAddressTypeLabel,
+  reverseGeocodeAddress,
+} from '@lunara/utils';
 import { FormLabel, Input } from '../ui/input';
 import type { AddressFormValues, CustomerAddress } from '../../lib/profile-types';
 import { addressToForm, emptyAddressForm } from '../../lib/profile-types';
@@ -64,20 +69,43 @@ export function AddressFormModal({
     }
   }
 
-  function useBrowserLocation() {
+  async function useBrowserLocation() {
     if (!navigator.geolocation) {
       setError('Location is not supported in this browser.');
       return;
     }
     setLocating(true);
     setError('');
+
     navigator.geolocation.getCurrentPosition(
-      (position) => {
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+
+        let geocoded: Awaited<ReturnType<typeof reverseGeocodeAddress>> = null;
+        try {
+          geocoded = await reverseGeocodeAddress(latitude, longitude);
+        } catch {
+          /* coords still useful without address text */
+        }
+
         setForm((f) => ({
           ...f,
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
+          latitude,
+          longitude,
+          ...(geocoded
+            ? {
+                line1: geocoded.line1 || f.line1,
+                line2: geocoded.line2 || f.line2,
+                city: geocoded.city || f.city,
+                province: geocoded.province || f.province,
+                postalCode: geocoded.postalCode || f.postalCode,
+              }
+            : {}),
         }));
+
+        if (!geocoded) {
+          setError('Location pinned. Review or complete the address fields below.');
+        }
         setLocating(false);
       },
       () => {
@@ -182,7 +210,7 @@ export function AddressFormModal({
             )}
 
             <Button type="button" variant="outline" disabled={locating} onClick={useBrowserLocation}>
-              {locating ? 'Getting location…' : 'Use my location'}
+              {locating ? 'Getting location & address…' : 'Use my location'}
             </Button>
 
             {hasAddresses && (

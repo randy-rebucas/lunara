@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
+import { DataPageStatus } from '../../components/data-page-status';
 import { PageHeader } from '../../components/ui/page-header';
 import { LiveBadge } from '../../components/ui/stat-card';
 import { adminFetch } from '../../lib/admin-api';
@@ -20,6 +21,7 @@ interface IncomingOrder {
   statusLabel: string;
   branchName?: string;
   canAssignShop: boolean;
+  awaitingPartnerAccept?: boolean;
   canAssignPickupRider: boolean;
   canAssignDeliveryRider: boolean;
 }
@@ -124,14 +126,12 @@ export default function AdminDispatchDashboardPage() {
     setSelectedBranch('');
     setEvaluations([]);
     try {
-      const q = await adminFetch<{ items: { _id: string; branchEvaluations: BranchEvaluation[]; recommendedBranchId?: string }[] }>(
-        '/admin/dispatch/queue',
-      );
-      const item = q.items.find((i) => i._id === orderId);
-      if (item) {
-        setEvaluations(item.branchEvaluations);
-        setSelectedBranch(item.recommendedBranchId ?? '');
-      }
+      const suggestions = await adminFetch<{
+        branchEvaluations: BranchEvaluation[];
+      }>(`/admin/dispatch/orders/${orderId}/suggestions`);
+      setEvaluations(suggestions.branchEvaluations);
+      const recommended = suggestions.branchEvaluations.find((b) => b.isRecommended);
+      setSelectedBranch(recommended?.branchId ?? '');
     } catch {
       setError('Could not load shop evaluations');
     }
@@ -154,15 +154,24 @@ export default function AdminDispatchDashboardPage() {
     }
   }
 
-  if (loading) {
+  if (loading && !data) {
     return (
       <div>
         <PageHeader title="Dispatch" description="Incoming queue, shop capacity, and rider availability." />
-        <p className="text-sm text-muted">Loading dispatch dashboard…</p>
+        <DataPageStatus loading error="" loadingMessage="Loading dispatch dashboard…" />
       </div>
     );
   }
-  if (!data) return <div className="alert-error">{error || 'No data'}</div>;
+  if (!data) {
+    return (
+      <div>
+        <PageHeader title="Dispatch" description="Incoming queue, shop capacity, and rider availability." />
+        <div className="alert-error mt-4" role="alert">
+          {error || 'No data'}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-10">
@@ -214,14 +223,15 @@ export default function AdminDispatchDashboardPage() {
         </div>
         <div className="overflow-x-auto">
           <table className="data-table min-w-[800px]">
+            <caption className="sr-only">Incoming dispatch queue</caption>
             <thead>
               <tr>
-                <th className="px-6 py-3 font-medium">Order</th>
-                <th className="px-4 py-3 font-medium">Customer</th>
-                <th className="px-4 py-3 font-medium">Area</th>
-                <th className="px-4 py-3 font-medium">Weight</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-6 py-3 font-medium">Actions</th>
+                <th scope="col">Order</th>
+                <th scope="col">Customer</th>
+                <th scope="col">Area</th>
+                <th scope="col">Weight</th>
+                <th scope="col">Status</th>
+                <th scope="col">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -258,6 +268,14 @@ export default function AdminDispatchDashboardPage() {
                             Assign shop
                           </button>
                         )}
+                        {row.awaitingPartnerAccept ? (
+                          <span
+                            className="badge-neutral px-2 py-1 text-xs font-medium"
+                            title="Partner must accept the order in the partner portal before a rider can be assigned"
+                          >
+                            Awaiting partner accept
+                          </span>
+                        ) : null}
                         {(row.canAssignPickupRider || row.canAssignDeliveryRider) && (
                           <Link
                             href={`/orders/${row.orderId}`}

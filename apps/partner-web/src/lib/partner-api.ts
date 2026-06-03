@@ -141,3 +141,26 @@ export function resolveMediaUrl(path: string) {
   const origin = resolveApiOrigin(process.env.NEXT_PUBLIC_API_URL);
   return `${origin}${path.startsWith('/') ? path : `/${path}`}`;
 }
+
+/** Fetch a JWT-protected upload and return a blob object URL for previews. */
+export async function fetchAuthenticatedMediaUrl(publicPath: string): Promise<string> {
+  const token = getPartnerToken();
+  const url = resolveMediaUrl(publicPath);
+
+  const res = await fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+
+  if (res.status === 401) {
+    clearPartnerToken();
+    if (typeof window !== 'undefined') window.location.href = '/login';
+    throw new Error('Session expired. Please sign in again.');
+  }
+
+  if (!res.ok) {
+    throw new Error('Failed to load media');
+  }
+
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}

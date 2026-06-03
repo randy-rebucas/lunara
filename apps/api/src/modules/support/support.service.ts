@@ -14,6 +14,7 @@ import { User, UserDocument } from '../users/schemas/user.schema';
 import { WalletsService } from '../wallets/wallets.service';
 import { CreateLostItemDto } from './dto/create-lost-item.dto';
 import { CreateAreaRequestDto } from './dto/create-area-request.dto';
+import { CreateTicketDto } from './dto/create-ticket.dto';
 import { InvestigateAction, InvestigateTicketDto } from './dto/investigate-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
 import {
@@ -75,6 +76,43 @@ export class SupportService {
     return this.ticketModel.countDocuments({
       status: { $in: [TicketStatus.OPEN, TicketStatus.IN_PROGRESS] },
     });
+  }
+
+  async createGeneralTicket(customerId: string, dto: CreateTicketDto) {
+    let orderId: Types.ObjectId | undefined;
+    if (dto.orderId) {
+      const order = await this.orderModel.findById(dto.orderId);
+      if (!order) throw new NotFoundException('Order not found');
+      if (order.customerId.toString() !== customerId) {
+        throw new ForbiddenException('This order does not belong to you');
+      }
+      orderId = order._id;
+    }
+
+    const user = await this.userModel.findById(customerId).select('email');
+    const ticket = await this.ticketModel.create({
+      subject: dto.subject.trim(),
+      description: dto.description.trim(),
+      type: TicketType.GENERAL,
+      status: TicketStatus.OPEN,
+      priority: TicketPriority.MEDIUM,
+      customerId: new Types.ObjectId(customerId),
+      customerEmail: user?.email,
+      orderId,
+      timeline: [
+        {
+          stage: 'submitted',
+          label: 'Customer submitted ticket',
+          at: new Date(),
+        },
+      ],
+    });
+
+    return {
+      success: true,
+      data: this.serializeTicket(ticket),
+      message: 'Your request was submitted. We will respond as soon as we can.',
+    };
   }
 
   async createLostItemComplaint(customerId: string, dto: CreateLostItemDto) {

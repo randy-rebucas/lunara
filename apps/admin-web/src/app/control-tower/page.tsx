@@ -3,9 +3,13 @@
 import Link from 'next/link';
 import { useCallback } from 'react';
 import { DataPageStatus } from '../../components/data-page-status';
+import { EmptyState } from '../../components/empty-state';
 import { PageHeader } from '../../components/ui/page-header';
+import { SectionHeading } from '../../components/ui/section-heading';
 import { StatCard, LiveBadge } from '../../components/ui/stat-card';
 import { adminFetch } from '../../lib/admin-api';
+import { formatSlugLabel } from '../../lib/format-label';
+import { formatPeso } from '../../lib/format-peso';
 import { useAdminQuery } from '../../lib/use-admin-query';
 import { useAdminOperationsSocket } from '../../lib/use-admin-operations-socket';
 
@@ -44,27 +48,34 @@ export default function ControlTowerPage() {
     },
   });
 
-  if (loading || error || !data) {
-    return (
-      <div>
-        <PageHeader
-          title="Control tower"
-          description="Logistics hub — review orders, assign shops and riders, monitor SLA, resolve conflicts."
-        />
-        <DataPageStatus loading={loading} error={error} loadingMessage="Loading control tower…" />
-      </div>
-    );
-  }
-
-  const stats = [
-    { label: 'Dispatch queue', value: data.counts.pendingDispatch, href: '/dispatch', accent: 'warning' as const },
-    { label: 'Partner accept pending', value: data.counts.awaitingPartnerAccept, href: '/orders' },
-    { label: 'Pickup rider needed', value: data.counts.awaitingPickupRider, href: '/orders' },
-    { label: 'Delivery rider needed', value: data.counts.awaitingDeliveryRider, href: '/orders' },
-    { label: 'SLA breaches', value: data.counts.slaBreaches, href: '/orders' },
-    { label: 'Flagged conflicts', value: data.counts.conflicts, href: '/orders' },
-    { label: 'Open support tickets', value: data.counts.openTickets, href: '/support' },
-  ];
+  const stats = data
+    ? [
+        {
+          label: 'Dispatch queue',
+          value: data.counts.pendingDispatch,
+          href: '/dispatch',
+          accent: 'warning' as const,
+        },
+        {
+          label: 'Partner accept pending',
+          value: data.counts.awaitingPartnerAccept,
+          href: '/orders',
+        },
+        {
+          label: 'Pickup rider needed',
+          value: data.counts.awaitingPickupRider,
+          href: '/orders',
+        },
+        {
+          label: 'Delivery rider needed',
+          value: data.counts.awaitingDeliveryRider,
+          href: '/orders',
+        },
+        { label: 'SLA breaches', value: data.counts.slaBreaches, href: '/orders' },
+        { label: 'Flagged conflicts', value: data.counts.conflicts, href: '/orders' },
+        { label: 'Open support tickets', value: data.counts.openTickets, href: '/support' },
+      ]
+    : [];
 
   return (
     <div>
@@ -72,50 +83,64 @@ export default function ControlTowerPage() {
         title="Control tower"
         description="Logistics hub — review orders, assign shops and riders, monitor SLA, resolve conflicts."
         badge={socketLive ? <LiveBadge /> : undefined}
+        actions={
+          <button type="button" className="btn-outline btn-sm" onClick={() => void reload()}>
+            Refresh
+          </button>
+        }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {stats.map((s) => (
-          <StatCard key={s.label} {...s} />
-        ))}
-      </div>
+      <DataPageStatus loading={loading} error={error} loadingMessage="Loading control tower…" />
 
-      <section className="mt-10">
-        <h3 className="text-lg font-semibold text-slate-900">Priority watchlist</h3>
-        <div className="mt-4 space-y-2">
-          {data.watchlist.length === 0 ? (
-            <p className="text-sm text-muted">No priority items right now.</p>
-          ) : (
-            data.watchlist.map((o) => (
-              <Link key={o._id} href={`/orders/${o._id}`} className="list-row flex-wrap">
-                <div>
-                  <p className="font-medium capitalize text-slate-900">
-                    {o.bookingType.replace(/_/g, ' ')} · ₱{o.total}
-                  </p>
-                  <p className="text-sm text-muted">
-                    {o.branchName ?? 'Unassigned shop'} ·{' '}
-                    {o.dispatchStatus?.replace(/_/g, ' ') ?? o.status}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {o.operationsConflict && <span className="badge-danger">Conflict</span>}
-                  <span
-                    className={
-                      o.sla.status === 'breached'
-                        ? 'badge-danger'
-                        : o.sla.status === 'warning'
-                          ? 'badge-warning'
-                          : 'badge-neutral'
-                    }
-                  >
-                    {o.sla.label}
-                  </span>
-                </div>
-              </Link>
-            ))
-          )}
-        </div>
-      </section>
+      {data ? (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {stats.map((s) => (
+              <StatCard key={s.label} {...s} />
+            ))}
+          </div>
+
+          <section className="mt-10">
+            <SectionHeading title="Priority watchlist" href="/orders" linkLabel="All orders →" />
+            {data.watchlist.length === 0 ? (
+              <EmptyState
+                title="No priority items"
+                description="Orders needing attention will appear here."
+              />
+            ) : (
+              <div className="space-y-2">
+                {data.watchlist.map((o) => (
+                  <Link key={o._id} href={`/orders/${o._id}`} className="list-row flex-wrap">
+                    <div>
+                      <p className="font-medium capitalize text-slate-900">
+                        {formatSlugLabel(o.bookingType)} · {formatPeso(o.total)}
+                      </p>
+                      <p className="text-sm text-muted">
+                        {o.branchName ?? 'Unassigned shop'} ·{' '}
+                        {o.dispatchStatus ? formatSlugLabel(o.dispatchStatus) : formatSlugLabel(o.status)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {o.operationsConflict && <span className="badge-danger">Conflict</span>}
+                      <span
+                        className={
+                          o.sla.status === 'breached'
+                            ? 'badge-danger'
+                            : o.sla.status === 'warning'
+                              ? 'badge-warning'
+                              : 'badge-neutral'
+                        }
+                      >
+                        {o.sla.label}
+                      </span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+        </>
+      ) : null}
     </div>
   );
 }

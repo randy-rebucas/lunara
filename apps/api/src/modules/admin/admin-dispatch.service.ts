@@ -104,11 +104,21 @@ export class AdminDispatchService {
         branchName: order.branchName,
         bookingType: order.bookingType,
         scheduledPickupAt: order.scheduledPickupAt,
+        partnerAcceptedAt: order.partnerAcceptedAt,
         canAssignShop: order.status === OrderStatus.PENDING_DISPATCH,
+        awaitingPartnerAccept:
+          !!order.branchId &&
+          !order.partnerAcceptedAt &&
+          (PICKUP_ASSIGN_STATUSES.includes(order.status as OrderStatus) ||
+            order.status === OrderStatus.READY_FOR_DELIVERY),
         canAssignPickupRider:
-          PICKUP_ASSIGN_STATUSES.includes(order.status as OrderStatus) && !order.pickupRiderId,
+          !!order.partnerAcceptedAt &&
+          PICKUP_ASSIGN_STATUSES.includes(order.status as OrderStatus) &&
+          !order.pickupRiderId,
         canAssignDeliveryRider:
-          order.status === OrderStatus.READY_FOR_DELIVERY && !order.deliveryRiderId,
+          !!order.partnerAcceptedAt &&
+          order.status === OrderStatus.READY_FOR_DELIVERY &&
+          !order.deliveryRiderId,
         priority: this.incomingPriority(order.status),
       };
     });

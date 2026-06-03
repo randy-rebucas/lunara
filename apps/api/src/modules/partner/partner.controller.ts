@@ -25,11 +25,15 @@ import {
 } from '../../common/uploads/upload-paths';
 import { PickupService } from '../riders/pickup.service';
 import { AssignStaffDto } from './dto/assign-staff.dto';
+import { CreateStaffDto } from './dto/create-staff.dto';
 import { AdvanceProcessingDto } from './dto/processing.dto';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
 import { PartnerOperationsService } from './partner-operations.service';
 import { ProcessingService } from './processing.service';
 import { ShopReceivingService } from './shop-receiving.service';
+import { PartnerNotificationsService } from './partner-notifications.service';
+import { PartnerSettingsService } from './partner-settings.service';
+import { UpdatePartnerSettingsDto } from './dto/update-partner-settings.dto';
 import {
   ConfirmShopItemsDto,
   ReceiveLaundryDto,
@@ -66,13 +70,54 @@ export class PartnerController {
     private readonly processingService: ProcessingService,
     private readonly operationsService: PartnerOperationsService,
     private readonly shopReceivingService: ShopReceivingService,
+    private readonly notificationsService: PartnerNotificationsService,
+    private readonly settingsService: PartnerSettingsService,
     private readonly pickupService: PickupService,
   ) {}
 
+  @Get('settings')
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
+  getSettings(@Req() req: { user: { sub: string; role: UserRole } }) {
+    return this.settingsService.getSettings(req.user.sub, req.user.role);
+  }
+
+  @Patch('settings')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  updateSettings(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Body() dto: UpdatePartnerSettingsDto,
+  ) {
+    return this.settingsService.updateSettings(req.user.sub, req.user.role, dto);
+  }
+
+  @Get('notifications')
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
+  listNotifications(
+    @Req() req: { user: { sub: string } },
+    @Query('limit') limit = '30',
+  ) {
+    return this.notificationsService.listNotifications(req.user.sub, Number(limit) || 30);
+  }
+
+  @Patch('notifications/read-all')
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
+  markAllNotificationsRead(@Req() req: { user: { sub: string } }) {
+    return this.notificationsService.markAllRead(req.user.sub);
+  }
+
+  @Patch('notifications/:id/read')
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
+  markNotificationRead(
+    @Req() req: { user: { sub: string } },
+    @Param('id') id: string,
+  ) {
+    return this.notificationsService.markNotificationRead(req.user.sub, id);
+  }
+
   @Get('dashboard')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
-  getDashboard() {
-    return this.operationsService.getDashboard();
+  getDashboard(@Req() req: { user: { sub: string; role: UserRole } }) {
+    return this.operationsService.getDashboard(req.user.sub, req.user.role);
   }
 
   @Get('orders/incoming')
@@ -110,14 +155,23 @@ export class PartnerController {
 
   @Get('orders/progress')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
-  getProgress() {
-    return this.operationsService.getProgressMonitor();
+  getProgress(@Req() req: { user: { sub: string; role: UserRole } }) {
+    return this.operationsService.getProgressMonitor(req.user.sub, req.user.role);
   }
 
   @Get('staff')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
-  listStaff() {
-    return this.operationsService.listStaff();
+  listStaff(@Req() req: { user: { sub: string; role: UserRole } }) {
+    return this.operationsService.listStaff(req.user.sub, req.user.role);
+  }
+
+  @Post('staff')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  createStaff(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Body() dto: CreateStaffDto,
+  ) {
+    return this.operationsService.createStaff(req.user.sub, req.user.role, dto);
   }
 
   @Post('orders/:orderId/assign-staff')
@@ -144,14 +198,17 @@ export class PartnerController {
 
   @Get('reports')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
-  getReports(@Query('days') days = '7') {
-    return this.operationsService.getReports(Number(days) || 7);
+  getReports(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Query('days') days = '7',
+  ) {
+    return this.operationsService.getReports(req.user.sub, req.user.role, Number(days) || 7);
   }
 
   @Get('revenue')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
-  getRevenue() {
-    return this.operationsService.getRevenue();
+  getRevenue(@Req() req: { user: { sub: string; role: UserRole } }) {
+    return this.operationsService.getRevenue(req.user.sub, req.user.role);
   }
 
   @Get('orders/:orderId/receiving')

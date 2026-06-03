@@ -5,12 +5,22 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { CreateLostItemDto } from './dto/create-lost-item.dto';
 import { CreateAreaRequestDto } from './dto/create-area-request.dto';
+import { CreateTicketDto } from './dto/create-ticket.dto';
 import { SupportService } from './support.service';
 
 @Controller('support')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class SupportController {
   constructor(private readonly supportService: SupportService) {}
+
+  @Post('tickets')
+  @Roles(UserRole.CUSTOMER)
+  createTicket(
+    @Req() req: { user: { sub: string } },
+    @Body() dto: CreateTicketDto,
+  ) {
+    return this.supportService.createGeneralTicket(req.user.sub, dto);
+  }
 
   @Post('lost-items')
   @Roles(UserRole.CUSTOMER)

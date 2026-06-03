@@ -187,6 +187,11 @@ export class RiderAssignmentService {
     if (!order.branchId || order.dispatchStatus !== 'dispatched') {
       throw new BadRequestException('Assign a laundry shop before assigning a pickup rider');
     }
+    if (!order.partnerAcceptedAt) {
+      throw new BadRequestException(
+        'Partner must accept the order at the shop before assigning a pickup rider',
+      );
+    }
     if (!isShopAssignedStatus(order.status)) {
       throw new BadRequestException(
         `Order must be shop-assigned (current: ${order.status})`,
@@ -419,6 +424,11 @@ export class RiderAssignmentService {
     }
     if (!order.branchId || order.dispatchStatus !== 'dispatched') {
       throw new BadRequestException('Order must be dispatched to a shop before delivery assignment');
+    }
+    if (!order.partnerAcceptedAt) {
+      throw new BadRequestException(
+        'Partner must accept the order at the shop before assigning a delivery rider',
+      );
     }
   }
 

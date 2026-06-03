@@ -6,6 +6,8 @@ import { Card, CardBody } from '../../components/ui/card';
 import { PageHeader } from '../../components/ui/page-header';
 import { StatCard } from '../../components/ui/stat-card';
 import { adminFetch } from '../../lib/admin-api';
+import { formatSlugLabel } from '../../lib/format-label';
+import { formatPeso } from '../../lib/format-peso';
 import { useAdminQuery } from '../../lib/use-admin-query';
 
 interface ReportData {
@@ -34,13 +36,14 @@ export default function ReportsPage() {
     <div>
       <PageHeader title="Reports" description="Platform analytics for the selected period." />
 
-      <div className="flex gap-2">
+      <div className="flex gap-2" role="group" aria-label="Report period">
         {[7, 14, 30].map((d) => (
           <button
             key={d}
             type="button"
             onClick={() => setDays(d)}
             className={days === d ? 'filter-chip-active' : 'filter-chip'}
+            aria-pressed={days === d}
           >
             {d} days
           </button>
@@ -51,15 +54,20 @@ export default function ReportsPage() {
         <DataPageStatus loading={loading} error={error} loadingMessage="Loading report…" />
       </div>
 
-      {report && (
+      {report ? (
         <>
+          <p className="mt-2 text-sm text-muted">Showing last {report.periodDays} days</p>
+
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard label="Total orders" value={report.totalOrders} />
             <StatCard label="Completed" value={report.completedOrders} accent="accent" />
-            <StatCard label="Revenue" value={`₱${report.revenue.toFixed(2)}`} />
+            <StatCard label="Revenue" value={formatPeso(report.revenue)} />
             <StatCard label="New customers" value={report.newCustomers} accent="secondary" />
             <StatCard label="Cancelled" value={report.cancelledOrders} />
-            <StatCard label="Avg order" value={`₱${report.averageOrderValue}`} />
+            <StatCard
+              label="Avg order"
+              value={report.completedOrders > 0 ? formatPeso(report.averageOrderValue) : '—'}
+            />
             <StatCard label="Riders joined" value={report.ridersJoined} />
           </div>
 
@@ -68,24 +76,29 @@ export default function ReportsPage() {
             <ReportList title="Completed by service" data={report.ordersByService} />
           </div>
         </>
-      )}
+      ) : null}
     </div>
   );
 }
 
 function ReportList({ title, data }: { title: string; data: Record<string, number> }) {
+  const entries = Object.entries(data);
   return (
     <Card>
       <CardBody>
         <h3 className="font-semibold text-slate-900">{title}</h3>
-        <ul className="mt-4 space-y-2 text-sm">
-          {Object.entries(data).map(([key, count]) => (
-            <li key={key} className="flex justify-between capitalize">
-              <span className="text-muted">{key.replace(/_/g, ' ')}</span>
-              <span className="font-medium text-slate-900">{count}</span>
-            </li>
-          ))}
-        </ul>
+        {entries.length === 0 ? (
+          <p className="mt-4 text-sm text-muted">No data for this period.</p>
+        ) : (
+          <ul className="mt-4 space-y-2 text-sm">
+            {entries.map(([key, count]) => (
+              <li key={key} className="flex justify-between capitalize">
+                <span className="text-muted">{formatSlugLabel(key)}</span>
+                <span className="font-medium text-slate-900">{count}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </CardBody>
     </Card>
   );

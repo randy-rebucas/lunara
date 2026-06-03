@@ -1,4 +1,16 @@
-import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { UserRole } from '@lunara/types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -84,6 +96,12 @@ export class OrdersController {
   @Get(':id')
   findOne(@Param('id') id: string, @Req() req: { user: { sub: string; role: UserRole } }) {
     return this.ordersService.findOne(id, req.user);
+  }
+
+  @Delete(':id')
+  @Roles(UserRole.CUSTOMER)
+  cancel(@Param('id') id: string, @Req() req: { user: { sub: string } }) {
+    return this.ordersService.cancelByCustomer(req.user.sub, id);
   }
 
   @Post(':id/assign-rider')

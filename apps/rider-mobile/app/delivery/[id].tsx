@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Image, StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import {
   DELIVERY_WORKFLOW_STEPS,
   formatCurrency,
@@ -21,7 +21,7 @@ import { SosButton } from '../../src/components/sos-button';
 import { loadTaskCache } from '../../src/lib/offline/task-cache';
 import { isOnline } from '../../src/lib/offline/network';
 import { captureTaskPhoto } from '../../src/lib/task-photo';
-import { resolveAuthenticatedMediaSource, resolveMediaUrl } from '../../src/lib/media-url';
+import { AuthenticatedImage } from '../../src/components/authenticated-image';
 import { callPhone, promptNavigate } from '../../src/lib/task-contact';
 import type { RiderShopLocation, RiderTaskAddress } from '../../src/lib/rider-task-types';
 import { colors, spacing, typography } from '../../src/theme';
@@ -129,10 +129,15 @@ export default function DeliveryScreen() {
     }
   }
 
-  function photoSource(url?: string) {
-    if (!url) return undefined;
-    if (url.startsWith('file://')) return { uri: url };
-    return resolveAuthenticatedMediaSource(url) ?? (resolveMediaUrl(url) ? { uri: resolveMediaUrl(url)! } : undefined);
+  function applyLocalPhotoPreview(localUri: string) {
+    setTask((prev) =>
+      prev
+        ? {
+            ...prev,
+            delivery: { ...prev.delivery, photoUrl: localUri },
+          }
+        : prev,
+    );
   }
 
   function confirmReject() {
@@ -333,6 +338,7 @@ export default function DeliveryScreen() {
                 run(async () => {
                   const captured = await captureTaskPhoto();
                   if (!captured) return;
+                  applyLocalPhotoPreview(captured.localUri);
                   return riderUpload(
                     `/riders/delivery-tasks/${id}/photo-upload`,
                     captured.formData,
@@ -343,17 +349,6 @@ export default function DeliveryScreen() {
               style={styles.action}
             />
           )}
-
-          {d.photoUrl ? (
-            <Card elevated style={styles.card}>
-              <Text style={styles.cardTitle}>Delivery photo proof</Text>
-              <Image
-                source={photoSource(d.photoUrl)}
-                style={styles.photoPreview}
-                accessibilityLabel="Delivery photo proof"
-              />
-            </Card>
-          ) : null}
 
           {task.canComplete && (
             <Button
@@ -383,6 +378,17 @@ export default function DeliveryScreen() {
           )}
         </>
       )}
+
+      {d.photoUrl ? (
+        <Card elevated style={styles.card}>
+          <Text style={styles.cardTitle}>Delivery photo proof</Text>
+          <AuthenticatedImage
+            path={d.photoUrl}
+            style={styles.photoPreview}
+            accessibilityLabel="Delivery photo proof"
+          />
+        </Card>
+      ) : null}
 
       {d.receiptCode && (
         <Card accent style={styles.card}>

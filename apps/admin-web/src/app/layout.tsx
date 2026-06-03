@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google';
 import brandIcon from '@lunara/brand/icon';
 import { appConfig } from '@lunara/config';
 import { AuthGuard } from '../components/auth-guard';
+import { AdminSettingsSync } from '../components/admin-settings-sync';
 import { AdminShell } from '../components/admin-shell';
 import { AdminSosProvider } from '../components/admin-sos-provider';
 import { AdminAuthProvider } from '../lib/admin-auth-provider';
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={inter.variable}>
       <body className="min-h-screen font-sans antialiased">
         <AdminAuthProvider>
+          <AdminSettingsSync />
           <AuthGuard>
             <AdminSosProvider>
               <AdminShell>{children}</AdminShell>

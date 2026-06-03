@@ -18,12 +18,12 @@ export class MediaController {
   constructor(private readonly mediaService: MediaService) {}
 
   @Get('rider-documents/:filename')
-  getRiderDocument(
+  async getRiderDocument(
     @Param('filename') filename: string,
     @Req() req: { user: { sub: string; role: UserRole } },
     @Res({ passthrough: true }) res: Response,
   ) {
-    this.mediaService.assertAccess('rider-documents', filename, req.user);
+    await this.mediaService.assertAccess('rider-documents', filename, req.user);
     const file = this.mediaService.resolveFile('rider-documents', filename);
     res.set('Cache-Control', 'private, max-age=300');
     res.set('Content-Type', file.contentType);
@@ -31,12 +31,12 @@ export class MediaController {
   }
 
   @Get('task-photos/:filename')
-  getTaskPhoto(
+  async getTaskPhoto(
     @Param('filename') filename: string,
     @Req() req: { user: { sub: string; role: UserRole } },
     @Res({ passthrough: true }) res: Response,
   ) {
-    this.mediaService.assertAccess('task-photos', filename, req.user);
+    await this.mediaService.assertAccess('task-photos', filename, req.user);
     const file = this.mediaService.resolveFile('task-photos', filename);
     res.set('Cache-Control', 'private, max-age=300');
     res.set('Content-Type', file.contentType);

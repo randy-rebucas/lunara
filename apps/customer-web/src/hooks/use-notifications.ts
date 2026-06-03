@@ -31,6 +31,14 @@ export function useNotifications(limit = 20) {
     load();
   }, [load]);
 
+  useEffect(() => {
+    const onBump = () => {
+      void load();
+    };
+    window.addEventListener('lunara-notifications-bump', onBump);
+    return () => window.removeEventListener('lunara-notifications-bump', onBump);
+  }, [load]);
+
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try {

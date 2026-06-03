@@ -1,11 +1,14 @@
 'use client';
 
-import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useState } from 'react';
 import { LOST_ITEM_FLOW, formatLostItemOutcome, lostItemFlowIndex } from '@lunara/utils';
 import { DataPageStatus } from '../../../components/data-page-status';
+import { AuthenticatedImage } from '../../../components/authenticated-image';
+import { Card, CardBody } from '../../../components/ui/card';
+import { PageHeader } from '../../../components/ui/page-header';
 import { adminFetch } from '../../../lib/admin-api';
+import { formatSlugLabel } from '../../../lib/format-label';
 import { useAdminQuery } from '../../../lib/use-admin-query';
 
 interface InvestigationData {
@@ -124,9 +127,7 @@ export default function SupportTicketInvestigationPage() {
   if (pageLoading || loadError || !data) {
     return (
       <div>
-        <Link href="/support" className="text-sm text-indigo-600">
-          ← Back to tickets
-        </Link>
+        <PageHeader title="Support ticket" backHref="/support" backLabel="Tickets" />
         <DataPageStatus loading={pageLoading} error={loadError} loadingMessage="Loading ticket…" />
       </div>
     );
@@ -140,16 +141,30 @@ export default function SupportTicketInvestigationPage() {
 
   return (
     <div>
-      <Link href="/support" className="text-sm text-indigo-600">
-        ← Back to tickets
-      </Link>
-      <h2 className="mt-4 text-2xl font-bold">{ticket.subject}</h2>
-      <p className="mt-1 text-sm text-slate-500">
-        {ticket.customerEmail ?? '—'} ·{' '}
-        <span className="capitalize">{ticket.status.replace(/_/g, ' ')}</span>
-        {isLostItem && ` · ${ticket.type.replace(/_/g, ' ')}`}
-      </p>
-      <p className="mt-4 rounded-lg border bg-white p-4 text-sm">{ticket.description}</p>
+      <PageHeader
+        title={ticket.subject}
+        description={
+          <>
+            {ticket.customerEmail ?? 'No email'} ·{' '}
+            <span className="capitalize">{formatSlugLabel(ticket.status)}</span>
+            {isLostItem ? ` · ${formatSlugLabel(ticket.type ?? 'lost_item')}` : ''}
+          </>
+        }
+        backHref="/support"
+        backLabel="Tickets"
+      />
+
+      {error ? (
+        <div className="alert-error mb-4" role="alert">
+          {error}
+        </div>
+      ) : null}
+
+      <Card>
+        <CardBody>
+          <p className="text-sm text-slate-700">{ticket.description}</p>
+        </CardBody>
+      </Card>
       {ticket.missingItems && ticket.missingItems.length > 0 && (
         <p className="mt-2 text-sm text-amber-700">Missing: {ticket.missingItems.join(', ')}</p>
       )}
@@ -230,9 +245,13 @@ export default function SupportTicketInvestigationPage() {
                   {log.tagCode && <p className="text-xs">Tag: {log.tagCode}</p>}
                   {log.note && <p className="text-xs text-slate-600">{log.note}</p>}
                   {log.photoUrl && (
-                    <a href={log.photoUrl} className="text-xs text-indigo-600" target="_blank" rel="noreferrer">
-                      Photo
-                    </a>
+                    <div className="mt-2">
+                      <AuthenticatedImage
+                        publicPath={log.photoUrl}
+                        alt={`${log.label} photo`}
+                        className="max-h-32 rounded border object-cover"
+                      />
+                    </div>
                   )}
                 </li>
               ))}

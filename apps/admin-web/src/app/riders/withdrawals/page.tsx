@@ -1,8 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { DataPageStatus } from '../../../components/data-page-status';
+import { EmptyState } from '../../../components/empty-state';
 import { NoteModal } from '../../../components/note-modal';
 import { PageHeader } from '../../../components/ui/page-header';
+import { formatPeso } from '../../../lib/format-peso';
 import { maskPayoutDetails } from '../../../lib/mask-pii';
 import { adminFetch } from '../../../lib/admin-api';
 
@@ -78,20 +81,18 @@ export default function RiderWithdrawalsPage() {
         description="Review pending payout requests from riders."
       />
 
-      {error ? (
-        <div className="alert-error mt-4" role="alert">
-          {error}
-        </div>
+      <div className="mt-4">
+        <DataPageStatus loading={loading} error={error} loadingMessage="Loading withdrawals…" />
+      </div>
+
+      {!loading && !error && rows.length === 0 ? (
+        <EmptyState
+          title="No pending withdrawals"
+          description="New rider payout requests will appear here."
+        />
       ) : null}
 
-      {loading ? (
-        <p className="mt-6 text-sm text-muted">Loading pending withdrawals…</p>
-      ) : rows.length === 0 ? (
-        <div className="card card-body mt-6">
-          <p className="font-medium text-slate-900">No pending withdrawals</p>
-          <p className="mt-1 text-sm text-muted">New rider payout requests will appear here.</p>
-        </div>
-      ) : (
+      {!loading && !error && rows.length > 0 ? (
         <div className="section-panel mt-6 overflow-x-auto">
           <table className="data-table">
             <caption className="sr-only">Pending rider withdrawal requests</caption>
@@ -111,7 +112,7 @@ export default function RiderWithdrawalsPage() {
               {rows.map((row) => (
                 <tr key={row._id}>
                   <td className="font-medium">{row.riderName}</td>
-                  <td>₱{row.amount.toLocaleString('en-PH')}</td>
+                  <td className="font-medium">{formatPeso(row.amount)}</td>
                   <td>{row.methodLabel}</td>
                   <td className="max-w-xs truncate text-sm text-muted" title={maskPayoutDetails(row)}>
                     {maskPayoutDetails(row)}
@@ -148,7 +149,7 @@ export default function RiderWithdrawalsPage() {
             </tbody>
           </table>
         </div>
-      )}
+      ) : null}
 
       <NoteModal
         open={!!pendingAction}

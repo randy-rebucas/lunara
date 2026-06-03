@@ -1,40 +1,38 @@
 'use client';
 
-import { createContext, useContext } from 'react';
-import { SosIncidentBanner } from './sos-incident-banner';
+import { createContext, useContext, useEffect, useRef } from 'react';
+import { loadAdminSettings } from '../lib/admin-settings';
+import { subscribeAdminRealtime } from '../lib/admin-realtime';
+import { playSosAlertSound } from '../lib/admin-sos-sound';
 import { useActiveSosIncidents } from '../lib/use-active-sos-incidents';
-import { useAdminOperationsSocket } from '../lib/use-admin-operations-socket';
+import type { DispatcherAlert } from '../lib/use-admin-operations-socket';
 
 const AdminSosContext = createContext<ReturnType<typeof useActiveSosIncidents> | null>(null);
 
 export function AdminSosProvider({ children }: { children: React.ReactNode }) {
   const sos = useActiveSosIncidents();
+  const sosRef = useRef(sos);
 
-  useAdminOperationsSocket({
-    onDispatcherAlert: (alert) => {
-      if (alert.type === 'rider_sos') {
-        sos.onDispatcherAlert(alert);
-      }
-    },
-    onSosLocationUpdate: sos.onSosLocationUpdate,
+  useEffect(() => {
+    sosRef.current = sos;
   });
 
-  return (
-    <AdminSosContext.Provider value={sos}>
-      {children}
-      <div className="fixed bottom-4 right-4 z-40 w-full max-w-md px-4 sm:px-0">
-        <SosIncidentBanner
-          incidents={sos.incidents}
-          liveAlert={sos.liveAlert}
-          liveLocations={sos.liveLocations}
-          resolvingId={sos.resolvingId}
-          resolveError={sos.resolveError}
-          onResolve={sos.handleResolve}
-          onDismissAlert={sos.dismissLiveAlert}
-        />
-      </div>
-    </AdminSosContext.Provider>
-  );
+  useEffect(() => {
+    return subscribeAdminRealtime({
+      onDispatcherAlert: (alert: DispatcherAlert) => {
+        if (alert.type !== 'rider_sos') return;
+        sosRef.current.onDispatcherAlert(alert);
+        if (loadAdminSettings().sosSoundAlerts) {
+          playSosAlertSound();
+        }
+      },
+      onSosLocationUpdate: (update) => {
+        sosRef.current.onSosLocationUpdate(update);
+      },
+    });
+  }, []);
+
+  return <AdminSosContext.Provider value={sos}>{children}</AdminSosContext.Provider>;
 }
 
 export function useAdminSos() {

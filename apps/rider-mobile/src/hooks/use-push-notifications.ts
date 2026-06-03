@@ -8,6 +8,7 @@ import {
   unregisterPushToken,
 } from '../lib/push-notifications';
 import { resolveRiderNotificationRoute } from '../lib/notification-types';
+import { useRiderOperations } from '../context/rider-operations';
 import { useAuthStore } from '../store/auth';
 
 function routeFromPushData(data: Record<string, unknown>): Href | null {
@@ -35,6 +36,7 @@ export function usePushNotifications() {
   const accessToken = useAuthStore((s) => s.tokens?.accessToken);
   const apiFetch = useAuthStore((s) => s.apiFetch);
   const tokenRef = useRef<string | null>(null);
+  const refresh = useRiderOperations().refresh;
 
   useEffect(() => {
     if (!accessToken) {
@@ -71,6 +73,13 @@ export function usePushNotifications() {
       if (href) router.push(href);
     });
 
-    return () => onResponse.remove();
-  }, [router]);
+    const onReceived = Notifications.addNotificationReceivedListener(() => {
+      refresh();
+    });
+
+    return () => {
+      onResponse.remove();
+      onReceived.remove();
+    };
+  }, [router, refresh]);
 }

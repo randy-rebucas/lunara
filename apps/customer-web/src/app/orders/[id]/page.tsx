@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { OrderStatus } from '@lunara/types';
@@ -9,7 +9,14 @@ import { Button } from '@lunara/ui';
 import { ButtonLink } from '../../../components/ui/button-link';
 import { resolveApiOrigin } from '@lunara/hooks';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
-import { buildCustomerTimeline, formatCurrency, formatOrderStatusLabel } from '@lunara/utils';
+import {
+  buildCustomerTimeline,
+  formatCurrency,
+  formatOrderStatusLabel,
+  type PartnerCoverageInfo,
+} from '@lunara/utils';
+import { HandoffQrCard } from '../../../components/handoff-qr-card';
+import { OrderPartnerCoverageNotice } from '../../../components/order-partner-coverage-notice';
 import { PageShell } from '../../../components/page-shell';
 import { DataPageStatus } from '../../../components/data-page-status';
 import { OrderNotifications, type OrderNotification } from '../../../components/order-notifications';
@@ -41,6 +48,9 @@ interface OrderDetail {
   statusHistory: { status: string; timestamp: string; note?: string }[];
   branchName?: string;
   branchCode?: string;
+  partnerCoverage?: PartnerCoverageInfo;
+  refundable?: boolean;
+  paymentMethod?: string;
 }
 
 interface DeliveryUiState {
@@ -88,6 +98,7 @@ function formatTime() {
 
 export default function OrderTrackPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const justBooked = searchParams.get('booked') === '1';
   const { api, tokens } = useAuthContext();
@@ -104,6 +115,7 @@ export default function OrderTrackPage() {
   const [hasReview, setHasReview] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [pageLoading, setPageLoading] = useState(true);
+  const [cancelling, setCancelling] = useState(false);
 
   const pushNotification = useCallback((message: string) => {
     setNotifications((prev) => [
@@ -207,6 +219,26 @@ export default function OrderTrackPage() {
     }
   }
 
+  async function handleCancelPendingDispatch() {
+    if (
+      !window.confirm(
+        'Cancel this order before it is dispatched? Wallet and online payments are refunded to your Lunara wallet. Cash orders are cancelled with no charge.',
+      )
+    ) {
+      return;
+    }
+    setCancelling(true);
+    setLoadError('');
+    try {
+      await api.delete(`/orders/${id}`);
+      router.push('/orders');
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : 'Could not cancel order');
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   async function handleSign() {
     setDeliveryError('');
     try {
@@ -247,6 +279,10 @@ export default function OrderTrackPage() {
   const showDeliveryActions =
     order.status === OrderStatus.OUT_FOR_DELIVERY ||
     order.status === OrderStatus.RIDER_ASSIGNED_DELIVERY;
+  const showPickupQr =
+    order.status === OrderStatus.RIDER_ASSIGNED_PICKUP ||
+    order.status === OrderStatus.RIDER_ASSIGNED;
+  const showDeliveryQr = order.status === OrderStatus.OUT_FOR_DELIVERY;
 
   return (
     <PageShell>
@@ -280,6 +316,13 @@ export default function OrderTrackPage() {
           </div>
         )}
 
+        {order.status === OrderStatus.PENDING_DISPATCH && !order.branchName && (
+          <OrderPartnerCoverageNotice
+            coverage={order.partnerCoverage}
+            className="mt-4"
+          />
+        )}
+
         {order.status === OrderStatus.PENDING && (
           <div className="mt-4 rounded-lg bg-amber-50 p-4 ring-1 ring-amber-200/60">
             <p className="text-sm font-medium text-amber-900">Order created — payment required</p>
@@ -299,6 +342,16 @@ export default function OrderTrackPage() {
               Payment received. Lunara operations is assigning your laundry partner. Pickup starts
               after dispatch.
             </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-4 border-red-200 text-red-600 hover:bg-red-50"
+              disabled={cancelling}
+              onClick={handleCancelPendingDispatch}
+            >
+              {cancelling ? 'Cancelling…' : 'Cancel order'}
+            </Button>
           </div>
         )}
 
@@ -322,6 +375,9 @@ export default function OrderTrackPage() {
         </section>
 
         {location && <RiderLocationMap lat={location.lat} lng={location.lng} />}
+
+        {showPickupQr && id ? <HandoffQrCard orderId={id} context="pickup" /> : null}
+        {showDeliveryQr && id ? <HandoffQrCard orderId={id} context="delivery" /> : null}
 
         {showDeliveryActions && deliveryUi?.needsVerify && (
           <div className="panel mt-6">
@@ -403,9 +459,11 @@ export default function OrderTrackPage() {
               <ButtonLink href={`/orders/${id}/lost-item`} variant="outline" className="w-full">
                 Report missing item
               </ButtonLink>
-              <ButtonLink href={`/orders/${id}/refund`} variant="outline" className="w-full">
-                Request refund
-              </ButtonLink>
+              {order.refundable === true && (
+                <ButtonLink href={`/orders/${id}/refund`} variant="outline" className="w-full">
+                  Request refund
+                </ButtonLink>
+              )}
             </div>
           </div>
         )}

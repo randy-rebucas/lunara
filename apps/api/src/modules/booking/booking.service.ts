@@ -8,6 +8,7 @@ import {
   BOOKING_MIN_WEIGHT_KG,
   calculateQuote,
   generatePickupSlots,
+  PICKUP_SCHEDULE_DAY_COUNT,
   getService,
   isServiceAvailableInArea,
   LAUNDRY_SERVICES,
@@ -16,11 +17,15 @@ import {
   validateServiceArea,
 } from '@lunara/utils';
 import { AddressesService } from '../addresses/addresses.service';
+import { BranchesService } from '../branches/branches.service';
 import { BookingQuoteDto, CreateBookingOrderDto } from './dto/booking.dto';
 
 @Injectable()
 export class BookingService {
-  constructor(private readonly addressesService: AddressesService) {}
+  constructor(
+    private readonly addressesService: AddressesService,
+    private readonly branchesService: BranchesService,
+  ) {}
 
   getConfig() {
     return {
@@ -63,7 +68,13 @@ export class BookingService {
 
   async getAvailability(userId: string, addressId: string) {
     const { area } = await this.validateAddressForUser(userId, addressId);
-    const slots = generatePickupSlots().filter((s) => s.available);
+    const slots = generatePickupSlots(new Date(), PICKUP_SCHEDULE_DAY_COUNT);
+    const partnerCoverage =
+      (await this.branchesService.evaluatePartnerCoverageForAddressId(addressId)) ?? {
+        hasPartnerNearby: false,
+        inServiceArea: true,
+        message: null,
+      };
 
     return {
       success: true,
@@ -72,6 +83,7 @@ export class BookingService {
         areaLabel: area.areaLabel,
         availableServices: area.availableServices,
         slots,
+        partnerCoverage,
         dispatchNote:
           'After payment, Lunara operations will assign the best partner branch for your area.',
       },

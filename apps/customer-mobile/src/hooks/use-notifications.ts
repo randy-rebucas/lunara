@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { AppNotification } from '../lib/notification-types';
+import { useNotificationSyncStore } from '../store/notification-sync';
 import { useAuthStore } from '../store/auth';
 
 export function useNotifications(limit = 20) {
   const apiFetch = useAuthStore((s) => s.apiFetch);
+  const syncTick = useNotificationSyncStore((s) => s.tick);
   const [items, setItems] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -24,7 +26,7 @@ export function useNotifications(limit = 20) {
 
   useEffect(() => {
     load();
-  }, [load]);
+  }, [load, syncTick]);
 
   const refresh = useCallback(async () => {
     setRefreshing(true);

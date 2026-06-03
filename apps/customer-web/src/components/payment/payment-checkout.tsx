@@ -1,7 +1,9 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { OrderStatus } from '@lunara/types';
 import { PaymentMethod } from '@lunara/types';
 import { Button } from '@lunara/ui';
 import {
@@ -34,6 +36,7 @@ interface PaymentCheckoutProps {
 }
 
 export function PaymentCheckout({ orderId }: PaymentCheckoutProps) {
+  const router = useRouter();
   const { api } = useAuthContext();
   const [order, setOrder] = useState<CheckoutOrder | null>(null);
   const [existingPayment, setExistingPayment] = useState<CheckoutPayment | null>(null);
@@ -42,6 +45,7 @@ export function PaymentCheckout({ orderId }: PaymentCheckoutProps) {
   const [cashTiming, setCashTiming] = useState<CashTiming>('pickup');
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -63,6 +67,26 @@ export function PaymentCheckout({ orderId }: PaymentCheckoutProps) {
       .catch((e) => setError(e instanceof Error ? e.message : 'Could not load checkout'))
       .finally(() => setLoading(false));
   }, [api, orderId]);
+
+  async function handleDelete() {
+    if (
+      !window.confirm(
+        'Delete this unpaid order? You can book again anytime. This cannot be undone.',
+      )
+    ) {
+      return;
+    }
+    setDeleting(true);
+    setError('');
+    try {
+      await api.delete(`/orders/${orderId}`);
+      router.push('/orders');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not delete order');
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   async function handlePay() {
     setPaying(true);
@@ -219,7 +243,7 @@ export function PaymentCheckout({ orderId }: PaymentCheckoutProps) {
       <Button
         className="w-full"
         size="lg"
-        disabled={paying || insufficientWallet}
+        disabled={paying || deleting || insufficientWallet}
         onClick={handlePay}
       >
         {paying
@@ -230,6 +254,19 @@ export function PaymentCheckout({ orderId }: PaymentCheckoutProps) {
               ? 'Pay with wallet'
               : 'Continue to PayMongo'}
       </Button>
+
+      {order.status === OrderStatus.PENDING && (
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full border-red-200 text-red-600 hover:bg-red-50"
+          size="lg"
+          disabled={paying || deleting}
+          onClick={handleDelete}
+        >
+          {deleting ? 'Deleting…' : 'Delete order'}
+        </Button>
+      )}
     </div>
   );
 }

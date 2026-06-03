@@ -150,3 +150,30 @@ export const LAUNDRY_PROCESSING_STATUSES: OrderStatus[] = [
   OrderStatus.QUALITY_CHECK,
   OrderStatus.READY_FOR_DELIVERY,
 ];
+
+/** Statuses where partner staff can run the laundry processing pipeline. */
+export const PARTNER_PROCESSING_QUEUE_STATUSES: OrderStatus[] = [
+  OrderStatus.RECEIVED_AT_SHOP,
+  ...LAUNDRY_PROCESSING_STATUSES,
+];
+
+export function isPartnerLaundryProcessingStatus(status: OrderStatus | string): boolean {
+  return PARTNER_PROCESSING_QUEUE_STATUSES.includes(status as OrderStatus);
+}
+
+export function formatPartnerPreProcessingLabel(status: OrderStatus | string): string {
+  switch (status) {
+    case OrderStatus.SHOP_ASSIGNED:
+    case OrderStatus.CONFIRMED:
+      return 'Awaiting pickup rider';
+    case OrderStatus.RIDER_ASSIGNED_PICKUP:
+    case OrderStatus.RIDER_ASSIGNED:
+      return 'Pickup rider assigned';
+    case OrderStatus.PICKED_UP:
+      return 'Picked up from customer';
+    case OrderStatus.IN_TRANSIT_TO_SHOP:
+      return 'In transit to shop';
+    default:
+      return status.replace(/_/g, ' ');
+  }
+}

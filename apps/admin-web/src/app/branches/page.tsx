@@ -271,30 +271,31 @@ export default function BranchNetworkPage() {
     <div>
       <PageHeader
         title="Branch network"
-        description="Lunara HQ sits at the root. Franchise branches or partner laundry shops chain below — each with a manager, staff, machines, capacity, daily quota, and performance metrics."
+        description="HQ at the root — franchises and partner shops below, with managers, capacity, quotas, and performance."
+        actions={
+          <>
+            <Link href="/dispatch" className="btn-outline btn-sm">
+              Dispatch
+            </Link>
+            <button
+              type="button"
+              className="btn-primary btn-sm"
+              onClick={() => setShowCreate((v) => !v)}
+            >
+              {showCreate ? 'Cancel' : 'Create branch'}
+            </button>
+          </>
+        }
       />
 
-      <div className="mt-4">
-        <DataPageStatus loading={loading} error={error} loadingMessage="Loading branch network…" />
-      </div>
+      <DataPageStatus loading={loading} error={error} loadingMessage="Loading branch network…" />
 
-      <div className="mt-4 flex flex-wrap gap-4 text-sm text-slate-600">
-        <span>
-          <strong>{stats.totalBranches}</strong> locations
-        </span>
-        <span>
-          <strong>{stats.operationalCount}</strong> operational shops
-        </span>
-        <Link href="/dispatch" className="link-primary">
-          Open dispatch dashboard →
-        </Link>
-        <Link href="/shops" className="link-primary">
-          Partner accounts →
-        </Link>
-        <button type="button" className="btn-secondary btn-sm" onClick={() => setShowCreate((v) => !v)}>
-          {showCreate ? 'Cancel create' : 'Create branch'}
-        </button>
-      </div>
+      {network ? (
+        <p className="mt-4 text-sm text-muted">
+          <strong className="text-slate-900">{stats.totalBranches}</strong> locations ·{' '}
+          <strong className="text-slate-900">{stats.operationalCount}</strong> operational shops
+        </p>
+      ) : null}
 
       {branchMsg ? (
         <p className="mt-3 text-sm text-muted" role="status">

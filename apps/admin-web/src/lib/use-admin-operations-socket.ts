@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { io, Socket } from 'socket.io-client';
-import { resolveApiOrigin } from '@lunara/utils';
-import { getAdminToken } from './admin-api';
+import { isAdminRealtimeConnected, subscribeAdminRealtime } from './admin-realtime';
 
 export interface DispatcherAlert {
   type?: string;
@@ -34,7 +32,7 @@ export function useAdminOperationsSocket(handlers: {
   onDispatcherAlert?: (alert: DispatcherAlert) => void;
   onSosLocationUpdate?: (update: SosLocationUpdate) => void;
 }) {
-  const [connected, setConnected] = useState(false);
+  const [connected, setConnected] = useState(isAdminRealtimeConnected);
   const handlersRef = useRef(handlers);
 
   useEffect(() => {
@@ -42,35 +40,12 @@ export function useAdminOperationsSocket(handlers: {
   });
 
   useEffect(() => {
-    const token = getAdminToken();
-    if (!token) return;
-
-    const apiUrl = resolveApiOrigin(process.env.NEXT_PUBLIC_API_URL);
-    const socket: Socket = io(`${apiUrl}/tracking`, {
-      transports: ['websocket'],
-      auth: { token },
+    return subscribeAdminRealtime({
+      onConnected: setConnected,
+      onDispatchQueueUpdated: () => handlersRef.current.onDispatchQueueUpdated?.(),
+      onDispatcherAlert: (alert) => handlersRef.current.onDispatcherAlert?.(alert),
+      onSosLocationUpdate: (update) => handlersRef.current.onSosLocationUpdate?.(update),
     });
-
-    socket.on('connect', () => {
-      socket.emit('joinAdminOperations');
-      setConnected(true);
-    });
-    socket.on('disconnect', () => setConnected(false));
-
-    socket.on('dispatchQueueUpdated', () => {
-      handlersRef.current.onDispatchQueueUpdated?.();
-    });
-    socket.on('dispatcherAlert', (data: DispatcherAlert) => {
-      handlersRef.current.onDispatcherAlert?.(data);
-    });
-    socket.on('sosLocationUpdate', (data: SosLocationUpdate) => {
-      handlersRef.current.onSosLocationUpdate?.(data);
-    });
-
-    return () => {
-      socket.disconnect();
-      setConnected(false);
-    };
   }, []);
 
   return { connected };

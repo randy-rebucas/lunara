@@ -17,6 +17,8 @@ import { normalizeRiderLocationPayload, riderLocationWirePayload } from '@lunara
 import { getJwtSecret } from '../../common/config/jwt-config';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { RiderSosService } from '../sos/rider-sos.service';
+import { CustomerOrderNotificationService } from '../push/customer-order-notification.service';
+import { PartnerOrderNotificationService } from '../push/partner-order-notification.service';
 
 @Injectable()
 @WebSocketGateway({ cors: { origin: '*' }, namespace: '/tracking' })
@@ -32,6 +34,9 @@ export class TrackingGateway implements OnGatewayConnection {
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
     @Inject(forwardRef(() => RiderSosService))
     private readonly riderSosService: RiderSosService,
+    private readonly customerOrderNotifications: CustomerOrderNotificationService,
+    @Inject(forwardRef(() => PartnerOrderNotificationService))
+    private readonly partnerOrderNotifications: PartnerOrderNotificationService,
   ) {}
 
   handleConnection(client: Socket) {
@@ -192,12 +197,15 @@ export class TrackingGateway implements OnGatewayConnection {
     const payload = { orderId, status };
     this.server.to(`order:${orderId}`).emit('orderStatusUpdate', payload);
     void this.emitToCustomerRoom(orderId, 'orderStatusUpdate', payload);
+    void this.partnerOrderNotifications.notifyOrderStatus(orderId, status);
   }
 
   emitOrderEvent(orderId: string, event: string, payload: Record<string, unknown>) {
     const full = { orderId, event, ...payload };
     this.server.to(`order:${orderId}`).emit('orderEvent', full);
     void this.emitToCustomerRoom(orderId, 'orderEvent', full);
+    void this.customerOrderNotifications.notifyOrderEvent(orderId, event, payload);
+    void this.partnerOrderNotifications.notifyOrderEvent(orderId, event, payload);
   }
 
   private async resolveCustomerId(orderId: string): Promise<string | undefined> {
@@ -245,6 +253,19 @@ export class TrackingGateway implements OnGatewayConnection {
     this.server.to(`rider:${riderUserId}`).emit('riderNotification', payload);
   }
 
+  /** In-app notification for partner portal users. */
+  emitPartnerNotification(userId: string, payload: Record<string, unknown>) {
+    this.server.to(`portal:${userId}`).emit('partnerNotification', payload);
+  }
+
+  emitPartnerNotificationToRoom(partnerId: string, payload: Record<string, unknown>) {
+    this.server.to(`partner:${partnerId}`).emit('partnerNotification', payload);
+  }
+
+  emitPartnerNotificationToBranch(branchId: string, payload: Record<string, unknown>) {
+    this.server.to(`branch:${branchId}`).emit('partnerNotification', payload);
+  }
+
   /** Alerts admin dispatcher UI (control tower). */
   emitAdminDispatcherAlert(payload: Record<string, unknown>) {
     this.server.to('admin:operations').emit('dispatcherAlert', payload);
@@ -289,6 +310,24 @@ export class TrackingGateway implements OnGatewayConnection {
     return { success: true };
   }
 
+  @SubscribeMessage('joinPartnerPortal')
+  handleJoinPartnerPortal(@ConnectedSocket() client: Socket) {
+    const user = this.getUser(client);
+    if (
+      !user ||
+      (user.role !== UserRole.PARTNER &&
+        user.role !== UserRole.STAFF &&
+        user.role !== UserRole.ADMIN)
+    ) {
+      return { success: false, error: 'Forbidden' };
+    }
+    client.join(`portal:${user.sub}`);
+    if (user.role === UserRole.PARTNER) {
+      client.join(`partner:${user.sub}`);
+    }
+    return { success: true, room: `portal:${user.sub}` };
+  }
+
   @SubscribeMessage('joinPartnerOperations')
   handleJoinPartnerOperations(@ConnectedSocket() client: Socket) {
     const user = this.getUser(client);
@@ -296,6 +335,7 @@ export class TrackingGateway implements OnGatewayConnection {
       return { success: false, error: 'Forbidden' };
     }
     client.join(`partner:${user.sub}`);
+    client.join(`portal:${user.sub}`);
     return { success: true, room: `partner:${user.sub}` };
   }
 
@@ -315,6 +355,7 @@ export class TrackingGateway implements OnGatewayConnection {
     }
     if (!data?.branchId) return { success: false, error: 'branchId required' };
     client.join(`branch:${data.branchId}`);
+    client.join(`portal:${user.sub}`);
     return { success: true, room: `branch:${data.branchId}` };
   }
 

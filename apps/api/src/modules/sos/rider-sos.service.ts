@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   ForbiddenException,
+  forwardRef,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -29,6 +31,7 @@ export class RiderSosService {
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(Rider.name) private riderModel: Model<RiderDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @Inject(forwardRef(() => TrackingGateway))
     private trackingGateway: TrackingGateway,
     private notificationDispatch: NotificationDispatchService,
   ) {}

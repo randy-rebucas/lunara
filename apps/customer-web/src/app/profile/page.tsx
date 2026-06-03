@@ -9,6 +9,7 @@ import { AuthLoading } from '../../components/auth-loading';
 import { DataPageStatus } from '../../components/data-page-status';
 import { PageShell } from '../../components/page-shell';
 import { AddressFormModal } from '../../components/profile/address-form-modal';
+import { ProfileAvatarUpload } from '../../components/profile/profile-avatar-upload';
 import { ShareInviteCard } from '../../components/share/share-sections';
 import { Card, CardBody } from '../../components/ui/card';
 import { FormLabel, Input } from '../../components/ui/input';
@@ -28,6 +29,7 @@ export default function ProfilePage() {
   const [addressModalOpen, setAddressModalOpen] = useState(false);
   const [editingAddress, setEditingAddress] = useState<CustomerAddress | null>(null);
   const [addressSaving, setAddressSaving] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
 
   const load = useCallback(async () => {
     const [profileRes, addressesRes] = await Promise.all([
@@ -47,6 +49,18 @@ export default function ProfilePage() {
 
   const profile = data?.profile ?? null;
   const addresses = data?.addresses ?? [];
+
+  async function uploadAvatar(file: File) {
+    setAvatarUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('avatar', file);
+      await api.upload<CustomerProfile>('/customers/me/avatar', formData);
+      await reload();
+    } finally {
+      setAvatarUploading(false);
+    }
+  }
 
   async function saveProfile() {
     setProfileError('');
@@ -135,10 +149,18 @@ export default function ProfilePage() {
         <>
           <Card className="mt-6">
             <CardBody className="text-center">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-xl font-bold text-primary">
-                {displayName.charAt(0).toUpperCase()}
-              </div>
-              <p className="mt-3 text-lg font-semibold text-slate-900">{displayName}</p>
+              <ProfileAvatarUpload
+                name={displayName}
+                avatarUrl={profile?.avatarUrl}
+                uploading={avatarUploading}
+                onUpload={uploadAvatar}
+              />
+              <p className="mt-1 text-lg font-semibold text-slate-900">{displayName}</p>
+              {profile?.loyaltyPoints != null && profile.loyaltyPoints > 0 && (
+                <p className="mt-1 text-sm font-medium text-primary">
+                  {profile.loyaltyPoints.toLocaleString()} loyalty points
+                </p>
+              )}
               {user?.email && <p className="mt-1 text-sm text-muted">{user.email}</p>}
               {user?.phone && <p className="text-sm text-muted">{user.phone}</p>}
             </CardBody>
@@ -206,7 +228,6 @@ export default function ProfilePage() {
                   <Card key={address._id}>
                     <CardBody>
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-medium text-slate-900">{address.label}</p>
                         <span className="badge-secondary">
                           {formatAddressTypeLabel(address.addressType)}
                         </span>

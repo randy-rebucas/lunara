@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback } from 'react';
-import { REFUND_FLOW, formatRefundStatus, refundFlowIndex } from '@lunara/utils';
+import { REFUND_FLOW, formatCurrency, formatRefundStatus, refundFlowIndex } from '@lunara/utils';
+import { formatRefundDate, refundStatusBadgeClass } from '../../../lib/refunds';
 import { ButtonLink } from '../../../components/ui/button-link';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { AuthLoading } from '../../../components/auth-loading';
@@ -45,9 +46,9 @@ export default function RefundDetailPage() {
 
   if (loading || error || !refund) {
     return (
-      <PageShell narrow>
+      <PageShell>
         <Link href="/refunds" className="text-sm text-muted transition-colors hover:text-primary">
-          ← All refunds
+          ← Refunds
         </Link>
         <DataPageStatus loading={loading} error={error} loadingMessage="Loading refund…" />
       </PageShell>
@@ -57,14 +58,18 @@ export default function RefundDetailPage() {
   const stageIdx = refundFlowIndex(refund.stage);
 
   return (
-    <PageShell narrow>
+    <PageShell>
       <Link href="/refunds" className="text-sm text-muted transition-colors hover:text-primary">
-        ← All refunds
+        ← Refunds
       </Link>
         <h1 className="mt-4 text-2xl font-bold">Refund request</h1>
-        <p className="mt-1 text-sm capitalize text-slate-500">
-          {formatRefundStatus(refund.status)}
+        <p className="mt-2 text-sm text-muted">
+          Order …{refund.orderId.slice(-6)}
+          {refund.processedAt ? ` · Processed ${formatRefundDate(refund.processedAt)}` : ''}
         </p>
+        <span className={`mt-2 inline-flex capitalize ${refundStatusBadgeClass(refund.status)}`}>
+          {formatRefundStatus(refund.status)}
+        </span>
 
         <ol className="mt-8 list-stack">
           {REFUND_FLOW.map((step, i) => {
@@ -87,9 +92,9 @@ export default function RefundDetailPage() {
         <div className="panel mt-6 text-sm">
           <p className="font-medium">Your request</p>
           <p className="mt-2 text-slate-700">{refund.reason}</p>
-          <p className="mt-2 text-slate-500">Requested: ₱{refund.requestedAmount}</p>
+          <p className="mt-2 text-slate-500">Requested: {formatCurrency(refund.requestedAmount)}</p>
           {refund.approvedAmount != null && (
-            <p className="text-accent">Approved: ₱{refund.approvedAmount}</p>
+            <p className="text-accent">Approved: {formatCurrency(refund.approvedAmount)}</p>
           )}
           {refund.rejectionReason && (
             <p className="mt-2 text-red-600">{refund.rejectionReason}</p>

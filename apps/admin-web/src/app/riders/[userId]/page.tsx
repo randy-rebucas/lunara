@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useState } from 'react';
 import { AuthenticatedImage } from '../../../components/authenticated-image';
@@ -146,11 +145,10 @@ export default function RiderProfileReviewPage() {
     <div>
       <PageHeader
         title={name ?? 'Rider profile'}
-        description="Review rider profile details and KYC documents."
+        description="Review profile, KYC documents, wallet hold, and manual credits."
+        backHref="/riders"
+        backLabel="Riders"
       />
-      <Link href="/riders" className="text-sm font-medium text-primary hover:underline">
-        ← Back to riders
-      </Link>
 
       <div className="mt-4">
         <DataPageStatus loading={loading} error={error} loadingMessage="Loading rider profile…" />

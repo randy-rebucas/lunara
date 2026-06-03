@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { adminLogout, getAdminUser } from '../lib/admin-api';
+import { AdminHeaderActions } from './admin-header-actions';
 import { BrandMark } from './ui/brand-mark';
 
 const nav = [
@@ -20,6 +21,8 @@ const nav = [
   { href: '/refunds', label: 'Refunds' },
   { href: '/reports', label: 'Reports' },
   { href: '/promotions', label: 'Promotions' },
+  { href: '/profile', label: 'Profile' },
+  { href: '/settings', label: 'Settings' },
 ];
 
 function isActive(pathname: string, href: string) {
@@ -59,7 +62,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="admin-bg flex min-h-screen">
+    <div className="admin-bg min-h-screen">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <button
@@ -70,10 +73,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar — fixed/sticky on the left */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[var(--width-sidebar)] flex-col bg-sidebar shadow-[var(--shadow-sidebar)] transition-transform lg:static lg:translate-x-0 ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        className={`fixed inset-y-0 left-0 z-50 flex w-[var(--width-sidebar)] flex-col bg-sidebar shadow-[var(--shadow-sidebar)] transition-transform ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
         <div className="flex h-full flex-col p-4">
@@ -85,7 +88,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             <p className="mb-4 truncate rounded-lg bg-slate-50 px-3 py-2 text-xs text-muted">{user.email}</p>
           )}
 
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto overscroll-contain">
             <SidebarNav onNavigate={() => setSidebarOpen(false)} />
           </div>
 
@@ -95,12 +98,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* Main content */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-border/60 bg-surface/95 px-4 py-3 backdrop-blur-sm lg:hidden">
+      {/* Main column — offset for fixed sidebar */}
+      <div className="flex min-h-screen min-w-0 flex-col lg:pl-[var(--width-sidebar)]">
+        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-border/60 bg-surface/95 px-4 backdrop-blur-sm sm:px-6 lg:px-8">
           <button
             type="button"
-            className="inline-flex rounded-lg p-2 text-muted hover:bg-slate-100"
+            className="inline-flex rounded-lg p-2 text-muted hover:bg-slate-100 lg:hidden"
             aria-expanded={sidebarOpen}
             aria-label="Toggle menu"
             onClick={() => setSidebarOpen((open) => !open)}
@@ -113,7 +116,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               )}
             </svg>
           </button>
-          <span className="text-sm font-semibold text-slate-900">Lunara Admin</span>
+
+          <span className="text-sm font-semibold text-slate-900 lg:hidden">Lunara Admin</span>
+
+          <AdminHeaderActions />
         </header>
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>

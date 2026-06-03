@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Image, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useRiderOperations } from '../src/context/rider-operations';
 import { Card } from '../src/components/ui/card';
 import { Screen } from '../src/components/ui/screen';
 import { DataLoadState } from '../src/components/data-load-state';
-import { resolveAuthenticatedMediaSource } from '../src/lib/media-url';
+import { AuthenticatedImage } from '../src/components/authenticated-image';
 import { riderFetch } from '../src/api';
 import {
   RIDER_DOCUMENT_LABELS,
@@ -130,7 +130,6 @@ export default function DocumentsScreen() {
 
       {RIDER_DOCUMENT_TYPES.map((type) => {
         const doc = documentsByType.get(type);
-        const imageSource = doc?.fileUrl ? resolveAuthenticatedMediaSource(doc.fileUrl) : undefined;
         const uploading = uploadingType === type;
 
         return (
@@ -142,8 +141,8 @@ export default function DocumentsScreen() {
               </Text>
             </View>
 
-            {imageSource ? (
-              <Image source={imageSource} style={styles.preview} resizeMode="cover" />
+            {doc?.fileUrl ? (
+              <AuthenticatedImage path={doc.fileUrl} style={styles.preview} accessibilityLabel={RIDER_DOCUMENT_LABELS[type]} />
             ) : (
               <View style={styles.previewPlaceholder}>
                 <Text style={styles.previewPlaceholderText}>No upload yet</Text>

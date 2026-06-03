@@ -29,6 +29,7 @@ export function usePartnerPipelineSocket(
 
     socket.on('connect', () => {
       const user = getPortalUser();
+      socket.emit('joinPartnerPortal');
       if (user?.role === UserRole.PARTNER) {
         socket.emit('joinPartnerOperations');
       }

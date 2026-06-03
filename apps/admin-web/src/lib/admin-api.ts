@@ -227,11 +227,10 @@ export async function adminLogout() {
   clearAdminSession();
 }
 
-export async function adminFetch<T>(path: string, init?: RequestInit): Promise<T> {
+async function adminFetchResponse(path: string, init?: RequestInit): Promise<Response> {
   const token = getAdminToken();
-  let res: Response;
   try {
-    res = await fetch(`${API_URL}${path}`, {
+    return await fetch(`${API_URL}${path}`, {
       ...init,
       headers: {
         'Content-Type': 'application/json',
@@ -243,6 +242,20 @@ export async function adminFetch<T>(path: string, init?: RequestInit): Promise<T
     throw new Error(
       `Cannot reach API at ${API_URL}. Start the API: npm run dev --workspace=@lunara/api`,
     );
+  }
+}
+
+export async function adminFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  let res = await adminFetchResponse(path, init);
+
+  if (res.status === 401 && authData?.tokens.refreshToken) {
+    try {
+      await refreshAccessToken();
+      res = await adminFetchResponse(path, init);
+    } catch {
+      handleUnauthorized();
+      throw new Error('Session expired. Please sign in again.');
+    }
   }
 
   let body: { success?: boolean; data?: T; error?: { message?: string } };

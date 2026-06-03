@@ -1,7 +1,8 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { resolveMediaUrl, uploadProcessingPhoto } from '../lib/partner-api';
+import { uploadProcessingPhoto } from '../lib/partner-api';
+import { AuthenticatedImage } from './authenticated-image';
 
 interface ProcessingPhotoUploadProps {
   orderId: string;
@@ -36,8 +37,6 @@ export function ProcessingPhotoUpload({
     }
   }
 
-  const previewUrl = value ? resolveMediaUrl(value) : '';
-
   return (
     <div className="mt-4">
       <label className="text-sm font-medium text-slate-700">Progress photo</label>
@@ -52,16 +51,15 @@ export function ProcessingPhotoUpload({
       />
       {uploading && <p className="mt-2 text-xs text-muted">Uploading photo…</p>}
       {uploadError && <p className="mt-2 text-xs text-red-500">{uploadError}</p>}
-      {previewUrl && (
+      {value ? (
         <div className="mt-3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={previewUrl}
+          <AuthenticatedImage
+            publicPath={value}
             alt="Processing stage preview"
             className="max-h-48 rounded-lg border border-border/60 object-cover"
           />
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

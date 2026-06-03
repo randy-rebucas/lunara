@@ -188,7 +188,8 @@ Base: `/partner` — JWT required; role enforced per route.
 | POST | `/partner/orders/:orderId/request-pickup` | partner, admin | Request pickup rider |
 | POST | `/partner/orders/:orderId/request-delivery` | partner, staff, admin | Request delivery rider |
 | GET | `/partner/orders/progress` | partner, admin | In-progress monitor |
-| GET | `/partner/staff` | partner, admin | Staff list + workload |
+| GET | `/partner/staff` | partner, admin | Staff list + workload (shop branch) |
+| POST | `/partner/staff` | partner, admin | Create staff account for shop branch |
 | POST | `/partner/orders/:orderId/assign-staff` | partner, admin | Assign staff to order |
 | GET | `/partner/inventory` | partner, admin | Shop inventory |
 | PATCH | `/partner/inventory/:id` | partner, admin | Update stock quantity |

@@ -6,9 +6,12 @@ import {
   distanceKm,
   estimateTurnaroundHours,
   formatDistanceKm,
+  buildPartnerCoverageNotice,
   rankBranchesForDispatch,
   resolveCoordinates,
   scoreBranchPerformance,
+  validateServiceArea,
+  type PartnerCoverageInfo,
 } from '@lunara/utils';
 import { Address, AddressDocument } from '../addresses/schemas/address.schema';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
@@ -180,6 +183,70 @@ export class BranchesService {
         isNearest: false,
       })),
     };
+  }
+
+  async evaluatePartnerCoverageForAddress(address: {
+    line1?: string;
+    city: string;
+    province: string;
+    postalCode: string;
+    latitude?: number;
+    longitude?: number;
+  }): Promise<PartnerCoverageInfo> {
+    const area = validateServiceArea({
+      line1: address.line1 ?? '',
+      city: address.city,
+      province: address.province,
+      postalCode: address.postalCode,
+    });
+
+    if (!area.valid) {
+      return buildPartnerCoverageNotice({
+        inServiceArea: false,
+        hasPartnerNearby: false,
+        branchAssigned: false,
+      });
+    }
+
+    await this.ensureSeeded();
+    const branches = await this.branchModel.find(this.operationalBranchFilter());
+    if (branches.length === 0) {
+      return buildPartnerCoverageNotice({
+        inServiceArea: true,
+        hasPartnerNearby: false,
+        branchAssigned: false,
+      });
+    }
+
+    const nearest = await this.findNearestForAddress({
+      city: address.city,
+      latitude: address.latitude,
+      longitude: address.longitude,
+    });
+
+    const hasPartnerNearby = nearest.ranked.some(
+      (r) => r.withinRadius && r.capacityAvailable,
+    );
+
+    return buildPartnerCoverageNotice({
+      inServiceArea: true,
+      hasPartnerNearby,
+      branchAssigned: false,
+      nearestDistanceLabel: nearest.ranked[0]?.distanceLabel,
+    });
+  }
+
+  async evaluatePartnerCoverageForAddressId(addressId: string) {
+    const address = await this.addressModel.findById(addressId);
+    if (!address) return null;
+    return this.evaluatePartnerCoverageForAddress({
+      line1: address.line1,
+      city: address.city,
+      province: address.province,
+      postalCode: address.postalCode,
+      latitude: address.latitude,
+      longitude: address.longitude,
+    });
   }
 
   async findNearestByAddressId(userId: string, addressId: string) {

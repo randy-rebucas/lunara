@@ -76,7 +76,7 @@ EXPO_PUBLIC_API_URL=http://localhost:3001
 
 On a physical device, `localhost` points at the phone — not your PC. Both apps automatically rewrite `localhost` / `127.0.0.1` in `EXPO_PUBLIC_API_URL` to your dev machine’s LAN IP (derived from the Expo dev-server host). No manual IP editing is required when using Expo Go on the same network.
 
-**Note:** Remote push notifications (FCM) do **not** work in Expo Go (SDK 53+). In-app notifications and Socket.IO alerts still work. For background push, use an [EAS development build](#push-notifications-firebase--eas) on a physical device.
+**Note:** Remote push notifications (FCM) do **not** work in Expo Go (SDK 53+). In-app notifications, Socket.IO realtime updates, and **on-device banners** (via `expo-notifications` local alerts) still work while the app is open. For background FCM push, use an [EAS development build](#push-notifications-firebase--eas) on a physical device.
 
 ### Run locally
 
@@ -116,7 +116,7 @@ Expo slug: `lunara-customer` · scheme: `lunara`
 | Refunds | `/refunds`, `/refunds/[id]`, `/orders/[id]/refund` | List, detail, and submit refund requests |
 | Support | `/support`, `/support/[id]`, `/orders/[id]/lost-item` | Tickets and lost-item complaints |
 
-Features mirror customer-web: managed-network booking (no shop picker), onboarding after signup, PayMongo / cash / wallet payment, order tracking with rider GPS when en route, delivery verification (last 4 digits of phone + signature), refunds, support tickets, and push notifications (FCM via EAS build on a physical device).
+Features mirror customer-web: managed-network booking (no shop picker), onboarding after signup, PayMongo / cash / wallet payment, order tracking with rider GPS when en route, delivery verification (last 4 digits of phone + signature), refunds, support tickets, and **dispatch notifications** (Socket.IO + in-app inbox + local banners; FCM when using an EAS build).
 
 ### Rider mobile (`apps/rider-mobile`)
 
@@ -137,7 +137,7 @@ Expo slug: `lunara-rider` · scheme: `lunara-rider` · requires **location** and
 | Notifications | `/notifications` | Dispatch alerts with mark-read and tap-to-open task |
 | SOS | Pickup/delivery task screens | Emergency button — notify dispatch + share live location during active tasks |
 
-Real-time task offers and location updates use Socket.IO (`/tracking` namespace). **Riders must complete profile and get all KYC documents approved** before going online (`POST /riders/online` returns 403 until verified). Admins review documents at admin-web **Riders → rider detail**. **Push notifications** (Firebase Cloud Messaging via `expo-notifications`) deliver assignments and offers when the app is backgrounded — requires an EAS development or production build on a physical device. Task photos upload to the API (`/riders/*/photo-upload`). Production builds use [EAS Build](https://docs.expo.dev/build/introduction/) (`npm run build --workspace=@lunara/rider-mobile`). See [Push notifications setup](#push-notifications-firebase--eas) and [End-to-End Test Flow → Rider daily operations](#rider-daily-operations-mobile-port-8082) for the full pickup/delivery walkthrough.
+Real-time task offers and location updates use Socket.IO (`/tracking` namespace). **Dispatch notifications** cover pickup/delivery offers, assignments, order updates, and platform alerts (Socket.IO + in-app inbox + local banners; FCM when using an EAS build). **Riders must complete profile and get all KYC documents approved** before going online (`POST /riders/online` returns 403 until verified). Admins review documents at admin-web **Riders → rider detail**. Task photos upload to the API (`/riders/*/photo-upload`). See [Dispatch notifications](#dispatch-notifications-realtime), [Push notifications setup](#push-notifications-firebase--eas), and [Test dispatch notifications](#test-dispatch-notifications) for the full walkthrough.
 
 ### Troubleshooting (Metro / Expo)
 
@@ -153,7 +153,7 @@ That runs `expo start --clear`. You can also delete `apps/<mobile-app>/.expo` an
 
 ### Push notifications (Firebase + EAS)
 
-Mobile apps register native device tokens with `POST /api/v1/users/me/push-token`. The API sends FCM messages via `firebase-admin` when in-app notifications are created (assignments, refunds, review requests) and when pickup/delivery offers are dispatched to online riders.
+Mobile apps register native device tokens with `POST /api/v1/users/me/push-token`. The API sends FCM messages via `firebase-admin` when in-app notifications are created (customer **order/dispatch updates**, rider assignments, refunds, review requests) and when pickup/delivery offers are dispatched to online riders.
 
 **One-time setup:**
 
@@ -174,6 +174,67 @@ Mobile apps register native device tokens with `POST /api/v1/users/me/push-token
    ```
 
 Push is skipped when Firebase env vars are missing (local dev without credentials still works for in-app + socket alerts).
+
+### Dispatch notifications (realtime)
+
+Both mobile apps stay connected to the API Socket.IO namespace **`/tracking`** while signed in. Dispatch and order-pipeline events trigger three layers:
+
+| Layer | Customer mobile | Rider mobile |
+|-------|-----------------|--------------|
+| **Socket** | `joinCustomer` + `joinOrder` on active orders | `joinRider`, `joinRiders` when online, `joinOrder` on tasks |
+| **In-app inbox** | `GET /notifications/me` (bell on Home) | `GET /riders/notifications` (bell on Home) |
+| **Local banner** | Immediate `expo-notifications` alert while app is open | Same for offers, assignments, dispatch alerts |
+| **FCM push** | When Firebase is configured + EAS build | Same |
+
+**Customer events** (examples): `awaitingDispatch`, `shopAssigned`, `findingRider`, `riderAssigned`, `pickedUp`, `outForDelivery`, `delivered`, etc. Copy lives in `@lunara/utils` (`ORDER_EVENT_MESSAGES`). The API persists each event via `CustomerOrderNotificationService` when `TrackingGateway.emitOrderEvent` runs.
+
+**Rider events** (examples): `pickupOffer`, `deliveryOffer`, `pickupAssignment`, `deliveryAssignment`, `riderNotification`, plus `orderStatusUpdate` / `orderEvent` on joined orders.
+
+**Key files**
+
+| Area | Path |
+|------|------|
+| API gateway | `apps/api/src/modules/realtime/tracking.gateway.ts` |
+| Customer push + inbox | `apps/api/src/modules/push/customer-order-notification.service.ts` |
+| Rider notifications | `apps/api/src/modules/riders/rider-notification.service.ts` |
+| Customer socket UI | `apps/customer-mobile/src/components/customer-tracking-sync.tsx` |
+| Rider socket UI | `apps/rider-mobile/src/hooks/use-rider-dispatch-socket.ts` |
+
+### Test dispatch notifications
+
+Prerequisites: API running, seed completed, customer + rider mobile dev servers, same Wi‑Fi if using a physical device.
+
+#### Customer mobile (port 8081)
+
+1. Sign in as `customer@lunara.dev` / `password123` (or complete OTP signup).
+2. Book and **pay** an order (wallet or mock PayMongo) so status becomes `pending_dispatch`.
+3. Keep the customer app **open** on Home or Orders — you should see a local banner: *Order received* / *pending dispatch*.
+4. In **admin-web** (3002) → **Dispatch** → assign a shop to the order.
+5. Customer app should banner *Shop assigned*; open **Notifications** (bell on Home) — new row with deep link to the order.
+6. Assign a **pickup rider** from admin → customer sees *Rider assigned* (socket + inbox).
+7. Complete pickup/delivery in rider + partner portals — each major step emits `orderEvent` and updates the customer timeline and notifications.
+
+**Verify socket only:** With customer app on order track (`/orders/[id]`), timeline and status should update live without manual refresh.
+
+#### Rider mobile (port 8082)
+
+1. Sign in as `rider@lunara.dev` / `password123`.
+2. Complete **profile + all KYC documents** (admin approves at admin-web → Riders → rider detail) if not already verified.
+3. Tap **Go online** on Home (joins `riders:online` room).
+4. From admin, **assign pickup** to this rider (or broadcast pickup request and accept in app).
+5. Rider should get a **local banner** (*New pickup offer* or *New assignment*) and Tasks list refreshes.
+6. Accept task → complete pickup workflow → after partner marks **ready for delivery**, assign delivery rider.
+7. Rider gets delivery assignment notification; **Notifications** screen shows unread count on the Home bell.
+8. Tap a notification → navigates to `/pickup/[id]` or `/delivery/[id]`.
+
+**Offers vs assignments:** Pickup/delivery **offers** broadcast to all online riders (`joinRiders`). **Assignments** go to the assigned rider’s room (`joinRider`). Rider must be online to receive offers.
+
+#### Background push (optional)
+
+1. Configure [Firebase + EAS](#push-notifications-firebase--eas).
+2. Install a **development build** on a physical device.
+3. Sign in, grant notification permission, background the app.
+4. Trigger dispatch from admin — FCM should deliver; tapping opens the relevant order/task screen.
 
 ### Monorepo notes
 
@@ -202,7 +263,7 @@ Works on **customer-web** (http://localhost:3000) or **customer-mobile** (Expo, 
 7. **Rider pickup** (rider app port 8082) — go online → accept offer → arrive → verify customer (last 4 of phone) → collect → photo → receipt → picked up
 8. **Partner processing** (http://localhost:3003) — `partner@lunara.dev` / `password123` → Orders → step through receive → weigh → tag → sort → wash → dry → fold → iron (optional) → QC → pack → ready for delivery
 9. **Delivery** — auto-notify riders when ready → rider accepts → delivers → customer verifies (last 4 of phone) & signs on order track → rider completes → delivered → completed
-10. **Track order** — http://localhost:3000/orders → select order → full timeline (booking → delivered) + live WebSocket notifications and rider GPS when en route
+10. **Track order** — http://localhost:3000/orders → select order → full timeline (booking → delivered) + live WebSocket notifications and rider GPS when en route. Same updates appear in **customer-mobile** (notifications bell + `/orders/[id]`) — see [Dispatch notifications](#dispatch-notifications-realtime)
 11. **Submit review** — when order is completed, notification on dashboard + track page → http://localhost:3000/orders/{id}/review → 1–5 stars, comment, submit → review published
 
 ### Rider daily operations (mobile port 8082)
@@ -214,6 +275,7 @@ See [Mobile Apps](#mobile-apps) for setup (Expo Go, Wi‑Fi, env). Then:
 3. **Accept pickup** → navigate → verify → collect → photo → **drop at laundry shop** → complete (₱80)
 4. After partner processing, **accept delivery** → navigate → arrive → customer verifies/signs → complete (₱120)
 5. **Earnings** update on home and Earnings screen
+6. Watch **Notifications** (bell) and local banners as admin assigns shops/riders — see [Test dispatch notifications](#test-dispatch-notifications)
 
 ### Partner laundry shop — daily operations (partner portal port 3003)
 
@@ -319,7 +381,7 @@ OTP login (dev): any phone → OTP is always `123456`
 
 ## Documentation
 
-See [`docs/`](./docs/) for architecture, database schemas, API reference, and development roadmap. Mobile app setup and screen reference are in [Mobile Apps](#mobile-apps) above.
+See [`docs/`](./docs/) for architecture, database schemas, API reference, and development roadmap. Mobile app setup, dispatch notifications, and screen reference are in [Mobile Apps](#mobile-apps) above.
 
 ## Theme
 

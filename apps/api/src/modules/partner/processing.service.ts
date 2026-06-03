@@ -8,9 +8,10 @@ import {
   getNextProcessingStep,
   getProcessingStep,
   isProcessingComplete,
+  formatPartnerPreProcessingLabel,
   LAUNDRY_PROCESSING_STEPS,
-  LAUNDRY_PROCESSING_STATUSES,
   normalizeProcessingStepId,
+  PARTNER_PROCESSING_QUEUE_STATUSES,
   type LaundryProcessingStepId,
 } from '@lunara/utils';
 import { RiderAssignmentService } from '../riders/rider-assignment.service';
@@ -23,11 +24,6 @@ import {
   assertOrderPortalAccess,
   resolvePortalBranchId,
 } from './partner-access';
-
-const PROCESSING_QUEUE_STATUSES = [
-  OrderStatus.RECEIVED_AT_SHOP,
-  ...LAUNDRY_PROCESSING_STATUSES,
-];
 
 @Injectable()
 export class ProcessingService {
@@ -43,7 +39,7 @@ export class ProcessingService {
       success: true,
       data: {
         steps: LAUNDRY_PROCESSING_STEPS,
-        queueStatuses: PROCESSING_QUEUE_STATUSES,
+        queueStatuses: PARTNER_PROCESSING_QUEUE_STATUSES,
       },
     };
   }
@@ -55,7 +51,7 @@ export class ProcessingService {
     role?: UserRole,
   ) {
     const filter: Record<string, unknown> = {
-      status: { $in: PROCESSING_QUEUE_STATUSES },
+      status: { $in: PARTNER_PROCESSING_QUEUE_STATUSES },
       dispatchStatus: 'dispatched',
       branchId: { $exists: true, $ne: null },
     };
@@ -97,6 +93,9 @@ export class ProcessingService {
     if (!order) throw new NotFoundException('Order not found');
     const branchId = await resolvePortalBranchId(this.userModel, userId, role);
     assertOrderPortalAccess(order, userId, role, branchId);
+    if (!PARTNER_PROCESSING_QUEUE_STATUSES.includes(order.status)) {
+      return { success: true, data: this.buildPreProcessingView(order) };
+    }
     return { success: true, data: this.buildProcessingView(order) };
   }
 
@@ -107,7 +106,7 @@ export class ProcessingService {
     const branchId = await resolvePortalBranchId(this.userModel, userId, role);
     assertOrderPortalAccess(order, userId, role, branchId);
 
-    if (!PROCESSING_QUEUE_STATUSES.includes(order.status)) {
+    if (!PARTNER_PROCESSING_QUEUE_STATUSES.includes(order.status)) {
       throw new BadRequestException('Order is not in the processing queue');
     }
 
@@ -148,7 +147,7 @@ export class ProcessingService {
     const branchId = await resolvePortalBranchId(this.userModel, userId, role);
     assertOrderPortalAccess(order, userId, role, branchId);
 
-    if (!PROCESSING_QUEUE_STATUSES.includes(order.status)) {
+    if (!PARTNER_PROCESSING_QUEUE_STATUSES.includes(order.status)) {
       throw new BadRequestException(`Order status ${order.status} is not in processing queue`);
     }
 
@@ -284,6 +283,35 @@ export class ProcessingService {
       branchId: order.branchId?.toString(),
       assignedStaffId: order.laundryProcessing?.assignedStaffId?.toString(),
       isAssigned: !!order.laundryProcessing?.assignedStaffId,
+    };
+  }
+
+  private buildPreProcessingView(order: OrderDocument) {
+    const label = formatPartnerPreProcessingLabel(order.status);
+    return {
+      preProcessing: true,
+      order: {
+        _id: order._id.toString(),
+        status: order.status,
+        bookingType: order.bookingType,
+        total: order.total,
+        estimatedWeightKg: order.estimatedWeightKg,
+        pickup: order.pickup,
+      },
+      processing: order.laundryProcessing,
+      currentStep: {
+        id: 'pre_processing',
+        label,
+        description:
+          'Laundry processing starts after the rider delivers to your shop and you complete shop receiving.',
+      },
+      nextStep: null,
+      steps: LAUNDRY_PROCESSING_STEPS,
+      progress: 0,
+      isComplete: false,
+      canSkipIroning: false,
+      assignedStaffId: order.laundryProcessing?.assignedStaffId?.toString(),
+      isJobAccepted: false,
     };
   }
 

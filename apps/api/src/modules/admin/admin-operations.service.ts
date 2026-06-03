@@ -99,6 +99,7 @@ export class AdminOperationsService {
     >['data'] | null = null;
     if (
       order.branchId &&
+      order.partnerAcceptedAt &&
       (order.status === OrderStatus.SHOP_ASSIGNED || order.status === OrderStatus.CONFIRMED) &&
       !order.pickupRiderId
     ) {
@@ -113,7 +114,11 @@ export class AdminOperationsService {
     let deliverySuggestions: Awaited<
       ReturnType<RiderAssignmentService['suggestDeliveryRider']>
     >['data'] | null = null;
-    if (order.status === OrderStatus.READY_FOR_DELIVERY && !order.deliveryRiderId) {
+    if (
+      order.partnerAcceptedAt &&
+      order.status === OrderStatus.READY_FOR_DELIVERY &&
+      !order.deliveryRiderId
+    ) {
       try {
         const s = await this.riderAssignmentService.suggestDeliveryRider(orderId);
         deliverySuggestions = s.data;

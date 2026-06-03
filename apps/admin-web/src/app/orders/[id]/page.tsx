@@ -4,7 +4,10 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useState } from 'react';
 import { DataPageStatus } from '../../../components/data-page-status';
+import { PageHeader } from '../../../components/ui/page-header';
+import { DetailRow, OpsPanel } from '../../../components/ui/ops-panel';
 import { adminFetch } from '../../../lib/admin-api';
+import { formatSlugLabel } from '../../../lib/format-label';
 import { useAdminQuery } from '../../../lib/use-admin-query';
 
 interface OpsOrder {
@@ -82,68 +85,73 @@ export default function AdminOrderOpsPage() {
   if (loading || loadError || !data) {
     return (
       <div>
-        <Link href="/orders" className="text-sm text-primary">
-          ← Orders
-        </Link>
+        <PageHeader title="Order operations" backHref="/orders" backLabel="Orders" />
         <DataPageStatus loading={loading} error={loadError} loadingMessage="Loading order…" />
       </div>
     );
   }
 
   const o = data.order;
+  const partnerAccepted = !!o.partnerAcceptedAt;
+  const canAssignPickup =
+    partnerAccepted &&
+    (o.status === 'shop_assigned' || o.status === 'confirmed') &&
+    !o.pickupRiderId;
+  const canAssignDelivery =
+    partnerAccepted && o.status === 'ready_for_delivery' && !o.deliveryRiderId;
+  const awaitingPartnerAccept =
+    !!o.branchName &&
+    o.dispatchStatus === 'dispatched' &&
+    !partnerAccepted &&
+    (o.status === 'shop_assigned' ||
+      o.status === 'confirmed' ||
+      o.status === 'ready_for_delivery');
 
   return (
     <div>
-      <Link href="/orders" className="text-sm text-primary">
-        ← Orders
-      </Link>
-      <h2 className="mt-4 text-2xl font-bold">Order operations</h2>
-      <p className="mt-1 font-mono text-xs text-slate-500">{o._id}</p>
-
-      <div className="mt-6 grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
-        <div className="rounded-xl bg-white p-5 shadow-sm">
-          <h3 className="font-semibold">Status</h3>
-          <dl className="mt-3 space-y-2 text-sm">
-            <div className="flex justify-between">
-              <dt className="text-slate-500">Pipeline</dt>
-              <dd className="capitalize">{o.status.replace(/_/g, ' ')}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-slate-500">Shop</dt>
-              <dd>{o.branchName ?? 'Not dispatched'}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-slate-500">SLA</dt>
-              <dd>{o.sla.label}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-slate-500">Partner accepted</dt>
-              <dd>{o.partnerAcceptedAt ? 'Yes' : 'No'}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-slate-500">Pickup requested</dt>
-              <dd>{o.pickupRequestedAt ? 'Yes' : 'No'}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-slate-500">Customer</dt>
-              <dd>{data.customer?.email ?? '—'}</dd>
-            </div>
-          </dl>
-          {o.status === 'pending_dispatch' && (
-            <Link href="/dispatch" className="mt-4 inline-block text-sm font-medium text-primary">
-              Dispatch to shop →
+      <PageHeader
+        title="Order operations"
+        description={<span className="font-mono text-xs">{o._id}</span>}
+        backHref="/orders"
+        backLabel="Orders"
+        actions={
+          o.status === 'pending_dispatch' ? (
+            <Link href="/dispatch" className="btn-primary btn-sm">
+              Dispatch to shop
             </Link>
-          )}
+          ) : undefined
+        }
+      />
+
+      {error ? (
+        <div className="alert-error mb-4" role="alert">
+          {error}
         </div>
+      ) : null}
 
-        <div className="rounded-xl bg-white p-5 shadow-sm">
-          <h3 className="font-semibold">Assign delivery rider</h3>
-          <p className="mt-1 text-xs text-slate-500">
-            When laundry is <code>ready_for_delivery</code> — status becomes{' '}
-            <code>rider_assigned_delivery</code>. Rider is notified in-app.
-          </p>
+      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+        <OpsPanel title="Status">
+          <dl className="space-y-2">
+            <DetailRow label="Pipeline" value={<span className="capitalize">{formatSlugLabel(o.status)}</span>} />
+            <DetailRow label="Shop" value={o.branchName ?? 'Not dispatched'} />
+            <DetailRow label="SLA" value={o.sla.label} />
+            <DetailRow label="Partner accepted" value={o.partnerAcceptedAt ? 'Yes' : 'No'} />
+            <DetailRow label="Pickup requested" value={o.pickupRequestedAt ? 'Yes' : 'No'} />
+            <DetailRow label="Customer" value={data.customer?.email ?? data.customer?.phone ?? '—'} />
+          </dl>
+        </OpsPanel>
 
-          {o.status === 'ready_for_delivery' && !o.deliveryRiderId && (
+        <OpsPanel
+          title="Assign delivery rider"
+          description="When laundry is ready_for_delivery — status becomes rider_assigned_delivery. Rider is notified in-app."
+        >
+          {awaitingPartnerAccept && o.status === 'ready_for_delivery' && !o.deliveryRiderId && (
+            <p className="mt-4 text-sm text-amber-800">
+              Partner must accept this order before you can assign a delivery rider.
+            </p>
+          )}
+
+          {canAssignDelivery && (
             <>
               {data.deliveryRiderSuggestions &&
                 data.deliveryRiderSuggestions.suggestions.length > 0 && (
@@ -169,7 +177,7 @@ export default function AdminOrderOpsPage() {
                 <button
                   type="button"
                   disabled={busy}
-                  className="rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm font-medium text-emerald-800"
+                  className="btn-outline btn-sm border-emerald-300 text-emerald-800"
                   onClick={() =>
                     run(async () => {
                       const res = await adminFetch<{
@@ -185,7 +193,7 @@ export default function AdminOrderOpsPage() {
                 <button
                   type="button"
                   disabled={busy}
-                  className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                  className="btn-primary btn-sm bg-emerald-600 hover:bg-emerald-600/90"
                   onClick={() =>
                     run(() =>
                       adminFetch(`/admin/operations/orders/${id}/confirm-delivery-rider`, {
@@ -202,16 +210,22 @@ export default function AdminOrderOpsPage() {
               </div>
             </>
           )}
-        </div>
+        </OpsPanel>
 
-        <div className="rounded-xl bg-white p-5 shadow-sm">
-          <h3 className="font-semibold">Assign pickup rider</h3>
-          <p className="mt-1 text-xs text-slate-500">
-            After shop assignment — status becomes <code>rider_assigned_pickup</code>. Rider is
-            notified in-app and via socket.
-          </p>
+        <OpsPanel
+          title="Assign pickup rider"
+          description="After partner accepts at the shop — status becomes rider_assigned_pickup. Rider is notified in-app."
+        >
+          {awaitingPartnerAccept &&
+            (o.status === 'shop_assigned' || o.status === 'confirmed') &&
+            !o.pickupRiderId && (
+              <p className="mt-4 text-sm text-amber-800">
+                Partner must accept this order in the partner portal before you can assign a pickup
+                rider or broadcast to the marketplace.
+              </p>
+            )}
 
-          {o.status === 'shop_assigned' && !o.pickupRiderId && (
+          {canAssignPickup && (
             <>
               {data.pickupRiderSuggestions && data.pickupRiderSuggestions.suggestions.length > 0 && (
                 <div className="mt-4 rounded-lg border border-indigo-100 bg-indigo-50/50 p-3 text-sm">
@@ -236,7 +250,7 @@ export default function AdminOrderOpsPage() {
                 <button
                   type="button"
                   disabled={busy}
-                  className="rounded-lg border border-indigo-300 bg-white px-3 py-2 text-sm font-medium text-indigo-700"
+                  className="btn-outline btn-sm"
                   onClick={() =>
                     run(async () => {
                       const res = await adminFetch<{
@@ -252,7 +266,7 @@ export default function AdminOrderOpsPage() {
                 <button
                   type="button"
                   disabled={busy}
-                  className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                  className="btn-primary btn-sm disabled:opacity-50"
                   onClick={() =>
                     run(() =>
                       adminFetch(`/admin/operations/orders/${id}/confirm-pickup-rider`, {
@@ -272,7 +286,8 @@ export default function AdminOrderOpsPage() {
           )}
 
           <select
-            className="mt-4 w-full rounded border px-3 py-2 text-sm"
+            className="input-field mt-4 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!canAssignPickup && !canAssignDelivery}
             value={riderId || data.suggestedPickupRiderId || ''}
             onChange={(e) => setRiderId(e.target.value)}
           >
@@ -292,7 +307,8 @@ export default function AdminOrderOpsPage() {
             ))}
           </select>
           <select
-            className="mt-2 w-full rounded border px-3 py-2 text-sm"
+            className="input-field mt-2 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!canAssignPickup && !canAssignDelivery}
             value={assignType}
             onChange={(e) => setAssignType(e.target.value as 'pickup' | 'delivery')}
           >
@@ -303,12 +319,13 @@ export default function AdminOrderOpsPage() {
             type="button"
             disabled={
               busy ||
+              (assignType === 'delivery' ? !canAssignDelivery : !canAssignPickup) ||
               !(riderId ||
                 (assignType === 'delivery'
                   ? data.suggestedDeliveryRiderId
                   : data.suggestedPickupRiderId))
             }
-            className="mt-3 w-full rounded-lg bg-slate-900 py-2 text-sm font-medium text-white disabled:opacity-50"
+            className="btn-primary mt-3 w-full disabled:opacity-50"
             onClick={() =>
               run(() =>
                 adminFetch(`/admin/operations/orders/${id}/assign-rider`, {
@@ -325,8 +342,8 @@ export default function AdminOrderOpsPage() {
           </button>
           <button
             type="button"
-            disabled={busy}
-            className="mt-2 w-full rounded-lg border py-2 text-sm text-slate-600"
+            disabled={busy || !canAssignPickup}
+            className="btn-outline mt-2 w-full disabled:cursor-not-allowed disabled:opacity-50"
             onClick={() =>
               run(() =>
                 adminFetch(`/admin/operations/orders/${id}/dispatch-pickup`, { method: 'POST' }),
@@ -335,16 +352,15 @@ export default function AdminOrderOpsPage() {
           >
             Broadcast to marketplace (riders accept)
           </button>
-        </div>
+        </OpsPanel>
       </div>
 
-      <div className="mt-6 rounded-xl bg-white p-5 shadow-sm">
-        <h3 className="font-semibold">Conflicts</h3>
+      <OpsPanel title="Conflicts" className="mt-6 lg:col-span-2 xl:col-span-3">
         {o.operationsConflict && (
-          <p className="mt-2 text-sm text-red-700">{o.operationsConflictNote}</p>
+          <p className="text-sm text-destructive">{o.operationsConflictNote}</p>
         )}
         <input
-          className="mt-3 w-full rounded border px-3 py-2 text-sm"
+          className="input-field mt-3"
           placeholder="Conflict note"
           value={conflictNote}
           onChange={(e) => setConflictNote(e.target.value)}
@@ -352,7 +368,7 @@ export default function AdminOrderOpsPage() {
         <button
           type="button"
           disabled={busy || !conflictNote}
-          className="mt-2 rounded-lg border px-4 py-2 text-sm"
+          className="btn-outline btn-sm mt-2"
           onClick={() =>
             run(() =>
               adminFetch(`/admin/operations/orders/${id}/flag-conflict`, {
@@ -365,7 +381,7 @@ export default function AdminOrderOpsPage() {
           Flag conflict
         </button>
         <input
-          className="mt-4 w-full rounded border px-3 py-2 text-sm"
+          className="input-field mt-4"
           placeholder="Resolution note"
           value={resolution}
           onChange={(e) => setResolution(e.target.value)}
@@ -373,7 +389,7 @@ export default function AdminOrderOpsPage() {
         <button
           type="button"
           disabled={busy || !resolution}
-          className="mt-2 rounded-lg bg-slate-800 px-4 py-2 text-sm text-white"
+          className="btn-primary btn-sm mt-2"
           onClick={() =>
             run(() =>
               adminFetch(`/admin/operations/orders/${id}/resolve-conflict`, {
@@ -385,12 +401,10 @@ export default function AdminOrderOpsPage() {
         >
           Resolve conflict
         </button>
-        <Link href="/support" className="mt-3 block text-sm text-primary">
+        <Link href="/support" className="link-primary mt-3 inline-block text-sm">
           Open support tickets →
         </Link>
-      </div>
-
-      {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+      </OpsPanel>
     </div>
   );
 }

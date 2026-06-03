@@ -3,7 +3,13 @@
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { PaymentMethod } from '@lunara/types';
 import { Button } from '@lunara/ui';
+import {
+  formatCashTimingLabel,
+  formatCurrency,
+  isRefundablePaymentMethod,
+} from '@lunara/utils';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { AuthLoading } from '../../../../components/auth-loading';
 import { PageShell } from '../../../../components/page-shell';
@@ -18,6 +24,8 @@ export default function RequestRefundPage() {
   const { isLoading, ready } = useProtectedPage({ requireOnboarding: true });
   const [reason, setReason] = useState('');
   const [orderTotal, setOrderTotal] = useState<number | null>(null);
+  const [cashBlocked, setCashBlocked] = useState(false);
+  const [cashLabel, setCashLabel] = useState('');
   const [loadError, setLoadError] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -25,8 +33,24 @@ export default function RequestRefundPage() {
   useEffect(() => {
     if (!id || !ready) return;
     api
-      .get<{ order: { total: number } }>(`/payments/orders/${id}`)
-      .then((res) => setOrderTotal(res.data.order?.total ?? null))
+      .get<{
+        order: { total: number };
+        payment: { method: string; cashTiming?: 'pickup' | 'delivery' } | null;
+      }>(`/payments/orders/${id}`)
+      .then((res) => {
+        setOrderTotal(res.data.order?.total ?? null);
+        const payment = res.data.payment;
+        if (
+          !payment ||
+          payment.method === PaymentMethod.CASH ||
+          !isRefundablePaymentMethod(payment.method as PaymentMethod)
+        ) {
+          setCashBlocked(true);
+          if (payment?.method === PaymentMethod.CASH) {
+            setCashLabel(formatCashTimingLabel(payment.cashTiming));
+          }
+        }
+      })
       .catch((e) => setLoadError(e instanceof Error ? e.message : 'Failed to load order'));
   }, [api, id, ready]);
 
@@ -36,6 +60,7 @@ export default function RequestRefundPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (cashBlocked) return;
     if (!id || reason.trim().length < 10) {
       setError('Please explain your refund request (at least 10 characters).');
       return;
@@ -62,43 +87,52 @@ export default function RequestRefundPage() {
       </Link>
       <h1 className="mt-4 text-2xl font-bold tracking-tight text-primary">Request a refund</h1>
       <p className="mt-2 text-sm text-muted">
-        Submit your request for admin review. We will verify your order and payment, then approve
-        or reject. Approved refunds are credited to your wallet.
+        Wallet and online payments can be refunded to your Lunara wallet after admin review. Cash on
+        pickup or delivery is not eligible for wallet refunds.
       </p>
       {loadError && (
         <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {loadError}
         </div>
       )}
-      {orderTotal != null && (
-        <p className="mt-2 text-sm font-medium">Order total: ₱{orderTotal}</p>
+      {cashBlocked && !loadError && (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {cashLabel
+            ? `This order uses ${cashLabel.toLowerCase()} and cannot be refunded to your wallet. Contact support if you need help.`
+            : 'This order is not eligible for a wallet refund. Only wallet and online payments qualify.'}
+        </div>
+      )}
+      {orderTotal != null && !cashBlocked && (
+        <p className="mt-2 text-sm font-medium">Order total: {formatCurrency(orderTotal)}</p>
       )}
 
-      <Card className="mt-8">
-        <CardBody>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <FormLabel>Reason for refund</FormLabel>
-              <textarea
-                className="input-field min-h-[120px] resize-y"
-                rows={5}
-                placeholder="Explain why you are requesting a refund…"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                required
-              />
-            </div>
-            {error && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                {error}
+      {!cashBlocked && (
+        <Card className="mt-8">
+          <CardBody>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <FormLabel>Reason for refund</FormLabel>
+                <textarea
+                  className="input-field min-h-[120px] resize-y"
+                  rows={5}
+                  placeholder="Explain why you are requesting a refund…"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  required
+                />
               </div>
-            )}
-            <Button type="submit" className="w-full" disabled={submitting}>
-              {submitting ? 'Submitting…' : 'Submit refund request'}
-            </Button>
-          </form>
-        </CardBody>
-      </Card>
+              {error && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
+              <Button type="submit" className="w-full" disabled={submitting}>
+                {submitting ? 'Submitting…' : 'Submit refund request'}
+              </Button>
+            </form>
+          </CardBody>
+        </Card>
+      )}
     </PageShell>
   );
 }

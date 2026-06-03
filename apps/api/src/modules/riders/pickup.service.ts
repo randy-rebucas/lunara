@@ -59,6 +59,11 @@ export class PickupService {
         `Order must be shop-assigned before pickup dispatch (current status: ${order.status})`,
       );
     }
+    if (!order.partnerAcceptedAt) {
+      throw new BadRequestException(
+        'Partner must accept the order at the shop before dispatching pickup riders',
+      );
+    }
 
     if (!order.pickup) order.pickup = {};
     order.pickup.offeredAt = new Date();

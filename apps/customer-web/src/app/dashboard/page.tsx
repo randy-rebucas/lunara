@@ -4,7 +4,9 @@ import Link from 'next/link';
 import { useCallback } from 'react';
 import { ButtonLink } from '../../components/ui/button-link';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
-import { formatCurrency } from '@lunara/utils';
+import { OrderStatus } from '@lunara/types';
+import { formatCurrency, isActiveOrderStatus, type PartnerCoverageInfo } from '@lunara/utils';
+import { OrderPartnerCoverageNotice } from '../../components/order-partner-coverage-notice';
 import { AuthLoading } from '../../components/auth-loading';
 import { DataPageStatus } from '../../components/data-page-status';
 import { PageShell } from '../../components/page-shell';
@@ -18,6 +20,7 @@ import { useCustomerQuery } from '../../lib/use-customer-query';
 interface CustomerProfile {
   firstName: string;
   lastName: string;
+  loyaltyPoints?: number;
 }
 
 interface OrderSummary {
@@ -25,6 +28,7 @@ interface OrderSummary {
   status: string;
   total: number;
   bookingType: string;
+  partnerCoverage?: PartnerCoverageInfo;
 }
 
 export default function DashboardPage() {
@@ -43,7 +47,7 @@ export default function DashboardPage() {
     return {
       profile: profileRes.data,
       balance: walletRes.data.balance,
-      orders: ordersRes.data.items.slice(0, 3),
+      orders: ordersRes.data.items,
     };
   }, [ready, api]);
 
@@ -55,7 +59,9 @@ export default function DashboardPage() {
 
   const profile = data?.profile ?? null;
   const balance = data?.balance ?? 0;
-  const orders = data?.orders ?? [];
+  const allOrders = data?.orders ?? [];
+  const activeOrders = allOrders.filter((o) => isActiveOrderStatus(o.status));
+  const displayOrders = (activeOrders.length > 0 ? activeOrders : allOrders).slice(0, 3);
   const name = profile ? `${profile.firstName} ${profile.lastName}` : 'there';
 
   return (
@@ -98,13 +104,15 @@ export default function DashboardPage() {
 
       <section className="mt-10">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold tracking-tight">Recent orders</h2>
+          <h2 className="text-lg font-semibold tracking-tight">
+            {activeOrders.length > 0 ? 'Active orders' : 'Recent orders'}
+          </h2>
           <Link href="/orders" className="text-sm link-primary">
             View all →
           </Link>
         </div>
         <div className="list-stack">
-          {!loading && !error && orders.length === 0 ? (
+          {!loading && !error && displayOrders.length === 0 ? (
             <Card>
               <CardBody className="text-center text-muted">
                 No orders yet.{' '}
@@ -114,16 +122,26 @@ export default function DashboardPage() {
               </CardBody>
             </Card>
           ) : (
-            orders.map((o) => (
-              <Link key={o._id} href={`/orders/${o._id}`}>
+            displayOrders.map((o) => (
+              <Link
+                key={o._id}
+                href={
+                  o.status === OrderStatus.PENDING ? `/checkout/${o._id}` : `/orders/${o._id}`
+                }
+              >
                 <Card className="transition-shadow hover:shadow-[var(--shadow-elevated)]">
-                  <CardBody className="flex items-center justify-between gap-4 py-4">
-                    <span className="font-medium capitalize text-slate-900">
-                      {o.bookingType.replace(/_/g, ' ')}
-                    </span>
-                    <span className="text-sm text-muted">
-                      {formatCurrency(o.total)} · {o.status.replace(/_/g, ' ')}
-                    </span>
+                  <CardBody className="py-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="font-medium capitalize text-slate-900">
+                        {o.bookingType.replace(/_/g, ' ')}
+                      </span>
+                      <span className="text-sm text-muted">
+                        {formatCurrency(o.total)} · {o.status.replace(/_/g, ' ')}
+                      </span>
+                    </div>
+                    {o.status === OrderStatus.PENDING_DISPATCH && (
+                      <OrderPartnerCoverageNotice coverage={o.partnerCoverage} />
+                    )}
                   </CardBody>
                 </Card>
               </Link>

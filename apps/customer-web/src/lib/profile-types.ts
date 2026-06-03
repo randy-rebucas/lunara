@@ -15,6 +15,7 @@ export interface CustomerAddress {
 }
 
 export interface CustomerProfile {
+  _id?: string;
   firstName: string;
   lastName: string;
   avatarUrl?: string;

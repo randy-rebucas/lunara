@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BookingType } from '@lunara/types';
 import { Button } from '@lunara/ui';
 import { ButtonLink } from '../ui/button-link';
@@ -12,10 +12,16 @@ import {
   formatCurrency,
   type BookingAddonOption,
   type LaundryServiceOption,
+  type PartnerCoverageInfo,
   type PickupSlot,
   type QuoteBreakdown,
 } from '@lunara/utils';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
+import { NearestBranchesCard, type NearestBranchRow } from '../nearest-branches-card';
+import { OrderPartnerCoverageNotice } from '../order-partner-coverage-notice';
+import { ScheduleSupportPrompt } from '../schedule-support-prompt';
+import { formatAvailabilityLoadError } from '../../lib/booking-availability-error';
+import { loadCustomerSettings } from '../../lib/customer-settings';
 import {
   BOOKING_STEPS,
   initialBookingForm,
@@ -24,6 +30,8 @@ import {
   type BookingFormState,
   type BookingStep,
 } from '../../lib/booking-flow';
+import { PickupSchedulePicker } from './pickup-schedule-picker';
+import { QuoteBreakdownPanel } from './quote-breakdown';
 
 interface AddressOption {
   _id: string;
@@ -223,9 +231,9 @@ function WizardActions({
     <div className="sticky bottom-0 z-10 -mx-4 mt-8 border-t border-border/20 bg-surface-muted/95 px-4 py-4 backdrop-blur-sm sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0">
       <div className="panel space-y-4">
         {activeQuote && !isConfirmStep && step !== 'review' && (
-          <div className="flex items-center justify-between gap-4 rounded-lg bg-slate-50 px-4 py-3 text-sm">
-            <span className="text-muted">Running estimate</span>
-            <span className="font-semibold text-primary">{formatCurrency(activeQuote.total)}</span>
+          <div className="rounded-lg bg-slate-50 px-4 py-3">
+            <p className="mb-2 text-sm font-semibold text-slate-900">Running estimate</p>
+            <QuoteBreakdownPanel quote={activeQuote} totalLabel="Running total" />
           </div>
         )}
 
@@ -297,6 +305,21 @@ export function BookingWizard() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [stepping, setStepping] = useState(false);
+  const [nearestBranches, setNearestBranches] = useState<NearestBranchRow[]>([]);
+  const [nearestNote, setNearestNote] = useState('');
+  const [partnerCoverage, setPartnerCoverage] = useState<PartnerCoverageInfo | null>(null);
+  const [coverageAddressId, setCoverageAddressId] = useState('');
+  const selectedAddressIdRef = useRef(form.addressId);
+  const [showBranchHints, setShowBranchHints] = useState(
+    () => loadCustomerSettings().showBranchDistanceHints,
+  );
+
+  useEffect(() => {
+    const sync = () => setShowBranchHints(loadCustomerSettings().showBranchDistanceHints);
+    sync();
+    window.addEventListener('lunara-customer-settings', sync);
+    return () => window.removeEventListener('lunara-customer-settings', sync);
+  }, []);
 
   useEffect(() => {
     setConfigLoading(true);
@@ -310,14 +333,13 @@ export function BookingWizard() {
 
     api
       .get<AddressOption[]>('/addresses')
-      .then((res) => {
-        setAddresses(res.data);
-        if (res.data[0]) {
-          setForm((f) => (f.addressId ? f : { ...f, addressId: res.data[0]._id }));
-        }
-      })
+      .then((res) => setAddresses(res.data))
       .catch(() => {});
   }, [api]);
+
+  useEffect(() => {
+    selectedAddressIdRef.current = form.addressId;
+  }, [form.addressId]);
 
   const localQuote = useMemo(() => {
     if (!form.bookingType) return null;
@@ -335,30 +357,105 @@ export function BookingWizard() {
   const loadAvailability = useCallback(
     async (addressId: string) => {
       if (!addressId) return;
+      setPartnerCoverage(null);
+      setCoverageAddressId('');
+      setNearestBranches([]);
+      setNearestNote('');
       const res = await api.get<{
         areaLabel: string;
         availableServices: BookingType[];
         slots: PickupSlot[];
         dispatchNote?: string;
+        partnerCoverage?: PartnerCoverageInfo;
       }>(`/booking/availability?addressId=${encodeURIComponent(addressId)}`);
+
+      if (selectedAddressIdRef.current !== addressId) return;
+
       setAreaLabel(res.data.areaLabel);
       setAvailableServices(res.data.availableServices);
       setSlots(res.data.slots);
       setDispatchNote(res.data.dispatchNote ?? '');
-      if (res.data.slots[0]) {
+      setPartnerCoverage(res.data.partnerCoverage ?? null);
+      setCoverageAddressId(addressId);
+      const firstAvailable = res.data.slots.find((s) => s.available);
+      if (firstAvailable) {
         setForm((f) =>
-          f.scheduledPickupAt ? f : { ...f, scheduledPickupAt: res.data.slots[0].startAt },
+          f.addressId !== addressId
+            ? f
+            : f.scheduledPickupAt
+              ? f
+              : { ...f, scheduledPickupAt: firstAvailable.startAt },
         );
       }
     },
     [api],
   );
 
+  const coverageMatchesSelection =
+    Boolean(form.addressId) && coverageAddressId === form.addressId;
+  const activePartnerCoverage = coverageMatchesSelection ? partnerCoverage : null;
+  const hasRealPartnerCoverage =
+    activePartnerCoverage?.inServiceArea === true &&
+    activePartnerCoverage?.hasPartnerNearby === true;
+
+  const loadNearestBranches = useCallback(
+    async (addressId: string) => {
+      if (!showBranchHints) {
+        setNearestBranches([]);
+        setNearestNote('');
+        return;
+      }
+      try {
+        const res = await api.get<{ ranked: NearestBranchRow[]; note?: string }>(
+          `/branches/nearest?addressId=${encodeURIComponent(addressId)}`,
+        );
+        if (selectedAddressIdRef.current !== addressId) return;
+
+        const inRange = (res.data.ranked ?? []).filter(
+          (b) => b.withinRadius && b.capacityAvailable,
+        );
+        setNearestBranches(inRange);
+        setNearestNote(res.data.note ?? '');
+      } catch {
+        if (selectedAddressIdRef.current === addressId) {
+          setNearestBranches([]);
+          setNearestNote('');
+        }
+      }
+    },
+    [api, showBranchHints],
+  );
+
   useEffect(() => {
-    if (form.addressId) {
-      loadAvailability(form.addressId).catch(() => setError('Could not load schedule'));
+    if (!form.addressId) {
+      setPartnerCoverage(null);
+      setCoverageAddressId('');
+      setAreaLabel('');
+      setAvailableServices([]);
+      setSlots([]);
+      setDispatchNote('');
+      setNearestBranches([]);
+      setNearestNote('');
+      return;
     }
-  }, [form.addressId, loadAvailability]);
+    setError('');
+    const addressForError = addresses.find((a) => a._id === form.addressId);
+    loadAvailability(form.addressId).catch((err) => {
+      if (selectedAddressIdRef.current !== form.addressId) return;
+      setError(formatAvailabilityLoadError(err, addressForError));
+      setPartnerCoverage(null);
+      setCoverageAddressId('');
+    });
+  }, [form.addressId, loadAvailability, addresses]);
+
+  useEffect(() => {
+    if (!form.addressId || !hasRealPartnerCoverage) {
+      setNearestBranches([]);
+      setNearestNote('');
+      return;
+    }
+    void loadNearestBranches(form.addressId);
+  }, [form.addressId, hasRealPartnerCoverage, loadNearestBranches]);
 
   async function refreshServerQuote() {
     if (!form.bookingType || !form.addressId) return null;
@@ -394,7 +491,12 @@ export function BookingWizard() {
         try {
           await loadAvailability(form.addressId);
         } catch (err) {
-          setError(err instanceof Error ? err.message : 'Address not available');
+          setError(
+            formatAvailabilityLoadError(
+              err,
+              addresses.find((a) => a._id === form.addressId),
+            ),
+          );
           return;
         }
       }
@@ -497,7 +599,7 @@ export function BookingWizard() {
             title="Pickup address"
             description="Service availability depends on your area. After payment, Lunara assigns your laundry partner."
           />
-          {dispatchNote && (
+          {form.addressId && coverageMatchesSelection && dispatchNote && (
             <div className="mb-4 rounded-lg bg-primary/5 p-4 text-sm text-slate-700 ring-1 ring-primary/15">
               {dispatchNote}
             </div>
@@ -527,6 +629,22 @@ export function BookingWizard() {
               ))}
             </div>
           )}
+          {form.addressId && !coverageMatchesSelection && (
+            <p className="mt-4 text-sm text-muted">Checking partner coverage for this address…</p>
+          )}
+          {form.addressId && activePartnerCoverage && (
+            <OrderPartnerCoverageNotice
+              coverage={activePartnerCoverage}
+              className="mt-4"
+            />
+          )}
+          {form.addressId &&
+            showBranchHints &&
+            coverageMatchesSelection &&
+            hasRealPartnerCoverage &&
+            nearestBranches.length > 0 && (
+              <NearestBranchesCard branches={nearestBranches} note={nearestNote} />
+            )}
         </section>
       )}
 
@@ -539,23 +657,23 @@ export function BookingWizard() {
             }
           />
           {slots.length === 0 ? (
-            <div className="panel text-sm text-muted">
-              No slots available. Try another day or address.
-            </div>
+            <>
+              <div className="panel text-sm text-muted">
+                No slots available. Try another day or address.
+              </div>
+              <ScheduleSupportPrompt
+                address={selectedAddress ?? null}
+                reason="No pickup slots are available for this address yet."
+              />
+            </>
           ) : (
-            <div className="list-stack">
-              {slots.map((slot) => (
-                <SelectableOption
-                  key={slot.id}
-                  compact
-                  selected={form.scheduledPickupAt === slot.startAt}
-                  disabled={!slot.available}
-                  onClick={() => setForm((f) => ({ ...f, scheduledPickupAt: slot.startAt }))}
-                >
-                  {slot.label}
-                </SelectableOption>
-              ))}
-            </div>
+            <PickupSchedulePicker
+              slots={slots}
+              selectedStartAt={form.scheduledPickupAt}
+              onSelectStartAt={(startAt) =>
+                setForm((f) => ({ ...f, scheduledPickupAt: startAt }))
+              }
+            />
           )}
         </section>
       )}
@@ -652,28 +770,7 @@ export function BookingWizard() {
             description="Review your estimated total before confirming."
           />
           <div className="panel">
-            <dl className="space-y-3">
-              <SummaryRow
-                label={`${activeQuote.serviceLabel} × ${activeQuote.weightKg} kg`}
-                value={formatCurrency(activeQuote.serviceSubtotal)}
-              />
-              {activeQuote.addons.map((a) => (
-                <SummaryRow key={a.id} label={a.label} value={formatCurrency(a.price)} />
-              ))}
-              <div className="border-t border-border/30 pt-3">
-                <SummaryRow label="Delivery fee" value={formatCurrency(activeQuote.deliveryFee)} />
-              </div>
-              <SummaryRow
-                label="Estimated total"
-                value={formatCurrency(activeQuote.total)}
-                emphasis
-              />
-            </dl>
-            {!activeQuote.meetsMinimum && (
-              <p className="mt-4 text-sm text-red-600">
-                Below minimum order of {formatCurrency(activeQuote.minimumOrderAmount)}.
-              </p>
-            )}
+            <QuoteBreakdownPanel quote={activeQuote} />
           </div>
         </section>
       )}

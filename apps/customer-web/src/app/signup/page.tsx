@@ -111,9 +111,13 @@ export default function SignUpPage() {
 
           <p className="mt-6 text-center text-sm text-muted">
             Already have an account?{' '}
-            <Link href="/login" className="link-primary">
-              Sign in
-            </Link>
+        <Link href="/login" className="link-primary">
+          Sign in
+        </Link>
+        {' · '}
+        <Link href="/register" className="link-primary">
+          Email register
+        </Link>
           </p>
         </div>
       </div>

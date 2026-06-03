@@ -58,6 +58,48 @@ export function createApiClient({ baseUrl, getAccessToken, onUnauthorized }: Api
     return body as ApiResponse<T>;
   }
 
+  async function upload<T>(path: string, formData: FormData): Promise<ApiResponse<T>> {
+    const token = getAccessToken?.();
+    const headers: HeadersInit = {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+
+    let res: Response;
+    try {
+      res = await fetch(`${baseUrl}${path}`, { method: 'POST', headers, body: formData });
+    } catch (e) {
+      if (e instanceof TypeError) {
+        throw new Error(
+          `Cannot reach the API at ${baseUrl}. Make sure it is running (npm run dev --workspace=@lunara/api) and that NEXT_PUBLIC_API_URL is correct.`,
+        );
+      }
+      throw e;
+    }
+
+    let body: ApiResponse<T> | ApiError;
+    try {
+      body = (await res.json()) as ApiResponse<T> | ApiError;
+    } catch {
+      if (res.status === 401) {
+        onUnauthorized?.();
+        throw new Error('Session expired. Please sign in again.');
+      }
+      throw new Error(`API error (${res.status}). Upload failed.`);
+    }
+
+    if (res.status === 401) {
+      onUnauthorized?.();
+      throw new Error('Session expired. Please sign in again.');
+    }
+
+    if (!res.ok || !body.success) {
+      const err = body as ApiError;
+      throw new Error(err.error?.message ?? 'Upload failed');
+    }
+
+    return body as ApiResponse<T>;
+  }
+
   return {
     get: <T>(path: string) => request<T>(path),
     post: <T>(path: string, data: unknown) =>
@@ -65,5 +107,6 @@ export function createApiClient({ baseUrl, getAccessToken, onUnauthorized }: Api
     patch: <T>(path: string, data: unknown) =>
       request<T>(path, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+    upload: <T>(path: string, formData: FormData) => upload<T>(path, formData),
   };
 }

@@ -6,8 +6,8 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { OrderStatus, PaymentStatus } from '@lunara/types';
-import { REFUND_FLOW } from '@lunara/utils';
+import { OrderStatus, PaymentMethod, PaymentStatus } from '@lunara/types';
+import { REFUND_FLOW, isRefundablePaymentMethod } from '@lunara/utils';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
 import { NotificationDispatchService } from '../push/notification-dispatch.service';
@@ -76,6 +76,11 @@ export class RefundsService {
     if (!payment) {
       throw new BadRequestException(
         'No completed payment found for this order. Refunds apply to paid orders.',
+      );
+    }
+    if (payment.method === PaymentMethod.CASH || !isRefundablePaymentMethod(payment.method)) {
+      throw new BadRequestException(
+        'Cash on pickup or delivery orders are not eligible for wallet refunds. Contact support if you need help.',
       );
     }
 
@@ -199,7 +204,8 @@ export class RefundsService {
               paymentPaid: payment?.status === PaymentStatus.PAID,
               eligibleForRefund:
                 payment?.status === PaymentStatus.PAID &&
-                order.status !== OrderStatus.REFUNDED,
+                order.status !== OrderStatus.REFUNDED &&
+                isRefundablePaymentMethod(payment.method),
             }
           : null,
       },
@@ -312,7 +318,15 @@ export class RefundsService {
 
     const payment = refund.paymentId
       ? await this.paymentModel.findById(refund.paymentId)
-      : null;
+      : await this.paymentModel.findOne({
+          orderId: refund.orderId,
+          status: PaymentStatus.PAID,
+        });
+    if (!payment || !isRefundablePaymentMethod(payment.method)) {
+      throw new BadRequestException(
+        'Cannot process a wallet refund for cash on pickup or delivery payments',
+      );
+    }
 
     await this.walletsService.credit(
       refund.customerId.toString(),
