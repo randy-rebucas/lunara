@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -19,7 +20,7 @@ import { KeyboardSafeScrollView } from './ui/keyboard-safe-scroll-view';
 import { AddressType } from '@lunara/types';
 import { ADDRESS_TYPE_OPTIONS, defaultLabelForAddressType } from '@lunara/utils';
 import type { AddressFormValues, CustomerAddress } from '../lib/profile-types';
-import { emptyAddressForm } from '../lib/profile-types';
+import { addressToForm, emptyAddressForm } from '../lib/profile-types';
 import { reverseGeocodeAddress } from '../lib/reverse-geocode';
 import { colors, radius, spacing, typography } from '../theme';
 
@@ -58,18 +59,7 @@ export function AddressFormModal({
     if (!visible) return;
     setError('');
     if (editing) {
-      setForm({
-        label: editing.label,
-        addressType: (editing.addressType as AddressType) ?? AddressType.HOME,
-        line1: editing.line1,
-        line2: editing.line2 ?? '',
-        city: editing.city,
-        province: editing.province,
-        postalCode: editing.postalCode,
-        latitude: editing.latitude,
-        longitude: editing.longitude,
-        isDefault: editing.isDefault,
-      });
+      setForm(addressToForm(editing));
     } else {
       setForm({ ...emptyAddressForm(), isDefault: !hasAddresses });
     }
@@ -188,6 +178,19 @@ export function AddressFormModal({
               GPS pin required — tap above to fill your address from location
             </Text>
           )}
+          {hasCoords ? (
+            <Pressable
+              style={styles.mapsLink}
+              onPress={() =>
+                Linking.openURL(
+                  `https://www.google.com/maps/search/?api=1&query=${form.latitude},${form.longitude}`,
+                )
+              }
+            >
+              <Ionicons name="map-outline" size={14} color={colors.primary} />
+              <Text style={styles.mapsLinkText}>Open in Google Maps</Text>
+            </Pressable>
+          ) : null}
 
           <Text style={styles.fieldGroupLabel}>Address type</Text>
           <View style={styles.typeRow}>
@@ -224,6 +227,19 @@ export function AddressFormModal({
             placeholder="Unit / building (optional)"
             value={form.line2}
             onChangeText={(line2) => setForm((f) => ({ ...f, line2 }))}
+          />
+          <Input
+            style={styles.field}
+            placeholder="Landmark (optional)"
+            value={form.landmark}
+            onChangeText={(landmark) => setForm((f) => ({ ...f, landmark }))}
+          />
+          <Input
+            style={styles.field}
+            placeholder="Notes for rider (optional)"
+            value={form.notes}
+            onChangeText={(notes) => setForm((f) => ({ ...f, notes }))}
+            multiline
           />
           <Input
             style={styles.field}
@@ -303,6 +319,14 @@ const styles = StyleSheet.create({
   },
   coordsText: { fontSize: 12, fontWeight: '600', color: colors.primaryDark },
   coordsHint: { ...typography.caption, marginBottom: spacing.lg },
+  mapsLink: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.lg,
+  },
+  mapsLinkText: { fontSize: 12, fontWeight: '600', color: colors.primary },
   fieldGroupLabel: { ...typography.label, marginBottom: spacing.sm },
   typeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
   typeChip: {

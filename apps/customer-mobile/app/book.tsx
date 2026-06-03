@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
@@ -62,9 +62,16 @@ interface BookingConfig {
 
 export default function BookScreen() {
   const router = useRouter();
+  const { service: serviceParam } = useLocalSearchParams<{ service?: string }>();
   const apiFetch = useAuthStore((s) => s.apiFetch);
   const [step, setStep] = useState<BookingStep>('service');
-  const [form, setForm] = useState<BookingFormState>(initialBookingForm);
+  const [form, setForm] = useState<BookingFormState>(() => {
+    const initial = { ...initialBookingForm };
+    if (serviceParam && Object.values(BookingType).includes(serviceParam as BookingType)) {
+      initial.bookingType = serviceParam as BookingType;
+    }
+    return initial;
+  });
   const [config, setConfig] = useState<BookingConfig | null>(null);
   const [addresses, setAddresses] = useState<AddressOption[]>([]);
   const [slots, setSlots] = useState<PickupSlot[]>([]);

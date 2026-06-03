@@ -1,4 +1,4 @@
-import { StyleSheet, View, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type ViewStyle, type RefreshControlProps } from 'react-native';
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 import { spacing } from '../../theme';
 import { LaundryBackground } from './laundry-background';
@@ -11,6 +11,7 @@ interface ScreenProps {
   /** Tab screens already have a nav header — skip top inset and use tighter padding */
   inTab?: boolean;
   centered?: boolean;
+  refreshControl?: React.ReactElement<RefreshControlProps>;
   style?: ViewStyle;
   contentStyle?: ViewStyle;
 }
@@ -21,6 +22,7 @@ export function Screen({
   padded = true,
   inTab = false,
   centered = false,
+  refreshControl,
   style,
   contentStyle,
 }: ScreenProps) {
@@ -47,6 +49,7 @@ export function Screen({
         {scroll ? (
           <KeyboardSafeScrollView
             contentContainerStyle={[styles.scrollContent, centered && styles.centered]}
+            refreshControl={refreshControl}
           >
             {padded ? (
               <View style={[paddingStyle, contentStyle]}>{children}</View>

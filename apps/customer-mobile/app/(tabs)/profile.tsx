@@ -3,6 +3,7 @@ import { useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
+  Linking,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -21,7 +22,13 @@ import { KeyboardSafeScrollView } from '../../src/components/ui/keyboard-safe-sc
 import { Screen } from '../../src/components/ui/screen';
 import { DataLoadState } from '../../src/components/data-load-state';
 import { useTabScreenPadding } from '../../src/hooks/use-tab-bar-height';
-import type { AddressFormValues, CustomerAddress, CustomerProfile } from '../../src/lib/profile-types';
+import {
+  addressToForm,
+  encodeAddressLine2,
+  type AddressFormValues,
+  type CustomerAddress,
+  type CustomerProfile,
+} from '../../src/lib/profile-types';
 import { useAuthStore } from '../../src/store/auth';
 import { colors, radius, spacing, typography } from '../../src/theme';
 
@@ -131,7 +138,7 @@ export default function ProfileScreen() {
         label: values.label.trim(),
         addressType: values.addressType,
         line1: values.line1.trim(),
-        line2: values.line2.trim() || undefined,
+        line2: encodeAddressLine2(values),
         city: values.city.trim(),
         province: values.province.trim(),
         postalCode: values.postalCode.trim(),
@@ -273,6 +280,9 @@ export default function ProfileScreen() {
             ) : (
               addresses.map((address) => (
                 <Card key={address._id} style={styles.addressCard}>
+                  {(() => {
+                    const parsed = addressToForm(address);
+                    return (
                   <View style={styles.addressTop}>
                     <View style={styles.addressMain}>
                       <View style={styles.addressLabelRow}>
@@ -289,7 +299,13 @@ export default function ProfileScreen() {
                         ) : null}
                       </View>
                       <Text style={styles.addressLine}>{address.line1}</Text>
-                      {address.line2 ? <Text style={styles.addressLine}>{address.line2}</Text> : null}
+                      {parsed.line2 ? <Text style={styles.addressLine}>{parsed.line2}</Text> : null}
+                      {parsed.landmark ? (
+                        <Text style={styles.addressMeta}>Landmark: {parsed.landmark}</Text>
+                      ) : null}
+                      {parsed.notes ? (
+                        <Text style={styles.addressMeta}>Notes: {parsed.notes}</Text>
+                      ) : null}
                       <Text style={styles.addressMeta}>
                         {address.city}, {address.province} {address.postalCode}
                       </Text>
@@ -299,8 +315,23 @@ export default function ProfileScreen() {
                           <Text style={styles.gpsText}>GPS pinned</Text>
                         </View>
                       ) : null}
+                      {address.latitude != null && address.longitude != null ? (
+                        <Pressable
+                          onPress={() =>
+                            Linking.openURL(
+                              `https://www.google.com/maps/search/?api=1&query=${address.latitude},${address.longitude}`,
+                            )
+                          }
+                          style={styles.mapsLink}
+                        >
+                          <Ionicons name="map-outline" size={12} color={colors.primary} />
+                          <Text style={styles.mapsLinkText}>Open in Google Maps</Text>
+                        </Pressable>
+                      ) : null}
                     </View>
                   </View>
+                    );
+                  })()}
                   <View style={styles.addressActions}>
                     {!address.isDefault ? (
                       <Pressable onPress={() => setDefaultAddress(address)} style={styles.actionChip}>
@@ -440,6 +471,8 @@ const styles = StyleSheet.create({
   addressMeta: { ...typography.caption, marginTop: spacing.xs },
   gpsRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.sm - 2 },
   gpsText: { fontSize: 11, fontWeight: '600', color: colors.accentDark },
+  mapsLink: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.sm - 2 },
+  mapsLinkText: { fontSize: 11, fontWeight: '600', color: colors.primary },
   addressActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
   actionChip: {
     paddingHorizontal: spacing.md,

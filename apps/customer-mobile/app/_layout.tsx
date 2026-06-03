@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 
 import { StatusBar } from 'expo-status-bar';
+import { Pressable, Text } from 'react-native';
 
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -91,6 +92,14 @@ export default function RootLayout() {
   const tokens = useAuthStore((s) => s.tokens);
 
   const apiFetch = useAuthStore((s) => s.apiFetch);
+
+  function handleHeaderBack() {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace('/(tabs)');
+  }
 
 
 
@@ -215,6 +224,11 @@ export default function RootLayout() {
             title: 'Book laundry',
 
             presentation: 'card',
+            headerLeft: () => (
+              <Pressable onPress={handleHeaderBack} hitSlop={10}>
+                <Text style={{ color: colors.primary, fontSize: 16, fontWeight: '600' }}>Back</Text>
+              </Pressable>
+            ),
 
           }}
 
@@ -269,6 +283,11 @@ export default function RootLayout() {
             title: 'Track order',
 
             presentation: 'card',
+            headerLeft: () => (
+              <Pressable onPress={handleHeaderBack} hitSlop={10}>
+                <Text style={{ color: colors.primary, fontSize: 16, fontWeight: '600' }}>Back</Text>
+              </Pressable>
+            ),
 
           }}
 
@@ -323,6 +342,11 @@ export default function RootLayout() {
             title: 'Refunds',
 
             presentation: 'card',
+            headerLeft: () => (
+              <Pressable onPress={handleHeaderBack} hitSlop={10}>
+                <Text style={{ color: colors.primary, fontSize: 16, fontWeight: '600' }}>Back</Text>
+              </Pressable>
+            ),
 
           }}
 
@@ -341,6 +365,11 @@ export default function RootLayout() {
             title: 'Refund request',
 
             presentation: 'card',
+            headerLeft: () => (
+              <Pressable onPress={handleHeaderBack} hitSlop={10}>
+                <Text style={{ color: colors.primary, fontSize: 16, fontWeight: '600' }}>Back</Text>
+              </Pressable>
+            ),
 
           }}
 
@@ -359,6 +388,11 @@ export default function RootLayout() {
             title: 'Support',
 
             presentation: 'card',
+            headerLeft: () => (
+              <Pressable onPress={handleHeaderBack} hitSlop={10}>
+                <Text style={{ color: colors.primary, fontSize: 16, fontWeight: '600' }}>Back</Text>
+              </Pressable>
+            ),
 
           }}
 
@@ -377,9 +411,29 @@ export default function RootLayout() {
             title: 'Support ticket',
 
             presentation: 'card',
+            headerLeft: () => (
+              <Pressable onPress={handleHeaderBack} hitSlop={10}>
+                <Text style={{ color: colors.primary, fontSize: 16, fontWeight: '600' }}>Back</Text>
+              </Pressable>
+            ),
 
           }}
 
+        />
+
+        <Stack.Screen
+          name="rewards"
+          options={{
+            ...stackHeaderOptions,
+            headerShown: true,
+            title: 'Rewards',
+            presentation: 'card',
+            headerLeft: () => (
+              <Pressable onPress={handleHeaderBack} hitSlop={10}>
+                <Text style={{ color: colors.primary, fontSize: 16, fontWeight: '600' }}>Back</Text>
+              </Pressable>
+            ),
+          }}
         />
 
         <Stack.Screen
@@ -395,6 +449,11 @@ export default function RootLayout() {
             title: 'Notifications',
 
             presentation: 'card',
+            headerLeft: () => (
+              <Pressable onPress={handleHeaderBack} hitSlop={10}>
+                <Text style={{ color: colors.primary, fontSize: 16, fontWeight: '600' }}>Back</Text>
+              </Pressable>
+            ),
 
           }}
 
