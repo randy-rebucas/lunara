@@ -16,7 +16,7 @@ COPY --from=deps /app/node_modules ./node_modules
 # Only copy API app source (not other apps like web/mobile)
 COPY apps/api ./apps/api
 COPY packages ./packages
-COPY tsconfig.base.json turbo.json nest-cli.json ./
+COPY tsconfig.base.json turbo.json ./
 # Build only the API app (Turbo will auto-build its dependencies: types, utils, validation)
 RUN npm run build --workspace=@lunara/api
 
