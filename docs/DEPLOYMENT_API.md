@@ -76,7 +76,12 @@ Deploy `apps/api` as a **Web Service**.
 
 Render sets `PORT` automatically; the API reads `process.env.PORT ?? 3001`.
 
-**Note:** The Dockerfile uses multi-stage build to properly install all workspace dependencies before building the API. Ensure all `packages/*/package.json` files are included in the deps stage.
+**Note:** The Dockerfile uses a multi-stage build:
+- **deps stage:** Copies all workspace dependencies and installs them (so npm ci resolves the full monorepo workspace graph)
+- **builder stage:** Copies only the API source code and runs `npm run build --workspace=@lunara/api` (Turbo automatically builds dependencies in order: types → utils → validation → api)
+- **runner stage:** Copies only the built API dist and production node_modules
+
+This approach ensures dependencies are properly installed, but avoids unnecessary builds of other apps (web frontends, mobile) that aren't needed in the API Docker image.
 
 ### Option B — Native Node
 
