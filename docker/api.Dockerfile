@@ -10,7 +10,8 @@ RUN npm ci --include-workspace-root
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build --workspace=@lunara/api
+# Use Turbo to build all packages in correct dependency order, then copy only API dist
+RUN npm run build
 
 FROM base AS runner
 ENV NODE_ENV=production

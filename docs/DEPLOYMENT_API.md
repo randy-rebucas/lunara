@@ -91,20 +91,10 @@ Render sets `PORT` automatically; the API reads `process.env.PORT ?? 3001`.
 **Build command:**
 
 ```bash
-npm ci && npm run build --workspace=@lunara/api
+npm ci && npm run build
 ```
 
-This uses Turbo to automatically build all dependencies (`@lunara/types`, `@lunara/utils`, `@lunara/validation`) in the correct order via `turbo.json`'s `dependsOn` configuration.
-
-**If Turbo is unavailable, use:**
-
-```bash
-npm ci \
-  && npm run build --workspace=@lunara/types \
-  && npm run build --workspace=@lunara/utils \
-  && npm run build --workspace=@lunara/validation \
-  && npm run build --workspace=@lunara/api
-```
+This runs Turbo to build all packages (including dependencies) in the correct order based on `turbo.json`'s `dependsOn` configuration. Turbo automatically handles the monorepo dependency graph.
 
 ---
 
@@ -239,7 +229,8 @@ Start with Render Standard instance; scale instance type under load. For multipl
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
-| Build fails: "Cannot find module '@lunara/types'" | Workspace dependencies not built | Ensure `npm ci` completes before `npm run build`. Use `npm run build --workspace=@lunara/api` (not individual workspace commands); npm/Turbo handles dependency order. |
+| Build fails with `Exited with status 1` | Dependencies not built before API build | Use `npm ci && npm run build` (not `--workspace` flags). This runs Turbo which handles the full dependency graph. |
+| Build fails: "Cannot find module '@lunara/types'" | Workspace dependencies not built | Same as above — ensure full `npm run build` is used, not individual workspace builds |
 | Build fails: "Workspace not found" | Workspace not installed | Check `npm ci` installed all workspaces; verify `package.json` root has `"workspaces": ["apps/*", "packages/*"]` |
 | API crashes on start | Missing `JWT_SECRET` / `JWT_REFRESH_SECRET` | Set both in Render environment |
 | Health check `503`, `mongo: error` | Atlas network block or bad URI | Allow Render IPs; verify `MONGODB_URI` |
