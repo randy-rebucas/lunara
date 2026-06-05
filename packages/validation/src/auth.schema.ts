@@ -8,7 +8,7 @@ export const loginSchema = z
     password: z.string().min(8).optional(),
     otp: z.string().length(6).optional(),
   })
-  .refine((data) => data.email || data.phone, {
+  .refine((data: any) => data.email || data.phone, {
     message: 'Email or phone is required',
   });
 

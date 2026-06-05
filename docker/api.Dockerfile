@@ -3,11 +3,12 @@ WORKDIR /app
 
 FROM base AS deps
 COPY package.json package-lock.json* ./
-# Copy all workspace package.json files so npm ci can resolve all dependencies
-COPY apps/*/package.json ./apps/
-COPY packages/*/package.json ./packages/
-# Copy build configuration files
-COPY tsconfig.base.json turbo.json nest-cli.json* ./
+# Copy entire package directories to preserve structure for npm ci to resolve workspaces
+COPY packages/ ./packages/
+COPY apps/api/ ./apps/api/
+# Copy build configuration
+COPY tsconfig.base.json turbo.json ./
+# Install all dependencies (includes workspaces and devDependencies)
 RUN npm ci --include-workspace-root
 
 FROM base AS builder
