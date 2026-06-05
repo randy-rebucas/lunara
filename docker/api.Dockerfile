@@ -13,6 +13,7 @@ RUN npm ci --include-workspace-root
 
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/package.json /app/package-lock.json* ./
 # Only copy API app source (not other apps like web/mobile)
 COPY apps/api ./apps/api
 COPY packages ./packages
