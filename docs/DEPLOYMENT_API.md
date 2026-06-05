@@ -88,25 +88,13 @@ This approach ensures dependencies are properly installed, but avoids unnecessar
 | Setting | Value |
 |---------|-------|
 | **Environment** | Node |
-| **Root directory** | *(repo root)* |
-| **Build command** | See below |
+| **Root directory** | *(repo root — leave blank)* |
+| **Install command** | `npm ci --include=dev` |
+| **Build command** | `npm run build` |
 | **Start command** | `node apps/api/dist/main.js` |
 | **Health check path** | `/api/v1/health` |
 
-**Build command:**
-
-```bash
-npm run build
-```
-
-**Important:** Ensure your **Install command** is set to `npm ci` (which installs all dependencies including devDependencies). The build script uses `rimraf` which is a root devDependency and must be available in node_modules.
-
-For Render Native Node, your settings should be:
-- **Install command:** `npm ci`
-- **Build command:** `npm run build`
-- **Start command:** `node apps/api/dist/main.js`
-
-This ensures `rimraf`, `turbo`, and all other build tools are available when the build runs.
+**Critical:** The install command **must include** `--include=dev` to install devDependencies (rimraf, turbo, nest-cli, etc.) that the build scripts require. Without this flag, build scripts fail with "command not found" errors.
 
 ---
 
@@ -241,6 +229,7 @@ Start with Render Standard instance; scale instance type under load. For multipl
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
+| Build fails: `rimraf: not found` or `nest: not found` | devDependencies not installed | Render's Native Node install command missing `--include=dev` flag. Set **Install command** to `npm ci --include=dev` (not just `npm ci`). |
 | Build fails with `exit code: 2` | TypeScript or NestJS compilation errors | Check Render logs for detailed error; likely type annotation or import issues. Check `packages/validation/src/` for TypeScript errors. |
 | Build fails with `exit code: 127` | Source files missing in Docker build | Ensure builder stage copies: `apps/api`, `packages`, `tsconfig.base.json`, `turbo.json`, and root `package.json`. Build command must be `npm run build --workspace=@lunara/api` (not full monorepo build). |
 | Build fails: Cannot find `/app/package.json` | Root package.json not copied to builder | Ensure builder stage includes: `COPY --from=deps /app/package.json /app/package-lock.json* ./` |
