@@ -96,10 +96,18 @@ This approach ensures dependencies are properly installed, but avoids unnecessar
 **Build command:**
 
 ```bash
-npm ci && npm run build
+npm run build
 ```
 
-This runs Turbo to build all packages (including dependencies) in the correct order based on `turbo.json`'s `dependsOn` configuration. Turbo automatically handles the monorepo dependency graph.
+This runs the root `npm run build` script which uses Turbo to build all packages (types, utils, validation, api) in the correct dependency order. Since the full repo source is available in Native Node environment, building everything is safe and necessary for dependencies to be compiled.
+
+**Alternatively, if you want to build only the API and dependencies:**
+
+```bash
+npm run build --workspace=@lunara/api
+```
+
+(Both should work; the first is simpler.)
 
 ---
 
@@ -234,15 +242,16 @@ Start with Render Standard instance; scale instance type under load. For multipl
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
-| Build fails with `Exited with status 1` | Dependencies not built before API build | Use `npm ci && npm run build` (not `--workspace` flags). This runs Turbo which handles the full dependency graph. |
-| Build fails with `exit code: 127` | `npm` command not found in Docker | Ensure ALL workspace `package.json` files are copied in Dockerfile deps stage (not just API app). The Dockerfile must copy `apps/*/package.json` and `packages/*/package.json`, plus `turbo.json` and `tsconfig.base.json`. |
-| Build fails: "Cannot find module '@lunara/types'" | Workspace dependencies not built | Same as above — ensure full `npm run build` is used, not individual workspace builds |
-| Build fails: "Workspace not found" | Workspace not installed | Check `npm ci` installed all workspaces; verify `package.json` root has `"workspaces": ["apps/*", "packages/*"]` |
-| API crashes on start | Missing `JWT_SECRET` / `JWT_REFRESH_SECRET` | Set both in Render environment |
-| Health check `503`, `mongo: error` | Atlas network block or bad URI | Allow Render IPs; verify `MONGODB_URI` |
-| Health check `503`, `redis: error` | Redis unreachable | Check `REDIS_URL` and connectivity |
-| Uploads 404 after redeploy | Ephemeral disk | Attach Render persistent disk |
-| WebSocket fails | API URL mismatch | Use `https://` in public URLs |
+| Build fails with `exit code: 2` | TypeScript or NestJS compilation errors | Check Render logs for detailed error; likely type annotation or import issues. Check `packages/validation/src/` for TypeScript errors. |
+| Build fails with `exit code: 127` | Source files missing in Docker build | Ensure builder stage copies: `apps/api`, `packages`, `tsconfig.base.json`, `turbo.json`, and root `package.json`. Build command must be `npm run build --workspace=@lunara/api` (not full monorepo build). |
+| Build fails: Cannot find `/app/package.json` | Root package.json not copied to builder | Ensure builder stage includes: `COPY --from=deps /app/package.json /app/package-lock.json* ./` |
+| Build fails: "Cannot find module '@lunara/types'" | Workspace dependencies not installed | Ensure deps stage copies entire directories: `COPY packages/ ./packages/` and `COPY apps/api/ ./apps/api/` (not just glob patterns like `packages/*/package.json`). |
+| Build fails: "Workspace not found" | Workspace not installed | Verify `npm ci --include-workspace-root` completes successfully in deps stage. Check `package.json` has `"workspaces": ["apps/*", "packages/*"]`. |
+| API crashes on start | Missing `JWT_SECRET` / `JWT_REFRESH_SECRET` | Set both in Render environment variables. API refuses to start in production without these. |
+| Health check `503`, `mongo: error` | Atlas network block or bad URI | Allow Render outbound IPs on MongoDB Atlas. Verify `MONGODB_URI` connection string is correct. |
+| Health check `503`, `redis: error` | Redis unreachable | Verify `REDIS_URL` is correct. Use internal Render URL for Render Key Value. Test connectivity from Render instance. |
+| Uploads 404 after redeploy | Ephemeral disk | Attach Render persistent disk mounted at `/app/uploads` (minimum 1 GB). Without it, uploads are lost on each redeploy. |
+| WebSocket fails to connect | API URL protocol mismatch | Ensure `NEXT_PUBLIC_API_URL` and `EXPO_PUBLIC_API_URL` use `https://` (not `http://`). WebSocket requires TLS in production. |
 
 ---
 
