@@ -12,16 +12,8 @@ RUN npm ci --include-workspace-root
 
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
-# Copy entire source tree for build
 COPY . .
-# Debug: verify structure
-RUN echo "=== Build Environment ===" && \
-    echo "Node version:" && node --version && \
-    echo "NPM version:" && npm --version && \
-    echo "=== Workspace structure ===" && \
-    ls -la apps/api/src && \
-    echo "=== Running build ===" && \
-    npm run build --verbose
+RUN npm run build
 
 FROM base AS runner
 ENV NODE_ENV=production
