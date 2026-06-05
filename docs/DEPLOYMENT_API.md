@@ -99,15 +99,14 @@ This approach ensures dependencies are properly installed, but avoids unnecessar
 npm run build
 ```
 
-This runs the root `npm run build` script which uses Turbo to build all packages (types, utils, validation, api) in the correct dependency order. Since the full repo source is available in Native Node environment, building everything is safe and necessary for dependencies to be compiled.
+**Important:** Ensure your **Install command** is set to `npm ci` (which installs all dependencies including devDependencies). The build script uses `rimraf` which is a root devDependency and must be available in node_modules.
 
-**Alternatively, if you want to build only the API and dependencies:**
+For Render Native Node, your settings should be:
+- **Install command:** `npm ci`
+- **Build command:** `npm run build`
+- **Start command:** `node apps/api/dist/main.js`
 
-```bash
-npm run build --workspace=@lunara/api
-```
-
-(Both should work; the first is simpler.)
+This ensures `rimraf`, `turbo`, and all other build tools are available when the build runs.
 
 ---
 
