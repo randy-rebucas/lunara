@@ -3,19 +3,14 @@ WORKDIR /app
 
 FROM base AS deps
 COPY package.json package-lock.json* ./
+COPY packages/*/package.json ./packages/
 COPY apps/api/package.json ./apps/api/
-COPY packages/types/package.json ./packages/types/
-COPY packages/utils/package.json ./packages/utils/
-COPY packages/validation/package.json ./packages/validation/
-RUN npm ci --workspace=@lunara/api --include-workspace-root
+RUN npm ci --include-workspace-root
 
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build --workspace=@lunara/types \
-  && npm run build --workspace=@lunara/utils \
-  && npm run build --workspace=@lunara/validation \
-  && npm run build --workspace=@lunara/api
+RUN npm run build --workspace=@lunara/api
 
 FROM base AS runner
 ENV NODE_ENV=production

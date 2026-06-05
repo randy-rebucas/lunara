@@ -383,6 +383,8 @@ OTP login (dev): any phone → OTP is always `123456`
 
 See [`docs/`](./docs/) for architecture, database schemas, API reference, and development roadmap. Mobile app setup, dispatch notifications, and screen reference are in [Mobile Apps](#mobile-apps) above.
 
+**Production deployment:** [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) — backend on Render, web apps on Vercel, MongoDB Atlas, Redis, and EAS for mobile.
+
 ## Theme
 
 - Primary: `#4F46E5`
