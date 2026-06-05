@@ -230,6 +230,7 @@ Start with Render Standard instance; scale instance type under load. For multipl
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
 | Build fails with `Exited with status 1` | Dependencies not built before API build | Use `npm ci && npm run build` (not `--workspace` flags). This runs Turbo which handles the full dependency graph. |
+| Build fails with `exit code: 127` | `npm` command not found in Docker | Ensure ALL workspace `package.json` files are copied in Dockerfile deps stage (not just API app). The Dockerfile must copy `apps/*/package.json` and `packages/*/package.json`, plus `turbo.json` and `tsconfig.base.json`. |
 | Build fails: "Cannot find module '@lunara/types'" | Workspace dependencies not built | Same as above — ensure full `npm run build` is used, not individual workspace builds |
 | Build fails: "Workspace not found" | Workspace not installed | Check `npm ci` installed all workspaces; verify `package.json` root has `"workspaces": ["apps/*", "packages/*"]` |
 | API crashes on start | Missing `JWT_SECRET` / `JWT_REFRESH_SECRET` | Set both in Render environment |

@@ -3,15 +3,18 @@ WORKDIR /app
 
 FROM base AS deps
 COPY package.json package-lock.json* ./
+# Copy all workspace package.json files so npm ci can resolve all dependencies
+COPY apps/*/package.json ./apps/
 COPY packages/*/package.json ./packages/
-COPY apps/api/package.json ./apps/api/
+# Copy tsconfig references for build
+COPY tsconfig.base.json turbo.json ./
 RUN npm ci --include-workspace-root
 
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# Use Turbo to build all packages in correct dependency order, then copy only API dist
-RUN npm run build
+# Verify npm is available, then build all packages with Turbo
+RUN npm --version && npm run build
 
 FROM base AS runner
 ENV NODE_ENV=production
