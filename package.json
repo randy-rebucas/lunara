@@ -10,6 +10,8 @@
   ],
   "scripts": {
     "build": "turbo run build",
+    "build:api": "npm run build --workspace=@lunara/types && npm run build --workspace=@lunara/utils && npm run build --workspace=@lunara/validation && npm run build --workspace=@lunara/api",
+    "build:api": "turbo run build --filter=@lunara/api",
     "dev": "turbo run dev",
     "lint": "turbo run lint",
     "test": "turbo run test",
