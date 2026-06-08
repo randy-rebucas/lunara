@@ -28,7 +28,13 @@ function rewriteLocalhost(url: string): string {
 }
 
 export function getApiV1BaseUrl(): string {
-  const base = resolveApiV1BaseUrl(process.env.EXPO_PUBLIC_API_URL);
+  const raw = process.env.EXPO_PUBLIC_API_URL?.trim();
+  if (!__DEV__ && !raw) {
+    throw new Error(
+      'EXPO_PUBLIC_API_URL is not configured. Set it in EAS secrets before building for production.',
+    );
+  }
+  const base = resolveApiV1BaseUrl(raw);
   if (Platform.OS === 'web') return base;
   return rewriteLocalhost(base);
 }

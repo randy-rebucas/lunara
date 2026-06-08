@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { appConfig, getShareWebsiteUrl } from '@lunara/config';
 import { buildAppSharePayload, formatAddressTypeLabel } from '@lunara/utils';
+import Constants from 'expo-constants';
 import { AddressFormModal } from '../../src/components/address-form-modal';
 import { ProfileAvatar } from '../../src/components/profile-avatar';
 import { ShareInviteCard } from '../../src/components/social-share-buttons';
@@ -201,6 +202,38 @@ export default function ProfileScreen() {
     router.replace('/(auth)/login');
   }
 
+  const privacyUrl =
+    (Constants.expoConfig?.extra?.privacyUrl as string | undefined) ?? `${getShareWebsiteUrl()}/privacy`;
+  const termsUrl =
+    (Constants.expoConfig?.extra?.termsUrl as string | undefined) ?? `${getShareWebsiteUrl()}/terms`;
+
+  function openUrl(url: string) {
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Could not open link', url);
+    });
+  }
+
+  function confirmDeleteAccount() {
+    Alert.alert(
+      'Delete account',
+      'Your account and order history will be permanently removed. Contact support to confirm deletion.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Email support',
+          style: 'destructive',
+          onPress: () => {
+            const subject = encodeURIComponent('Account deletion request');
+            const body = encodeURIComponent(
+              'Please delete my Lunara customer account and associated personal data.',
+            );
+            void Linking.openURL(`mailto:${appConfig.supportEmail}?subject=${subject}&body=${body}`);
+          },
+        },
+      ],
+    );
+  }
+
   const displayName =
     profile && profile.firstName !== 'Customer'
       ? `${profile.firstName} ${profile.lastName}`.trim()
@@ -373,6 +406,38 @@ export default function ProfileScreen() {
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
               </Pressable>
+              <Pressable
+                style={[styles.prefRow, styles.prefRowBorder]}
+                onPress={() => openUrl(privacyUrl)}
+              >
+                <Ionicons name="document-text-outline" size={20} color={colors.primary} />
+                <View style={styles.prefCopy}>
+                  <Text style={styles.prefTitle}>Privacy policy</Text>
+                  <Text style={styles.prefHint}>How we collect and use your data</Text>
+                </View>
+                <Ionicons name="open-outline" size={16} color={colors.mutedForeground} />
+              </Pressable>
+              <Pressable
+                style={[styles.prefRow, styles.prefRowBorder]}
+                onPress={() => openUrl(termsUrl)}
+              >
+                <Ionicons name="reader-outline" size={20} color={colors.primary} />
+                <View style={styles.prefCopy}>
+                  <Text style={styles.prefTitle}>Terms of service</Text>
+                  <Text style={styles.prefHint}>Rules for using Lunara</Text>
+                </View>
+                <Ionicons name="open-outline" size={16} color={colors.mutedForeground} />
+              </Pressable>
+              <Pressable
+                style={[styles.prefRow, styles.prefRowBorder]}
+                onPress={confirmDeleteAccount}
+              >
+                <Ionicons name="trash-outline" size={20} color={colors.destructive} />
+                <View style={styles.prefCopy}>
+                  <Text style={[styles.prefTitle, styles.destructiveText]}>Delete account</Text>
+                  <Text style={styles.prefHint}>Request permanent removal of your account</Text>
+                </View>
+              </Pressable>
             </Card>
 
             <Text style={[styles.sectionTitle, styles.sectionTitleSpaced]}>Preferences</Text>
@@ -489,6 +554,7 @@ const styles = StyleSheet.create({
   prefRowBorder: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.md, marginTop: spacing.md },
   prefCopy: { flex: 1 },
   prefTitle: { fontSize: 14, fontWeight: '600', color: colors.foreground },
+  destructiveText: { color: colors.destructive },
   prefHint: { ...typography.caption, marginTop: spacing.xs },
   logoutBtn: { marginTop: spacing.xxxl },
 });

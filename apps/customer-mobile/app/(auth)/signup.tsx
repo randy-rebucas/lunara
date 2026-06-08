@@ -29,7 +29,7 @@ export default function SignUpScreen() {
     setSubmitting(true);
     try {
       const code = await requestOtp(phone);
-      if (code) setDevOtp(code);
+      if (__DEV__ && code) setDevOtp(code);
       setStep('otp');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not send OTP');
@@ -89,7 +89,7 @@ export default function SignUpScreen() {
               onChangeText={setOtp}
               keyboardType="number-pad"
             />
-            {devOtp ? <Text style={styles.devOtp}>Dev OTP: {devOtp}</Text> : null}
+            {__DEV__ && devOtp ? <Text style={styles.devOtp}>Dev OTP: {devOtp}</Text> : null}
             {error ? <Text style={styles.error}>{error}</Text> : null}
             <Button
               label={submitting ? 'Verifying…' : 'Verify & continue'}
@@ -110,7 +110,7 @@ export default function SignUpScreen() {
         </Link>
       </Text>
 
-      <Text style={styles.devHint}>Dev OTP is always 123456</Text>
+      {__DEV__ ? <Text style={styles.devHint}>Dev OTP is always 123456</Text> : null}
     </Screen>
   );
 }

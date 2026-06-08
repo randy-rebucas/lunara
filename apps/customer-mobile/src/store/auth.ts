@@ -4,6 +4,7 @@ import type { AuthTokens, User } from '@lunara/types';
 import { UserRole } from '@lunara/types';
 import { getApiV1BaseUrl } from '../api-config';
 import { parseApiError } from '../lib/api-error';
+import { apiUnreachableMessage } from '../lib/network-error';
 
 const STORAGE_KEY = 'lunara_auth';
 
@@ -39,9 +40,7 @@ async function authRequest<T>(
       },
     });
   } catch {
-    throw new Error(
-      `Cannot reach API at ${baseUrl}. Start the API (npm run dev --workspace=@lunara/api) and use the same Wi‑Fi as your phone.`,
-    );
+    throw new Error(apiUnreachableMessage(baseUrl));
   }
   const body = await res.json();
   if (res.status === 401 && token) {
@@ -71,9 +70,7 @@ async function authUpload<T>(
       body: formData,
     });
   } catch {
-    throw new Error(
-      `Cannot reach API at ${baseUrl}. Start the API (npm run dev --workspace=@lunara/api) and use the same Wi‑Fi as your phone.`,
-    );
+    throw new Error(apiUnreachableMessage(baseUrl));
   }
   const body = await res.json();
   if (res.status === 401 && token) {

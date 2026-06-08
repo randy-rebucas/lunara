@@ -11,13 +11,16 @@ import { Screen } from '../../src/components/ui/screen';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import { useAuthStore } from '../../src/store/auth';
 
+const DEV_EMAIL = __DEV__ ? 'customer@lunara.dev' : '';
+const DEV_PASSWORD = __DEV__ ? 'password123' : '';
+
 export default function LoginScreen() {
   const router = useRouter();
   const { loginWithOtp, loginWithEmail, requestOtp, apiFetch } = useAuthStore();
   const [mode, setMode] = useState<'otp' | 'email'>('otp');
   const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('customer@lunara.dev');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState(DEV_EMAIL);
+  const [password, setPassword] = useState(DEV_PASSWORD);
   const [otp, setOtp] = useState('');
   const [devOtp, setDevOtp] = useState('');
   const [error, setError] = useState('');
@@ -26,7 +29,7 @@ export default function LoginScreen() {
     setError('');
     try {
       const code = await requestOtp(phone);
-      if (code) setDevOtp(code);
+      if (__DEV__ && code) setDevOtp(code);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not send OTP');
     }
@@ -111,7 +114,7 @@ export default function LoginScreen() {
               />
               <Button label="Send" variant="secondary" onPress={handleSendOtp} style={styles.sendBtn} />
             </View>
-            {devOtp ? <Text style={styles.devOtp}>Dev OTP: {devOtp}</Text> : null}
+            {__DEV__ && devOtp ? <Text style={styles.devOtp}>Dev OTP: {devOtp}</Text> : null}
           </>
         ) : null}
 
@@ -127,9 +130,11 @@ export default function LoginScreen() {
         </Link>
       </Text>
 
-      <Text style={styles.devHint}>
-        Dev OTP is always 123456 · email: customer@lunara.dev / password123
-      </Text>
+      {__DEV__ ? (
+        <Text style={styles.devHint}>
+          Dev OTP is always 123456 · email: customer@lunara.dev / password123
+        </Text>
+      ) : null}
     </Screen>
   );
 }
