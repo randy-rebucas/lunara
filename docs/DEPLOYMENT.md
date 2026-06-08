@@ -133,6 +133,8 @@ npm ci \
   && npm run build --workspace=@lunara/api
 ```
 
+> **Do not use `npm run build` at the repo root on Render.** That runs Turbo across every app with a `build` script (Next.js web apps, API, etc.). Mobile apps are built with **EAS** (`npm run eas:build --workspace=@lunara/rider-mobile`), not on Render. Prefer **Option A (Docker)** or the scoped build command above. A [`render.yaml`](../render.yaml) blueprint is included for Docker deploy.
+
 ### API environment variables (Render)
 
 Set these in the Render service **Environment** tab.

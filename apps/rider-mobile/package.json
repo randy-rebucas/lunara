@@ -8,7 +8,7 @@
     "dev:clear": "expo start --clear --port 8082",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "build": "eas build --platform all",
+    "eas:build": "eas build --platform all",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test src/lib/**/*.test.ts"
   },

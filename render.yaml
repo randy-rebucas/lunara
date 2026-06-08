@@ -1,0 +1,28 @@
+# Render Blueprint — API only (Docker).
+# Mobile apps build via EAS, not Render. Web apps deploy to Vercel.
+services:
+  - type: web
+    name: lunara-api
+    runtime: docker
+    dockerfilePath: ./docker/api.Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: JWT_REFRESH_EXPIRES_IN
+        value: 30d
+    disk:
+      name: lunara-uploads
+      mountPath: /app/uploads
+      sizeGB: 5

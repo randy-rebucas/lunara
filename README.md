@@ -170,7 +170,7 @@ Mobile apps register native device tokens with `POST /api/v1/users/me/push-token
    ```
 5. Build dev clients and test on a **physical device** (simulators do not receive FCM):
    ```bash
-   npm run build --workspace=@lunara/rider-mobile -- --profile development
+   npm run eas:build --workspace=@lunara/rider-mobile -- --profile development
    ```
 
 Push is skipped when Firebase env vars are missing (local dev without credentials still works for in-app + socket alerts).
