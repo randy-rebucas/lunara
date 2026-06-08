@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --port 3000",
+    "prebuild": "cd ../.. && npm run build --workspace=@lunara/types && npm run build --workspace=@lunara/utils && npm run build --workspace=@lunara/config && npm run build --workspace=@lunara/hooks",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",

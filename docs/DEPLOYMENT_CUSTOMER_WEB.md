@@ -49,7 +49,7 @@ Deploy the customer Next.js app (`apps/customer-web`) to **Vercel**.
 | **Install command** | `cd ../.. && npm ci` |
 | **Build command** | `cd ../.. && npm run build --workspace=@lunara/customer-web` |
 
-This uses `npm` workspaces to automatically build all dependencies in the correct order via `package.json`'s `workspaces` configuration and `turbo.json`'s `dependsOn` rules.
+The `prebuild` script compiles shared packages (`@lunara/types`, `@lunara/utils`, `@lunara/hooks`, `@lunara/config`) before `next build`. Alternatively use `cd ../.. && npm run build:customer-web`.
 
 ---
 
@@ -132,6 +132,7 @@ Vercel → **Deployments** → select a previous deployment → **Promote to Pro
 | CORS error in console | API not reachable | Verify API is live at `NEXT_PUBLIC_API_URL` |
 | WebSocket never connects | API URL protocol mismatch | Use `https://` URL (not `http://`) |
 | Blank page after deploy | Build failed silently | Check Vercel build logs for errors |
+| `Can't resolve '@lunara/types'` or `@lunara/hooks` | Shared packages not compiled | Ensure install runs from repo root (`cd ../.. && npm ci`). The `prebuild` step must run before `next build` — use `npm run build --workspace=@lunara/customer-web`, not `next build` alone |
 | 404 on static pages | `next.config.ts` error | Check `turbo.json` and build filters |
 
 ---
