@@ -1,0 +1,12 @@
+**/node_modules
+**/.next
+**/.expo
+**/dist
+.git
+.gitignore
+*.md
+apps/admin-web
+apps/customer-web
+apps/partner-web
+apps/customer-mobile
+apps/rider-mobile
