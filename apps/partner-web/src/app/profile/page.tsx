@@ -6,7 +6,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { UserRole, type PortalUser } from '@lunara/types';
 import type { PartnerSettingsData } from '@lunara/types';
 import { AuthLoading } from '../../components/auth-loading';
-import { DataPageStatus } from '../../components/data-page-status';
 import { Card, CardBody } from '../../components/ui/card';
 import { PageHeader } from '../../components/ui/page-header';
 import { useProtectedPage } from '../../hooks/use-protected-page';

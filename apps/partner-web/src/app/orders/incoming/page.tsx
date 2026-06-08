@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { PartnerOrderSummary } from '@lunara/types';
 import { UserRole } from '@lunara/types';
 import { AuthLoading } from '../../../components/auth-loading';
-import { DataPageStatus } from '../../../components/data-page-status';
 import { PageHeader } from '../../../components/ui/page-header';
 import { LiveBadge } from '../../../components/ui/card';
 import { useProtectedPage } from '../../../hooks/use-protected-page';
