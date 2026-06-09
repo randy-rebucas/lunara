@@ -24,7 +24,7 @@ export const appConfig = {
   tagline: 'Laundry made simple',
   defaultCurrency: 'PHP',
   defaultLocale: 'en-PH',
-  supportEmail: 'support@lunara.dev',
+  supportEmail: 'support@lunara.app',
   marketing: marketingConfig,
   pagination: {
     defaultLimit: 20,

@@ -4,6 +4,25 @@ Deploy the customer Expo app (`apps/customer-mobile`) to **Expo EAS**.
 
 ---
 
+## Production checklist
+
+Before `eas build --profile production`:
+
+| Step | Command / action |
+|------|------------------|
+| EAS project linked | `extra.eas.projectId` in `app.config.js` ✓ |
+| API URL secret | `eas secret:create --name EXPO_PUBLIC_API_URL --value https://your-api.onrender.com` |
+| Firebase on API | `FIREBASE_*` on Render (for background push) |
+| FCM credentials | `eas credentials --platform android` |
+| APNs credentials | `eas credentials --platform ios` |
+| Twilio on API | Required for real phone OTP in production |
+| Privacy & terms pages | Live at `https://lunara.app/privacy` and `/terms` |
+| Store assets | [Store listing guide](./STORE_LISTING_CUSTOMER_MOBILE.md) — screenshots & metadata |
+
+Shared packages (`@lunara/types`, `@lunara/utils`, `@lunara/config`) compile automatically via the `eas-build-post-install` script in `package.json` (runs **after** `npm install`, not before).
+
+---
+
 ## Prerequisites
 
 - Expo account at [expo.dev](https://expo.dev)
@@ -55,7 +74,17 @@ If not already set up:
 eas project:init
 ```
 
-This creates/links an EAS project and updates `app.json`.
+This project uses dynamic config (`app.config.js`), so EAS cannot auto-write the project ID. After init, add the ID it prints to `app.config.js`:
+
+```javascript
+extra: {
+  eas: {
+    projectId: '<your-eas-project-id>',
+  },
+},
+```
+
+The customer app is linked to project `08355e56-d5dc-4fe0-b11c-8b6a27691dc5`.
 
 ---
 
@@ -67,8 +96,15 @@ Set environment variables for production builds:
 
 ```bash
 eas secret:create --name EXPO_PUBLIC_API_URL --value https://api.lunara.example.com
-eas secret:create --name EXPO_PUBLIC_ENV --value production
 ```
+
+Optional:
+
+```bash
+eas secret:create --name EXPO_PUBLIC_WEBSITE_URL --value https://lunara.app
+```
+
+`EXPO_PUBLIC_API_URL` is **required** — the app throws at startup in production builds if it is missing.
 
 List existing secrets:
 
@@ -85,28 +121,26 @@ Ensure production profile includes necessary settings:
   "build": {
     "production": {
       "node": "20.0.0",
-      "ios": {
-        "buildType": "archive"
-      },
+      "autoIncrement": true,
       "android": {
-        "buildType": "apk"
+        "buildType": "app-bundle"
       }
     },
     "preview": {
       "node": "20.0.0",
+      "distribution": "internal",
       "ios": {
-        "buildType": "simulator"
+        "simulator": true
       },
       "android": {
         "buildType": "apk"
       }
     }
-  },
-  "submit": {
-    "production": {}
   }
 }
 ```
+
+> **Note:** `buildType` is **Android-only** (`apk` or `app-bundle`). For iOS simulator builds use `"simulator": true`. Store builds omit iOS-specific options — EAS produces an `.ipa` by default.
 
 ---
 
@@ -158,7 +192,7 @@ The app appears in TestFlight within minutes for internal testing.
 
 1. Log in to [App Store Connect](https://appstoreconnect.apple.com)
 2. Create a new app version
-3. Fill in metadata, screenshots, description
+3. Fill in metadata, screenshots, description — see [Store listing guide](./STORE_LISTING_CUSTOMER_MOBILE.md)
 4. Submit for review (Apple reviews within 24–48 hours)
 
 ---
@@ -205,7 +239,7 @@ The app is uploaded to Google Play Console.
 
 1. Log in to [Google Play Console](https://play.google.com/console)
 2. Create a new release in the **Internal testing** or **Closed testing** track
-3. Add screenshots, description, content rating
+3. Add screenshots, description, content rating — see [Store listing guide](./STORE_LISTING_CUSTOMER_MOBILE.md)
 4. Promote to **Production** after testing (Google Play reviews within 24 hours)
 
 ---
@@ -286,6 +320,7 @@ eas build --platform ios --profile production
 
 ## Related docs
 
+- [Store listing — screenshots & metadata](./STORE_LISTING_CUSTOMER_MOBILE.md)
 - [Main deployment guide](./DEPLOYMENT.md)
 - [API deployment](./DEPLOYMENT_API.md)
 - [Rider Mobile deployment](./DEPLOYMENT_RIDER_MOBILE.md)

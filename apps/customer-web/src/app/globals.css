@@ -78,6 +78,26 @@
     @apply font-medium text-primary transition-colors hover:text-primary/80;
   }
 
+  .legal-prose {
+    @apply space-y-5 text-sm leading-relaxed text-slate-700;
+  }
+
+  .legal-prose h2 {
+    @apply pt-2 text-base font-semibold text-slate-900;
+  }
+
+  .legal-prose ul {
+    @apply list-disc space-y-2 pl-5;
+  }
+
+  .legal-prose a {
+    @apply font-medium text-primary hover:text-primary/80;
+  }
+
+  .legal-prose strong {
+    @apply font-semibold text-slate-900;
+  }
+
   .badge-primary {
     @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-primary/10 text-primary;
   }

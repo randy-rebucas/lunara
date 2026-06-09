@@ -81,6 +81,12 @@ export default function HomePage() {
           ))}
         </div>
       </main>
+
+      <footer className="page-container border-t border-border/60 py-6 text-center text-xs text-muted-foreground">
+        <Link href="/privacy" className="link-primary">
+          Privacy Policy
+        </Link>
+      </footer>
     </div>
   );
 }
