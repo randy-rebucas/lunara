@@ -7,9 +7,18 @@ const icon = path.join(monorepoRoot, 'packages/brand/assets/icon.png');
 
 loadProjectEnv(monorepoRoot);
 
+const appJson = require('./app.json').expo;
+
 /** @type {import('expo/config').ExpoConfig} */
 module.exports = {
-  ...require('./app.json').expo,
+  ...appJson,
+  extra: {
+    ...appJson.extra,
+    eas: {
+      ...appJson.extra?.eas,
+      projectId: '2a1569f7-a2e2-4d55-85de-f695de891c44',
+    },
+  },
   icon,
   splash: {
     image: icon,
@@ -17,13 +26,13 @@ module.exports = {
     backgroundColor: '#ffffff',
   },
   android: {
-    ...require('./app.json').expo.android,
+    ...appJson.android,
     adaptiveIcon: {
       foregroundImage: icon,
       backgroundColor: '#ffffff',
     },
   },
   ios: {
-    ...require('./app.json').expo.ios,
+    ...appJson.ios,
   },
 };

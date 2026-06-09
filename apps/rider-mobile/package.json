@@ -8,7 +8,10 @@
     "dev:clear": "expo start --clear --port 8082",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "eas:build": "eas build --platform all",
+    "eas:build": "eas build --platform all --profile production",
+    "eas:build:android": "eas build --platform android --profile production",
+    "eas:build:ios": "eas build --platform ios --profile production",
+    "eas-build-post-install": "cd ../.. && npm run build --workspace=@lunara/types && npm run build --workspace=@lunara/utils && npm run build --workspace=@lunara/config",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test src/lib/**/*.test.ts"
   },
