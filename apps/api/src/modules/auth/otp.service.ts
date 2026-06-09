@@ -1,30 +1,25 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { formatPhone } from '@lunara/utils';
 import { RedisService } from '../../common/redis/redis.service';
+import { TwilioVerifyService } from './twilio-verify.service';
 
-const OTP_TTL = 300; // 5 minutes
-const OTP_PREFIX = 'otp:';
 const REFRESH_PREFIX = 'refresh:';
 
 @Injectable()
 export class OtpService {
-  private readonly logger = new Logger(OtpService.name);
+  constructor(
+    private readonly redis: RedisService,
+    private readonly twilioVerify: TwilioVerifyService,
+  ) {}
 
-  constructor(private readonly redis: RedisService) {}
-
-  async generate(phone: string): Promise<string> {
-    const code = process.env.NODE_ENV === 'production'
-      ? String(Math.floor(100000 + Math.random() * 900000))
-      : '123456';
-    await this.redis.set(`${OTP_PREFIX}${phone}`, code, OTP_TTL);
-    this.logger.log(`OTP for ${phone}: ${code}`);
-    return code;
+  async sendOtp(phone: string): Promise<void> {
+    this.assertConfigured();
+    await this.twilioVerify.sendVerification(formatPhone(phone));
   }
 
   async verify(phone: string, code: string): Promise<boolean> {
-    const stored = await this.redis.get(`${OTP_PREFIX}${phone}`);
-    if (!stored || stored !== code) return false;
-    await this.redis.del(`${OTP_PREFIX}${phone}`);
-    return true;
+    this.assertConfigured();
+    return this.twilioVerify.checkVerification(formatPhone(phone), code);
   }
 
   async storeRefreshToken(userId: string, token: string) {
@@ -38,5 +33,13 @@ export class OtpService {
 
   async revokeRefreshToken(userId: string) {
     await this.redis.del(`${REFRESH_PREFIX}${userId}`);
+  }
+
+  private assertConfigured() {
+    if (!this.twilioVerify.isConfigured()) {
+      throw new ServiceUnavailableException(
+        'SMS verification is not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_VERIFY_SERVICE_SID.',
+      );
+    }
   }
 }

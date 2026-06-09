@@ -4,6 +4,19 @@ Deploy the rider Expo app (`apps/rider-mobile`) to **Expo EAS**.
 
 ---
 
+## Production checklist
+
+Before `eas build --profile production`:
+
+| Step | Command / action |
+|------|------------------|
+| EAS project linked | `extra.eas.projectId` in `app.config.js` |
+| API URL env | `eas env:create --name EXPO_PUBLIC_API_URL --value https://your-api.onrender.com --environment production` |
+| Monorepo upload | Root [`.easignore`](../.easignore) must **not** list `apps/rider-mobile` (EAS uploads from repo root) |
+| Shared packages | `eas-build-post-install` in `package.json` builds `@lunara/types`, `@lunara/utils`, `@lunara/config` after install |
+
+---
+
 ## Prerequisites
 
 - Expo account at [expo.dev](https://expo.dev)
@@ -55,7 +68,17 @@ If not already set up:
 eas project:init
 ```
 
-This creates/links an EAS project and updates `app.json`.
+This project uses dynamic config (`app.config.js`), so EAS cannot auto-write the project ID. After init, add the ID it prints to `app.config.js`:
+
+```javascript
+extra: {
+  ...appJson.extra,
+  eas: {
+    ...appJson.extra?.eas,
+    projectId: '<your-eas-project-id>',
+  },
+},
+```
 
 ---
 
@@ -84,18 +107,17 @@ Ensure production profile includes necessary settings:
 {
   "build": {
     "production": {
+      "autoIncrement": true,
       "node": "20.0.0",
-      "ios": {
-        "buildType": "archive"
-      },
       "android": {
-        "buildType": "apk"
+        "buildType": "app-bundle"
       }
     },
     "preview": {
+      "distribution": "internal",
       "node": "20.0.0",
       "ios": {
-        "buildType": "simulator"
+        "simulator": true
       },
       "android": {
         "buildType": "apk"
@@ -107,6 +129,8 @@ Ensure production profile includes necessary settings:
   }
 }
 ```
+
+> **Note:** `buildType` is **Android-only** (`apk` or `app-bundle`). For iOS simulator builds use `"simulator": true`. Store builds omit iOS-specific options — EAS produces an `.ipa` by default.
 
 ---
 

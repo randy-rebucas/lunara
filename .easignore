@@ -1,7 +1,6 @@
 apps/admin-web
 apps/partner-web
 apps/customer-web
-apps/rider-mobile
 apps/api
 **/.next
 .git

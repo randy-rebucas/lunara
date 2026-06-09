@@ -18,7 +18,12 @@ import { Model } from 'mongoose';
 
 import { UserRole } from '@lunara/types';
 
-import { getPermissionsForRole } from '@lunara/utils';
+import { formatPhone, getPermissionsForRole } from '@lunara/utils';
+
+import {
+  OTP_PROFILE_PLACEHOLDER_FIRST_NAME,
+  OTP_PROFILE_PLACEHOLDER_LAST_NAME,
+} from '../customers/customers.constants';
 
 import { getJwtRefreshSecret } from '../../common/config/jwt-config';
 
@@ -107,43 +112,31 @@ export class AuthService {
 
 
   async login(dto: LoginDto) {
-
-    const orConditions = [{ email: dto.email }, { phone: dto.phone }].filter((q) =>
-
+    const phone = dto.phone ? formatPhone(dto.phone) : undefined;
+    const orConditions = [{ email: dto.email }, { phone }].filter((q) =>
       Object.values(q).some(Boolean),
-
     );
 
     let user = orConditions.length
-
       ? await this.userModel.findOne({ $or: orConditions })
-
       : null;
 
-
-
-    if (dto.otp && dto.phone) {
-
-      const valid = await this.otpService.verify(dto.phone, dto.otp);
-
+    if (dto.otp && phone) {
+      const valid = await this.otpService.verify(phone, dto.otp);
       if (!valid) throw new UnauthorizedException('Invalid OTP');
 
-
-
       if (!user) {
-
         user = await this.userModel.create({
-
-          phone: dto.phone,
-
+          phone,
           role: UserRole.CUSTOMER,
-
           isActive: true,
-
         });
 
-        await this.customersService.create(user._id.toString(), 'Customer', dto.phone);
-
+        await this.customersService.create(
+          user._id.toString(),
+          OTP_PROFILE_PLACEHOLDER_FIRST_NAME,
+          OTP_PROFILE_PLACEHOLDER_LAST_NAME,
+        );
       }
 
       user.lastLoginAt = new Date();
@@ -183,27 +176,16 @@ export class AuthService {
 
 
   async requestOtp(phone: string) {
-
-    const code = await this.otpService.generate(phone);
-
-    await this.smsService.sendOtp(phone, code);
+    const normalized = formatPhone(phone);
+    await this.smsService.sendOtp(normalized);
 
     return {
-
       success: true,
-
       data: {
-
         message: 'OTP sent',
-
-        phone,
-
-        ...(process.env.NODE_ENV !== 'production' ? { devOtp: code } : {}),
-
+        phone: normalized,
       },
-
     };
-
   }
 
   async forgotPassword(email: string) {
@@ -222,10 +204,11 @@ export class AuthService {
   }
 
   async resetPassword(dto: ResetPasswordDto) {
-    const valid = await this.otpService.verify(dto.phone, dto.otp);
+    const phone = formatPhone(dto.phone);
+    const valid = await this.otpService.verify(phone, dto.otp);
     if (!valid) throw new UnauthorizedException('Invalid OTP');
 
-    const user = await this.userModel.findOne({ phone: dto.phone });
+    const user = await this.userModel.findOne({ phone });
     if (!user) throw new UnauthorizedException('Invalid OTP');
 
     user.passwordHash = await bcrypt.hash(dto.password, 12);

@@ -4,46 +4,83 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Button } from '@lunara/ui';
+import { isValidPhilippineMobile } from '@lunara/utils';
 import { fetchOnboardingStatus, getOnboardingPath } from '@lunara/hooks/onboarding';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { AuthShell } from '../../components/auth-shell';
 import { Input } from '../../components/ui/input';
 
+type OtpStep = 'phone' | 'code';
+
 export default function LoginPage() {
   const { login, loginWithOtp, requestOtp, api } = useAuthContext();
   const router = useRouter();
   const [mode, setMode] = useState<'password' | 'otp'>('password');
+  const [otpStep, setOtpStep] = useState<OtpStep>('phone');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [verifiedPhone, setVerifiedPhone] = useState('');
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
-  const [devOtp, setDevOtp] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handlePasswordSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+    setSubmitting(true);
     try {
-      if (mode === 'password') {
-        await login(email, password);
-      } else {
-        await loginWithOtp(phone, otp);
-      }
+      await login(email, password);
       const status = await fetchOnboardingStatus(api);
       router.push(getOnboardingPath(status));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
+    } finally {
+      setSubmitting(false);
     }
   }
 
-  async function handleRequestOtp() {
+  async function handleSendOtp(e: React.FormEvent) {
+    e.preventDefault();
     setError('');
+    if (!isValidPhilippineMobile(phone)) {
+      setError('Enter a valid Philippine mobile number (e.g. +639171234567).');
+      return;
+    }
+    setSubmitting(true);
     try {
       const result = await requestOtp(phone);
-      if (result.devOtp) setDevOtp(result.devOtp);
-    } catch {
-      setError('Failed to send OTP');
+      setVerifiedPhone(result.phone);
+      setOtp('');
+      setOtpStep('code');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send OTP');
+    } finally {
+      setSubmitting(false);
     }
+  }
+
+  async function handleVerifyOtp(e: React.FormEvent) {
+    e.preventDefault();
+    setError('');
+    setSubmitting(true);
+    try {
+      await loginWithOtp(verifiedPhone || phone, otp);
+      const status = await fetchOnboardingStatus(api);
+      router.replace(getOnboardingPath(status));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Invalid or expired OTP');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function switchMode(next: 'password' | 'otp') {
+    setMode(next);
+    setError('');
+    setOtpStep('phone');
+    setOtp('');
+    setVerifiedPhone('');
   }
 
   return (
@@ -54,7 +91,7 @@ export default function LoginPage() {
       <div className="mt-6 flex gap-2 rounded-lg bg-slate-100 p-1">
         <button
           type="button"
-          onClick={() => setMode('password')}
+          onClick={() => switchMode('password')}
           className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
             mode === 'password' ? 'bg-surface text-primary shadow-sm' : 'text-muted hover:text-slate-900'
           }`}
@@ -63,7 +100,7 @@ export default function LoginPage() {
         </button>
         <button
           type="button"
-          onClick={() => setMode('otp')}
+          onClick={() => switchMode('otp')}
           className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
             mode === 'otp' ? 'bg-surface text-primary shadow-sm' : 'text-muted hover:text-slate-900'
           }`}
@@ -72,37 +109,82 @@ export default function LoginPage() {
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-        {mode === 'password' ? (
-          <>
-            <Input placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-            <Input
-              placeholder="Password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </>
-        ) : (
-          <>
-            <Input placeholder="Phone (+639...)" value={phone} onChange={(e) => setPhone(e.target.value)} required />
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-              <Input placeholder="OTP" value={otp} onChange={(e) => setOtp(e.target.value)} required className="min-w-0 flex-1" />
-              <Button type="button" variant="outline" size="default" className="w-full shrink-0 sm:w-auto" onClick={handleRequestOtp}>
-                Send OTP
-              </Button>
-            </div>
-            {devOtp && <p className="badge-accent">Dev OTP: {devOtp}</p>}
-          </>
-        )}
-        {error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
-        )}
-        <Button type="submit" className="w-full" size="lg">
-          Sign in
-        </Button>
-      </form>
+      {mode === 'password' ? (
+        <form onSubmit={handlePasswordSubmit} className="mt-6 space-y-4">
+          <Input placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <Input
+            placeholder="Password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+          {error && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+          )}
+          <Button type="submit" className="w-full" size="lg" disabled={submitting}>
+            {submitting ? 'Signing in…' : 'Sign in'}
+          </Button>
+        </form>
+      ) : otpStep === 'phone' ? (
+        <form onSubmit={handleSendOtp} className="mt-6 space-y-4">
+          <Input
+            placeholder="Mobile number (+639...)"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            autoComplete="tel"
+            inputMode="tel"
+            required
+          />
+          {error && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+          )}
+          <Button type="submit" className="w-full" size="lg" disabled={submitting}>
+            {submitting ? 'Sending…' : 'Send OTP'}
+          </Button>
+        </form>
+      ) : (
+        <form onSubmit={handleVerifyOtp} className="mt-6 space-y-4">
+          <p className="text-sm text-muted">
+            Code sent to <span className="font-medium text-slate-900">{verifiedPhone || phone}</span>
+          </p>
+          <Input
+            placeholder="6-digit OTP"
+            value={otp}
+            onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            required
+          />
+          {error && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+          )}
+          <Button type="submit" className="w-full" size="lg" disabled={submitting || otp.length < 6}>
+            {submitting ? 'Verifying…' : 'Verify & sign in'}
+          </Button>
+          <button
+            type="button"
+            className="w-full text-sm link-primary"
+            disabled={submitting}
+            onClick={() => {
+              void handleSendOtp({ preventDefault: () => {} } as React.FormEvent);
+            }}
+          >
+            Resend code
+          </button>
+          <button
+            type="button"
+            className="w-full text-sm text-muted"
+            onClick={() => {
+              setOtpStep('phone');
+              setOtp('');
+              setError('');
+            }}
+          >
+            Change number
+          </button>
+        </form>
+      )}
 
       <p className="mt-6 text-center text-sm text-muted">
         No account?{' '}

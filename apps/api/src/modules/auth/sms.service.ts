@@ -1,15 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { OtpService } from './otp.service';
 
 @Injectable()
 export class SmsService {
-  private readonly logger = new Logger(SmsService.name);
+  constructor(private readonly otpService: OtpService) {}
 
-  async sendOtp(phone: string, code: string) {
-    if (process.env.NODE_ENV === 'production' && process.env.TWILIO_ACCOUNT_SID) {
-      // Production: integrate Twilio or local SMS provider
-      this.logger.log(`[SMS] Would send OTP to ${phone}`);
-      return;
-    }
-    this.logger.log(`[DEV SMS] OTP ${code} sent to ${phone}`);
+  async sendOtp(phone: string) {
+    await this.otpService.sendOtp(phone);
   }
 }

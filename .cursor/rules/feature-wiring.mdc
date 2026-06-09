@@ -1,0 +1,41 @@
+---
+description: Wire new/changed features across all relevant Lunara apps and document them
+alwaysApply: true
+---
+
+# Feature Wiring & Documentation
+
+When implementing, changing, or updating a feature, wire it end-to-end across every surface that should use it, then write summary documentation.
+
+## Wiring order
+
+1. **Shared packages** — `@lunara/types` → `@lunara/validation` → `@lunara/utils` → `@lunara/hooks` (rebuild packages before app changes)
+2. **API** — module, DTOs, guards/RBAC, events, Socket.IO if realtime
+3. **Clients** — only the apps whose roles need the feature (see matrix in `docs/FEATURE_WIRING.md`)
+
+| App | Audience | Typical scope |
+|-----|----------|---------------|
+| `api` | All | Source of truth — always |
+| `admin-web` | Admin | Platform ops, support, analytics |
+| `partner-web` | Partner/staff | Shop operations |
+| `customer-web` | Customer | Booking, orders, account |
+| `customer-mobile` | Customer | Parity with customer-web where applicable |
+| `rider-mobile` | Rider | Dispatch, delivery, earnings |
+
+## Per-feature checklist
+
+Before marking work done, confirm:
+
+- [ ] API endpoints, roles, and validation match client usage
+- [ ] Shared types/schemas updated if the contract changed
+- [ ] Each relevant app has UI + API integration (not API-only)
+- [ ] Realtime/push wired if the feature needs live updates
+- [ ] Seed data or dev flows updated if needed (`apps/api/src/scripts/seed.ts`)
+- [ ] `docs/API_ENDPOINTS.md` updated for new/changed routes
+- [ ] Feature summary added under `docs/features/` using `docs/features/_TEMPLATE.md`
+
+## Documentation
+
+Create `docs/features/<feature-slug>.md` with: summary, affected apps, API changes, client changes, and how to verify locally. Link it from `docs/features/README.md`.
+
+Do not skip documentation because a change "seems small" — if it touches the API contract or user-facing behavior, document it.

@@ -10,8 +10,21 @@ import React, {
   useState,
 } from 'react';
 import type { AuthTokens, User } from '@lunara/types';
+import { formatPhone } from '@lunara/utils';
 import { createApiClient } from './api-client';
 import { resolveApiV1BaseUrl } from './api-url';
+
+function parseAuthError(body: unknown, fallback: string): string {
+  if (!body || typeof body !== 'object') return fallback;
+  const record = body as Record<string, unknown>;
+  if (record.error && typeof record.error === 'object') {
+    const message = (record.error as { message?: unknown }).message;
+    if (typeof message === 'string' && message.trim()) return message;
+  }
+  if (typeof record.message === 'string' && record.message.trim()) return record.message;
+  if (Array.isArray(record.message) && record.message.length > 0) return String(record.message[0]);
+  return fallback;
+}
 
 const STORAGE_KEY = 'lunara_auth';
 const REFRESH_BUFFER_MS = 60_000;
@@ -30,6 +43,7 @@ interface AuthContextValue {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   loginWithOtp: (phone: string, otp: string) => Promise<void>;
+  signupWithOtp: (phone: string, otp: string) => Promise<void>;
   register: (data: {
     email?: string;
     phone?: string;
@@ -37,7 +51,7 @@ interface AuthContextValue {
     firstName: string;
     lastName: string;
   }) => Promise<void>;
-  requestOtp: (phone: string) => Promise<{ devOtp?: string }>;
+  requestOtp: (phone: string) => Promise<{ phone: string }>;
   logout: () => Promise<void>;
   api: ReturnType<typeof createApiClient>;
 }
@@ -187,10 +201,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const res = await fetch(`${getApiUrl()}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, otp }),
+        body: JSON.stringify({ phone: formatPhone(phone), otp: otp.trim() }),
       });
       const body = await res.json();
-      if (!body.success) throw new Error(body.error?.message ?? 'Login failed');
+      if (!body.success) throw new Error(parseAuthError(body, 'Login failed'));
       persist(authDataFromSession(body.data.user, body.data.tokens));
     },
     [persist],
@@ -220,12 +234,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const res = await fetch(`${getApiUrl()}/auth/otp/request`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone }),
+      body: JSON.stringify({ phone: formatPhone(phone) }),
     });
     const body = await res.json();
-    if (!body.success) throw new Error('Failed to send OTP');
-    return { devOtp: body.data.devOtp };
+    if (!body.success) throw new Error(parseAuthError(body, 'Failed to send OTP'));
+    return {
+      phone: (body.data.phone as string | undefined) ?? formatPhone(phone),
+    };
   }, []);
+
+  const signupWithOtp = loginWithOtp;
 
   const logout = useCallback(async () => {
     const token = authRef.current?.tokens.accessToken;
@@ -245,6 +263,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isLoading,
     login,
     loginWithOtp,
+    signupWithOtp,
     register,
     requestOtp,
     logout,

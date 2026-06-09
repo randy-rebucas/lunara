@@ -79,10 +79,11 @@ export default function ForgotPasswordScreen() {
         <Card style={styles.card}>
           <Text style={styles.hint}>Code sent to {phone}</Text>
           <Input
-            placeholder="OTP code"
+            placeholder="6-digit OTP"
             keyboardType="number-pad"
+            autoComplete="sms-otp"
             value={otp}
-            onChangeText={setOtp}
+            onChangeText={(value) => setOtp(value.replace(/\D/g, '').slice(0, 6))}
             style={styles.field}
           />
           <Input

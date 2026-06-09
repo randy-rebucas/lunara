@@ -10,6 +10,7 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { OtpService } from './otp.service';
 import { SmsService } from './sms.service';
+import { TwilioVerifyService } from './twilio-verify.service';
 import { User, UserSchema } from '../users/schemas/user.schema';
 
 @Module({
@@ -24,7 +25,7 @@ import { User, UserSchema } from '../users/schemas/user.schema';
     MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, OtpService, SmsService],
+  providers: [AuthService, JwtStrategy, OtpService, SmsService, TwilioVerifyService],
   exports: [AuthService, JwtModule],
 })
 export class AuthModule {}

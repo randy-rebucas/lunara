@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Button } from '@lunara/ui';
+import { formatPhone, isValidPhilippineMobile } from '@lunara/utils';
 import { fetchOnboardingStatus, getOnboardingPath } from '@lunara/hooks/onboarding';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { AuthShellWide } from '../../components/auth-shell';
@@ -13,25 +14,30 @@ import { Input } from '../../components/ui/input';
 type Step = 'phone' | 'otp';
 
 export default function SignUpPage() {
-  const { loginWithOtp, requestOtp, api } = useAuthContext();
+  const { signupWithOtp, requestOtp, api } = useAuthContext();
   const router = useRouter();
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
+  const [verifiedPhone, setVerifiedPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
-  const [devOtp, setDevOtp] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  async function handleSendOtp(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSendOtp(e?: React.FormEvent) {
+    e?.preventDefault();
     setError('');
+    if (!isValidPhilippineMobile(phone)) {
+      setError('Enter a valid Philippine mobile number (e.g. +639171234567).');
+      return;
+    }
     setSubmitting(true);
     try {
       const result = await requestOtp(phone);
-      if (result.devOtp) setDevOtp(result.devOtp);
+      setVerifiedPhone(result.phone);
+      setOtp('');
       setStep('otp');
-    } catch {
-      setError('Failed to send OTP. Check your number and try again.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send OTP. Check your number and try again.');
     } finally {
       setSubmitting(false);
     }
@@ -42,14 +48,22 @@ export default function SignUpPage() {
     setError('');
     setSubmitting(true);
     try {
-      await loginWithOtp(phone, otp);
+      const targetPhone = verifiedPhone || formatPhone(phone);
+      await signupWithOtp(targetPhone, otp);
       const status = await fetchOnboardingStatus(api);
-      router.push(getOnboardingPath(status));
-    } catch {
-      setError('Invalid or expired OTP. Request a new code.');
+      router.replace(getOnboardingPath(status));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Invalid or expired OTP. Request a new code.');
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function handleChangeNumber() {
+    setStep('phone');
+    setOtp('');
+    setVerifiedPhone('');
+    setError('');
   }
 
   return (
@@ -68,6 +82,7 @@ export default function SignUpPage() {
                 onChange={(e) => setPhone(e.target.value)}
                 required
                 autoComplete="tel"
+                inputMode="tel"
               />
               {error && (
                 <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
@@ -79,31 +94,32 @@ export default function SignUpPage() {
           ) : (
             <form onSubmit={handleVerifyOtp} className="mt-6 space-y-4">
               <p className="text-sm text-muted">
-                Code sent to <span className="font-medium text-slate-900">{phone}</span>
+                Code sent to{' '}
+                <span className="font-medium text-slate-900">{verifiedPhone || formatPhone(phone)}</span>
               </p>
               <Input
                 placeholder="6-digit OTP"
                 value={otp}
-                onChange={(e) => setOtp(e.target.value)}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
                 inputMode="numeric"
+                autoComplete="one-time-code"
                 required
               />
-              {devOtp && <p className="badge-accent">Dev OTP: {devOtp}</p>}
               {error && (
                 <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
               )}
-              <Button type="submit" className="w-full" size="lg" disabled={submitting}>
-                {submitting ? 'Verifying…' : 'Verify & Continue'}
+              <Button type="submit" className="w-full" size="lg" disabled={submitting || otp.length < 6}>
+                {submitting ? 'Verifying…' : 'Verify & Create Account'}
               </Button>
               <button
                 type="button"
                 className="w-full text-sm link-primary"
-                onClick={() => {
-                  setStep('phone');
-                  setOtp('');
-                  setError('');
-                }}
+                disabled={submitting}
+                onClick={() => void handleSendOtp()}
               >
+                Resend code
+              </button>
+              <button type="button" className="w-full text-sm text-muted" onClick={handleChangeNumber}>
                 Change number
               </button>
             </form>
@@ -111,13 +127,13 @@ export default function SignUpPage() {
 
           <p className="mt-6 text-center text-sm text-muted">
             Already have an account?{' '}
-        <Link href="/login" className="link-primary">
-          Sign in
-        </Link>
-        {' · '}
-        <Link href="/register" className="link-primary">
-          Email register
-        </Link>
+            <Link href="/login" className="link-primary">
+              Sign in
+            </Link>
+            {' · '}
+            <Link href="/register" className="link-primary">
+              Email register
+            </Link>
           </p>
         </div>
       </div>

@@ -82,7 +82,7 @@ On a physical device, `localhost` points at the phone — not your PC. Both apps
 
 | App | Command | Metro port | Dev login |
 |-----|---------|------------|-----------|
-| Customer | `npm run dev --workspace=@lunara/customer-mobile` | 8081 | Phone OTP → `123456`, or `customer@lunara.dev` / `password123` |
+| Customer | `npm run dev --workspace=@lunara/customer-mobile` | 8081 | Phone OTP (Twilio SMS), or `customer@lunara.dev` / `password123` |
 | Rider | `npm run dev --workspace=@lunara/rider-mobile` | 8082 | `rider@lunara.dev` / `password123` |
 
 Platform shortcuts (from each app directory or via `--workspace`):
@@ -246,9 +246,9 @@ Prerequisites: API running, seed completed, customer + rider mobile dev servers,
 
 ### Customer sign-up (OTP)
 
-Works on **customer-web** (http://localhost:3000) or **customer-mobile** (Expo, port 8081) — same API and dev OTP.
+Works on **customer-web** (http://localhost:3000) or **customer-mobile** (Expo, port 8081) — same API and Twilio OTP.
 
-1. **Sign up** at http://localhost:3000/signup — enter mobile → OTP `123456` (dev)
+1. **Sign up** at http://localhost:3000/signup — enter mobile → OTP via SMS (Twilio on API)
 2. **Complete profile** and **add address** (onboarding screens)
 3. **Dashboard** at http://localhost:3000/dashboard
 
@@ -377,11 +377,13 @@ Track status: http://localhost:3000/refunds/{refundId}
 
 Dev logins (after seed): `partner@lunara.dev`, `staff@lunara.dev`, `rider@lunara.dev`, `admin@lunara.dev` / `password123`
 
-OTP login (dev): any phone → OTP is always `123456`
+OTP login: requires Twilio env vars on the API (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_VERIFY_SERVICE_SID`)
 
 ## Documentation
 
 See [`docs/`](./docs/) for architecture, database schemas, API reference, and development roadmap. Mobile app setup, dispatch notifications, and screen reference are in [Mobile Apps](#mobile-apps) above.
+
+**Feature work:** When adding or changing features, wire them across every relevant app (API, admin-web, partner-web, customer-web, customer-mobile, rider-mobile) and add a summary under [`docs/features/`](./docs/features/). See [`docs/FEATURE_WIRING.md`](./docs/FEATURE_WIRING.md).
 
 **Production deployment:** [docs/DEPLOYMENT_API.md](./docs/DEPLOYMENT_API.md) (API on Render) · [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) (full platform)
 

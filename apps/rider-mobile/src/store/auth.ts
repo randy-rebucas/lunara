@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { AuthTokens, User } from '@lunara/types';
 import { UserRole } from '@lunara/types';
+import { formatPhone } from '@lunara/utils';
 import { getApiV1BaseUrl } from '../api-config';
 import { parseApiError } from '../lib/api-error';
 
@@ -79,7 +80,7 @@ interface AuthStore {
   hydrate: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   loginWithOtp: (phone: string, otp: string) => Promise<void>;
-  requestOtp: (phone: string) => Promise<{ phone: string; devOtp?: string }>;
+  requestOtp: (phone: string) => Promise<{ phone: string; message: string }>;
   forgotPassword: (email: string) => Promise<{ message: string; phone: string | null }>;
   resetPassword: (phone: string, otp: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -124,7 +125,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   loginWithOtp: async (phone, otp) => {
     const data = await authRequest<{ user: User; tokens: AuthTokens }>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ phone, otp }),
+      body: JSON.stringify({ phone: formatPhone(phone), otp: otp.trim() }),
     });
     if (data.user.role !== UserRole.RIDER) {
       throw new Error('This account is not a rider account.');
@@ -134,9 +135,9 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   requestOtp: async (phone) => {
-    return authRequest<{ phone: string; devOtp?: string; message: string }>('/auth/otp/request', {
+    return authRequest<{ phone: string; message: string }>('/auth/otp/request', {
       method: 'POST',
-      body: JSON.stringify({ phone }),
+      body: JSON.stringify({ phone: formatPhone(phone) }),
     });
   },
 
@@ -150,7 +151,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   resetPassword: async (phone, otp, password) => {
     await authRequest<{ message: string }>('/auth/reset-password', {
       method: 'POST',
-      body: JSON.stringify({ phone, otp, password }),
+      body: JSON.stringify({ phone: formatPhone(phone), otp: otp.trim(), password }),
     });
   },
 

@@ -14,9 +14,12 @@
 
 ## Login (OTP)
 
-1. `POST /auth/otp/request` → generates 6-digit code, stores in Redis (5 min TTL), sends SMS
+1. `POST /auth/otp/request` → sends a 6-digit code via **Twilio Verify** SMS
+   - Requires `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_VERIFY_SERVICE_SID`
 2. `POST /auth/login` with phone + otp
-3. API verifies OTP from Redis, issues tokens
+3. API verifies the code through Twilio Verify, issues tokens (creates customer account if new phone)
+
+Phone numbers are normalized to E.164 before SMS (e.g. `09171234567` → `+639171234567`).
 
 ## Token Refresh
 

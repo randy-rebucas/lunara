@@ -2,6 +2,7 @@ import { Link, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { appConfig } from '@lunara/config';
+import { isValidPhilippineMobile } from '@lunara/utils';
 import { redirectAfterAuth } from '../../src/lib/onboarding';
 import { BrandMark } from '../../src/components/ui/brand-mark';
 import { Button } from '../../src/components/ui/button';
@@ -14,39 +15,72 @@ import { useAuthStore } from '../../src/store/auth';
 const DEV_EMAIL = __DEV__ ? 'customer@lunara.dev' : '';
 const DEV_PASSWORD = __DEV__ ? 'password123' : '';
 
+type OtpStep = 'phone' | 'code';
+
 export default function LoginScreen() {
   const router = useRouter();
   const { loginWithOtp, loginWithEmail, requestOtp, apiFetch } = useAuthStore();
   const [mode, setMode] = useState<'otp' | 'email'>('otp');
+  const [otpStep, setOtpStep] = useState<OtpStep>('phone');
   const [phone, setPhone] = useState('');
+  const [verifiedPhone, setVerifiedPhone] = useState('');
   const [email, setEmail] = useState(DEV_EMAIL);
   const [password, setPassword] = useState(DEV_PASSWORD);
   const [otp, setOtp] = useState('');
-  const [devOtp, setDevOtp] = useState('');
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   async function handleSendOtp() {
     setError('');
+    if (!isValidPhilippineMobile(phone)) {
+      setError('Enter a valid Philippine mobile number (e.g. +639171234567).');
+      return;
+    }
+    setSubmitting(true);
     try {
-      const code = await requestOtp(phone);
-      if (__DEV__ && code) setDevOtp(code);
+      const result = await requestOtp(phone);
+      setVerifiedPhone(result.phone);
+      setOtp('');
+      setOtpStep('code');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not send OTP');
+    } finally {
+      setSubmitting(false);
     }
   }
 
-  async function handleLogin() {
+  async function handleVerifyOtp() {
     setError('');
+    setSubmitting(true);
     try {
-      if (mode === 'email') {
-        await loginWithEmail(email, password);
-      } else {
-        await loginWithOtp(phone, otp);
-      }
+      await loginWithOtp(verifiedPhone || phone, otp);
+      await redirectAfterAuth(apiFetch, router);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Invalid or expired OTP');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleEmailLogin() {
+    setError('');
+    setSubmitting(true);
+    try {
+      await loginWithEmail(email, password);
       await redirectAfterAuth(apiFetch, router);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Login failed');
+    } finally {
+      setSubmitting(false);
     }
+  }
+
+  function switchMode(next: 'otp' | 'email') {
+    setMode(next);
+    setError('');
+    setOtpStep('phone');
+    setOtp('');
+    setVerifiedPhone('');
   }
 
   return (
@@ -63,13 +97,13 @@ export default function LoginScreen() {
         <View style={styles.modeRow}>
           <Pressable
             style={[styles.modeBtn, mode === 'otp' && styles.modeBtnActive]}
-            onPress={() => setMode('otp')}
+            onPress={() => switchMode('otp')}
           >
             <Text style={mode === 'otp' ? styles.modeTextActive : styles.modeText}>Phone OTP</Text>
           </Pressable>
           <Pressable
             style={[styles.modeBtn, mode === 'email' && styles.modeBtnActive]}
-            onPress={() => setMode('email')}
+            onPress={() => switchMode('email')}
           >
             <Text style={mode === 'email' ? styles.modeTextActive : styles.modeText}>Email</Text>
           </Pressable>
@@ -92,35 +126,64 @@ export default function LoginScreen() {
               onChangeText={setPassword}
               secureTextEntry
             />
+            <Button
+              label={submitting ? 'Signing in…' : 'Sign in'}
+              onPress={handleEmailLogin}
+              disabled={submitting}
+              style={styles.submitBtn}
+            />
           </>
-        ) : null}
-
-        {mode === 'otp' ? (
+        ) : otpStep === 'phone' ? (
           <>
             <Input
               style={styles.field}
-              placeholder="Phone number"
+              placeholder="Mobile number (+639...)"
               value={phone}
               onChangeText={setPhone}
               keyboardType="phone-pad"
+              autoComplete="tel"
             />
-            <View style={styles.row}>
-              <Input
-                style={[styles.field, styles.otpInput]}
-                placeholder="OTP"
-                value={otp}
-                onChangeText={setOtp}
-                keyboardType="number-pad"
-              />
-              <Button label="Send" variant="secondary" onPress={handleSendOtp} style={styles.sendBtn} />
-            </View>
-            {__DEV__ && devOtp ? <Text style={styles.devOtp}>Dev OTP: {devOtp}</Text> : null}
+            <Button
+              label={submitting ? 'Sending…' : 'Send OTP'}
+              onPress={handleSendOtp}
+              disabled={submitting || !phone.trim()}
+              style={styles.submitBtn}
+            />
           </>
-        ) : null}
+        ) : (
+          <>
+            <Text style={styles.phoneHint}>Code sent to {verifiedPhone || phone}</Text>
+            <Input
+              style={styles.field}
+              placeholder="6-digit OTP"
+              value={otp}
+              onChangeText={(value) => setOtp(value.replace(/\D/g, '').slice(0, 6))}
+              keyboardType="number-pad"
+              autoComplete="sms-otp"
+            />
+            <Button
+              label={submitting ? 'Verifying…' : 'Verify & sign in'}
+              onPress={handleVerifyOtp}
+              disabled={submitting || otp.length < 6}
+              style={styles.submitBtn}
+            />
+            <Pressable onPress={handleSendOtp} style={styles.linkBtn}>
+              <Text style={styles.linkText}>Resend code</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                setOtpStep('phone');
+                setOtp('');
+                setError('');
+              }}
+              style={styles.linkBtn}
+            >
+              <Text style={styles.mutedLinkText}>Change number</Text>
+            </Pressable>
+          </>
+        )}
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
-
-        <Button label="Sign in" onPress={handleLogin} style={styles.submitBtn} />
       </Card>
 
       <Text style={styles.footer}>
@@ -130,11 +193,6 @@ export default function LoginScreen() {
         </Link>
       </Text>
 
-      {__DEV__ ? (
-        <Text style={styles.devHint}>
-          Dev OTP is always 123456 · email: customer@lunara.dev / password123
-        </Text>
-      ) : null}
     </Screen>
   );
 }
@@ -164,18 +222,12 @@ const styles = StyleSheet.create({
   modeText: { color: colors.muted, fontWeight: '500' },
   modeTextActive: { color: colors.primary, fontWeight: '600' },
   field: { marginBottom: spacing.md },
-  row: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
-  otpInput: { flex: 1, marginBottom: 0 },
-  sendBtn: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md + 2 },
-  devOtp: { color: colors.accent, marginBottom: spacing.sm, fontSize: 13, fontWeight: '500' },
-  error: { color: colors.destructive, marginBottom: spacing.sm, fontSize: 14 },
+  phoneHint: { ...typography.bodySm, marginBottom: spacing.sm },
+  error: { color: colors.destructive, marginTop: spacing.sm, fontSize: 14 },
   submitBtn: { marginTop: spacing.sm },
+  linkBtn: { marginTop: spacing.md, alignItems: 'center' },
+  linkText: { color: colors.primary, fontWeight: '600', fontSize: 14 },
+  mutedLinkText: { color: colors.muted, fontSize: 14 },
   footer: { ...typography.bodySm, textAlign: 'center', marginTop: spacing.xxl },
   footerLink: { color: colors.primary, fontWeight: '600' },
-  devHint: {
-    ...typography.caption,
-    textAlign: 'center',
-    marginTop: spacing.lg,
-    paddingHorizontal: spacing.lg,
-  },
 });

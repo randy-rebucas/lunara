@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { AuthTokens, User } from '@lunara/types';
 import { UserRole } from '@lunara/types';
+import { formatPhone } from '@lunara/utils';
 import { getApiV1BaseUrl } from '../api-config';
 import { parseApiError } from '../lib/api-error';
 import { apiUnreachableMessage } from '../lib/network-error';
@@ -16,7 +17,8 @@ interface AuthStore {
   login: (email: string, password: string) => Promise<void>;
   loginWithEmail: (email: string, password: string) => Promise<void>;
   loginWithOtp: (phone: string, otp: string) => Promise<void>;
-  requestOtp: (phone: string) => Promise<string | undefined>;
+  signupWithOtp: (phone: string, otp: string) => Promise<void>;
+  requestOtp: (phone: string) => Promise<{ phone: string }>;
   logout: () => Promise<void>;
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
   apiUpload: <T>(path: string, formData: FormData) => Promise<T>;
@@ -119,7 +121,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   loginWithOtp: async (phone, otp) => {
     const data = await authRequest<{ user: User; tokens: AuthTokens }>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ phone, otp }),
+      body: JSON.stringify({ phone: formatPhone(phone), otp: otp.trim() }),
     });
     if (data.user.role !== UserRole.CUSTOMER) {
       throw new Error('This account is not a customer account.');
@@ -128,12 +130,16 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     set({ user: data.user, tokens: data.tokens });
   },
 
+  signupWithOtp: async (phone, otp) => get().loginWithOtp(phone, otp),
+
   requestOtp: async (phone) => {
-    const data = await authRequest<{ devOtp?: string }>('/auth/otp/request', {
+    const data = await authRequest<{ phone: string }>('/auth/otp/request', {
       method: 'POST',
-      body: JSON.stringify({ phone }),
+      body: JSON.stringify({ phone: formatPhone(phone) }),
     });
-    return data.devOtp;
+    return {
+      phone: data.phone ?? formatPhone(phone),
+    };
   },
 
   logout: async () => {
