@@ -14,6 +14,7 @@ Before `eas build --profile production`:
 | API URL env | `eas env:create --name EXPO_PUBLIC_API_URL --value https://your-api.onrender.com --environment production` |
 | Monorepo upload | Root [`.easignore`](../.easignore) must **not** list `apps/rider-mobile` (EAS uploads from repo root) |
 | Shared packages | `eas-build-post-install` in `package.json` builds `@lunara/types`, `@lunara/utils`, `@lunara/config` after install |
+| Store listing | [Store listing guide](./STORE_LISTING_RIDER_MOBILE.md) — screenshots, copy, App Store / Play checklists |
 
 ---
 
@@ -337,6 +338,7 @@ Test with staging or production API before submitting to app stores.
 
 ## Related docs
 
+- [Store listing (App Store & Play)](./STORE_LISTING_RIDER_MOBILE.md)
 - [Main deployment guide](./DEPLOYMENT.md)
 - [API deployment](./DEPLOYMENT_API.md)
 - [Customer Mobile deployment](./DEPLOYMENT_CUSTOMER_MOBILE.md)

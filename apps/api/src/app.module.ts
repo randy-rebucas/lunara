@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { resolveMonorepoEnvPaths } from './common/config/load-env';
 import { MongooseModule } from '@nestjs/mongoose';
 import { RedisModule } from './common/redis/redis.module';
 import { AddressesModule } from './modules/addresses/addresses.module';
@@ -26,7 +27,11 @@ import { MediaModule } from './modules/media/media.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: resolveMonorepoEnvPaths(),
+      ignoreEnvFile: resolveMonorepoEnvPaths().length === 0,
+    }),
     RedisModule,
     MongooseModule.forRoot(process.env.MONGODB_URI ?? 'mongodb://localhost:27017/lunara'),
     PushModule,
