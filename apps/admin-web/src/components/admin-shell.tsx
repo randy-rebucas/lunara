@@ -21,6 +21,8 @@ const nav = [
   { href: '/refunds', label: 'Refunds' },
   { href: '/reports', label: 'Reports' },
   { href: '/promotions', label: 'Promotions' },
+  { href: '/services', label: 'Services' },
+  { href: '/addons', label: 'Add-ons' },
   { href: '/profile', label: 'Profile' },
   { href: '/settings', label: 'Settings' },
 ];

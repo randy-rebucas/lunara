@@ -66,6 +66,7 @@ export interface Order extends BaseDocument {
   discount: number;
   deliveryFee: number;
   total: number;
+  couponCode?: string;
   statusHistory: OrderStatusEvent[];
 }
 
@@ -131,5 +132,25 @@ export interface Deal {
   discountType: 'percent' | 'fixed';
   discountValue: number;
   minOrderAmount: number;
+  startsAt?: string;
   endsAt?: string;
+  expiresAt?: string;
+  isPersonal?: boolean;
+  audience?: 'all' | 'new_customers';
+}
+
+export interface CustomerPromo {
+  _id: string;
+  userId: string;
+  code: string;
+  title: string;
+  description?: string;
+  discountType: 'percent' | 'fixed';
+  discountValue: number;
+  minOrderAmount: number;
+  expiresAt: string;
+  redeemedAt?: string;
+  orderId?: string;
+  sourcePromotionId?: string;
+  createdAt: string;
 }

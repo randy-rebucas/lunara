@@ -18,7 +18,7 @@ export class BookingController {
 
   @Get('config')
   @Roles(UserRole.CUSTOMER)
-  getConfig() {
+  async getConfig() {
     return this.bookingService.getConfig();
   }
 

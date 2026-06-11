@@ -28,6 +28,7 @@ import {
 import { getJwtRefreshSecret } from '../../common/config/jwt-config';
 
 import { CustomersService } from '../customers/customers.service';
+import { PromotionsService } from '../promotions/promotions.service';
 
 import { User, UserDocument } from '../users/schemas/user.schema';
 
@@ -54,6 +55,7 @@ export class AuthService {
     private smsService: SmsService,
 
     private customersService: CustomersService,
+    private promotionsService: PromotionsService,
 
   ) {}
 
@@ -100,6 +102,7 @@ export class AuthService {
     if (role === UserRole.CUSTOMER) {
 
       await this.customersService.create(user._id.toString(), dto.firstName, dto.lastName);
+      await this.promotionsService.grantSignupPromo(user._id.toString());
 
     }
 
@@ -137,6 +140,7 @@ export class AuthService {
           OTP_PROFILE_PLACEHOLDER_FIRST_NAME,
           OTP_PROFILE_PLACEHOLDER_LAST_NAME,
         );
+        await this.promotionsService.grantSignupPromo(user._id.toString());
       }
 
       user.lastLoginAt = new Date();

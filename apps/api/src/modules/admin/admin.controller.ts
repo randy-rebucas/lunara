@@ -40,6 +40,9 @@ import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { CreateRiderDto } from './dto/create-rider.dto';
 import { RiderAnnouncementDto } from './dto/rider-announcement.dto';
 import { UpdatePromotionDto } from './dto/update-promotion.dto';
+import { UpdateLaundryAddonDto } from './dto/update-laundry-addon.dto';
+import { UpdateLaundryServiceDto } from './dto/update-laundry-service.dto';
+import { CatalogService } from '../catalog/catalog.service';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -47,6 +50,7 @@ import { UpdatePromotionDto } from './dto/update-promotion.dto';
 export class AdminController {
   constructor(
     private readonly adminService: AdminService,
+    private readonly catalogService: CatalogService,
     private readonly supportService: SupportService,
     private readonly refundsService: RefundsService,
     private readonly branchesService: BranchesService,
@@ -364,5 +368,25 @@ export class AdminController {
   @Patch('promotions/:id')
   updatePromotion(@Param('id') id: string, @Body() dto: UpdatePromotionDto) {
     return this.adminService.updatePromotion(id, dto);
+  }
+
+  @Get('services')
+  getServices() {
+    return this.catalogService.listAllServices().then((data) => ({ success: true, data }));
+  }
+
+  @Patch('services/:id')
+  updateService(@Param('id') id: string, @Body() dto: UpdateLaundryServiceDto) {
+    return this.catalogService.updateService(id, dto);
+  }
+
+  @Get('addons')
+  getAddons() {
+    return this.catalogService.listAllAddons().then((data) => ({ success: true, data }));
+  }
+
+  @Patch('addons/:id')
+  updateAddon(@Param('id') id: string, @Body() dto: UpdateLaundryAddonDto) {
+    return this.catalogService.updateAddon(id, dto);
   }
 }

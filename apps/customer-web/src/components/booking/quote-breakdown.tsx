@@ -50,7 +50,11 @@ export function QuoteBreakdownPanel({
         <BreakdownRow label="Delivery fee" value={formatCurrency(quote.deliveryFee)} />
       </div>
       {quote.discount > 0 && (
-        <BreakdownRow label="Discount" value={`−${formatCurrency(quote.discount)}`} />
+        <BreakdownRow
+          label={quote.promotionTitle ? `Discount — ${quote.promotionTitle}` : 'Discount'}
+          detail={quote.couponCode ? `Code ${quote.couponCode}` : undefined}
+          value={`−${formatCurrency(quote.discount)}`}
+        />
       )}
       <div className="border-t border-border/30 pt-2">
         <BreakdownRow label={totalLabel} value={formatCurrency(quote.total)} emphasis />

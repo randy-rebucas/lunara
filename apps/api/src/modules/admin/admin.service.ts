@@ -12,6 +12,7 @@ import {
   PromotionDocument,
 } from './schemas/promotion.schema';
 import { computePickupSla } from '@lunara/utils';
+import { PromotionsService } from '../promotions/promotions.service';
 import { BranchesService } from '../branches/branches.service';
 import { SupportService } from '../support/support.service';
 import { CreatePartnerDto } from './dto/create-partner.dto';
@@ -29,27 +30,6 @@ const ACTIVE_ORDER_STATUSES = Object.values(OrderStatus).filter(
   (s) => !COMPLETED.includes(s) && s !== OrderStatus.CANCELLED && s !== OrderStatus.REFUNDED,
 );
 
-const DEFAULT_PROMOTIONS = [
-  {
-    code: 'WELCOME10',
-    title: 'Welcome discount',
-    description: '10% off first order',
-    discountType: 'percent' as const,
-    discountValue: 10,
-    minOrderAmount: 200,
-    isActive: true,
-  },
-  {
-    code: 'FREEDEL50',
-    title: 'Free delivery',
-    description: '₱50 off delivery fee',
-    discountType: 'fixed' as const,
-    discountValue: 50,
-    minOrderAmount: 500,
-    isActive: true,
-  },
-];
-
 @Injectable()
 export class AdminService {
   constructor(
@@ -60,13 +40,12 @@ export class AdminService {
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
     private supportService: SupportService,
     private branchesService: BranchesService,
+    private promotionsService: PromotionsService,
   ) {}
 
   async ensureSeeded() {
     await this.supportService.ensureSeeded();
-
-    const promoCount = await this.promotionModel.countDocuments();
-    if (promoCount === 0) await this.promotionModel.insertMany(DEFAULT_PROMOTIONS);
+    await this.promotionsService.ensureSeeded();
   }
 
   async getDashboard() {
@@ -511,6 +490,10 @@ export class AdminService {
       discountValue: dto.discountValue,
       minOrderAmount: dto.minOrderAmount ?? 0,
       isActive: dto.isActive ?? true,
+      audience: dto.audience,
+      kind: dto.kind,
+      maxUsesPerCustomer: dto.maxUsesPerCustomer,
+      newCustomerWithinDays: dto.newCustomerWithinDays,
       startsAt: dto.startsAt ? new Date(dto.startsAt) : undefined,
       endsAt: dto.endsAt ? new Date(dto.endsAt) : undefined,
     });
@@ -525,6 +508,10 @@ export class AdminService {
     if (dto.discountValue != null) promo.discountValue = dto.discountValue;
     if (dto.minOrderAmount != null) promo.minOrderAmount = dto.minOrderAmount;
     if (dto.isActive != null) promo.isActive = dto.isActive;
+    if (dto.audience) promo.audience = dto.audience;
+    if (dto.kind) promo.kind = dto.kind;
+    if (dto.maxUsesPerCustomer != null) promo.maxUsesPerCustomer = dto.maxUsesPerCustomer;
+    if (dto.newCustomerWithinDays != null) promo.newCustomerWithinDays = dto.newCustomerWithinDays;
     if (dto.startsAt) promo.startsAt = new Date(dto.startsAt);
     if (dto.endsAt) promo.endsAt = new Date(dto.endsAt);
     await promo.save();
@@ -548,6 +535,10 @@ export class AdminService {
       discountValue: p.discountValue,
       minOrderAmount: p.minOrderAmount,
       isActive: p.isActive,
+      audience: p.audience,
+      kind: p.kind,
+      maxUsesPerCustomer: p.maxUsesPerCustomer,
+      newCustomerWithinDays: p.newCustomerWithinDays,
       startsAt: p.startsAt,
       endsAt: p.endsAt,
       createdAt: p.createdAt,

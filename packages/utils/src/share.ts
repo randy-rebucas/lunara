@@ -23,7 +23,7 @@ export function buildAppSharePayload(appUrl: string, appName = 'Lunara'): ShareP
 }
 
 export function buildDealSharePayload(deal: Deal, appUrl: string, appName = 'Lunara'): SharePayload {
-  const url = `${appUrl.replace(/\/$/, '')}/book`;
+  const url = `${appUrl.replace(/\/$/, '')}/book?code=${encodeURIComponent(deal.code)}`;
   const discount = formatDealDiscount(deal);
   return {
     title: `${deal.title} — ${appName}`,

@@ -10,7 +10,8 @@ import { AuthLoading } from '../../../components/auth-loading';
 import { DataPageStatus } from '../../../components/data-page-status';
 import { PageShell } from '../../../components/page-shell';
 import { ReviewNotifications } from '../../../components/review/review-notifications';
-import { DashboardDeals, ShareInviteCard } from '../../../components/share/share-sections';
+import { DealsCarousel } from '../../../components/deals/deals-carousel';
+import { ShareInviteCard } from '../../../components/share/share-sections';
 import { ButtonLink } from '../../../components/ui/button-link';
 import { Card, CardBody } from '../../../components/ui/card';
 import { PageHeader } from '../../../components/ui/page-header';
@@ -98,7 +99,7 @@ export function DashboardClient() {
 
       <ReviewNotifications />
 
-      <DashboardDeals />
+      <DealsCarousel />
 
       <ShareInviteCard />
 

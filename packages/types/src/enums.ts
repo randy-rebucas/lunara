@@ -85,3 +85,13 @@ export enum AddressType {
   APARTMENT = 'apartment',
   OTHER = 'other',
 }
+
+export enum PromotionAudience {
+  ALL = 'all',
+  NEW_CUSTOMERS = 'new_customers',
+}
+
+export enum PromotionKind {
+  STANDARD = 'standard',
+  SIGNUP_TEMPLATE = 'signup_template',
+}

@@ -4,6 +4,8 @@
  */
 import mongoose from 'mongoose';
 import * as bcrypt from 'bcrypt';
+import { reseedLaundryAddons, reseedLaundryServices } from '../modules/catalog/catalog.seed';
+import { reseedPromotions } from '../modules/promotions/promotions.seed';
 
 const MONGODB_URI = process.env.MONGODB_URI ?? 'mongodb://localhost:27017/lunara';
 
@@ -182,6 +184,15 @@ async function seed() {
       console.log(`Linked staff to branch: ${branch.name}`);
     }
   }
+
+  console.log('Reseeding laundry services…');
+  await reseedLaundryServices(db.collection('laundry_services'));
+
+  console.log('Reseeding laundry add-ons…');
+  await reseedLaundryAddons(db.collection('laundry_addons'));
+
+  console.log('Reseeding promotions…');
+  await reseedPromotions(db.collection('promotions'));
 
   await mongoose.disconnect();
   console.log('Done.');

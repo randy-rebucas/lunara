@@ -13,6 +13,8 @@ import { SosModule } from '../sos/sos.module';
 import { AdminController } from './admin.controller';
 import { AdminOperationsService } from './admin-operations.service';
 import { AdminDispatchService } from './admin-dispatch.service';
+import { CatalogModule } from '../catalog/catalog.module';
+import { PromotionsModule } from '../promotions/promotions.module';
 import { AdminService } from './admin.service';
 import { Promotion, PromotionSchema } from './schemas/promotion.schema';
 import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
@@ -33,6 +35,8 @@ import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
     OrdersModule,
     RidersModule,
     SosModule,
+    PromotionsModule,
+    CatalogModule,
   ],
   controllers: [AdminController],
   providers: [AdminService, AdminOperationsService, AdminDispatchService],

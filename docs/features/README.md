@@ -25,4 +25,7 @@ See [`../FEATURE_WIRING.md`](../FEATURE_WIRING.md) for the full wiring workflow.
 
 | Feature | Date | Apps | Doc |
 |---------|------|------|-----|
-| *(none yet — add rows as features ship)* | | | |
+| Promo code redemption | 2026-06-11 | api, customer-web, customer-mobile | [promo-redemption.md](./promo-redemption.md) |
+| New-user & expiring promos | 2026-06-11 | api, admin-web, customer-web, customer-mobile | [promo-audience-expiry.md](./promo-audience-expiry.md) |
+| Laundry services catalog | 2026-06-11 | api, admin-web, customer-web, customer-mobile | [laundry-services-catalog.md](./laundry-services-catalog.md) |
+| Laundry add-ons catalog | 2026-06-11 | api, admin-web, customer-web, customer-mobile | [laundry-addons-catalog.md](./laundry-addons-catalog.md) |

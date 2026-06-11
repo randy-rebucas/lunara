@@ -334,6 +334,9 @@ export class Order {
   @Prop({ default: 0 })
   discount!: number;
 
+  @Prop({ uppercase: true })
+  couponCode?: string;
+
   @Prop({ required: true })
   deliveryFee!: number;
 

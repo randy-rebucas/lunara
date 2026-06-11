@@ -6,6 +6,7 @@ import { WalletsModule } from '../wallets/wallets.module';
 import { RidersModule } from '../riders/riders.module';
 import { BranchesModule } from '../branches/branches.module';
 import { HandoffModule } from '../handoff/handoff.module';
+import { PromotionsModule } from '../promotions/promotions.module';
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 import { Order, OrderSchema } from './schemas/order.schema';
@@ -21,6 +22,7 @@ import { Order, OrderSchema } from './schemas/order.schema';
     BranchesModule,
     RidersModule,
     HandoffModule,
+    PromotionsModule,
   ],
   controllers: [OrdersController],
   providers: [OrdersService],

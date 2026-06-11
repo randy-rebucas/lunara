@@ -5,6 +5,7 @@ import {
   PICKUP_SCHEDULE_DAY_COUNT,
   buildPickupScheduleDays,
   formatPickupSlotTimeWindow,
+  isPickupSlotBookable,
   pickupSlotDayKey,
   type PickupSlot,
 } from '@lunara/utils';
@@ -49,7 +50,7 @@ export function PickupSchedulePicker({
     setSelectedDayKey(key);
     if (selectedStartAt && pickupSlotDayKey(selectedStartAt) === key) return;
 
-    const firstAvailable = day.slots.find((s) => s.available);
+    const firstAvailable = day.slots.find((s) => isPickupSlotBookable(s));
     onSelectStartAt(firstAvailable?.startAt ?? '');
   }
 
@@ -107,14 +108,15 @@ export function PickupSchedulePicker({
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {timeSlots.map((slot) => {
               const selected = selectedStartAt === slot.startAt;
+              const bookable = isPickupSlotBookable(slot);
               return (
                 <button
                   key={slot.id}
                   type="button"
-                  disabled={!slot.available}
+                  disabled={!bookable}
                   onClick={() => onSelectStartAt(slot.startAt)}
                   className={`rounded-lg px-4 py-3 text-left text-sm ring-1 transition-all ${
-                    !slot.available
+                    !bookable
                       ? 'cursor-not-allowed bg-slate-50 text-slate-400 ring-border/30 line-through'
                       : selected
                         ? 'bg-primary/5 font-medium text-slate-900 ring-2 ring-primary/35'
@@ -122,7 +124,7 @@ export function PickupSchedulePicker({
                   }`}
                 >
                   {formatPickupSlotTimeWindow(slot)}
-                  {!slot.available && (
+                  {!bookable && (
                     <span className="mt-1 block text-xs font-normal text-slate-400">Unavailable</span>
                   )}
                 </button>

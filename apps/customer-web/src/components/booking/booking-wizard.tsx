@@ -7,12 +7,16 @@ import { BookingType } from '@lunara/types';
 import { Button } from '@lunara/ui';
 import { ButtonLink } from '../ui/button-link';
 import {
+  BOOKING_MACHINE_LOAD_INFO,
   BOOKING_MIN_ORDER_AMOUNT,
+  formatMachineLoadLabel,
   calculateQuote,
   formatCurrency,
+  resolveMediaUrl,
   type BookingAddonOption,
   type LaundryServiceOption,
   type PartnerCoverageInfo,
+  isPickupSlotBookable,
   type PickupSlot,
   type QuoteBreakdown,
 } from '@lunara/utils';
@@ -31,7 +35,12 @@ import {
   type BookingStep,
 } from '../../lib/booking-flow';
 import { PickupSchedulePicker } from './pickup-schedule-picker';
+import { PromoCodeField } from './promo-code-field';
 import { QuoteBreakdownPanel } from './quote-breakdown';
+
+interface BookingWizardProps {
+  initialCouponCode?: string;
+}
 
 interface AddressOption {
   _id: string;
@@ -192,7 +201,12 @@ function canProceedStep(
     case 'address':
       return Boolean(form.addressId) && addresses.length > 0;
     case 'schedule':
-      return Boolean(form.scheduledPickupAt) && slots.some((slot) => slot.available);
+      return (
+        Boolean(form.scheduledPickupAt) &&
+        slots.some(
+          (slot) => slot.startAt === form.scheduledPickupAt && isPickupSlotBookable(slot),
+        )
+      );
     case 'weight':
       return Boolean(localQuote?.meetsMinimum);
     case 'addons':
@@ -289,11 +303,14 @@ function WizardActions({
   );
 }
 
-export function BookingWizard() {
+export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
   const { api } = useAuthContext();
   const router = useRouter();
   const [step, setStep] = useState<BookingStep>('service');
-  const [form, setForm] = useState<BookingFormState>(initialBookingForm);
+  const [form, setForm] = useState<BookingFormState>(() => ({
+    ...initialBookingForm,
+    couponCode: initialCouponCode?.trim().toUpperCase() ?? '',
+  }));
   const [config, setConfig] = useState<BookingConfig | null>(null);
   const [configLoading, setConfigLoading] = useState(true);
   const [addresses, setAddresses] = useState<AddressOption[]>([]);
@@ -302,6 +319,7 @@ export function BookingWizard() {
   const [dispatchNote, setDispatchNote] = useState('');
   const [availableServices, setAvailableServices] = useState<BookingType[]>([]);
   const [quote, setQuote] = useState<QuoteBreakdown | null>(null);
+  const [promoLoading, setPromoLoading] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [stepping, setStepping] = useState(false);
@@ -343,16 +361,21 @@ export function BookingWizard() {
 
   const localQuote = useMemo(() => {
     if (!form.bookingType) return null;
+    const service = config?.services.find((s) => s.type === form.bookingType);
     try {
-      return calculateQuote({
-        bookingType: form.bookingType,
-        weightKg: form.weightKg,
-        addonIds: form.addonIds,
-      });
+      return calculateQuote(
+        {
+          bookingType: form.bookingType,
+          weightKg: form.weightKg,
+          addonIds: form.addonIds,
+        },
+        service,
+        config?.addons,
+      );
     } catch {
       return null;
     }
-  }, [form.bookingType, form.weightKg, form.addonIds]);
+  }, [form.bookingType, form.weightKg, form.addonIds, config?.services, config?.addons]);
 
   const loadAvailability = useCallback(
     async (addressId: string) => {
@@ -377,7 +400,7 @@ export function BookingWizard() {
       setDispatchNote(res.data.dispatchNote ?? '');
       setPartnerCoverage(res.data.partnerCoverage ?? null);
       setCoverageAddressId(addressId);
-      const firstAvailable = res.data.slots.find((s) => s.available);
+      const firstAvailable = res.data.slots.find((s) => isPickupSlotBookable(s));
       if (firstAvailable) {
         setForm((f) =>
           f.addressId !== addressId
@@ -457,7 +480,7 @@ export function BookingWizard() {
     void loadNearestBranches(form.addressId);
   }, [form.addressId, hasRealPartnerCoverage, loadNearestBranches]);
 
-  async function refreshServerQuote() {
+  async function refreshServerQuote(couponCode = form.couponCode) {
     if (!form.bookingType || !form.addressId) return null;
     const res = await api.post<QuoteBreakdown>(
       `/booking/quote?addressId=${encodeURIComponent(form.addressId)}`,
@@ -465,10 +488,37 @@ export function BookingWizard() {
         bookingType: form.bookingType,
         weightKg: form.weightKg,
         addonIds: form.addonIds,
+        ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}),
       },
     );
     setQuote(res.data);
     return res.data;
+  }
+
+  async function applyPromoCode() {
+    setPromoLoading(true);
+    setError('');
+    try {
+      await refreshServerQuote(form.couponCode);
+    } catch (err) {
+      setQuote(null);
+      setError(err instanceof Error ? err.message : 'Could not apply promo code');
+    } finally {
+      setPromoLoading(false);
+    }
+  }
+
+  async function removePromoCode() {
+    setForm((f) => ({ ...f, couponCode: '' }));
+    setPromoLoading(true);
+    setError('');
+    try {
+      await refreshServerQuote('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not refresh price');
+    } finally {
+      setPromoLoading(false);
+    }
   }
 
   async function goNext() {
@@ -525,12 +575,14 @@ export function BookingWizard() {
     setLoading(true);
     setError('');
     try {
+      await refreshServerQuote(form.couponCode);
       const res = await api.post<{ _id: string; total: number }>('/booking/orders', {
         bookingType: form.bookingType,
         weightKg: form.weightKg,
         addonIds: form.addonIds,
         pickupAddressId: form.addressId,
         scheduledPickupAt: form.scheduledPickupAt,
+        ...(form.couponCode.trim() ? { couponCode: form.couponCode.trim() } : {}),
       });
       router.push(`/checkout/${res.data._id}`);
     } catch (err) {
@@ -684,10 +736,16 @@ export function BookingWizard() {
             title="Estimate weight"
             description={`We'll confirm actual weight at pickup. Minimum order ${formatCurrency(config?.minOrderAmount ?? BOOKING_MIN_ORDER_AMOUNT)}.`}
           />
+          <div className="mb-4 rounded-lg bg-primary/5 p-4 text-sm leading-relaxed text-slate-700 ring-1 ring-primary/15">
+            <p>{BOOKING_MACHINE_LOAD_INFO}</p>
+            <p className="mt-2 font-medium text-slate-900">
+              Your estimate: {formatMachineLoadLabel(form.weightKg)}
+            </p>
+          </div>
           <div className="panel">
             <div className="flex items-end justify-between gap-4">
               <div>
-                <p className="text-sm font-medium text-muted">Estimated load</p>
+                <p className="text-sm font-medium text-muted">Estimated weight</p>
                 <p className="mt-1 text-4xl font-bold tracking-tight text-primary">
                   {form.weightKg} kg
                 </p>
@@ -735,6 +793,7 @@ export function BookingWizard() {
             <div className="list-stack">
               {addons.map((a) => {
                 const selected = form.addonIds.includes(a.id);
+                const addonImage = resolveMediaUrl(a.imageUrl, process.env.NEXT_PUBLIC_API_URL);
                 return (
                   <SelectableOption
                     key={a.id}
@@ -748,13 +807,24 @@ export function BookingWizard() {
                       }))
                     }
                   >
-                    <div className="flex justify-between gap-4">
-                      <span className="font-medium text-slate-900">{a.label}</span>
-                      <span className="shrink-0 font-medium text-primary">
-                        +{formatCurrency(a.price)}
-                      </span>
+                    <div className="flex items-start gap-3">
+                      {addonImage ? (
+                        <img
+                          src={addonImage}
+                          alt=""
+                          className="h-12 w-12 shrink-0 rounded-lg bg-slate-50 object-cover ring-1 ring-border/40"
+                        />
+                      ) : null}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex justify-between gap-4">
+                          <span className="font-medium text-slate-900">{a.label}</span>
+                          <span className="shrink-0 font-medium text-primary">
+                            +{formatCurrency(a.price)}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-sm text-muted">{a.description}</p>
+                      </div>
                     </div>
-                    <p className="mt-1 text-sm text-muted">{a.description}</p>
                   </SelectableOption>
                 );
               })}
@@ -769,7 +839,16 @@ export function BookingWizard() {
             title="Price estimate"
             description="Review your estimated total before confirming."
           />
-          <div className="panel">
+          <div className="panel space-y-6">
+            <PromoCodeField
+              value={form.couponCode}
+              appliedCode={activeQuote.couponCode}
+              appliedTitle={activeQuote.promotionTitle}
+              loading={promoLoading}
+              onValueChange={(couponCode) => setForm((f) => ({ ...f, couponCode }))}
+              onApply={applyPromoCode}
+              onRemove={removePromoCode}
+            />
             <QuoteBreakdownPanel quote={activeQuote} />
           </div>
         </section>
@@ -794,6 +873,12 @@ export function BookingWizard() {
                 <SummaryRow
                   label="Add-ons"
                   value={activeQuote.addons.map((a) => a.label).join(', ')}
+                />
+              )}
+              {activeQuote.couponCode && (
+                <SummaryRow
+                  label="Promo"
+                  value={`${activeQuote.couponCode}${activeQuote.discount > 0 ? ` (−${formatCurrency(activeQuote.discount)})` : ''}`}
                 />
               )}
               <div className="border-t border-border/30 pt-3">

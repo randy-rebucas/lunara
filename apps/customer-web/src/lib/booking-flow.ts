@@ -26,6 +26,7 @@ export interface BookingFormState {
   scheduledPickupAt: string;
   weightKg: number;
   addonIds: string[];
+  couponCode: string;
   orderId: string;
 }
 
@@ -35,6 +36,7 @@ export const initialBookingForm: BookingFormState = {
   scheduledPickupAt: '',
   weightKg: 5,
   addonIds: [],
+  couponCode: '',
   orderId: '',
 };
 

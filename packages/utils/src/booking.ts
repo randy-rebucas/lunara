@@ -6,6 +6,22 @@ export const BOOKING_MIN_WEIGHT_KG = 1;
 export const BOOKING_MAX_WEIGHT_KG = 50;
 export const BOOKING_DEFAULT_WEIGHT_KG = 5;
 
+/** Minimum capacity per washing machine load (kg). */
+export const BOOKING_MACHINE_LOAD_MIN_KG = 8;
+
+export const BOOKING_MACHINE_LOAD_INFO =
+  'Each machine holds up to 8 kg per load. Under 8 kg counts as 1 load; over 8 kg counts as 2 loads.';
+
+/** ≤8 kg = 1 load; >8 kg = 2 loads. */
+export function estimateMachineLoads(weightKg: number): number {
+  return weightKg <= BOOKING_MACHINE_LOAD_MIN_KG ? 1 : 2;
+}
+
+export function formatMachineLoadLabel(weightKg: number): string {
+  const loads = estimateMachineLoads(weightKg);
+  return `${loads} machine load${loads === 1 ? '' : 's'}`;
+}
+
 export interface LaundryServiceOption {
   type: BookingType;
   label: string;
@@ -19,6 +35,7 @@ export interface BookingAddonOption {
   label: string;
   description: string;
   price: number;
+  imageUrl?: string;
 }
 
 export interface ServiceAreaRule {
@@ -66,6 +83,8 @@ export interface QuoteBreakdown {
   total: number;
   meetsMinimum: boolean;
   minimumOrderAmount: number;
+  couponCode?: string;
+  promotionTitle?: string;
 }
 
 export const LAUNDRY_SERVICES: LaundryServiceOption[] = [
@@ -239,14 +258,19 @@ export function clampWeight(weightKg: number) {
   return Math.min(BOOKING_MAX_WEIGHT_KG, Math.max(BOOKING_MIN_WEIGHT_KG, weightKg));
 }
 
-export function calculateQuote(input: QuoteInput): QuoteBreakdown {
-  const service = getService(input.bookingType);
+export function calculateQuote(
+  input: QuoteInput,
+  serviceOverride?: LaundryServiceOption,
+  addonOptions?: BookingAddonOption[],
+): QuoteBreakdown {
+  const service = serviceOverride ?? getService(input.bookingType);
   if (!service) throw new Error('Unknown service type');
 
   const weightKg = clampWeight(input.weightKg);
   const serviceSubtotal = Math.round(service.pricePerKg * weightKg);
+  const catalog = addonOptions ?? BOOKING_ADDONS;
   const addons = input.addonIds
-    .map((id) => getAddon(id))
+    .map((id) => catalog.find((a) => a.id === id))
     .filter((a): a is BookingAddonOption => !!a)
     .map((a) => ({ id: a.id, label: a.label, price: a.price }));
   const addonsSubtotal = addons.reduce((sum, a) => sum + a.price, 0);
@@ -280,6 +304,14 @@ function slotCapacityUsed(slotId: string) {
 }
 
 export const PICKUP_SCHEDULE_DAY_COUNT = 7;
+
+/** Minimum lead time before slot start when it becomes bookable. */
+export const PICKUP_SLOT_MIN_LEAD_MS = 30 * 60 * 1000;
+
+export function isPickupSlotBookable(slot: PickupSlot, fromDate: Date = new Date()): boolean {
+  if (!slot.available) return false;
+  return new Date(slot.startAt).getTime() >= fromDate.getTime() + PICKUP_SLOT_MIN_LEAD_MS;
+}
 
 export function pickupSlotDayKey(isoOrDate: string | Date) {
   const d = typeof isoOrDate === 'string' ? new Date(isoOrDate) : isoOrDate;
@@ -335,7 +367,7 @@ export function buildPickupScheduleDays(
       monthLabel: date.toLocaleDateString('en-PH', { month: 'short' }),
       isToday: key === todayKey,
       slots: daySlots,
-      hasAvailable: daySlots.some((s) => s.available),
+      hasAvailable: daySlots.some((s) => isPickupSlotBookable(s)),
     });
   }
   return days;
@@ -369,7 +401,7 @@ export function generatePickupSlots(fromDate: Date = new Date(), days = 7): Pick
       const end = new Date(day);
       end.setHours(w.end, 0, 0, 0);
 
-      if (start <= fromDate) continue;
+      if (start.getTime() < fromDate.getTime() + PICKUP_SLOT_MIN_LEAD_MS) continue;
 
       const id = start.toISOString();
       const used = slotCapacityUsed(id);

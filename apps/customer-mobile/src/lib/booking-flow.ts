@@ -25,6 +25,7 @@ export interface BookingFormState {
   scheduledPickupAt: string;
   weightKg: number;
   addonIds: string[];
+  couponCode: string;
 }
 
 export const initialBookingForm: BookingFormState = {
@@ -33,6 +34,7 @@ export const initialBookingForm: BookingFormState = {
   scheduledPickupAt: '',
   weightKg: 5,
   addonIds: [],
+  couponCode: '',
 };
 
 export function nextStep(step: BookingStep): BookingStep | null {

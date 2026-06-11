@@ -1,23 +1,23 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { BookingType } from '@lunara/types';
 import {
-  BOOKING_ADDONS,
   BOOKING_DELIVERY_FEE,
   BOOKING_MAX_WEIGHT_KG,
   BOOKING_MIN_ORDER_AMOUNT,
   BOOKING_MIN_WEIGHT_KG,
   calculateQuote,
   generatePickupSlots,
+  isPickupSlotBookable,
   PICKUP_SCHEDULE_DAY_COUNT,
-  getService,
   isServiceAvailableInArea,
-  LAUNDRY_SERVICES,
   SERVICE_AREAS,
   validateAddressFields,
   validateServiceArea,
 } from '@lunara/utils';
 import { AddressesService } from '../addresses/addresses.service';
 import { BranchesService } from '../branches/branches.service';
+import { CatalogService } from '../catalog/catalog.service';
+import { PromotionsService } from '../promotions/promotions.service';
 import { BookingQuoteDto, CreateBookingOrderDto } from './dto/booking.dto';
 
 @Injectable()
@@ -25,14 +25,20 @@ export class BookingService {
   constructor(
     private readonly addressesService: AddressesService,
     private readonly branchesService: BranchesService,
+    private readonly catalogService: CatalogService,
+    private readonly promotionsService: PromotionsService,
   ) {}
 
-  getConfig() {
+  async getConfig() {
+    const [services, addons] = await Promise.all([
+      this.catalogService.listActiveServices(),
+      this.catalogService.listActiveAddons(),
+    ]);
     return {
       success: true,
       data: {
-        services: LAUNDRY_SERVICES,
-        addons: BOOKING_ADDONS,
+        services,
+        addons,
         serviceAreas: SERVICE_AREAS.map((a) => ({
           id: a.id,
           label: a.label,
@@ -90,18 +96,29 @@ export class BookingService {
     };
   }
 
-  buildQuote(dto: BookingQuoteDto, areaServices: BookingType[]) {
-    const service = getService(dto.bookingType);
-    if (!service) throw new BadRequestException('Invalid service type');
+  async buildQuote(dto: BookingQuoteDto, areaServices: BookingType[], userId: string) {
+    const service = await this.catalogService.findActiveByType(dto.bookingType);
+    if (!service) throw new BadRequestException('Invalid or inactive service type');
     if (!isServiceAvailableInArea(dto.bookingType, areaServices)) {
       throw new BadRequestException('This service is not available in your area');
     }
 
-    const quote = calculateQuote({
-      bookingType: dto.bookingType,
-      weightKg: dto.weightKg,
-      addonIds: dto.addonIds ?? [],
-    });
+    const activeAddons = await this.catalogService.listActiveAddons();
+    const addonIds = dto.addonIds ?? [];
+    const invalidAddon = addonIds.find((id) => !activeAddons.some((a) => a.id === id));
+    if (invalidAddon) {
+      throw new BadRequestException('Invalid or inactive add-on');
+    }
+
+    const quote = calculateQuote(
+      {
+        bookingType: dto.bookingType,
+        weightKg: dto.weightKg,
+        addonIds,
+      },
+      service,
+      activeAddons,
+    );
 
     if (!quote.meetsMinimum) {
       throw new BadRequestException(
@@ -109,21 +126,22 @@ export class BookingService {
       );
     }
 
-    return quote;
+    return this.promotionsService.applyCouponToQuote(quote, dto.couponCode, userId);
   }
 
   async quote(userId: string, addressId: string, dto: BookingQuoteDto) {
     const { area } = await this.validateAddressForUser(userId, addressId);
-    const breakdown = this.buildQuote(dto, area.availableServices);
+    const breakdown = await this.buildQuote(dto, area.availableServices, userId);
     return { success: true, data: breakdown };
   }
 
   async prepareOrderPayload(userId: string, dto: CreateBookingOrderDto) {
     const { area } = await this.validateAddressForUser(userId, dto.pickupAddressId);
-    const quote = this.buildQuote(dto, area.availableServices);
-    const service = getService(dto.bookingType)!;
+    const quote = await this.buildQuote(dto, area.availableServices, userId);
+    const service = await this.catalogService.findActiveByType(dto.bookingType);
+    if (!service) throw new BadRequestException('Invalid or inactive service type');
     const slot = generatePickupSlots().find((s) => s.startAt === dto.scheduledPickupAt);
-    if (!slot || !slot.available) {
+    if (!slot || !isPickupSlotBookable(slot)) {
       throw new BadRequestException('Selected pickup slot is no longer available');
     }
 
@@ -149,7 +167,7 @@ export class BookingService {
         deliveryAddressId: dto.deliveryAddressId ?? dto.pickupAddressId,
         scheduledPickupAt: dto.scheduledPickupAt,
         scheduledDeliveryAt: undefined,
-        couponCode: dto.couponCode,
+        couponCode: quote.couponCode,
         estimatedWeightKg: quote.weightKg,
         addons: quote.addons,
         subtotal: quote.subtotal,

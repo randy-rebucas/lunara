@@ -90,8 +90,9 @@ Example response (healthy):
 |--------|------|-------|-------------|
 | GET | `/booking/config` | customer | Services, pricing config |
 | GET | `/booking/availability?addressId=` | customer | Pickup slots + nearest branches |
-| POST | `/booking/quote?addressId=` | customer | Price quote |
-| POST | `/booking/orders` | customer | Create order from booking wizard (pending payment) |
+| POST | `/booking/quote?addressId=` | customer | Price quote; optional `couponCode` applies active promo |
+| POST | `/booking/orders` | customer | Create order from booking wizard (pending payment); optional `couponCode` |
+| GET | `/deals` | customer | Eligible promos for signed-in customer (shared + personal signup code; filtered by audience/expiry) |
 
 ---
 
@@ -344,9 +345,27 @@ Base: `/admin` — JWT + `admin` role.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/admin/promotions` | List promos |
-| POST | `/admin/promotions` | Create promo |
-| PATCH | `/admin/promotions/:id` | Update promo |
+| GET | `/admin/promotions` | List promos (includes audience, kind, dates, usage limits) |
+| POST | `/admin/promotions` | Create promo (`audience`, `kind`, `startsAt`, `endsAt`, `maxUsesPerCustomer`, `newCustomerWithinDays`) |
+| PATCH | `/admin/promotions/:id` | Update promo fields above |
+
+### Laundry services (catalog)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/admin/services` | List all laundry services (active and inactive) |
+| PATCH | `/admin/services/:id` | Update label, description, `pricePerKg`, `minWeightKg`, `isActive`, `sortOrder` |
+
+Booking config (`GET /booking/config`) returns active services from this catalog.
+
+### Booking add-ons (catalog)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/admin/addons` | List all booking add-ons (active and inactive) |
+| PATCH | `/admin/addons/:id` | Update label, description, price, `imageUrl`, `isActive`, `sortOrder` |
+
+Booking config (`GET /booking/config`) returns active add-ons from this catalog. Seed images are served at `/api/v1/uploads/catalog-addons/`.
 
 ---
 

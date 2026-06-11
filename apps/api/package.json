@@ -11,6 +11,9 @@
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test src/modules/push/**/*.test.ts src/modules/riders/**/*.test.ts src/modules/sos/**/*.test.ts",
     "seed": "npx ts-node src/scripts/seed.ts",
+    "seed:promotions": "npx ts-node src/scripts/seed-promotions.ts",
+    "seed:services": "npx ts-node src/scripts/seed-services.ts",
+    "seed:addons": "npx ts-node src/scripts/seed-addons.ts",
     "clean": "rimraf dist tsconfig.tsbuildinfo"
   },
   "dependencies": {

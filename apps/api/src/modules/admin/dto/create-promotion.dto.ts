@@ -1,4 +1,5 @@
-import { IsBoolean, IsIn, IsNumber, IsOptional, IsString, Min, MinLength } from 'class-validator';
+import { PromotionAudience, PromotionKind } from '@lunara/types';
+import { IsBoolean, IsEnum, IsIn, IsNumber, IsOptional, IsString, Min, MinLength } from 'class-validator';
 
 export class CreatePromotionDto {
   @IsString()
@@ -27,6 +28,24 @@ export class CreatePromotionDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @IsEnum(PromotionAudience)
+  audience?: PromotionAudience;
+
+  @IsOptional()
+  @IsEnum(PromotionKind)
+  kind?: PromotionKind;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  maxUsesPerCustomer?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  newCustomerWithinDays?: number;
 
   @IsOptional()
   @IsString()

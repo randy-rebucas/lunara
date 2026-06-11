@@ -23,6 +23,7 @@ import {
   buildOrderPaymentSummary,
   loadLatestOrderPaymentsByOrderId,
 } from '../payments/payment-summary';
+import { PromotionsService } from '../promotions/promotions.service';
 import { Order, OrderDocument } from './schemas/order.schema';
 
 export interface BookingOrderPayload {
@@ -54,6 +55,7 @@ export class OrdersService {
     private riderAssignmentService: RiderAssignmentService,
     private walletsService: WalletsService,
     private branchesService: BranchesService,
+    private promotionsService: PromotionsService,
   ) {}
 
   private isBranchAssigned(order: OrderDocument) {
@@ -172,9 +174,18 @@ export class OrdersService {
       subtotal: payload.subtotal,
       deliveryFee: payload.deliveryFee,
       discount: payload.discount,
+      couponCode: payload.couponCode,
       total: payload.total,
       statusHistory: [{ status: OrderStatus.PENDING, timestamp: new Date() }],
     });
+
+    if (payload.couponCode) {
+      await this.promotionsService.recordRedemption(
+        customerId,
+        payload.couponCode,
+        order._id.toString(),
+      );
+    }
 
     return { success: true, data: order };
   }

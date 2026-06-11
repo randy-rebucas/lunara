@@ -17,6 +17,12 @@ interface Promotion {
   discountValue: number;
   minOrderAmount: number;
   isActive: boolean;
+  audience?: 'all' | 'new_customers';
+  kind?: 'standard' | 'signup_template';
+  maxUsesPerCustomer?: number;
+  newCustomerWithinDays?: number;
+  startsAt?: string;
+  endsAt?: string;
 }
 
 type PromoState = 'nominal' | 'attention';
@@ -52,8 +58,37 @@ function formatDiscount(p: Promotion) {
   return `${formatPeso(p.discountValue)} off`;
 }
 
+function isPromoExpired(p: Promotion, now = new Date()) {
+  return Boolean(p.endsAt && new Date(p.endsAt) < now);
+}
+
+function formatValidity(p: Promotion) {
+  if (!p.startsAt && !p.endsAt) return 'No expiry';
+  const start = p.startsAt
+    ? new Date(p.startsAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    : 'Now';
+  const end = p.endsAt
+    ? new Date(p.endsAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+    : 'Open';
+  return `${start} – ${end}`;
+}
+
+function formatAudience(p: Promotion) {
+  if (p.kind === 'signup_template') return 'Signup template';
+  if (p.audience === 'new_customers') return 'New customers';
+  return 'All customers';
+}
+
+function formatUsesPerCustomer(p: Promotion) {
+  if (p.maxUsesPerCustomer != null && p.maxUsesPerCustomer > 0) {
+    return `${p.maxUsesPerCustomer}×`;
+  }
+  return 'Unlimited';
+}
+
 function derivePromoState(items: Promotion[]): PromoState {
-  if (items.some((p) => p.isActive)) return 'nominal';
+  const now = new Date();
+  if (items.some((p) => p.isActive && !isPromoExpired(p, now))) return 'nominal';
   return 'attention';
 }
 
@@ -67,6 +102,13 @@ export function PromotionsBoard() {
   const [title, setTitle] = useState('');
   const [discountType, setDiscountType] = useState<'percent' | 'fixed'>('percent');
   const [discountValue, setDiscountValue] = useState('10');
+  const [minOrderAmount, setMinOrderAmount] = useState('0');
+  const [audience, setAudience] = useState<'all' | 'new_customers'>('all');
+  const [kind, setKind] = useState<'standard' | 'signup_template'>('standard');
+  const [maxUsesPerCustomer, setMaxUsesPerCustomer] = useState('');
+  const [newCustomerWithinDays, setNewCustomerWithinDays] = useState('');
+  const [startsAt, setStartsAt] = useState('');
+  const [endsAt, setEndsAt] = useState('');
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState('');
 
@@ -78,8 +120,9 @@ export function PromotionsBoard() {
 
   const { data: items, loading, error, reload } = useAdminQuery(load, []);
 
-  const promos = items ?? [];
-  const activeCount = promos.filter((p) => p.isActive).length;
+  const promos = useMemo(() => items ?? [], [items]);
+  const now = new Date();
+  const activeCount = promos.filter((p) => p.isActive && !isPromoExpired(p, now)).length;
   const inactiveCount = promos.length - activeCount;
   const percentCount = promos.filter((p) => p.discountType === 'percent').length;
   const fixedCount = promos.filter((p) => p.discountType === 'fixed').length;
@@ -119,8 +162,14 @@ export function PromotionsBoard() {
           title: title.trim(),
           discountType,
           discountValue: Number(discountValue),
-          minOrderAmount: 0,
+          minOrderAmount: Number(minOrderAmount) || 0,
           isActive: true,
+          audience,
+          kind,
+          ...(maxUsesPerCustomer ? { maxUsesPerCustomer: Number(maxUsesPerCustomer) } : {}),
+          ...(newCustomerWithinDays ? { newCustomerWithinDays: Number(newCustomerWithinDays) } : {}),
+          ...(startsAt ? { startsAt: new Date(startsAt).toISOString() } : {}),
+          ...(endsAt ? { endsAt: new Date(endsAt).toISOString() } : {}),
         }),
       });
       setShowForm(false);
@@ -128,6 +177,13 @@ export function PromotionsBoard() {
       setTitle('');
       setDiscountValue('10');
       setDiscountType('percent');
+      setMinOrderAmount('0');
+      setAudience('all');
+      setKind('standard');
+      setMaxUsesPerCustomer('');
+      setNewCustomerWithinDays('');
+      setStartsAt('');
+      setEndsAt('');
       await reload();
     } catch (e) {
       setActionError(e instanceof Error ? e.message : 'Failed to create promotion');
@@ -337,7 +393,7 @@ export function PromotionsBoard() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="data-table min-w-[720px]">
+                <table className="data-table min-w-[1080px]">
                   <caption className="sr-only">Promotion codes catalog</caption>
                   <thead>
                     <tr>
@@ -345,6 +401,9 @@ export function PromotionsBoard() {
                       <th scope="col">Title</th>
                       <th scope="col">Discount</th>
                       <th scope="col">Min order</th>
+                      <th scope="col">Audience</th>
+                      <th scope="col">Validity</th>
+                      <th scope="col">Uses / customer</th>
                       <th scope="col">Status</th>
                       <th scope="col">
                         <span className="sr-only">Toggle</span>
@@ -367,10 +426,17 @@ export function PromotionsBoard() {
                         <td className="tabular-nums text-muted">
                           {p.minOrderAmount > 0 ? formatPeso(p.minOrderAmount) : '—'}
                         </td>
+                        <td className="text-sm text-muted">{formatAudience(p)}</td>
+                        <td className="text-sm text-muted">{formatValidity(p)}</td>
+                        <td className="text-sm text-muted">{formatUsesPerCustomer(p)}</td>
                         <td>
-                          <span className={p.isActive ? 'badge-accent' : 'badge-neutral'}>
-                            {p.isActive ? 'Active' : 'Inactive'}
-                          </span>
+                          {isPromoExpired(p, now) ? (
+                            <span className="badge-neutral">Expired</span>
+                          ) : (
+                            <span className={p.isActive ? 'badge-accent' : 'badge-neutral'}>
+                              {p.isActive ? 'Active' : 'Inactive'}
+                            </span>
+                          )}
                         </td>
                         <td>
                           <button
@@ -460,6 +526,99 @@ export function PromotionsBoard() {
                         value={discountValue}
                         onChange={(e) => setDiscountValue(e.target.value)}
                         required
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="promo-min" className="form-label">
+                        Min order (₱)
+                      </label>
+                      <input
+                        id="promo-min"
+                        className="input-field"
+                        type="number"
+                        min={0}
+                        value={minOrderAmount}
+                        onChange={(e) => setMinOrderAmount(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="promo-audience" className="form-label">
+                        Audience
+                      </label>
+                      <select
+                        id="promo-audience"
+                        className="input-field"
+                        value={audience}
+                        onChange={(e) => setAudience(e.target.value as 'all' | 'new_customers')}
+                      >
+                        <option value="all">All customers</option>
+                        <option value="new_customers">New customers only</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="promo-kind" className="form-label">
+                        Kind
+                      </label>
+                      <select
+                        id="promo-kind"
+                        className="input-field"
+                        value={kind}
+                        onChange={(e) => setKind(e.target.value as 'standard' | 'signup_template')}
+                      >
+                        <option value="standard">Standard (shareable code)</option>
+                        <option value="signup_template">Signup template (grants personal codes)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="promo-max-uses" className="form-label">
+                        Max uses per customer
+                      </label>
+                      <input
+                        id="promo-max-uses"
+                        className="input-field"
+                        type="number"
+                        min={1}
+                        placeholder="Unlimited"
+                        value={maxUsesPerCustomer}
+                        onChange={(e) => setMaxUsesPerCustomer(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="promo-new-days" className="form-label">
+                        New customer window (days)
+                      </label>
+                      <input
+                        id="promo-new-days"
+                        className="input-field"
+                        type="number"
+                        min={1}
+                        placeholder="No limit"
+                        value={newCustomerWithinDays}
+                        onChange={(e) => setNewCustomerWithinDays(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="promo-starts" className="form-label">
+                        Starts at
+                      </label>
+                      <input
+                        id="promo-starts"
+                        className="input-field"
+                        type="datetime-local"
+                        value={startsAt}
+                        onChange={(e) => setStartsAt(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="promo-ends" className="form-label">
+                        Ends at
+                      </label>
+                      <input
+                        id="promo-ends"
+                        className="input-field"
+                        type="datetime-local"
+                        value={endsAt}
+                        onChange={(e) => setEndsAt(e.target.value)}
                       />
                     </div>
                   </div>

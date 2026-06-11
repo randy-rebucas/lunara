@@ -23,6 +23,7 @@ export * from './branch-network.js';
 export * from './address.js';
 export * from './reverse-geocode.js';
 export * from './deals.js';
+export * from './promotions.js';
 export * from './share.js';
 export * from './user-roles.js';
 export * from './sla.js';

@@ -23,6 +23,10 @@ export class BookingQuoteDto {
   @IsArray()
   @IsString({ each: true })
   addonIds?: string[];
+
+  @IsOptional()
+  @IsString()
+  couponCode?: string;
 }
 
 export class BookingAvailabilityQueryDto {
@@ -40,8 +44,4 @@ export class CreateBookingOrderDto extends BookingQuoteDto {
 
   @IsDateString()
   scheduledPickupAt!: string;
-
-  @IsOptional()
-  @IsString()
-  couponCode?: string;
 }

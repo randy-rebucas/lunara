@@ -2,25 +2,31 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  Image,
   Linking,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { BookingType, PaymentMethod } from '@lunara/types';
 import {
+  BOOKING_MACHINE_LOAD_INFO,
   BOOKING_MIN_ORDER_AMOUNT,
+  formatMachineLoadLabel,
   calculateQuote,
   formatCurrency,
   formatAddressTypeLabel,
   type BookingAddonOption,
   type CashTiming,
   type LaundryServiceOption,
+  isPickupSlotBookable,
   type PickupSlot,
   type QuoteBreakdown,
 } from '@lunara/utils';
+import { resolveMediaUrl } from '../src/lib/media-url';
 import { colors, radius, spacing, typography } from '../src/theme';
 import { BookingProgress } from '../src/components/booking-progress';
 import { Button } from '../src/components/ui/button';
@@ -63,13 +69,19 @@ interface BookingConfig {
 
 export default function BookScreen() {
   const router = useRouter();
-  const { service: serviceParam } = useLocalSearchParams<{ service?: string }>();
+  const { service: serviceParam, code: codeParam } = useLocalSearchParams<{
+    service?: string;
+    code?: string;
+  }>();
   const apiFetch = useAuthStore((s) => s.apiFetch);
   const [step, setStep] = useState<BookingStep>('service');
   const [form, setForm] = useState<BookingFormState>(() => {
     const initial = { ...initialBookingForm };
     if (serviceParam && Object.values(BookingType).includes(serviceParam as BookingType)) {
       initial.bookingType = serviceParam as BookingType;
+    }
+    if (codeParam?.trim()) {
+      initial.couponCode = codeParam.trim().toUpperCase();
     }
     return initial;
   });
@@ -81,6 +93,7 @@ export default function BookScreen() {
   const [nearestBranches, setNearestBranches] = useState<NearestBranchRow[]>([]);
   const [nearestNote, setNearestNote] = useState('');
   const [quote, setQuote] = useState<QuoteBreakdown | null>(null);
+  const [promoLoading, setPromoLoading] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.GCASH);
   const [cashTiming, setCashTiming] = useState<CashTiming>('pickup');
   const [walletBalance, setWalletBalance] = useState(0);
@@ -110,16 +123,21 @@ export default function BookScreen() {
 
   const localQuote = useMemo(() => {
     if (!form.bookingType) return null;
+    const service = config?.services.find((s) => s.type === form.bookingType);
     try {
-      return calculateQuote({
-        bookingType: form.bookingType,
-        weightKg: form.weightKg,
-        addonIds: form.addonIds,
-      });
+      return calculateQuote(
+        {
+          bookingType: form.bookingType,
+          weightKg: form.weightKg,
+          addonIds: form.addonIds,
+        },
+        service,
+        config?.addons,
+      );
     } catch {
       return null;
     }
-  }, [form.bookingType, form.weightKg, form.addonIds]);
+  }, [form.bookingType, form.weightKg, form.addonIds, config?.services, config?.addons]);
 
   const loadAvailability = useCallback(
     async (addressId: string) => {
@@ -135,9 +153,11 @@ export default function BookScreen() {
         setSlots(avail.slots);
         setDispatchNote(avail.dispatchNote ?? '');
         setForm((f) => {
-          const stillValid = avail.slots.some((s) => s.startAt === f.scheduledPickupAt && s.available);
+          const stillValid = avail.slots.some(
+            (s) => s.startAt === f.scheduledPickupAt && isPickupSlotBookable(s),
+          );
           if (stillValid) return f;
-          const first = avail.slots.find((s) => s.available);
+          const first = avail.slots.find((s) => isPickupSlotBookable(s));
           return { ...f, scheduledPickupAt: first?.startAt ?? '' };
         });
       } catch (e) {
@@ -183,7 +203,7 @@ export default function BookScreen() {
       .catch(() => setWalletBalance(0));
   }, [apiFetch, step]);
 
-  async function refreshQuote() {
+  async function refreshQuote(couponCode = form.couponCode) {
     if (!form.bookingType || !form.addressId) return null;
     const q = await apiFetch<QuoteBreakdown>(
       `/booking/quote?addressId=${encodeURIComponent(form.addressId)}`,
@@ -193,11 +213,38 @@ export default function BookScreen() {
           bookingType: form.bookingType,
           weightKg: form.weightKg,
           addonIds: form.addonIds,
+          ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}),
         }),
       },
     );
     setQuote(q);
     return q;
+  }
+
+  async function applyPromoCode() {
+    setPromoLoading(true);
+    setError('');
+    try {
+      await refreshQuote(form.couponCode);
+    } catch (e) {
+      setQuote(null);
+      setError(e instanceof Error ? e.message : 'Could not apply promo code');
+    } finally {
+      setPromoLoading(false);
+    }
+  }
+
+  async function removePromoCode() {
+    setForm((f) => ({ ...f, couponCode: '' }));
+    setPromoLoading(true);
+    setError('');
+    try {
+      await refreshQuote('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not refresh price');
+    } finally {
+      setPromoLoading(false);
+    }
   }
 
   const selectedAddress = addresses.find((a) => a._id === form.addressId);
@@ -267,6 +314,7 @@ export default function BookScreen() {
           addonIds: form.addonIds,
           pickupAddressId: form.addressId,
           scheduledPickupAt: form.scheduledPickupAt,
+          ...(form.couponCode.trim() ? { couponCode: form.couponCode.trim() } : {}),
         }),
       });
       const payment = await apiFetch<{
@@ -441,20 +489,23 @@ export default function BookScreen() {
           {slots.length === 0 && !availabilityError ? (
             <Text style={styles.sub}>No pickup slots available for this address.</Text>
           ) : null}
-          {slots.map((slot) => (
+          {slots.map((slot) => {
+            const bookable = isPickupSlotBookable(slot);
+            return (
             <Pressable
               key={slot.id}
-              disabled={!slot.available}
+              disabled={!bookable}
               style={[
                 styles.option,
                 form.scheduledPickupAt === slot.startAt && styles.optionSelected,
-                !slot.available && styles.optionDisabled,
+                !bookable && styles.optionDisabled,
               ]}
               onPress={() => setForm((f) => ({ ...f, scheduledPickupAt: slot.startAt }))}
             >
               <Text style={styles.optionTitle}>{slot.label}</Text>
             </Pressable>
-          ))}
+            );
+          })}
           {showScheduleSupport ? (
             <ScheduleSupportPrompt
               address={selectedAddress}
@@ -471,6 +522,12 @@ export default function BookScreen() {
             We'll confirm actual weight at pickup. Min order{' '}
             {formatCurrency(config?.minOrderAmount ?? BOOKING_MIN_ORDER_AMOUNT)}.
           </Text>
+          <View style={styles.loadInfo}>
+            <Text style={styles.loadInfoText}>{BOOKING_MACHINE_LOAD_INFO}</Text>
+            <Text style={styles.loadInfoHighlight}>
+              Your estimate: {formatMachineLoadLabel(form.weightKg)}
+            </Text>
+          </View>
           <View style={styles.weightHeader}>
             <Text style={styles.weightValue}>{form.weightKg} kg</Text>
             {activeQuote ? (
@@ -515,6 +572,7 @@ export default function BookScreen() {
           ) : (
             addons.map((a) => {
               const selected = form.addonIds.includes(a.id);
+              const imageUri = resolveMediaUrl(a.imageUrl);
               return (
                 <Pressable
                   key={a.id}
@@ -528,11 +586,18 @@ export default function BookScreen() {
                     }))
                   }
                 >
-                  <View style={styles.addonRow}>
-                    <Text style={styles.optionTitle}>{a.label}</Text>
-                    <Text style={styles.addonPrice}>+{formatCurrency(a.price)}</Text>
+                  <View style={styles.addonCardRow}>
+                    {imageUri ? (
+                      <Image source={{ uri: imageUri }} style={styles.addonImage} />
+                    ) : null}
+                    <View style={styles.addonCardBody}>
+                      <View style={styles.addonRow}>
+                        <Text style={styles.optionTitle}>{a.label}</Text>
+                        <Text style={styles.addonPrice}>+{formatCurrency(a.price)}</Text>
+                      </View>
+                      <Text style={styles.optionSub}>{a.description}</Text>
+                    </View>
                   </View>
-                  <Text style={styles.optionSub}>{a.description}</Text>
                 </Pressable>
               );
             })
@@ -543,6 +608,39 @@ export default function BookScreen() {
       {step === 'review' && activeQuote && (
         <View>
           <Text style={styles.heading}>Price estimate</Text>
+          <View style={styles.promoCard}>
+            <Text style={styles.promoTitle}>Promo code</Text>
+            {activeQuote.couponCode ? (
+              <View style={styles.promoAppliedRow}>
+                <View style={styles.promoAppliedText}>
+                  <Text style={styles.promoAppliedCode}>{activeQuote.couponCode}</Text>
+                  {activeQuote.promotionTitle ? (
+                    <Text style={styles.promoAppliedSub}>{activeQuote.promotionTitle}</Text>
+                  ) : null}
+                </View>
+                <Pressable onPress={() => void removePromoCode()} disabled={promoLoading}>
+                  <Text style={styles.promoRemove}>Remove</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.promoInputRow}>
+                <TextInput
+                  value={form.couponCode}
+                  onChangeText={(text) => setForm((f) => ({ ...f, couponCode: text.toUpperCase() }))}
+                  placeholder="e.g. WELCOME10"
+                  autoCapitalize="characters"
+                  style={styles.promoInput}
+                />
+                <Pressable
+                  style={[styles.promoApplyBtn, (!form.couponCode.trim() || promoLoading) && styles.btnDisabled]}
+                  onPress={() => void applyPromoCode()}
+                  disabled={!form.couponCode.trim() || promoLoading}
+                >
+                  <Text style={styles.promoApplyText}>Apply</Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
           <View style={styles.estimateCard}>
             <View style={styles.estimateRow}>
               <Text style={styles.estimateLabel}>
@@ -560,6 +658,14 @@ export default function BookScreen() {
               <Text style={styles.estimateLabel}>Delivery fee</Text>
               <Text>{formatCurrency(activeQuote.deliveryFee)}</Text>
             </View>
+            {activeQuote.discount > 0 && (
+              <View style={styles.estimateRow}>
+                <Text style={styles.estimateLabel}>
+                  Discount{activeQuote.promotionTitle ? ` — ${activeQuote.promotionTitle}` : ''}
+                </Text>
+                <Text>−{formatCurrency(activeQuote.discount)}</Text>
+              </View>
+            )}
             <View style={styles.estimateRow}>
               <Text style={styles.estimateTotalLabel}>Estimated total</Text>
               <Text style={styles.estimateTotal}>{formatCurrency(activeQuote.total)}</Text>
@@ -666,8 +772,28 @@ const styles = StyleSheet.create({
   optionPrice: { marginTop: spacing.sm - 2, fontSize: 13, color: colors.primary, fontWeight: '500' },
   optionGps: { marginTop: spacing.sm - 2, fontSize: 12, color: colors.accentDark, fontWeight: '500' },
   optionGpsMissing: { marginTop: spacing.sm - 2, fontSize: 12, color: colors.warning, fontWeight: '500' },
+  addonCardRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  addonCardBody: { flex: 1, minWidth: 0 },
+  addonImage: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.md,
+    backgroundColor: colors.muted,
+  },
   addonRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   addonPrice: { fontSize: 15, fontWeight: '600', color: colors.primary },
+  loadInfo: {
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.primary + '26',
+    backgroundColor: colors.primary + '0D',
+    gap: spacing.sm,
+  },
+  loadInfoText: { fontSize: 13, lineHeight: 20, color: colors.muted },
+  loadInfoHighlight: { fontSize: 13, fontWeight: '600', color: colors.foreground },
   weightHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -676,6 +802,48 @@ const styles = StyleSheet.create({
   },
   weightService: { fontSize: 13, color: colors.muted },
   weightRange: { textAlign: 'center', fontSize: 12, color: colors.mutedForeground, marginTop: spacing.sm },
+  promoCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    backgroundColor: colors.surface,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  promoTitle: { fontSize: 14, fontWeight: '600', color: colors.foreground },
+  promoInputRow: { flexDirection: 'row', gap: spacing.sm },
+  promoInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    fontSize: 14,
+    color: colors.foreground,
+    backgroundColor: colors.surfaceMuted,
+  },
+  promoApplyBtn: {
+    backgroundColor: colors.secondary,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
+    justifyContent: 'center',
+  },
+  promoApplyText: { color: colors.onPrimary, fontWeight: '600', fontSize: 14 },
+  promoAppliedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    backgroundColor: colors.primaryLight,
+    borderRadius: radius.md,
+    padding: spacing.md,
+  },
+  promoAppliedText: { flex: 1 },
+  promoAppliedCode: { fontSize: 15, fontWeight: '700', color: colors.primary },
+  promoAppliedSub: { fontSize: 12, color: colors.muted, marginTop: 2 },
+  promoRemove: { fontSize: 13, fontWeight: '600', color: colors.primary },
   estimateCard: {
     borderWidth: 1,
     borderColor: colors.border,

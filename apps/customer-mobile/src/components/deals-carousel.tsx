@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import type { Deal } from '@lunara/types';
 import { appConfig, getShareWebsiteUrl } from '@lunara/config';
-import { buildDealSharePayload, formatCurrency } from '@lunara/utils';
+import { buildDealSharePayload, formatCurrency, formatDealExpiry, formatDealMinimum } from '@lunara/utils';
 import { useAuthStore } from '../store/auth';
 import { shareNative } from '../lib/share';
 import { colors, radius, shadow, spacing, typography } from '../theme';
@@ -26,11 +26,6 @@ const DEAL_ACCENTS = [colors.primary, colors.secondary, colors.accent] as const;
 function formatDealDiscount(deal: Pick<Deal, 'discountType' | 'discountValue'>): string {
   if (deal.discountType === 'percent') return `${deal.discountValue}% off`;
   return `${formatCurrency(deal.discountValue)} off`;
-}
-
-function formatDealMinimum(deal: Pick<Deal, 'minOrderAmount'>): string | null {
-  if (deal.minOrderAmount <= 0) return null;
-  return `Min. order ${formatCurrency(deal.minOrderAmount)}`;
 }
 
 interface DealsCarouselProps {
@@ -79,7 +74,7 @@ export function DealsCarousel({ onDealPress }: DealsCarouselProps) {
       onDealPress(deal);
       return;
     }
-    router.push('/book');
+    router.push({ pathname: '/book', params: { code: deal.code } });
   }
 
   function handleShareDeal(deal: Deal) {
@@ -90,6 +85,7 @@ export function DealsCarousel({ onDealPress }: DealsCarouselProps) {
   const renderItem: ListRenderItem<Deal> = ({ item, index }) => {
     const accent = DEAL_ACCENTS[index % DEAL_ACCENTS.length];
     const minimum = formatDealMinimum(item);
+    const expiry = formatDealExpiry(item.expiresAt ?? item.endsAt);
 
     return (
       <Pressable
@@ -103,8 +99,14 @@ export function DealsCarousel({ onDealPress }: DealsCarouselProps) {
       >
         <View style={styles.cardTop}>
           <View style={styles.badge}>
-            <Ionicons name="pricetag" size={14} color={accent} />
-            <Text style={[styles.badgeText, { color: accent }]}>Deal</Text>
+            <Ionicons
+              name={item.isPersonal ? 'gift-outline' : 'pricetag'}
+              size={14}
+              color={accent}
+            />
+            <Text style={[styles.badgeText, { color: accent }]}>
+              {item.isPersonal ? 'Just for you' : 'Deal'}
+            </Text>
           </View>
           <View style={styles.cardTopActions}>
             <Pressable
@@ -127,7 +129,10 @@ export function DealsCarousel({ onDealPress }: DealsCarouselProps) {
             <Text style={styles.codeLabel}>Code</Text>
             <Text style={styles.code}>{item.code}</Text>
           </View>
-          {minimum ? <Text style={styles.minimum}>{minimum}</Text> : null}
+          <View style={styles.footerMeta}>
+            {minimum ? <Text style={styles.minimum}>{minimum}</Text> : null}
+            {expiry ? <Text style={styles.expiry}>{expiry}</Text> : null}
+          </View>
         </View>
 
         <View style={styles.ctaRow}>
@@ -299,12 +304,22 @@ const styles = StyleSheet.create({
     color: colors.onPrimary,
     letterSpacing: 1,
   },
-  minimum: {
+  footerMeta: {
     flex: 1,
-    textAlign: 'right',
+    alignItems: 'flex-end',
+    gap: 2,
+  },
+  minimum: {
     fontSize: 11,
     color: 'rgba(255,255,255,0.82)',
     fontWeight: '500',
+    textAlign: 'right',
+  },
+  expiry: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.95)',
+    fontWeight: '600',
+    textAlign: 'right',
   },
   ctaRow: {
     flexDirection: 'row',
