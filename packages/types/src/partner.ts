@@ -98,6 +98,8 @@ export interface PartnerQueueOrder {
   paymentStatus?: string;
   paymentLabel?: string;
 }
+
+export interface PartnerStaffMember {
   _id: string;
   email?: string;
   phone?: string;
