@@ -76,6 +76,12 @@ export interface PartnerOrderSummary {
   canReceiveAtShop?: boolean;
   receivingStepLabel?: string;
   slaLabel?: string;
+  paymentMethod?: string;
+  paymentStatus?: string;
+  paymentAmount?: number;
+  paymentReceiptCode?: string;
+  cashTiming?: 'pickup' | 'delivery';
+  paymentLabel?: string;
 }
 
 export interface PartnerQueueOrder {
@@ -88,9 +94,10 @@ export interface PartnerQueueOrder {
   assignedStaffId?: string;
   isAssigned?: boolean;
   branchId?: string;
+  paymentMethod?: string;
+  paymentStatus?: string;
+  paymentLabel?: string;
 }
-
-export interface PartnerStaffMember {
   _id: string;
   email?: string;
   phone?: string;

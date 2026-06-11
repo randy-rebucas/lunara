@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  NotFoundException,
   Param,
   Post,
   Query,
@@ -24,6 +25,12 @@ import { PaymentsService } from './payments.service';
 @Controller('payments')
 export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}
+
+  private assertMockPaymentsAllowed() {
+    if (process.env.NODE_ENV === 'production') {
+      throw new NotFoundException();
+    }
+  }
 
   @Post('intent')
   @UseGuards(JwtAuthGuard)
@@ -85,6 +92,7 @@ export class PaymentsController {
     @Query('purpose') purpose: string,
     @Res() res: Response,
   ) {
+    this.assertMockPaymentsAllowed();
     const label =
       method === PaymentMethod.GCASH
         ? 'GCash'
@@ -111,6 +119,7 @@ export class PaymentsController {
     @Query('method') method: string,
     @Res() res: Response,
   ) {
+    this.assertMockPaymentsAllowed();
     const result = await this.paymentsService.confirmPayment(
       paymentId,
       `mock-paymongo-${method}-${Date.now()}`,
@@ -127,16 +136,19 @@ export class PaymentsController {
 
   @Get('mock/gcash')
   async mockGcash(@Query('paymentId') paymentId: string, @Res() res: Response) {
+    this.assertMockPaymentsAllowed();
     await this.redirectAfterConfirm(paymentId, `gcash-${Date.now()}`, res);
   }
 
   @Get('mock/maya')
   async mockMaya(@Query('paymentId') paymentId: string, @Res() res: Response) {
+    this.assertMockPaymentsAllowed();
     await this.redirectAfterConfirm(paymentId, `maya-${Date.now()}`, res);
   }
 
   @Get('mock/stripe')
   async mockStripe(@Query('paymentId') paymentId: string, @Res() res: Response) {
+    this.assertMockPaymentsAllowed();
     await this.redirectAfterConfirm(paymentId, `stripe-${Date.now()}`, res);
   }
 

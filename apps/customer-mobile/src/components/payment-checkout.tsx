@@ -9,6 +9,7 @@ import { Card } from './ui/card';
 import { DataLoadState } from './data-load-state';
 import { colors, spacing, typography } from '../theme';
 import type { CashTiming } from '@lunara/utils';
+import { getCustomerClientOrigin } from '../lib/client-origin';
 
 interface CheckoutOrder {
   _id: string;
@@ -50,11 +51,22 @@ export function PaymentCheckout({ orderId, onPaid }: PaymentCheckoutProps) {
         ),
         apiFetch<{ balance: number }>('/wallets/me'),
       ]);
+      let payment = checkout.payment;
+      if (payment?.status === 'pending' && payment._id) {
+        try {
+          const synced = await apiFetch<{ status: string }>(`/payments/${payment._id}/sync`, {
+            method: 'POST',
+          });
+          payment = { ...payment, status: synced.status };
+        } catch {
+          // still pending
+        }
+      }
       setOrder(checkout.order);
-      setExistingPayment(checkout.payment);
+      setExistingPayment(payment);
       setWalletBalance(wallet.balance ?? 0);
-      if (checkout.payment?.status === 'paid' && checkout.payment._id) {
-        onPaid?.(checkout.payment._id);
+      if (payment?.status === 'paid' && payment._id) {
+        onPaid?.(payment._id);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load checkout');
@@ -83,6 +95,7 @@ export function PaymentCheckout({ orderId, onPaid }: PaymentCheckoutProps) {
         body: JSON.stringify({
           orderId,
           method,
+          clientOrigin: getCustomerClientOrigin(),
           ...(method === PaymentMethod.CASH ? { cashTiming } : {}),
         }),
       });

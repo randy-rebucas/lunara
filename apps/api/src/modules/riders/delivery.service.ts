@@ -21,6 +21,7 @@ import { TrackingGateway } from '../realtime/tracking.gateway';
 import { RiderOfferPushService } from '../push/rider-offer-push.service';
 import { ReviewsService } from '../reviews/reviews.service';
 import { HandoffQrService } from '../handoff/handoff-qr.service';
+import { PaymentsService } from '../payments/payments.service';
 import { VerifyQrDto } from './dto/pickup.dto';
 import { RidersService } from './riders.service';
 import { buildRiderTaskDetails } from './rider-task-summary';
@@ -49,6 +50,7 @@ export class DeliveryService {
     private reviewsService: ReviewsService,
     private riderOfferPush: RiderOfferPushService,
     private handoffQrService: HandoffQrService,
+    private paymentsService: PaymentsService,
   ) {}
 
   async dispatchDeliverySearch(orderId: string) {
@@ -396,6 +398,18 @@ export class DeliveryService {
     };
   }
 
+  async collectCash(orderId: string, riderUserId: string) {
+    const order = await this.getAssignedDeliveryOrder(orderId, riderUserId);
+    if (order.status !== OrderStatus.OUT_FOR_DELIVERY) {
+      throw new BadRequestException('Order must be out for delivery');
+    }
+    if (!this.hasCustomerReceived(order)) {
+      throw new BadRequestException('Customer must receive laundry before collecting cash');
+    }
+    await this.paymentsService.collectCashForOrder(orderId, riderUserId, 'delivery');
+    return { success: true, data: await this.buildDeliverySummary(order, riderUserId) };
+  }
+
   async completeDelivery(orderId: string, riderUserId: string) {
     const order = await this.getAssignedDeliveryOrder(orderId, riderUserId);
     if (!order.delivery?.customerSignedAt) {
@@ -407,6 +421,7 @@ export class DeliveryService {
     if (!this.hasCustomerReceived(order)) {
       throw new BadRequestException('Customer must receive laundry first');
     }
+    await this.paymentsService.assertCashCollectedForStage(orderId, 'delivery');
 
     if (!canTransitionOrderStatus(order.status, OrderStatus.DELIVERED)) {
       throw new BadRequestException(`Cannot deliver from status ${order.status}`);
@@ -531,6 +546,13 @@ export class DeliveryService {
       order.status === OrderStatus.RIDER_ASSIGNED_DELIVERY &&
       !order.delivery?.pickedUpFromShopAt;
 
+    const cashPayment = await this.paymentsService.getRiderCashPaymentInfo(
+      order._id.toString(),
+      'delivery',
+      order.status === OrderStatus.OUT_FOR_DELIVERY && this.hasCustomerReceived(order),
+    );
+    const cashCollected = !cashPayment || cashPayment.collected;
+
     return {
       _id: order._id.toString(),
       status: order.status,
@@ -586,7 +608,9 @@ export class DeliveryService {
       canComplete:
         order.status === OrderStatus.OUT_FOR_DELIVERY &&
         !!order.delivery?.photoUrl &&
-        !!order.delivery?.customerSignedAt,
+        !!order.delivery?.customerSignedAt &&
+        cashCollected,
+      cashPayment,
     };
   }
 }

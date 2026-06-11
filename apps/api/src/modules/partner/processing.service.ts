@@ -18,6 +18,12 @@ import { RiderAssignmentService } from '../riders/rider-assignment.service';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
+import {
+  buildOrderPaymentSummary,
+  buildPartnerPaymentLabel,
+  loadLatestOrderPaymentsByOrderId,
+} from '../payments/payment-summary';
 import { AdvanceProcessingDto } from './dto/processing.dto';
 import {
   applyStaffBranchFilter,
@@ -30,6 +36,7 @@ export class ProcessingService {
   constructor(
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
     private trackingGateway: TrackingGateway,
     private riderAssignmentService: RiderAssignmentService,
   ) {}
@@ -71,6 +78,11 @@ export class ProcessingService {
       .sort({ updatedAt: -1 })
       .limit(100);
 
+    const paymentsByOrderId = await loadLatestOrderPaymentsByOrderId(
+      this.paymentModel,
+      items.map((o) => o._id),
+    );
+
     const counts = items.reduce(
       (acc, order) => {
         acc[order.status] = (acc[order.status] ?? 0) + 1;
@@ -82,7 +94,7 @@ export class ProcessingService {
     return {
       success: true,
       data: {
-        items: items.map((o) => this.summarizeOrder(o)),
+        items: items.map((o) => this.summarizeOrder(o, paymentsByOrderId)),
         counts,
       },
     };
@@ -264,12 +276,17 @@ export class ProcessingService {
     });
   }
 
-  private summarizeOrder(order: OrderDocument) {
+  private summarizeOrder(
+    order: OrderDocument,
+    paymentsByOrderId?: Map<string, PaymentDocument>,
+  ) {
     const currentStepId = order.laundryProcessing?.currentStepId
       ?? getInitialProcessingStepForOrder(order.status)
       ?? getInitialProcessingStepForOrder(order.status)
       ?? 'received';
     const step = getProcessingStep(currentStepId as LaundryProcessingStepId);
+    const paymentSummary = buildOrderPaymentSummary(paymentsByOrderId?.get(order._id.toString()));
+    const paymentLabel = buildPartnerPaymentLabel(paymentSummary);
     return {
       _id: order._id.toString(),
       status: order.status,
@@ -283,6 +300,8 @@ export class ProcessingService {
       branchId: order.branchId?.toString(),
       assignedStaffId: order.laundryProcessing?.assignedStaffId?.toString(),
       isAssigned: !!order.laundryProcessing?.assignedStaffId,
+      ...paymentSummary,
+      paymentLabel,
     };
   }
 

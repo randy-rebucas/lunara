@@ -20,6 +20,7 @@ import { TrackingGateway } from '../realtime/tracking.gateway';
 import { RiderOfferPushService } from '../push/rider-offer-push.service';
 import { CollectLaundryDto, DropAtShopDto, VerifyCustomerDto } from './dto/pickup.dto';
 import { HandoffQrService } from '../handoff/handoff-qr.service';
+import { PaymentsService } from '../payments/payments.service';
 import { RidersService } from './riders.service';
 import { buildRiderTaskDetails } from './rider-task-summary';
 
@@ -46,6 +47,7 @@ export class PickupService {
     private trackingGateway: TrackingGateway,
     private riderOfferPush: RiderOfferPushService,
     private handoffQrService: HandoffQrService,
+    private paymentsService: PaymentsService,
   ) {}
 
   async dispatchPickupSearch(orderId: string) {
@@ -231,11 +233,21 @@ export class PickupService {
     };
   }
 
+  async collectCash(orderId: string, riderUserId: string) {
+    const order = await this.getActivePickupOrder(orderId, riderUserId, true);
+    if (!order.pickup?.customerVerifiedAt) {
+      throw new BadRequestException('Verify customer before collecting cash');
+    }
+    await this.paymentsService.collectCashForOrder(orderId, riderUserId, 'pickup');
+    return { success: true, data: await this.buildPickupSummary(order, riderUserId) };
+  }
+
   async collectLaundry(orderId: string, riderUserId: string, dto: CollectLaundryDto) {
     const order = await this.getActivePickupOrder(orderId, riderUserId);
     if (!order.pickup?.customerVerifiedAt) {
       throw new BadRequestException('Verify customer before collecting laundry');
     }
+    await this.paymentsService.assertCashCollectedForStage(orderId, 'pickup');
     if (!order.pickup) order.pickup = {};
     order.pickup.actualWeightKg = dto.actualWeightKg;
     order.pickup.notes = dto.notes;
@@ -428,6 +440,12 @@ export class PickupService {
           OrderStatus.RIDER_ASSIGNED,
         ].includes(order.status));
 
+    const cashPayment = await this.paymentsService.getRiderCashPaymentInfo(
+      order._id.toString(),
+      'pickup',
+      !!order.pickup?.customerVerifiedAt,
+    );
+
     return {
       _id: order._id.toString(),
       status: order.status,
@@ -465,6 +483,7 @@ export class PickupService {
       shopPhoneMasked: taskDetails.shopPhoneMasked,
       canReject,
       shopLocation: taskDetails.shopLocation,
+      cashPayment,
     };
   }
 }

@@ -15,6 +15,7 @@ import { AdminOperationsService } from './admin-operations.service';
 import { AdminDispatchService } from './admin-dispatch.service';
 import { AdminService } from './admin.service';
 import { Promotion, PromotionSchema } from './schemas/promotion.schema';
+import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { Promotion, PromotionSchema } from './schemas/promotion.schema';
       { name: Rider.name, schema: RiderSchema },
       { name: Address.name, schema: AddressSchema },
       { name: Promotion.name, schema: PromotionSchema },
+      { name: Payment.name, schema: PaymentSchema },
     ]),
     SupportModule,
     RefundsModule,

@@ -2,6 +2,7 @@ export type WorkflowStepKey =
   | 'pickup:accept'
   | 'pickup:arrive'
   | 'pickup:verify'
+  | 'pickup:collect-cash'
   | 'pickup:collect'
   | 'pickup:photo'
   | 'pickup:receipt'
@@ -11,6 +12,7 @@ export type WorkflowStepKey =
   | 'delivery:out-for-delivery'
   | 'delivery:customer-received'
   | 'delivery:photo'
+  | 'delivery:collect-cash'
   | 'delivery:complete';
 
 export interface BaseQueueItem {

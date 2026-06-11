@@ -176,13 +176,39 @@ export class PaymongoService {
     }
     if (!signatureHeader) return false;
 
-    const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
+    const parts = Object.fromEntries(
+      signatureHeader.split(',').map((segment) => {
+        const [key, value] = segment.trim().split('=');
+        return [key, value ?? ''];
+      }),
+    ) as Record<string, string>;
 
-    try {
-      return timingSafeEqual(Buffer.from(expected), Buffer.from(signatureHeader));
-    } catch {
+    const timestamp = parts.t;
+    const testSignature = parts.te;
+    const liveSignature = parts.li;
+    if (!timestamp || (!testSignature && !liveSignature)) {
       return false;
     }
+
+    const payload = `${timestamp}.${rawBody.toString('utf8')}`;
+    const expectedTest = createHmac('sha256', secret).update(payload).digest('hex');
+    const expectedLive = expectedTest;
+
+    const candidates = [testSignature, liveSignature, signatureHeader].filter(Boolean);
+    for (const candidate of candidates) {
+      try {
+        if (
+          timingSafeEqual(Buffer.from(expectedTest), Buffer.from(candidate)) ||
+          timingSafeEqual(Buffer.from(expectedLive), Buffer.from(candidate))
+        ) {
+          return true;
+        }
+      } catch {
+        // length mismatch — try next candidate
+      }
+    }
+
+    return false;
   }
 
   parseWebhookEvent(rawBody: Buffer): {
@@ -241,10 +267,6 @@ export class PaymongoService {
   }
 
   isPaidWebhookEvent(type: string): boolean {
-    return (
-      type === 'checkout_session.payment.paid' ||
-      type === 'payment.paid' ||
-      type === 'source.chargeable'
-    );
+    return type === 'checkout_session.payment.paid' || type === 'payment.paid';
   }
 }

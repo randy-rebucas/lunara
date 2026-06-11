@@ -4,17 +4,21 @@ import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { OrderStatus } from '@lunara/types';
+import { OrderStatus, PaymentMethod, PaymentStatus } from '@lunara/types';
 import { Button } from '@lunara/ui';
 import { ButtonLink } from '../../../../components/ui/button-link';
 import { resolveApiOrigin } from '@lunara/hooks';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 import {
   buildCustomerTimeline,
+  formatCashTimingLabel,
   formatCurrency,
   formatOrderStatusLabel,
+  formatPaymentMethodLabel,
+  formatPaymentStatusLabel,
   type PartnerCoverageInfo,
 } from '@lunara/utils';
+import { PaymentReceipt, type PaymentReceiptData } from '../../../../components/payment/payment-receipt';
 import { HandoffQrCard } from '../../../../components/handoff-qr-card';
 import { OrderPartnerCoverageNotice } from '../../../../components/order-partner-coverage-notice';
 import { PageShell } from '../../../../components/page-shell';
@@ -51,6 +55,11 @@ interface OrderDetail {
   partnerCoverage?: PartnerCoverageInfo;
   refundable?: boolean;
   paymentMethod?: string;
+  paymentStatus?: string;
+  paymentAmount?: number;
+  paymentReceiptCode?: string;
+  cashTiming?: 'pickup' | 'delivery';
+  paymentPaidAt?: string;
 }
 
 interface DeliveryUiState {
@@ -88,6 +97,7 @@ const ORDER_EVENT_MESSAGES: Record<string, string> = {
   customerSignedDelivery: 'You signed for your delivery.',
   delivered: 'Laundry delivered successfully.',
   completed: 'Order complete. Thank you!',
+  paymentReceived: 'Cash payment received — thank you!',
   reviewRequested: 'How was your experience? Leave a review when you have a moment.',
   reviewPublished: 'Thank you for your review!',
 };
@@ -167,9 +177,7 @@ export default function OrderTrackPage() {
 
   useEffect(() => {
     if (justBooked) {
-      pushNotification(
-        'Payment received — Lunara is assigning your laundry partner. Pickup starts after dispatch.',
-      );
+      pushNotification('Booking confirmed — track your order below.');
     }
   }, [justBooked, pushNotification]);
 
@@ -283,6 +291,19 @@ export default function OrderTrackPage() {
     order.status === OrderStatus.RIDER_ASSIGNED_PICKUP ||
     order.status === OrderStatus.RIDER_ASSIGNED;
   const showDeliveryQr = order.status === OrderStatus.OUT_FOR_DELIVERY;
+  const isCashPending =
+    order.paymentMethod === PaymentMethod.CASH && order.paymentStatus === PaymentStatus.PENDING;
+  const paymentReceipt: PaymentReceiptData | null = order.paymentMethod
+    ? {
+        _id: order._id,
+        method: order.paymentMethod,
+        status: order.paymentStatus ?? PaymentStatus.PENDING,
+        amount: order.paymentAmount ?? order.total,
+        receiptCode: order.paymentReceiptCode,
+        cashTiming: order.cashTiming,
+        paidAt: order.paymentPaidAt,
+      }
+    : null;
 
   return (
     <PageShell>
@@ -339,8 +360,9 @@ export default function OrderTrackPage() {
           <div className="mt-4 rounded-lg bg-primary/5 p-4 text-sm ring-1 ring-primary/15">
             <p className="font-medium text-primary">Pending dispatch</p>
             <p className="mt-1 text-slate-700">
-              Payment received. Lunara operations is assigning your laundry partner. Pickup starts
-              after dispatch.
+              {isCashPending
+                ? `Booking confirmed. Pay ${formatCurrency(order.total)} in cash on ${order.cashTiming === 'delivery' ? 'delivery' : 'pickup'}. Lunara is assigning your laundry partner.`
+                : 'Payment received. Lunara operations is assigning your laundry partner. Pickup starts after dispatch.'}
             </p>
             <Button
               type="button"
@@ -353,6 +375,20 @@ export default function OrderTrackPage() {
               {cancelling ? 'Cancelling…' : 'Cancel order'}
             </Button>
           </div>
+        )}
+
+        {paymentReceipt && (
+          <section className="mt-6">
+            <h2 className="text-lg font-semibold">Payment</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              {formatPaymentMethodLabel(order.paymentMethod!)}
+              {order.cashTiming ? ` · ${formatCashTimingLabel(order.cashTiming)}` : ''}
+              {order.paymentStatus ? ` · ${formatPaymentStatusLabel(order.paymentStatus)}` : ''}
+            </p>
+            <div className="mt-4">
+              <PaymentReceipt payment={paymentReceipt} orderTotal={order.total} />
+            </div>
+          </section>
         )}
 
         <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200">

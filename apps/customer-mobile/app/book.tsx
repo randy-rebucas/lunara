@@ -27,6 +27,7 @@ import { Button } from '../src/components/ui/button';
 import { ScheduleSupportPrompt } from '../src/components/schedule-support-prompt';
 import { NearestBranchesCard, type NearestBranchRow } from '../src/components/nearest-branches';
 import { PaymentMethodPicker } from '../src/components/payment-method-picker';
+import { getCustomerClientOrigin } from '../src/lib/client-origin';
 import {
   initialBookingForm,
   nextStep,
@@ -279,6 +280,7 @@ export default function BookScreen() {
         body: JSON.stringify({
           orderId: order._id,
           method: paymentMethod,
+          clientOrigin: getCustomerClientOrigin(),
           ...(paymentMethod === PaymentMethod.CASH ? { cashTiming } : {}),
         }),
       });

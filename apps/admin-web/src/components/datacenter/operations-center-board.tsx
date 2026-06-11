@@ -63,7 +63,7 @@ const systemCopy: Record<SystemState, { label: string; detail: string; dot: stri
 };
 
 function statusTone(status: string): string {
-  if (status === 'pending_dispatch' || status === 'pending_payment') return 'badge-warning';
+  if (status === 'pending_dispatch') return 'badge-warning';
   if (status.includes('cancel')) return 'badge-neutral';
   if (status === 'completed' || status === 'delivered') return 'badge-accent';
   if (status.includes('rider') || status.includes('pickup') || status.includes('delivery')) {

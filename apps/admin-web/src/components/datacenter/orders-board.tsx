@@ -33,11 +33,7 @@ function summarizeCounts(counts: Record<string, number>) {
   const completed = counts.completed ?? 0;
   const cancelled = counts.cancelled ?? 0;
   const refunded = counts.refunded ?? 0;
-  const pendingPayment = counts.pending_payment ?? 0;
-  const active = Math.max(
-    0,
-    total - completed - cancelled - refunded - pendingDispatch - pendingPayment,
-  );
+  const active = Math.max(0, total - completed - cancelled - refunded - pendingDispatch);
   return { total, pendingDispatch, active, completed };
 }
 
@@ -76,7 +72,7 @@ const pipelineCopy: Record<
 };
 
 function statusBadgeClass(status: string) {
-  if (status === 'pending_dispatch' || status === 'pending_payment') return 'badge-warning';
+  if (status === 'pending_dispatch') return 'badge-warning';
   if (status === 'completed' || status === 'delivered') return 'badge-accent';
   if (status.includes('cancel') || status === 'refunded') return 'badge-neutral';
   if (status.includes('rider') || status.includes('pickup') || status.includes('delivery')) {

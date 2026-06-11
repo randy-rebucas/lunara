@@ -73,3 +73,32 @@ export function useOrderPendingCount(orderId: string | undefined) {
 
   return count;
 }
+
+export function useOrderHasPendingStep(
+  orderId: string | undefined,
+  stepKey: 'pickup:collect-cash' | 'delivery:collect-cash',
+) {
+  const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    if (!orderId) return;
+    const refresh = async () => {
+      const items = await import('../lib/offline/queue-store').then((m) => m.getQueueItems());
+      setPending(
+        items.some(
+          (i) =>
+            i.kind !== 'gps' &&
+            i.orderId === orderId &&
+            'stepKey' in i &&
+            i.stepKey === stepKey,
+        ),
+      );
+    };
+    refresh();
+    return subscribeQueue(() => {
+      void refresh();
+    });
+  }, [orderId, stepKey]);
+
+  return pending;
+}

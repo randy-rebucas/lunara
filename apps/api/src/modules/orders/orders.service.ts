@@ -11,7 +11,6 @@ import {
   buildPartnerCoverageNotice,
   canTransitionOrderStatus,
   isPaymongoMethod,
-  isRefundablePaymentMethod,
   type PartnerCoverageInfo,
 } from '@lunara/utils';
 import { BranchesService } from '../branches/branches.service';
@@ -20,6 +19,10 @@ import { TrackingGateway } from '../realtime/tracking.gateway';
 import { WalletsService } from '../wallets/wallets.service';
 import { AssignRiderDto, CreateOrderDto, UpdateOrderStatusDto } from './dto/order.dto';
 import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
+import {
+  buildOrderPaymentSummary,
+  loadLatestOrderPaymentsByOrderId,
+} from '../payments/payment-summary';
 import { Order, OrderDocument } from './schemas/order.schema';
 
 export interface BookingOrderPayload {
@@ -86,44 +89,27 @@ export class OrdersService {
     );
   }
 
-  private async loadPaidPaymentsByOrderId(orderIds: Types.ObjectId[]) {
-    if (orderIds.length === 0) return new Map<string, PaymentDocument>();
-
-    const payments = await this.paymentModel
-      .find({ orderId: { $in: orderIds }, status: PaymentStatus.PAID })
-      .sort({ paidAt: -1, createdAt: -1 });
-
-    const byOrderId = new Map<string, PaymentDocument>();
-    for (const payment of payments) {
-      if (!payment.orderId) continue;
-      const key = payment.orderId.toString();
-      if (!byOrderId.has(key)) byOrderId.set(key, payment);
-    }
-    return byOrderId;
+  private async loadLatestOrderPaymentsByOrderId(orderIds: Types.ObjectId[]) {
+    return loadLatestOrderPaymentsByOrderId(this.paymentModel, orderIds);
   }
 
-  private paymentRefundFields(payment: PaymentDocument | undefined) {
-    if (!payment) {
-      return { refundable: false as const };
-    }
-    return {
-      paymentMethod: payment.method,
-      paymentStatus: payment.status,
-      cashTiming: payment.cashTiming,
-      refundable: isRefundablePaymentMethod(payment.method),
-    };
+  private enrichOrderWithPayment(
+    order: OrderDocument,
+    payment: PaymentDocument | undefined,
+  ) {
+    return { ...order.toObject(), ...buildOrderPaymentSummary(payment) };
   }
 
   private async enrichCustomerOrders(orders: OrderDocument[]) {
     const coverageByAddress = new Map<string, PartnerCoverageInfo>();
-    const paidByOrderId = await this.loadPaidPaymentsByOrderId(orders.map((o) => o._id));
+    const paymentsByOrderId = await this.loadLatestOrderPaymentsByOrderId(
+      orders.map((o) => o._id),
+    );
 
     return Promise.all(
       orders.map(async (order) => {
-        const paymentFields = this.paymentRefundFields(
-          paidByOrderId.get(order._id.toString()),
-        );
-        const base = { ...order.toObject(), ...paymentFields };
+        const payment = paymentsByOrderId.get(order._id.toString());
+        const base = this.enrichOrderWithPayment(order, payment);
 
         if (!this.shouldShowPartnerCoverage(order)) {
           return base;

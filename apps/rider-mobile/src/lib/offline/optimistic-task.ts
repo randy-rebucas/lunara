@@ -1,8 +1,10 @@
+import type { RiderCashPaymentInfo } from '@lunara/utils';
 import type { WorkflowStepKey } from './types';
 
 export interface PickupTaskLike {
   _id: string;
   status: string;
+  cashPayment?: RiderCashPaymentInfo | null;
   pickup?: {
     acceptedAt?: string;
     arrivedAt?: string;
@@ -18,6 +20,7 @@ export interface PickupTaskLike {
 export interface DeliveryTaskLike {
   _id: string;
   status: string;
+  cashPayment?: RiderCashPaymentInfo | null;
   customerReceived?: boolean;
   customerSigned?: boolean;
   canPickupFromShop?: boolean;
@@ -42,6 +45,9 @@ export function inferStepKey(path: string, method: string): WorkflowStepKey | nu
   if (path.includes('/pickup-offers/') && path.endsWith('/accept')) return 'pickup:accept';
   if (path.includes('/pickup-tasks/') && path.endsWith('/arrive')) return 'pickup:arrive';
   if (path.includes('/pickup-tasks/') && path.endsWith('/verify')) return 'pickup:verify';
+  if (path.includes('/pickup-tasks/') && path.endsWith('/collect-cash')) {
+    return 'pickup:collect-cash';
+  }
   if (path.includes('/pickup-tasks/') && path.endsWith('/collect')) return 'pickup:collect';
   if (path.includes('/pickup-tasks/') && path.endsWith('/photo-upload')) return 'pickup:photo';
   if (path.includes('/pickup-tasks/') && path.endsWith('/generate-receipt')) return 'pickup:receipt';
@@ -57,6 +63,9 @@ export function inferStepKey(path: string, method: string): WorkflowStepKey | nu
     return 'delivery:customer-received';
   }
   if (path.includes('/delivery-tasks/') && path.endsWith('/photo-upload')) return 'delivery:photo';
+  if (path.includes('/delivery-tasks/') && path.endsWith('/collect-cash')) {
+    return 'delivery:collect-cash';
+  }
   if (path.includes('/delivery-tasks/') && path.endsWith('/complete')) return 'delivery:complete';
   return null;
 }
@@ -84,6 +93,18 @@ export function applyPickupStep(
     case 'pickup:verify':
       pickup.customerVerifiedAt = t;
       return { ...task, pickup };
+    case 'pickup:collect-cash':
+      return {
+        ...task,
+        cashPayment: task.cashPayment
+          ? {
+              ...task.cashPayment,
+              collected: true,
+              status: 'paid',
+              canCollect: false,
+            }
+          : task.cashPayment,
+      };
     case 'pickup:collect':
       pickup.collectedAt = t;
       return { ...task, status: 'picked_up', pickup };
@@ -150,8 +171,25 @@ export function applyDeliveryStep(
       return {
         ...task,
         canCapturePhoto: false,
-        canComplete: true,
+        canComplete:
+          !!task.customerSigned && (!task.cashPayment || task.cashPayment.collected),
         delivery,
+      };
+    case 'delivery:collect-cash':
+      return {
+        ...task,
+        cashPayment: task.cashPayment
+          ? {
+              ...task.cashPayment,
+              collected: true,
+              status: 'paid',
+              canCollect: false,
+            }
+          : task.cashPayment,
+        canComplete:
+          task.status === 'out_for_delivery' &&
+          !!delivery.photoUrl &&
+          !!task.customerSigned,
       };
     case 'delivery:complete':
       delivery.receiptCode = extras?.receiptCode ?? `DL-PENDING-${task._id.slice(-4)}`;
@@ -175,6 +213,8 @@ export function isPickupStepDone(task: PickupTaskLike, stepKey: WorkflowStepKey)
       return !!p.arrivedAt;
     case 'pickup:verify':
       return !!p.customerVerifiedAt;
+    case 'pickup:collect-cash':
+      return !!task.cashPayment?.collected;
     case 'pickup:collect':
       return !!p.collectedAt;
     case 'pickup:photo':
@@ -201,6 +241,8 @@ export function isDeliveryStepDone(task: DeliveryTaskLike, stepKey: WorkflowStep
       return !!d.customerReceivedAt || !!task.customerReceived;
     case 'delivery:photo':
       return !!d.photoUrl;
+    case 'delivery:collect-cash':
+      return !!task.cashPayment?.collected;
     case 'delivery:complete':
       return task.status === 'delivered' || task.status === 'completed' || !!d.receiptCode;
     default:

@@ -7,7 +7,9 @@ import {
   formatCurrency,
   getDeliveryWorkflowStepIndex,
 } from '@lunara/utils';
+import type { RiderCashPaymentInfo } from '@lunara/utils';
 import { OpsStepper } from '../../src/components/ops-stepper';
+import { CashPaymentCard } from '../../src/components/cash-payment-card';
 import { TaskDetailsCard } from '../../src/components/task-details-card';
 import { DataLoadState } from '../../src/components/data-load-state';
 import { Button } from '../../src/components/ui/button';
@@ -61,6 +63,7 @@ interface DeliveryTask {
   };
   deliveryAddress?: RiderTaskAddress | null;
   shopLocation?: RiderShopLocation | null;
+  cashPayment?: RiderCashPaymentInfo | null;
 }
 
 export default function DeliveryScreen() {
@@ -328,6 +331,25 @@ export default function DeliveryScreen() {
                 {task.customerSigned ? 'Yes ✓' : 'Waiting…'}
               </Text>
             </Card>
+          )}
+
+          {task.cashPayment?.collectAt === 'delivery' && task.status === 'out_for_delivery' && (
+            <CashPaymentCard
+              cashPayment={task.cashPayment}
+              loading={loading}
+              onCollect={
+                task.cashPayment.canCollect
+                  ? () =>
+                      run(
+                        () =>
+                          riderFetch(`/riders/delivery-tasks/${id}/collect-cash`, {
+                            method: 'POST',
+                          }),
+                        'Cash payment recorded',
+                      )
+                  : undefined
+              }
+            />
           )}
 
           {task.canCapturePhoto && (

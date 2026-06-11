@@ -154,6 +154,15 @@ export class RidersController {
     return this.pickupService.verifyCustomer(orderId, req.user.sub, dto);
   }
 
+  @Post('pickup-tasks/:orderId/collect-cash')
+  @Roles(UserRole.RIDER)
+  collectPickupCash(
+    @Param('orderId') orderId: string,
+    @Req() req: { user: { sub: string } },
+  ) {
+    return this.pickupService.collectCash(orderId, req.user.sub);
+  }
+
   @Post('pickup-tasks/:orderId/collect')
   @Roles(UserRole.RIDER)
   collectLaundry(
@@ -393,6 +402,15 @@ export class RidersController {
       req.user.sub,
       taskPhotoPublicPath(file.filename),
     );
+  }
+
+  @Post('delivery-tasks/:orderId/collect-cash')
+  @Roles(UserRole.RIDER)
+  collectDeliveryCash(
+    @Param('orderId') orderId: string,
+    @Req() req: { user: { sub: string } },
+  ) {
+    return this.deliveryService.collectCash(orderId, req.user.sub);
   }
 
   @Post('delivery-tasks/:orderId/complete')

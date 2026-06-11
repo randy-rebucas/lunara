@@ -11,6 +11,11 @@ import { PickupService } from '../riders/pickup.service';
 import { RiderAssignmentService } from '../riders/rider-assignment.service';
 import { BranchesService } from '../branches/branches.service';
 import { SupportService } from '../support/support.service';
+import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
+import {
+  buildOrderPaymentSummary,
+  loadLatestOrderPaymentsByOrderId,
+} from '../payments/payment-summary';
 
 @Injectable()
 export class AdminOperationsService {
@@ -18,6 +23,7 @@ export class AdminOperationsService {
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Rider.name) private riderModel: Model<RiderDocument>,
+    @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
     private ordersService: OrdersService,
     private pickupService: PickupService,
     private riderAssignmentService: RiderAssignmentService,
@@ -132,10 +138,14 @@ export class AdminOperationsService {
       .find({ _id: { $in: riders.map((r) => r.userId) } })
       .select('email');
 
+    const paymentsByOrderId = await loadLatestOrderPaymentsByOrderId(this.paymentModel, [
+      order._id,
+    ]);
+
     return {
       success: true,
       data: {
-        order: await this.serializeOpsOrder(order),
+        order: await this.serializeOpsOrder(order, paymentsByOrderId),
         customer: customer
           ? { email: customer.email, phone: customer.phone }
           : null,
@@ -249,7 +259,10 @@ export class AdminOperationsService {
     }).length;
   }
 
-  private async serializeOpsOrder(order: OrderDocument) {
+  private async serializeOpsOrder(
+    order: OrderDocument,
+    paymentsByOrderId?: Map<string, PaymentDocument>,
+  ) {
     const sla = computePickupSla({
       status: order.status,
       scheduledPickupAt: order.slaPickupDueAt ?? order.scheduledPickupAt,
@@ -258,6 +271,11 @@ export class AdminOperationsService {
       pickupRiderId: order.pickupRiderId?.toString(),
       pickupCollectedAt: order.pickup?.collectedAt,
     });
+
+    const paymentMap =
+      paymentsByOrderId ??
+      (await loadLatestOrderPaymentsByOrderId(this.paymentModel, [order._id]));
+    const payment = buildOrderPaymentSummary(paymentMap.get(order._id.toString()));
 
     return {
       _id: order._id.toString(),
@@ -276,6 +294,7 @@ export class AdminOperationsService {
       operationsConflict: order.operationsConflict,
       operationsConflictNote: order.operationsConflictNote,
       sla,
+      ...payment,
     };
   }
 }

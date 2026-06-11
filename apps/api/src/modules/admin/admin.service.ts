@@ -18,6 +18,11 @@ import { CreatePartnerDto } from './dto/create-partner.dto';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { CreateRiderDto } from './dto/create-rider.dto';
 import { UpdatePromotionDto } from './dto/update-promotion.dto';
+import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
+import {
+  buildOrderPaymentSummary,
+  loadLatestOrderPaymentsByOrderId,
+} from '../payments/payment-summary';
 
 const COMPLETED = [OrderStatus.DELIVERED, OrderStatus.COMPLETED];
 const ACTIVE_ORDER_STATUSES = Object.values(OrderStatus).filter(
@@ -52,6 +57,7 @@ export class AdminService {
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Rider.name) private riderModel: Model<RiderDocument>,
     @InjectModel(Promotion.name) private promotionModel: Model<PromotionDocument>,
+    @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
     private supportService: SupportService,
     private branchesService: BranchesService,
   ) {}
@@ -145,6 +151,10 @@ export class AdminService {
       .select('email phone');
 
     const customerMap = new Map(customers.map((c) => [c._id.toString(), c]));
+    const paymentsByOrderId = await loadLatestOrderPaymentsByOrderId(
+      this.paymentModel,
+      items.map((o) => o._id),
+    );
 
     return {
       success: true,
@@ -158,6 +168,7 @@ export class AdminService {
             pickupRiderId: o.pickupRiderId?.toString(),
             pickupCollectedAt: o.pickup?.collectedAt,
           });
+          const payment = buildOrderPaymentSummary(paymentsByOrderId.get(o._id.toString()));
           return {
             _id: o._id.toString(),
             status: o.status,
@@ -173,6 +184,7 @@ export class AdminService {
             updatedAt: o.updatedAt,
             slaStatus: sla.status,
             slaLabel: sla.label,
+            ...payment,
           };
         }),
         statusCounts: await this.orderStatusCounts(),

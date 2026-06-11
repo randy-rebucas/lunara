@@ -240,8 +240,10 @@ Base: `/riders` — JWT + `rider` role unless noted.
 | POST | `/riders/pickup-offers/:orderId/accept` | Accept pickup |
 | POST | `/riders/pickup-tasks/:orderId/arrive` | Mark arrived at customer |
 | POST | `/riders/pickup-tasks/:orderId/verify` | Verify customer (4-digit code or `{ qrPayload }`) |
+| POST | `/riders/pickup-tasks/:orderId/collect-cash` | Record cash collected on pickup |
 | POST | `/riders/pickup-tasks/:orderId/collect` | Collect laundry |
-| POST | `/riders/pickup-tasks/:orderId/photo` | Upload pickup photo URL |
+| POST | `/riders/pickup-tasks/:orderId/photo-upload` | Upload pickup photo (multipart) |
+| POST | `/riders/pickup-tasks/:orderId/photo` | Set pickup photo URL (legacy) |
 | POST | `/riders/pickup-tasks/:orderId/generate-receipt` | Generate pickup receipt |
 | GET | `/riders/pickup-tasks/:orderId/order-qr` | Order handover QR payload (rider) |
 | POST | `/riders/pickup-tasks/:orderId/drop-at-shop` | Drop at shop (optional `{ qrPayload }` for scan handover) |
@@ -255,7 +257,9 @@ Base: `/riders` — JWT + `rider` role unless noted.
 | POST | `/riders/delivery-tasks/:orderId/customer-received` | Customer received |
 | POST | `/riders/delivery-tasks/:orderId/verify-customer-qr` | Verify customer via scanned QR (`{ qrPayload }`) |
 | POST | `/riders/delivery-tasks/:orderId/arrive` | Arrived at customer |
-| POST | `/riders/delivery-tasks/:orderId/photo` | Delivery photo URL |
+| POST | `/riders/delivery-tasks/:orderId/collect-cash` | Record cash collected on delivery |
+| POST | `/riders/delivery-tasks/:orderId/photo-upload` | Upload delivery photo (multipart) |
+| POST | `/riders/delivery-tasks/:orderId/photo` | Set delivery photo URL (legacy) |
 | POST | `/riders/delivery-tasks/:orderId/complete` | Complete delivery |
 | POST | `/riders/sos/notify` | Notify dispatch of SOS (body: `{ orderId, lat?, lng? }`) |
 | POST | `/riders/sos/location/start` | Start live location sharing with dispatch |

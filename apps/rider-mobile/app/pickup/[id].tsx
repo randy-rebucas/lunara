@@ -7,7 +7,9 @@ import {
   getPickupWorkflowStepIndex,
   PICKUP_WORKFLOW_STEPS,
 } from '@lunara/utils';
+import type { RiderCashPaymentInfo } from '@lunara/utils';
 import { OpsStepper } from '../../src/components/ops-stepper';
+import { CashPaymentCard } from '../../src/components/cash-payment-card';
 import { TaskDetailsCard } from '../../src/components/task-details-card';
 import { DataLoadState } from '../../src/components/data-load-state';
 import { Button } from '../../src/components/ui/button';
@@ -16,7 +18,7 @@ import { Input } from '../../src/components/ui/input';
 import { Screen } from '../../src/components/ui/screen';
 import { riderFetch, riderUpload, loadTaskWithCache, isQueuedResponse } from '../../src/api';
 import { useRiderOrderSocket } from '../../src/hooks/use-rider-dispatch-socket';
-import { useOrderPendingCount } from '../../src/hooks/use-offline-sync';
+import { useOrderPendingCount, useOrderHasPendingStep } from '../../src/hooks/use-offline-sync';
 import { PendingSyncChip } from '../../src/components/pending-sync-chip';
 import { SosButton } from '../../src/components/sos-button';
 import { loadTaskCache } from '../../src/lib/offline/task-cache';
@@ -57,12 +59,14 @@ interface PickupTask {
   };
   pickupAddress?: RiderTaskAddress | null;
   shopLocation?: RiderShopLocation | null;
+  cashPayment?: RiderCashPaymentInfo | null;
 }
 
 export default function PickupScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const pendingCount = useOrderPendingCount(id);
+  const cashPendingSync = useOrderHasPendingStep(id, 'pickup:collect-cash');
   const [task, setTask] = useState<PickupTask | null>(null);
   const [fromCache, setFromCache] = useState(false);
   const [verifyCode, setVerifyCode] = useState('');
@@ -190,6 +194,11 @@ export default function PickupScreen() {
   }
 
   const p = task.pickup ?? {};
+  const cash = task.cashPayment;
+  const pickupCashDue =
+    cash?.collectAt === 'pickup' && !cash.collected && !!p.customerVerifiedAt;
+  const canCollectLaundry =
+    !!p.customerVerifiedAt && !p.collectedAt && !pickupCashDue && !cashPendingSync;
   const isOffer =
     (task.status === 'shop_assigned' || task.status === 'confirmed') && !p.acceptedAt;
   const done =
@@ -306,7 +315,30 @@ export default function PickupScreen() {
               </Card>
             )}
 
-            {p.customerVerifiedAt && !p.collectedAt && (
+            {p.customerVerifiedAt && cash?.collectAt === 'pickup' && (
+              <CashPaymentCard
+                cashPayment={cash}
+                loading={loading}
+                onCollect={
+                  cash.canCollect
+                    ? () =>
+                        run(
+                          () =>
+                            riderFetch(`/riders/pickup-tasks/${id}/collect-cash`, {
+                              method: 'POST',
+                            }),
+                          'Cash payment recorded',
+                        )
+                    : undefined
+                }
+              />
+            )}
+
+            {cashPendingSync && cash?.collectAt === 'pickup' ? (
+              <Text style={styles.cacheHint}>Cash collection pending sync — stay online before pickup</Text>
+            ) : null}
+
+            {canCollectLaundry && (
               <Card elevated style={styles.card}>
                 <Text style={styles.cardTitle}>Pickup laundry</Text>
                 <Text style={styles.statusHint}>Status will become picked_up</Text>

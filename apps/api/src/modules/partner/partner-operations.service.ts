@@ -32,6 +32,12 @@ import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
 import { applyStaffBranchFilter, resolvePortalBranchId } from './partner-access';
 import { PartnerOrderNotificationService } from '../push/partner-order-notification.service';
+import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
+import {
+  buildOrderPaymentSummary,
+  buildPartnerPaymentLabel,
+  loadLatestOrderPaymentsByOrderId,
+} from '../payments/payment-summary';
 
 const INCOMING_STATUSES = [
   OrderStatus.SHOP_ASSIGNED,
@@ -84,6 +90,7 @@ export class PartnerOperationsService {
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Branch.name) private branchModel: Model<BranchDocument>,
     @InjectModel(ShopInventoryItem.name) private inventoryModel: Model<ShopInventoryDocument>,
+    @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
     private trackingGateway: TrackingGateway,
     private riderAssignmentService: RiderAssignmentService,
     private partnerOrderNotifications: PartnerOrderNotificationService,
@@ -200,7 +207,7 @@ export class PartnerOperationsService {
           todayOrders: completedToday.length,
           weekOrders: weekOrders.length,
         },
-        recentOrders: await Promise.all(recent.map((o) => this.summarizeIncoming(o))),
+        recentOrders: await this.summarizeIncomingBatch(recent),
       },
     };
   }
@@ -348,14 +355,10 @@ export class PartnerOperationsService {
     return {
       success: true,
       data: {
-        items: await Promise.all(
-          items.map((o) =>
-            this.summarizeIncoming(o, {
-              allowStaffRequestDelivery,
-              viewerRole: role,
-            }),
-          ),
-        ),
+        items: await this.summarizeIncomingBatch(items, {
+          allowStaffRequestDelivery,
+          viewerRole: role,
+        }),
       },
     };
   }
@@ -509,7 +512,7 @@ export class PartnerOperationsService {
     return {
       success: true,
       data: {
-        items: await Promise.all(items.map((o) => this.summarizeIncoming(o))),
+        items: await this.summarizeIncomingBatch(items),
       },
     };
   }
@@ -646,12 +649,29 @@ export class PartnerOperationsService {
     };
   }
 
+  private async summarizeIncomingBatch(
+    orders: OrderDocument[],
+    options?: {
+      allowStaffRequestDelivery?: boolean;
+      viewerRole?: UserRole;
+    },
+  ) {
+    const paymentsByOrderId = await loadLatestOrderPaymentsByOrderId(
+      this.paymentModel,
+      orders.map((o) => o._id),
+    );
+    return Promise.all(
+      orders.map((o) => this.summarizeIncoming(o, options, paymentsByOrderId)),
+    );
+  }
+
   private async summarizeIncoming(
     order: OrderDocument,
     options?: {
       allowStaffRequestDelivery?: boolean;
       viewerRole?: UserRole;
     },
+    paymentsByOrderId?: Map<string, PaymentDocument>,
   ) {
     const storedStep = normalizeProcessingStepId(order.laundryProcessing?.currentStepId);
     const initialStep = getInitialProcessingStepForOrder(order.status);
@@ -679,6 +699,12 @@ export class PartnerOperationsService {
       pickupRiderId: order.pickupRiderId?.toString(),
       pickupCollectedAt: order.pickup?.collectedAt,
     });
+
+    const paymentMap =
+      paymentsByOrderId ??
+      (await loadLatestOrderPaymentsByOrderId(this.paymentModel, [order._id]));
+    const paymentSummary = buildOrderPaymentSummary(paymentMap.get(order._id.toString()));
+    const paymentLabel = buildPartnerPaymentLabel(paymentSummary);
 
     return {
       _id: order._id.toString(),
@@ -723,6 +749,8 @@ export class PartnerOperationsService {
             : order.status === OrderStatus.RECEIVED_AT_SHOP
               ? 'Received at shop — start processing'
               : undefined,
+      ...paymentSummary,
+      paymentLabel,
     };
   }
 }

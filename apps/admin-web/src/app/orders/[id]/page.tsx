@@ -24,6 +24,14 @@ interface OpsOrder {
   deliveryRequestedAt?: string;
   operationsConflict?: boolean;
   operationsConflictNote?: string;
+  total?: number;
+  paymentMethod?: string;
+  paymentStatus?: string;
+  paymentAmount?: number;
+  paymentReceiptCode?: string;
+  cashTiming?: 'pickup' | 'delivery';
+  paymentPaidAt?: string;
+  cashCollectedBy?: string;
   sla: { status: string; label: string };
 }
 
@@ -316,6 +324,30 @@ export default function AdminOrderOpsPage() {
             <DetailRow label="Customer" value={data.customer?.email ?? data.customer?.phone ?? '—'} />
           </dl>
         </OpsPanel>
+
+        {o.paymentMethod ? (
+          <OpsPanel title="Payment">
+            <dl>
+              <DetailRow label="Method" value={<span className="capitalize">{formatSlugLabel(o.paymentMethod)}</span>} />
+              <DetailRow label="Status" value={<span className="capitalize">{formatSlugLabel(o.paymentStatus ?? 'unknown')}</span>} />
+              {o.paymentAmount != null ? (
+                <DetailRow label="Amount" value={`₱${o.paymentAmount.toFixed(2)}`} />
+              ) : null}
+              {o.cashTiming ? (
+                <DetailRow label="Cash timing" value={<span className="capitalize">{o.cashTiming.replace(/_/g, ' ')}</span>} />
+              ) : null}
+              {o.paymentReceiptCode ? (
+                <DetailRow label="Receipt ref" value={<span className="font-mono text-sm">{o.paymentReceiptCode}</span>} />
+              ) : null}
+              {o.paymentPaidAt ? (
+                <DetailRow label="Paid at" value={new Date(o.paymentPaidAt).toLocaleString()} />
+              ) : null}
+              {o.cashCollectedBy ? (
+                <DetailRow label="Collected by rider" value={o.cashCollectedBy} />
+              ) : null}
+            </dl>
+          </OpsPanel>
+        ) : null}
 
         <div className="grid gap-4 lg:grid-cols-2">
           <OpsPanel

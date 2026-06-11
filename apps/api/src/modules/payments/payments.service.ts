@@ -5,7 +5,9 @@ import { OrderStatus, PaymentMethod, PaymentStatus } from '@lunara/types';
 import {
   generatePaymentReceiptCode,
   isPaymongoMethod,
+  buildRiderCashPaymentInfo,
   type CashTiming,
+  type RiderCashPaymentInfo,
 } from '@lunara/utils';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { TrackingGateway } from '../realtime/tracking.gateway';
@@ -175,6 +177,12 @@ export class PaymentsService {
     if (order.status === OrderStatus.CANCELLED) {
       throw new BadRequestException('Order is cancelled');
     }
+    if (
+      order.status !== OrderStatus.PENDING &&
+      order.status !== OrderStatus.PENDING_DISPATCH
+    ) {
+      throw new BadRequestException('Order is no longer awaiting payment');
+    }
 
     const paid = await this.paymentModel.findOne({
       orderId: order._id,
@@ -213,7 +221,17 @@ export class PaymentsService {
         payment._id.toString(),
         `Payment for order ${orderId}`,
       );
-      await this.markOrderPaid(payment, order, `wallet-${payment._id}`);
+      try {
+        await this.markOrderPaid(payment, order, `wallet-${payment._id}`);
+      } catch (err) {
+        await this.walletsService.credit(
+          userId,
+          order.total,
+          `refund-wallet-${payment._id}`,
+          `Refund — order payment failed for ${orderId}`,
+        );
+        throw err;
+      }
       return {
         success: true,
         data: {
@@ -426,6 +444,11 @@ export class PaymentsService {
     const session = await this.paymongo.getCheckoutSession(payment.paymongoSessionId);
     if (session.isPaid) {
       await this.fulfillPayment(payment, session.paymentId);
+      return;
+    }
+    if (session.sessionStatus === 'expired' && payment.status === PaymentStatus.PENDING) {
+      payment.status = PaymentStatus.FAILED;
+      await payment.save();
     }
   }
 
@@ -498,6 +521,78 @@ export class PaymentsService {
         orderId: order._id.toString(),
       });
     }
+  }
+
+  async getRiderCashPaymentInfo(
+    orderId: string,
+    stage: 'pickup' | 'delivery',
+    readyToCollect: boolean,
+  ): Promise<RiderCashPaymentInfo | null> {
+    const payment = await this.paymentModel
+      .findOne({
+        orderId: new Types.ObjectId(orderId),
+        purpose: 'order',
+        method: PaymentMethod.CASH,
+      })
+      .sort({ createdAt: -1 });
+
+    if (!payment?.cashTiming) return null;
+
+    return buildRiderCashPaymentInfo({
+      timing: payment.cashTiming as CashTiming,
+      amount: payment.amount,
+      status: payment.status,
+      receiptCode: payment.receiptCode,
+      stage,
+      readyToCollect,
+    });
+  }
+
+  async assertCashCollectedForStage(orderId: string, stage: 'pickup' | 'delivery') {
+    const payment = await this.paymentModel.findOne({
+      orderId: new Types.ObjectId(orderId),
+      purpose: 'order',
+      method: PaymentMethod.CASH,
+      cashTiming: stage,
+    });
+    if (!payment) return;
+    if (payment.status !== PaymentStatus.PAID) {
+      throw new BadRequestException(
+        stage === 'pickup'
+          ? 'Collect cash from customer before picking up laundry'
+          : 'Collect cash from customer before completing delivery',
+      );
+    }
+  }
+
+  async collectCashForOrder(orderId: string, riderUserId: string, stage: 'pickup' | 'delivery') {
+    const payment = await this.paymentModel.findOne({
+      orderId: new Types.ObjectId(orderId),
+      purpose: 'order',
+      method: PaymentMethod.CASH,
+      cashTiming: stage,
+    });
+    if (!payment) {
+      throw new BadRequestException('No cash payment due at this stage');
+    }
+    if (payment.status === PaymentStatus.PAID) {
+      return payment;
+    }
+
+    payment.status = PaymentStatus.PAID;
+    payment.paidAt = new Date();
+    payment.cashCollectedBy = new Types.ObjectId(riderUserId);
+    payment.externalId = `cash-${stage}-${payment._id}`;
+    await payment.save();
+
+    this.trackingGateway.emitOrderEvent(orderId, 'paymentReceived', {
+      message: 'Cash payment received',
+      amount: payment.amount,
+      method: PaymentMethod.CASH,
+      receiptCode: payment.receiptCode,
+    });
+
+    return payment;
   }
 
   serializePayment(payment: PaymentDocument) {

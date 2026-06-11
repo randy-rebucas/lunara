@@ -13,6 +13,7 @@ import { ShopInventoryItem, ShopInventorySchema } from './schemas/shop-inventory
 import { Notification, NotificationSchema } from '../reviews/schemas/notification.schema';
 import { Branch, BranchSchema } from '../branches/schemas/branch.schema';
 import { PartnerSettingsService } from './partner-settings.service';
+import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { PartnerSettingsService } from './partner-settings.service';
       { name: ShopInventoryItem.name, schema: ShopInventorySchema },
       { name: Notification.name, schema: NotificationSchema },
       { name: Branch.name, schema: BranchSchema },
+      { name: Payment.name, schema: PaymentSchema },
     ]),
     RealtimeModule,
     RidersModule,

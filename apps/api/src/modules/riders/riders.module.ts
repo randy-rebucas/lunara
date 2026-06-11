@@ -24,6 +24,7 @@ import {
 } from './schemas/rider-wallet.schema';
 import { RiderWalletService } from './rider-wallet.service';
 import { HandoffModule } from '../handoff/handoff.module';
+import { PaymentsModule } from '../payments/payments.module';
 import { SosModule } from '../sos/sos.module';
 
 @Module({
@@ -43,6 +44,7 @@ import { SosModule } from '../sos/sos.module';
     RealtimeModule,
     ReviewsModule,
     HandoffModule,
+    PaymentsModule,
     SosModule,
   ],
   controllers: [RidersController],

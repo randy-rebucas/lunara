@@ -32,6 +32,7 @@ export const ORDER_EVENT_MESSAGES: Record<string, string> = {
   customerSignedDelivery: 'You signed for your delivery.',
   delivered: 'Laundry delivered successfully.',
   completed: 'Order complete. Thank you!',
+  paymentReceived: 'Cash payment received — thank you!',
   reviewRequested: 'How was your experience? Leave a review when you have a moment.',
   reviewPublished: 'Thank you for your review!',
   refundProcessed: 'Your refund has been processed.',

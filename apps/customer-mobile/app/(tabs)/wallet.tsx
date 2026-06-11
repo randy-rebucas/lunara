@@ -17,6 +17,7 @@ import { colors, spacing, typography } from '../../src/theme';
 import { DataLoadState } from '../../src/components/data-load-state';
 import { useTabScreenPadding } from '../../src/hooks/use-tab-bar-height';
 import { useAuthStore } from '../../src/store/auth';
+import { getCustomerClientOrigin } from '../../src/lib/client-origin';
 
 const TOP_UP_AMOUNT = 500;
 const PAYMONGO_OPTIONS = CUSTOMER_PAYMENT_OPTIONS.filter((o) => o.channel === 'paymongo');
@@ -82,10 +83,17 @@ export default function WalletScreen() {
   async function topUp() {
     setTopUpLoading(true);
     try {
-      const data = await apiFetch<{ checkoutUrl?: string }>('/payments/wallet-topup/intent', {
-        method: 'POST',
-        body: JSON.stringify({ amount: TOP_UP_AMOUNT, method: topUpMethod }),
-      });
+      const data = await apiFetch<{ checkoutUrl?: string; payment?: { _id: string } }>(
+        '/payments/wallet-topup/intent',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            amount: TOP_UP_AMOUNT,
+            method: topUpMethod,
+            clientOrigin: getCustomerClientOrigin(),
+          }),
+        },
+      );
 
       if (data.checkoutUrl) {
         await Linking.openURL(data.checkoutUrl);

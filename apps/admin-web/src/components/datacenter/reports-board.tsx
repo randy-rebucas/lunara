@@ -62,7 +62,7 @@ function deriveReportState(report: ReportData): ReportState {
 
 function statusBadgeClass(status: string) {
   if (status === 'completed' || status === 'delivered') return 'badge-accent';
-  if (status === 'pending_dispatch' || status === 'pending_payment') return 'badge-warning';
+  if (status === 'pending_dispatch') return 'badge-warning';
   if (status.includes('cancel') || status === 'refunded') return 'badge-neutral';
   if (status.includes('rider') || status.includes('pickup') || status.includes('delivery')) {
     return 'badge-primary';

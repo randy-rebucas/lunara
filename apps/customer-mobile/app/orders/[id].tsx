@@ -11,11 +11,14 @@ import {
   View,
 } from 'react-native';
 import { KeyboardSafeScrollView } from '../../src/components/ui/keyboard-safe-scroll-view';
-import { OrderStatus } from '@lunara/types';
+import { OrderStatus, PaymentMethod, PaymentStatus } from '@lunara/types';
 import {
   buildCustomerTimeline,
+  formatCashTimingLabel,
   formatCurrency,
   formatOrderStatusLabel,
+  formatPaymentMethodLabel,
+  formatPaymentStatusLabel,
 } from '@lunara/utils';
 import { Button } from '../../src/components/ui/button';
 import { colors, radius, spacing, typography } from '../../src/theme';
@@ -38,6 +41,11 @@ interface OrderDetail {
   pickup?: { receiptCode?: string };
   delivery?: { receiptCode?: string; signatureName?: string };
   statusHistory: { status: string; timestamp: string; note?: string }[];
+  paymentMethod?: string;
+  paymentStatus?: string;
+  paymentAmount?: number;
+  paymentReceiptCode?: string;
+  cashTiming?: 'pickup' | 'delivery';
 }
 
 interface DeliveryUiState {
@@ -228,6 +236,9 @@ export default function OrderTrackScreen() {
     timeline.isTerminal && order.status === OrderStatus.COMPLETED;
   const showLostItemHint =
     order.status === OrderStatus.DELIVERED || order.status === OrderStatus.COMPLETED;
+  const isCashPending =
+    order.paymentMethod === PaymentMethod.CASH &&
+    order.paymentStatus === PaymentStatus.PENDING;
 
   return (
     <KeyboardSafeScrollView
@@ -269,10 +280,30 @@ export default function OrderTrackScreen() {
         <View style={styles.banner}>
           <Text style={styles.bannerTitle}>Assigning partner branch</Text>
           <Text style={styles.bannerText}>
-            Payment received. Lunara HQ is dispatching your order to the best partner laundry shop.
+            {isCashPending
+              ? `Booking confirmed. Pay ${formatCurrency(order.total)} in cash on ${order.cashTiming === 'delivery' ? 'delivery' : 'pickup'}. Lunara is assigning your partner branch.`
+              : 'Payment received. Lunara HQ is dispatching your order to the best partner laundry shop.'}
           </Text>
         </View>
       )}
+
+      {order.paymentMethod ? (
+        <View style={styles.paymentCard}>
+          <Text style={styles.paymentTitle}>Payment</Text>
+          <Text style={styles.paymentLine}>
+            {formatPaymentMethodLabel(order.paymentMethod)}
+            {order.cashTiming ? ` · ${formatCashTimingLabel(order.cashTiming)}` : ''}
+          </Text>
+          {order.paymentStatus ? (
+            <Text style={styles.paymentLine}>
+              {formatPaymentStatusLabel(order.paymentStatus)}
+            </Text>
+          ) : null}
+          {order.paymentReceiptCode ? (
+            <Text style={styles.paymentRef}>Ref {order.paymentReceiptCode}</Text>
+          ) : null}
+        </View>
+      ) : null}
 
       {hasBranch && (
         <View style={styles.branchCard}>
@@ -448,6 +479,24 @@ const styles = StyleSheet.create({
   },
   bannerTitle: { fontWeight: '600', color: colors.warning },
   bannerText: { marginTop: spacing.sm - 2, fontSize: 13, color: colors.warning, lineHeight: 20, opacity: 0.9 },
+  bannerText: { marginTop: spacing.xs, fontSize: 13, color: colors.muted, lineHeight: 20 },
+  paymentCard: {
+    marginTop: spacing.lg,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  paymentTitle: { fontSize: 14, fontWeight: '700', color: colors.foreground },
+  paymentLine: { marginTop: spacing.xs, fontSize: 13, color: colors.muted },
+  paymentRef: {
+    marginTop: spacing.sm,
+    fontFamily: 'monospace',
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.accentDark,
+  },
   branchCard: {
     marginTop: spacing.lg,
     padding: spacing.lg - 2,

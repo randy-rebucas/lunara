@@ -102,3 +102,43 @@ export function isPaymongoMethod(method: PaymentMethod) {
 export function isRefundablePaymentMethod(method: PaymentMethod) {
   return method === PaymentMethod.WALLET || isPaymongoMethod(method);
 }
+
+/** Cash payment summary for rider pickup/delivery tasks. */
+export interface RiderCashPaymentInfo {
+  required: true;
+  timing: CashTiming;
+  amount: number;
+  status: 'pending' | 'paid';
+  receiptCode?: string;
+  /** When the rider must collect cash. */
+  collectAt: CashTiming;
+  /** Rider can tap "Cash collected" on this task now. */
+  canCollect: boolean;
+  collected: boolean;
+}
+
+export function buildRiderCashPaymentInfo(input: {
+  timing: CashTiming;
+  amount: number;
+  status: string;
+  receiptCode?: string;
+  stage: 'pickup' | 'delivery';
+  /** Pickup: customer verified. Delivery: out for delivery with customer received. */
+  readyToCollect: boolean;
+}): RiderCashPaymentInfo {
+  const collected = input.status === 'paid';
+  const collectAt = input.timing;
+  const canCollect =
+    !collected && collectAt === input.stage && input.readyToCollect;
+
+  return {
+    required: true,
+    timing: input.timing,
+    amount: input.amount,
+    status: collected ? 'paid' : 'pending',
+    receiptCode: input.receiptCode,
+    collectAt,
+    canCollect,
+    collected,
+  };
+}

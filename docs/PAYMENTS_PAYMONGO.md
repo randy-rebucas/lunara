@@ -2,7 +2,21 @@
 
 Lunara uses [PayMongo](https://paymongo.com) Checkout Sessions for online payments in PHP: **GCash**, **Maya**, and **credit/debit card**. Wallet top-ups and order checkout share the same integration.
 
-**Apps involved:** `apps/api` (server), `apps/customer-web`, `apps/customer-mobile`
+**Apps involved:** `apps/api`, `apps/customer-web`, `apps/customer-mobile`, `apps/rider-mobile` (cash), `apps/admin-web` (ops)
+
+---
+
+## Cash on pickup / delivery
+
+| Step | Behavior |
+|------|----------|
+| Customer checkout | `POST /payments/intent` with `method: cash`, `cashTiming: pickup \| delivery` |
+| Rider pickup | `POST /riders/pickup-tasks/:orderId/collect-cash` before collecting laundry |
+| Rider delivery | `POST /riders/delivery-tasks/:orderId/collect-cash` before completing delivery |
+| Customer track | Orders include `paymentMethod`, `paymentStatus`, `cashTiming`, receipt ref |
+| Realtime | `paymentReceived` when rider records cash |
+
+Cash is not refundable via the app. Rider mobile supports offline `collect-cash` queue.
 
 ---
 
@@ -41,7 +55,7 @@ CUSTOMER_WEB_URL=http://localhost:3000
 API_URL=http://localhost:3001
 ```
 
-When `PAYMONGO_SECRET_KEY` is **empty**, order checkout falls back to **dev mock** pages at `/api/v1/payments/mock/paymongo/*`. Wallet top-up still uses mock checkout in that mode. Production must set real keys.
+When `PAYMONGO_SECRET_KEY` is **empty**, order checkout falls back to **dev mock** pages at `/api/v1/payments/mock/paymongo/*` (disabled when `NODE_ENV=production`). Wallet top-up still uses mock checkout in that mode. Production must set real keys.
 
 ---
 
@@ -176,8 +190,9 @@ Stored on each session for webhook matching:
 ### customer-mobile
 
 - Checkout and wallet open PayMongo in the **device browser** (`Linking.openURL`).
-- After payment, user returns to the **web** success URL (`CUSTOMER_WEB_URL`). Pull to refresh wallet or reopen the app.
-- Pass `clientOrigin` when top-up from mobile if you add a dedicated return URL later; today wallet intent uses API default unless extended.
+- Sends `clientOrigin` from `EXPO_PUBLIC_WEBSITE_URL` (defaults to production site) so PayMongo success/cancel URLs match customer-web.
+- After payment in browser, user lands on customer-web success/wallet URL — pull to refresh in the app or reopen checkout to sync (`POST /payments/:id/sync`).
+- Set `EXPO_PUBLIC_WEBSITE_URL=http://localhost:3000` in dev so returns match your local customer-web session.
 
 ---
 
@@ -242,7 +257,8 @@ Stored on each session for webhook matching:
 | Webhook not received | No ngrok / wrong URL | Register webhook; use sync on return URL as backup |
 | `PayMongo is not configured` | Missing secret key | Set `PAYMONGO_SECRET_KEY` on API |
 | `Use POST /payments/wallet-topup/intent` | Calling old `POST /wallets/topup` with keys set | Use PayMongo top-up flow only |
-| Webhook **401/400** | Bad signature | Match `PAYMONGO_WEBHOOK_SECRET` to endpoint secret; API must receive raw body (`rawBody: true` in `main.ts`) |
+| Webhook **401/400** | Bad signature | Match `PAYMONGO_WEBHOOK_SECRET`; signature is `HMAC-SHA256(t + "." + body)` compared to `te`/`li` in `Paymongo-Signature` header |
+| Expired PayMongo session | User abandoned checkout | Sync marks payment `failed`; customer can start checkout again |
 | Amount mismatch | PayMongo uses **centavos** | API converts `amount * 100` automatically |
 
 ---

@@ -45,6 +45,9 @@ export class Payment {
   @Prop({ enum: ['pickup', 'delivery'] })
   cashTiming?: 'pickup' | 'delivery';
 
+  @Prop({ type: Types.ObjectId })
+  cashCollectedBy?: Types.ObjectId;
+
   @Prop()
   paidAt?: Date;
 
