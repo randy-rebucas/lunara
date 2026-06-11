@@ -15,9 +15,13 @@ Lunara REST API reference. All routes below are relative to the global prefix **
 
 `POST /auth/register` always creates a **customer** account. Role cannot be set via the public API.
 
-### Payment webhook confirm
+### PayMongo webhooks
 
-`POST /payments/:id/confirm` requires header `x-payment-webhook-secret` (env `PAYMENT_WEBHOOK_SECRET`, dev default `dev-payment-webhook-secret`). Mock checkout flows confirm payments server-side and do not call this route.
+`POST /payments/webhooks/paymongo` verifies the `Paymongo-Signature` header with `PAYMONGO_WEBHOOK_SECRET`. See [PAYMENTS_PAYMONGO.md](./PAYMENTS_PAYMONGO.md).
+
+### Legacy payment confirm
+
+`POST /payments/:id/confirm` requires header `x-payment-webhook-secret` (env `PAYMENT_WEBHOOK_SECRET`). Mock checkout flows confirm payments server-side and do not call this route.
 
 ---
 
@@ -123,12 +127,15 @@ Admin branch network and CRUD live under **`/admin/branches`** (see Admin).
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | `/payments/intent` | JWT | Create payment intent for order |
+| POST | `/payments/intent` | JWT | Create payment intent for order (`clientOrigin` optional) |
+| POST | `/payments/wallet-topup/intent` | JWT | PayMongo wallet top-up (`amount`, `method`, `clientOrigin`) |
 | GET | `/payments/orders/:orderId` | JWT | Payment + order summary for checkout |
-| GET | `/payments/:id` | JWT | Payment by id |
-| POST | `/payments/:id/confirm` | Webhook secret | Confirm payment (provider callback) |
-| GET | `/payments/mock/paymongo/checkout` | Public | Dev PayMongo checkout page |
-| GET | `/payments/mock/paymongo/complete` | Public | Dev PayMongo complete redirect |
+| GET | `/payments/:id` | JWT | Payment by id (syncs pending PayMongo session) |
+| POST | `/payments/:id/sync` | JWT | Poll PayMongo and fulfill if paid |
+| POST | `/payments/webhooks/paymongo` | PayMongo signature | PayMongo webhook (`Paymongo-Signature` header) |
+| POST | `/payments/:id/confirm` | Webhook secret | Legacy confirm (generic provider callback) |
+| GET | `/payments/mock/paymongo/checkout` | Public | Dev mock checkout (no `PAYMONGO_SECRET_KEY`) |
+| GET | `/payments/mock/paymongo/complete` | Public | Dev mock complete redirect |
 | GET | `/payments/mock/gcash` | Public | Dev GCash confirm redirect |
 | GET | `/payments/mock/maya` | Public | Dev Maya confirm redirect |
 | GET | `/payments/mock/stripe` | Public | Dev card confirm redirect |
@@ -141,7 +148,7 @@ Admin branch network and CRUD live under **`/admin/branches`** (see Admin).
 |--------|------|-------|-------------|
 | GET | `/wallets/me` | customer | Balance |
 | GET | `/wallets/me/transactions` | customer | Transaction history |
-| POST | `/wallets/topup` | customer | Dev top-up |
+| POST | `/wallets/topup` | customer | Dev-only instant top-up (blocked when PayMongo is configured) |
 
 ---
 
@@ -386,9 +393,12 @@ Unauthenticated connections are disconnected.
 | `MONGODB_URI` | MongoDB connection |
 | `REDIS_URL` | Redis connection |
 | `JWT_SECRET` / `JWT_REFRESH_SECRET` | Required in production |
+| `PAYMONGO_SECRET_KEY` | PayMongo API secret (`sk_test_` / `sk_live_`) |
+| `PAYMONGO_WEBHOOK_SECRET` | PayMongo webhook signing secret |
 | `PAYMENT_WEBHOOK_SECRET` | Protects `POST /payments/:id/confirm` |
+| `CUSTOMER_WEB_URL` | Customer web URL for payment return redirects |
 | `API_URL` | Public API URL for mock payment redirects |
 
 ---
 
-*Last updated: 2026-05-30 — reflects implemented routes in `apps/api`.*
+*Last updated: 2026-06-11 — reflects implemented routes in `apps/api`.*

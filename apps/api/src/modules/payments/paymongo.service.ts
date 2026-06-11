@@ -116,7 +116,8 @@ export class PaymongoService {
   }
 
   async getCheckoutSession(sessionId: string): Promise<{
-    status: string;
+    sessionStatus: string;
+    isPaid: boolean;
     paymentId?: string;
     metadata: Record<string, string>;
   }> {
@@ -128,8 +129,11 @@ export class PaymongoService {
       data?: {
         attributes: {
           status: string;
-          payments?: { id: string }[];
           metadata?: Record<string, string>;
+          payments?: Array<
+            | { id: string; attributes?: { status?: string } }
+            | { id?: string; status?: string }
+          >;
         };
       };
       errors?: { detail: string }[];
@@ -141,9 +145,25 @@ export class PaymongoService {
     }
 
     const attrs = json.data.attributes;
+    const paidEntry = attrs.payments?.find((p) => {
+      const status =
+        'attributes' in p && p.attributes?.status
+          ? p.attributes.status
+          : 'status' in p
+            ? p.status
+            : undefined;
+      return status === 'paid';
+    });
+    const firstPayment = paidEntry ?? attrs.payments?.[0];
+    const paymentId =
+      firstPayment && 'id' in firstPayment && firstPayment.id
+        ? firstPayment.id
+        : undefined;
+
     return {
-      status: attrs.status,
-      paymentId: attrs.payments?.[0]?.id,
+      sessionStatus: attrs.status,
+      isPaid: Boolean(paidEntry),
+      paymentId,
       metadata: attrs.metadata ?? {},
     };
   }
@@ -176,9 +196,13 @@ export class PaymongoService {
           attributes?: {
             type?: string;
             data?: {
+              id?: string;
               attributes?: {
                 metadata?: Record<string, string>;
-                payments?: { id: string }[];
+                payments?: Array<
+                  | { id: string; attributes?: { status?: string } }
+                  | { id?: string; status?: string }
+                >;
               };
             };
           };
@@ -188,7 +212,27 @@ export class PaymongoService {
       const type = payload.data?.attributes?.type ?? '';
       const inner = payload.data?.attributes?.data?.attributes;
       const metadata = inner?.metadata ?? {};
-      const paymongoPaymentId = inner?.payments?.[0]?.id;
+
+      const paidEntry = inner?.payments?.find((p) => {
+        const status =
+          'attributes' in p && p.attributes?.status
+            ? p.attributes.status
+            : 'status' in p
+              ? p.status
+              : undefined;
+        return status === 'paid';
+      });
+      const firstPayment = paidEntry ?? inner?.payments?.[0];
+      const paymongoPaymentId =
+        firstPayment && 'id' in firstPayment && firstPayment.id ? firstPayment.id : undefined;
+
+      // payment.paid events nest a single payment resource
+      if (!paymongoPaymentId && payload.data?.attributes?.data?.id) {
+        const resource = payload.data.attributes.data;
+        if (resource.id?.startsWith('pay_')) {
+          return { type, metadata, paymongoPaymentId: resource.id };
+        }
+      }
 
       return { type, metadata, paymongoPaymentId };
     } catch {

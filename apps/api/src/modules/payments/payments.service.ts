@@ -85,6 +85,18 @@ export class PaymentsService {
       .findOne({ orderId: order._id, purpose: 'order' })
       .sort({ createdAt: -1 });
 
+    if (payment?.status === PaymentStatus.PENDING && payment.paymongoSessionId) {
+      try {
+        await this.syncPaymongoPayment(payment);
+      } catch (err) {
+        this.logger.debug(`PayMongo sync skipped for order ${orderId}: ${err}`);
+      }
+    }
+
+    const refreshed = payment
+      ? await this.paymentModel.findById(payment._id)
+      : null;
+
     return {
       success: true,
       data: {
@@ -94,7 +106,7 @@ export class PaymentsService {
           total: order.total,
           bookingType: order.bookingType,
         },
-        payment: payment ? this.serializePayment(payment) : null,
+        payment: refreshed ? this.serializePayment(refreshed) : null,
       },
     };
   }
@@ -412,7 +424,7 @@ export class PaymentsService {
     if (payment.status === PaymentStatus.PAID) return;
 
     const session = await this.paymongo.getCheckoutSession(payment.paymongoSessionId);
-    if (session.status === 'paid') {
+    if (session.isPaid) {
       await this.fulfillPayment(payment, session.paymentId);
     }
   }

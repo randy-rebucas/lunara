@@ -381,7 +381,7 @@ OTP login: requires Twilio env vars on the API (`TWILIO_ACCOUNT_SID`, `TWILIO_AU
 
 ## Documentation
 
-See [`docs/`](./docs/) for architecture, database schemas, API reference, and development roadmap. Mobile app setup, dispatch notifications, and screen reference are in [Mobile Apps](#mobile-apps) above.
+See [`docs/`](./docs/) for architecture, database schemas, API reference, and development roadmap. **PayMongo setup (GCash, Maya, card, wallet top-up):** [docs/PAYMENTS_PAYMONGO.md](./docs/PAYMENTS_PAYMONGO.md). Mobile app setup, dispatch notifications, and screen reference are in [Mobile Apps](#mobile-apps) above.
 
 **Feature work:** When adding or changing features, wire them across every relevant app (API, admin-web, partner-web, customer-web, customer-mobile, rider-mobile) and add a summary under [`docs/features/`](./docs/features/). See [`docs/FEATURE_WIRING.md`](./docs/FEATURE_WIRING.md).
 

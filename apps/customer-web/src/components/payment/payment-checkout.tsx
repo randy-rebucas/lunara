@@ -49,23 +49,53 @@ export function PaymentCheckout({ orderId }: PaymentCheckoutProps) {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    Promise.all([
-      api.get<{ order: CheckoutOrder; payment: CheckoutPayment | null }>(
-        `/payments/orders/${orderId}`,
-      ),
-      api.get<{ balance: number }>('/wallets/me'),
-    ])
-      .then(([checkout, wallet]) => {
+    let cancelled = false;
+
+    async function loadCheckout() {
+      try {
+        const [checkout, wallet] = await Promise.all([
+          api.get<{ order: CheckoutOrder; payment: CheckoutPayment | null }>(
+            `/payments/orders/${orderId}`,
+          ),
+          api.get<{ balance: number }>('/wallets/me'),
+        ]);
+
+        if (cancelled) return;
+
+        let payment = checkout.data.payment;
         setOrder(checkout.data.order);
-        setExistingPayment(checkout.data.payment);
-        const bal = (wallet.data as { balance?: number }).balance;
-        setWalletBalance(bal ?? 0);
-        if (checkout.data.payment?.status === 'paid') {
-          window.location.href = `/checkout/${orderId}/success?paymentId=${checkout.data.payment._id}`;
+        setWalletBalance((wallet.data as { balance?: number }).balance ?? 0);
+
+        if (payment?.status === 'pending' && payment._id) {
+          try {
+            const synced = await api.post<{ status: string; _id: string }>(
+              `/payments/${payment._id}/sync`,
+              {},
+            );
+            payment = { ...payment, status: synced.data.status };
+          } catch {
+            // Still pending — user can retry payment
+          }
         }
-      })
-      .catch((e) => setError(e instanceof Error ? e.message : 'Could not load checkout'))
-      .finally(() => setLoading(false));
+
+        setExistingPayment(payment);
+
+        if (payment?.status === 'paid' && payment._id) {
+          window.location.href = `/checkout/${orderId}/success?paymentId=${payment._id}`;
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : 'Could not load checkout');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void loadCheckout();
+    return () => {
+      cancelled = true;
+    };
   }, [api, orderId]);
 
   async function handleDelete() {
