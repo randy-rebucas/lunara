@@ -1,8 +1,14 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { appConfig } from '@lunara/config';
 import { MarketingContentPage } from '../../../components/marketing/marketing-content-page';
-import { ButtonLink } from '../../../components/ui/button-link';
+import {
+  MarketingBackLink,
+  MarketingCtaPanel,
+  MarketingFeatureCard,
+  MarketingInfoCard,
+} from '../../../components/marketing/marketing-design';
+import { MarketingActions } from '../../../components/marketing/marketing-actions';
+import { ButtonAnchor, ButtonLink } from '../../../components/ui/button-link';
 
 export const metadata: Metadata = {
   title: `Partner with ${appConfig.name}`,
@@ -42,58 +48,46 @@ const REQUIREMENTS = [
 export default function PartnersPage() {
   return (
     <MarketingContentPage
+      badge="For laundry shops"
       title="Partner with Lunara"
       description="Grow your laundry business by joining our pickup-and-delivery network."
-      wide
     >
       <div className="grid gap-6 lg:grid-cols-2">
         {BENEFITS.map((item) => (
-          <article key={item.title} className="card h-full">
-            <div className="card-body">
-              <h2 className="text-lg font-semibold text-slate-900">{item.title}</h2>
-              <p className="mt-2 text-sm leading-relaxed text-muted">{item.description}</p>
-            </div>
-          </article>
+          <MarketingFeatureCard key={item.title} title={item.title} description={item.description} />
         ))}
       </div>
 
-      <div className="card mt-10">
-        <div className="card-body">
-          <h2 className="text-lg font-semibold text-slate-900">What we look for</h2>
-          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm leading-relaxed text-muted">
-            {REQUIREMENTS.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        </div>
-      </div>
+      <MarketingInfoCard title="What we look for" className="mt-10">
+        <ul className="list-disc space-y-2 pl-5 text-sm leading-relaxed text-muted">
+          {REQUIREMENTS.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </MarketingInfoCard>
 
-      <div className="card-elevated mt-10">
-        <div className="card-body bg-gradient-to-br from-primary/5 to-secondary/5 sm:py-8">
-          <h2 className="text-xl font-semibold text-slate-900">Apply to become a partner</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
-            Tell us about your laundry shop, location, and daily capacity. Our partnerships team will
-            review your application and follow up with onboarding steps.
-          </p>
-          <div className="btn-row mt-6">
-            <ButtonLink
-              href={`mailto:${appConfig.supportEmail}?subject=${encodeURIComponent('Lunara partner application')}`}
-              size="lg"
-            >
-              Email partnerships
-            </ButtonLink>
-            <ButtonLink href="/locations" variant="outline" size="lg">
-              View service areas
-            </ButtonLink>
-          </div>
-        </div>
-      </div>
+      <MarketingCtaPanel
+        className="mt-10"
+        badge="Apply today"
+        variant="primary"
+        title="Apply to become a partner"
+        description="Tell us about your laundry shop, location, and daily capacity. Our partnerships team will review your application and follow up with onboarding steps."
+      >
+        <MarketingActions gap="loose">
+          <ButtonAnchor
+            href={`mailto:${appConfig.supportEmail}?subject=${encodeURIComponent('Lunara partner application')}`}
+            size="lg"
+            layout="responsive"
+          >
+            Email partnerships
+          </ButtonAnchor>
+          <ButtonLink href="/locations" variant="outline" size="lg" layout="responsive">
+            View service areas
+          </ButtonLink>
+        </MarketingActions>
+      </MarketingCtaPanel>
 
-      <p className="mt-8 text-center text-sm text-muted">
-        <Link href="/marketing" className="link-primary">
-          ← Back to home
-        </Link>
-      </p>
+      <MarketingBackLink />
     </MarketingContentPage>
   );
 }

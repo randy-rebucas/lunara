@@ -1,26 +1,39 @@
+import { MarketingContentBody, MarketingPageHero } from './marketing-design';
 import { MarketingShell } from './marketing-shell';
 
 export function MarketingContentPage({
   title,
   description,
+  badge,
   children,
   wide,
+  narrow,
+  heroActions,
 }: {
   title: string;
   description?: string;
+  badge?: string;
   children: React.ReactNode;
   wide?: boolean;
+  narrow?: boolean;
+  heroActions?: React.ReactNode;
 }) {
   return (
     <MarketingShell>
-      <section className="marketing-container py-12 sm:py-16">
-        <div className={wide ? 'mx-auto max-w-5xl' : 'mx-auto max-w-3xl'}>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">{title}</h1>
-          {description ? (
-            <p className="mt-3 text-lg leading-relaxed text-muted">{description}</p>
-          ) : null}
-          <div className="mt-10">{children}</div>
-        </div>
+      <MarketingPageHero
+        badge={badge}
+        title={title}
+        description={description}
+        wide={wide}
+        narrow={narrow}
+        glow
+      >
+        {heroActions}
+      </MarketingPageHero>
+      <section className="marketing-container pb-16 pt-0 sm:pb-20">
+        <MarketingContentBody wide={wide} narrow={narrow}>
+          {children}
+        </MarketingContentBody>
       </section>
     </MarketingShell>
   );

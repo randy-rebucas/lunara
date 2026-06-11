@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { appConfig } from '@lunara/config';
 import { FaqList } from '../../../components/marketing/faq-list';
 import { MarketingContentPage } from '../../../components/marketing/marketing-content-page';
-import { ButtonLink } from '../../../components/ui/button-link';
+import { MarketingBackLink, MarketingCtaPanel } from '../../../components/marketing/marketing-design';
+import { MarketingActions } from '../../../components/marketing/marketing-actions';
+import { ButtonAnchor, ButtonLink } from '../../../components/ui/button-link';
 
 export const metadata: Metadata = {
   title: `FAQ — ${appConfig.name}`,
@@ -13,37 +14,42 @@ export const metadata: Metadata = {
 export default function FaqPage() {
   return (
     <MarketingContentPage
+      badge="Help center"
       title="Frequently asked questions"
-      description="Quick answers about booking, payments, tracking, and support."
+      description="Quick answers about booking, payments, tracking, and support. Jump to a topic below or browse all questions."
     >
       <FaqList />
 
-      <div className="card-elevated mt-12">
-        <div className="card-body text-center sm:py-8">
-          <h2 className="text-lg font-semibold text-slate-900">Still need help?</h2>
-          <p className="mt-2 text-sm text-muted">
-            Reach our support team at{' '}
+      <MarketingCtaPanel
+        className="mt-14"
+        badge="Need a hand?"
+        title="Still need help?"
+        description={
+          <>
+            Email us at{' '}
             <a href={`mailto:${appConfig.supportEmail}`} className="link-primary">
               {appConfig.supportEmail}
-            </a>
-            , or sign in to open a support ticket from your dashboard.
-          </p>
-          <div className="btn-row mt-6 justify-center">
-            <ButtonLink href="/signup" size="sm">
-              Get started
-            </ButtonLink>
-            <ButtonLink href="/login" variant="outline" size="sm">
-              Sign in
-            </ButtonLink>
-          </div>
-        </div>
-      </div>
+            </a>{' '}
+            or sign in to open a support ticket from your dashboard.
+          </>
+        }
+        align="center"
+      >
+        <MarketingActions align="center" gap="loose">
+          <ButtonAnchor
+            href={`mailto:${appConfig.supportEmail}?subject=${encodeURIComponent('Lunara support request')}`}
+            size="lg"
+            layout="responsive"
+          >
+            Email support
+          </ButtonAnchor>
+          <ButtonLink href="/login" variant="outline" size="lg" layout="responsive">
+            Sign in
+          </ButtonLink>
+        </MarketingActions>
+      </MarketingCtaPanel>
 
-      <p className="mt-8 text-center text-sm text-muted">
-        <Link href="/marketing" className="link-primary">
-          ← Back to home
-        </Link>
-      </p>
+      <MarketingBackLink />
     </MarketingContentPage>
   );
 }

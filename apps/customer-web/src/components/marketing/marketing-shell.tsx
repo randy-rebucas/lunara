@@ -8,13 +8,16 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
     <div className="laundry-bg flex min-h-screen flex-col">
       <header className="marketing-container sticky top-0 z-10 border-b border-border/40 bg-surface-muted/80 py-4 backdrop-blur-md">
         <div className="flex items-center justify-between gap-4">
-          <Link href="/marketing" className="flex items-center gap-2.5">
+          <Link href="/" className="flex items-center gap-2.5">
             <BrandMark variant="customer" compact size="sm" />
             <span className="font-bold tracking-tight text-primary">{appConfig.name}</span>
           </Link>
           <nav className="hidden items-center gap-5 text-sm font-medium text-muted lg:flex">
-            <Link href="/marketing" className="transition-colors hover:text-primary">
-              Product
+            <Link href="/#how-it-works" className="transition-colors hover:text-primary">
+              How it works
+            </Link>
+            <Link href="/#service-areas" className="transition-colors hover:text-primary">
+              Service areas
             </Link>
             <Link href="/locations" className="transition-colors hover:text-primary">
               Locations
@@ -29,11 +32,20 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
               Riders
             </Link>
           </nav>
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             <Link href="/login" className="link-primary hidden text-sm sm:inline">
               Sign in
             </Link>
-            <ButtonLink href="/signup" size="sm">
+            <ButtonLink
+              href="/signup"
+              variant="outline"
+              size="sm"
+              layout="inline"
+              className="hidden sm:inline-flex"
+            >
+              Book pickup
+            </ButtonLink>
+            <ButtonLink href="/signup" size="sm" layout="inline">
               Get started
             </ButtonLink>
           </div>
@@ -50,7 +62,7 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
           </div>
           <p className="text-center text-sm text-muted-foreground">{appConfig.tagline}</p>
           <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm">
-            <Link href="/marketing" className="link-primary">
+            <Link href="/" className="link-primary">
               Home
             </Link>
             <Link href="/locations" className="link-primary">

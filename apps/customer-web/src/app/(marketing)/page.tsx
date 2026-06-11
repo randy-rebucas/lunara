@@ -1,112 +1,13 @@
-'use client';
-
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import type { Metadata } from 'next';
 import { appConfig } from '@lunara/config';
-import { fetchOnboardingStatus, getOnboardingPath } from '@lunara/hooks/onboarding';
-import { useAuthContext } from '@lunara/hooks/auth-provider';
-import { BrandMark } from '@lunara/ui';
-import { AuthLoading } from '../../components/auth-loading';
-import { ButtonLink } from '../../components/ui/button-link';
-export default function HomePage() {
-  const { isAuthenticated, isLoading, api } = useAuthContext();
-  const router = useRouter();
+import { HomePage } from '../../components/marketing/home-page';
 
-  useEffect(() => {
-    if (isLoading || !isAuthenticated) return;
-    fetchOnboardingStatus(api).then((status) => {
-      router.replace(getOnboardingPath(status));
-    });
-  }, [isLoading, isAuthenticated, api, router]);
+export const metadata: Metadata = {
+  title: `${appConfig.name} — Laundry pickup & delivery`,
+  description:
+    'Book door-to-door laundry in Metro Manila. Download the app, schedule pickup, track orders live, and pay with GCash, card, wallet, or cash.',
+};
 
-  if (isLoading) return <AuthLoading />;
-  if (isAuthenticated) return <AuthLoading message="Redirecting…" />;
-
-  return (
-    <div className="laundry-bg flex min-h-screen flex-col">
-      <header className="page-container flex items-center justify-between py-6">
-        <div className="flex items-center gap-2.5">
-          <BrandMark variant="customer" compact size="sm" />
-          <span className="font-bold tracking-tight text-primary">{appConfig.name}</span>
-        </div>
-        <div className="flex items-center gap-4 text-sm">
-          <Link href="/marketing" className="link-primary hidden sm:inline">
-            Learn more
-          </Link>
-          <Link href="/login" className="link-primary">
-            Sign in
-          </Link>
-        </div>
-      </header>
-
-      <main className="page-container flex flex-1 flex-col items-center justify-center pb-16 pt-8">
-        <div className="card-elevated page-content-narrow text-center">
-          <div className="card-body space-y-6">
-            <div className="mx-auto">
-              <BrandMark variant="customer" compact size="lg" />
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-                {appConfig.name}
-              </h1>
-              <p className="mt-3 text-base leading-relaxed text-muted sm:text-lg">{appConfig.tagline}</p>
-            </div>
-            <div className="btn-row sm:justify-center">
-              <ButtonLink href="/signup" size="lg" className="w-full sm:min-w-[180px]">
-                Get started
-              </ButtonLink>
-              <ButtonLink
-                href="/login"
-                variant="outline"
-                size="lg"
-                className="w-full sm:min-w-[180px]"
-              >
-                Sign in
-              </ButtonLink>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              New here? Sign up with your mobile number — we&apos;ll guide you through setup.
-            </p>
-          </div>
-        </div>
-
-        <div className="page-content-narrow mt-12 grid gap-4 sm:grid-cols-3">
-          {[
-            { label: 'Book pickup', desc: 'Schedule in minutes', color: 'text-primary' },
-            { label: 'Track orders', desc: 'Live status updates', color: 'text-secondary' },
-            { label: 'Pay securely', desc: 'Wallet & checkout', color: 'text-accent' },
-          ].map((item) => (
-            <div key={item.label} className="card text-center">
-              <div className="card-body py-4">
-                <p className={`text-sm font-semibold ${item.color}`}>{item.label}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{item.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </main>
-
-      <footer className="page-container flex flex-wrap items-center justify-center gap-x-4 gap-y-2 border-t border-border/60 py-6 text-center text-xs text-muted-foreground">
-        <Link href="/marketing" className="link-primary">
-          About
-        </Link>
-        <Link href="/locations" className="link-primary">
-          Locations
-        </Link>
-        <Link href="/faq" className="link-primary">
-          FAQ
-        </Link>
-        <Link href="/partners" className="link-primary">
-          Partners
-        </Link>
-        <Link href="/riders" className="link-primary">
-          Riders
-        </Link>
-        <Link href="/privacy" className="link-primary">
-          Privacy
-        </Link>
-      </footer>
-    </div>
-  );
+export default function MarketingHomePage() {
+  return <HomePage />;
 }

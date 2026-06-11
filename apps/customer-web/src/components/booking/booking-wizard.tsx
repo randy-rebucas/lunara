@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BookingType } from '@lunara/types';
 import { Button } from '@lunara/ui';
 import { ButtonLink } from '../ui/button-link';
+import { buttonResponsiveClass } from '../ui/button-layout';
 import {
   BOOKING_MACHINE_LOAD_INFO,
   BOOKING_MIN_ORDER_AMOUNT,
@@ -260,7 +261,7 @@ function WizardActions({
 
         <div className="btn-row sm:justify-end">
           {isFirstStep ? (
-            <ButtonLink href="/dashboard" variant="ghost" size="lg" className="w-full sm:w-auto sm:min-w-[132px]">
+            <ButtonLink href="/dashboard" variant="ghost" size="lg" layout="responsive">
               Cancel
             </ButtonLink>
           ) : (
@@ -270,7 +271,7 @@ function WizardActions({
               size="lg"
               onClick={onBack}
               disabled={loading || stepping}
-              className="w-full sm:w-auto sm:min-w-[132px]"
+              className={buttonResponsiveClass('lg')}
             >
               Back
             </Button>

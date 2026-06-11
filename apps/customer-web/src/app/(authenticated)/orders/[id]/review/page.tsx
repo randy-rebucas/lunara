@@ -123,11 +123,11 @@ export default function OrderReviewPage() {
             {showPublished.comment && (
               <p className="mt-4 text-center text-sm text-slate-700">&ldquo;{showPublished.comment}&rdquo;</p>
             )}
-            <div className="mt-6 btn-row sm:justify-center">
-              <ButtonLink href={`/orders/${id}`} variant="outline" size="lg" className="w-full sm:min-w-[180px]">
+            <div className="mt-6 btn-row btn-row-responsive sm:justify-center">
+              <ButtonLink href={`/orders/${id}`} variant="outline" size="lg" layout="responsive">
                 Track order
               </ButtonLink>
-              <ButtonLink href="/orders" size="lg" className="w-full sm:min-w-[180px]">
+              <ButtonLink href="/orders" size="lg" layout="responsive">
                 My orders
               </ButtonLink>
             </div>

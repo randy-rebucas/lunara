@@ -79,11 +79,11 @@ export default function PaymentSuccessPage() {
         </div>
       )}
 
-      <div className="mt-8 btn-row sm:justify-center">
-        <ButtonLink href={`/orders/${orderId}?booked=1`} size="lg" className="w-full sm:min-w-[180px]">
+      <div className="mt-8 btn-row btn-row-responsive sm:justify-center">
+        <ButtonLink href={`/orders/${orderId}?booked=1`} size="lg" layout="responsive">
           Track order
         </ButtonLink>
-        <ButtonLink href="/orders" variant="outline" size="lg" className="w-full sm:min-w-[180px]">
+        <ButtonLink href="/orders" variant="outline" size="lg" layout="responsive">
           My orders
         </ButtonLink>
       </div>

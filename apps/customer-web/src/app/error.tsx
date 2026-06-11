@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { Button } from '@lunara/ui';
+import { buttonResponsiveClass } from '../components/ui/button-layout';
 
 export default function Error({
   error,
@@ -22,9 +23,16 @@ export default function Error({
           <p className="text-sm text-muted" role="alert">
             {error.message || 'An unexpected error occurred. Please try again.'}
           </p>
-          <div className="btn-row sm:justify-center">
-            <Button onClick={reset}>Try again</Button>
-            <Button variant="outline" onClick={() => (window.location.href = '/dashboard')}>
+          <div className="btn-row btn-row-responsive sm:justify-center">
+            <Button size="lg" className={buttonResponsiveClass('lg')} onClick={reset}>
+              Try again
+            </Button>
+            <Button
+              variant="outline"
+              size="lg"
+              className={buttonResponsiveClass('lg')}
+              onClick={() => (window.location.href = '/dashboard')}
+            >
               Go to dashboard
             </Button>
           </div>

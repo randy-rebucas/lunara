@@ -13,6 +13,7 @@ const LAST_UPDATED = 'June 8, 2026';
 export default function PrivacyPage() {
   return (
     <PublicShell
+      badge="Legal"
       title="Privacy Policy"
       description={`Last updated: ${LAST_UPDATED}`}
     >

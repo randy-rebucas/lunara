@@ -1,8 +1,14 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { appConfig } from '@lunara/config';
 import { MarketingContentPage } from '../../../components/marketing/marketing-content-page';
-import { ButtonLink } from '../../../components/ui/button-link';
+import {
+  MarketingBackLink,
+  MarketingCtaPanel,
+  MarketingFeatureCard,
+  MarketingInfoCard,
+} from '../../../components/marketing/marketing-design';
+import { MarketingActions } from '../../../components/marketing/marketing-actions';
+import { ButtonAnchor, ButtonLink } from '../../../components/ui/button-link';
 
 export const metadata: Metadata = {
   title: `Drive with ${appConfig.name}`,
@@ -42,61 +48,48 @@ const STEPS = [
 export default function RidersPage() {
   return (
     <MarketingContentPage
+      badge="For riders"
       title="Drive with Lunara"
       description="Earn on your schedule as a pickup and delivery rider on the Lunara network."
-      wide
     >
       <div className="grid gap-6 lg:grid-cols-2">
         {PERKS.map((item) => (
-          <article key={item.title} className="card h-full">
-            <div className="card-body">
-              <h2 className="text-lg font-semibold text-slate-900">{item.title}</h2>
-              <p className="mt-2 text-sm leading-relaxed text-muted">{item.description}</p>
-            </div>
-          </article>
+          <MarketingFeatureCard key={item.title} title={item.title} description={item.description} />
         ))}
       </div>
 
-      <div className="card mt-10">
-        <div className="card-body">
-          <h2 className="text-lg font-semibold text-slate-900">How onboarding works</h2>
-          <ol className="mt-4 list-decimal space-y-3 pl-5 text-sm leading-relaxed text-muted">
-            {STEPS.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-        </div>
-      </div>
+      <MarketingInfoCard title="How onboarding works" className="mt-10">
+        <ol className="list-decimal space-y-3 pl-5 text-sm leading-relaxed text-muted">
+          {STEPS.map((step) => (
+            <li key={step}>{step}</li>
+          ))}
+        </ol>
+      </MarketingInfoCard>
 
-      <div className="card-elevated mt-10">
-        <div className="card-body bg-gradient-to-br from-secondary/5 to-accent/5 sm:py-8">
-          <h2 className="text-xl font-semibold text-slate-900">Join the rider fleet</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
-            Rider accounts are created by Lunara operations after review. Email us with your name,
-            phone number, city, and vehicle type to start your application.
-          </p>
-          <div className="btn-row mt-6">
-            <ButtonLink
-              href={`mailto:${appConfig.supportEmail}?subject=${encodeURIComponent('Lunara rider application')}`}
-              size="lg"
-            >
-              Apply to drive
-            </ButtonLink>
-            <ButtonLink href="/faq" variant="outline" size="lg">
-              Read FAQ
-            </ButtonLink>
-          </div>
-          <p className="mt-4 text-xs text-muted-foreground">
-            Existing riders: use the Lunara Rider mobile app to sign in and manage your shift.
-          </p>
-        </div>
-      </div>
+      <MarketingCtaPanel
+        className="mt-10"
+        badge="Join the fleet"
+        badgeVariant="secondary"
+        variant="secondary"
+        title="Join the rider fleet"
+        description="Rider accounts are created by Lunara operations after review. Email us with your name, phone number, city, and vehicle type to start your application."
+        footer="Existing riders: use the Lunara Rider mobile app to sign in and manage your shift."
+      >
+        <MarketingActions gap="loose">
+          <ButtonAnchor
+            href={`mailto:${appConfig.supportEmail}?subject=${encodeURIComponent('Lunara rider application')}`}
+            size="lg"
+            layout="responsive"
+          >
+            Apply to drive
+          </ButtonAnchor>
+          <ButtonLink href="/faq" variant="outline" size="lg" layout="responsive">
+            Read FAQ
+          </ButtonLink>
+        </MarketingActions>
+      </MarketingCtaPanel>
 
-      <p className="mt-8 text-center text-sm text-muted">
-        <Link href="/marketing" className="link-primary">
-          ← Back to home
-        </Link>
-      </p>
+      <MarketingBackLink />
     </MarketingContentPage>
   );
 }

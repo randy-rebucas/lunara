@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { BrandMark } from '@lunara/ui';
+import { MarketingShell } from './marketing/marketing-shell';
 
 export { BrandMark };
 
@@ -11,30 +12,30 @@ export function AuthShell({
   showBrand?: boolean;
 }) {
   return (
-    <div className="laundry-bg flex min-h-screen flex-col items-center justify-center py-12">
-      <div className="page-container flex w-full flex-col items-center">
+    <MarketingShell>
+      <section className="marketing-container flex flex-1 flex-col items-center justify-center py-12 sm:py-16">
         {showBrand && (
           <Link href="/" className="mb-8 transition-opacity hover:opacity-90">
             <BrandMark variant="customer" />
           </Link>
         )}
-        <div className="card-elevated page-content-narrow">
+        <div className="card-elevated w-full max-w-xl">
           <div className="card-body">{children}</div>
         </div>
-      </div>
-    </div>
+      </section>
+    </MarketingShell>
   );
 }
 
 export function AuthShellWide({ children }: { children: React.ReactNode }) {
   return (
-    <div className="laundry-bg min-h-screen py-8 sm:py-12">
-      <div className="page-container">
+    <MarketingShell>
+      <section className="marketing-container py-8 sm:py-12">
         <Link href="/" className="mb-8 inline-block transition-opacity hover:opacity-90">
           <BrandMark variant="customer" compact />
         </Link>
-        <div className="page-content-narrow">{children}</div>
-      </div>
-    </div>
+        <div className="mx-auto max-w-xl">{children}</div>
+      </section>
+    </MarketingShell>
   );
 }
