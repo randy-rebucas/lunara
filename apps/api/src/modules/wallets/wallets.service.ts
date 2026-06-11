@@ -32,7 +32,17 @@ export class WalletsService {
     return { success: true, data: items };
   }
 
+  /**
+   * Dev-only instant top-up when PayMongo is not configured.
+   * Production top-ups go through POST /payments/wallet-topup/intent.
+   */
   async topUp(userId: string, amount: number) {
+    if (process.env.PAYMONGO_SECRET_KEY?.trim()) {
+      throw new BadRequestException(
+        'Use POST /payments/wallet-topup/intent to top up via PayMongo (GCash, Maya, or card).',
+      );
+    }
+
     const wallet = await this.findOrCreate(userId);
     wallet.balance += amount;
     await wallet.save();
@@ -40,8 +50,8 @@ export class WalletsService {
       walletId: wallet._id,
       type: 'credit',
       amount,
-      reference: `topup-${Date.now()}`,
-      description: 'Wallet top-up',
+      reference: `topup-dev-${Date.now()}`,
+      description: 'Wallet top-up (dev)',
     });
     return { success: true, data: wallet };
   }
@@ -64,6 +74,11 @@ export class WalletsService {
   }
 
   async credit(userId: string, amount: number, reference: string, description: string) {
+    const existing = await this.transactionModel.findOne({ reference });
+    if (existing) {
+      return this.findOrCreate(userId);
+    }
+
     const wallet = await this.findOrCreate(userId);
     wallet.balance += amount;
     await wallet.save();

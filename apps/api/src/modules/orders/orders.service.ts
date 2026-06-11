@@ -95,6 +95,7 @@ export class OrdersService {
 
     const byOrderId = new Map<string, PaymentDocument>();
     for (const payment of payments) {
+      if (!payment.orderId) continue;
       const key = payment.orderId.toString();
       if (!byOrderId.has(key)) byOrderId.set(key, payment);
     }

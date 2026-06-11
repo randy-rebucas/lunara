@@ -90,12 +90,16 @@ export interface Transaction extends BaseDocument {
   description: string;
 }
 
+export type PaymentPurpose = 'order' | 'wallet_topup';
+
 export interface Payment extends BaseDocument {
-  orderId: string;
+  orderId?: string;
+  purpose?: PaymentPurpose;
   method: PaymentMethod;
   status: PaymentStatus;
   amount: number;
   externalId?: string;
+  paymongoSessionId?: string;
   receiptCode?: string;
   cashTiming?: 'pickup' | 'delivery';
   paidAt?: string;

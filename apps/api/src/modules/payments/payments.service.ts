@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { OrderStatus, PaymentMethod, PaymentStatus } from '@lunara/types';
@@ -10,24 +10,68 @@ import {
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { WalletsService } from '../wallets/wallets.service';
+import { PaymongoService } from './paymongo.service';
 import { Payment, PaymentDocument } from './schemas/payment.schema';
 
 @Injectable()
 export class PaymentsService {
+  private readonly logger = new Logger(PaymentsService.name);
+
   constructor(
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     private walletsService: WalletsService,
     private trackingGateway: TrackingGateway,
+    private paymongo: PaymongoService,
   ) {}
 
   getCustomerWebUrl() {
     return process.env.CUSTOMER_WEB_URL ?? 'http://localhost:3000';
   }
 
-  getSuccessRedirectUrl(orderId: string, paymentId: string) {
-    const base = this.getCustomerWebUrl();
+  resolveWebOrigin(clientOrigin?: string) {
+    const fallback = this.getCustomerWebUrl().replace(/\/$/, '');
+    if (!clientOrigin?.trim()) return fallback;
+
+    try {
+      const url = new URL(clientOrigin);
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') return fallback;
+
+      if (process.env.NODE_ENV === 'production') {
+        const allowed = new URL(fallback);
+        if (url.host !== allowed.host) return fallback;
+      }
+
+      return url.origin;
+    } catch {
+      return fallback;
+    }
+  }
+
+  getOrderSuccessRedirectUrl(orderId: string, paymentId: string, baseUrl?: string) {
+    const base = (baseUrl ?? this.getCustomerWebUrl()).replace(/\/$/, '');
     return `${base}/checkout/${orderId}/success?paymentId=${paymentId}`;
+  }
+
+  getWalletTopupSuccessUrl(paymentId: string, baseUrl?: string) {
+    const base = (baseUrl ?? this.getCustomerWebUrl()).replace(/\/$/, '');
+    return `${base}/wallet?topupPaymentId=${paymentId}`;
+  }
+
+  getRedirectUrlAfterPayment(payment: {
+    _id: string;
+    orderId?: string;
+    purpose?: string;
+    returnOrigin?: string;
+  }) {
+    const base = payment.returnOrigin ?? this.getCustomerWebUrl();
+    if (payment.purpose === 'wallet_topup') {
+      return this.getWalletTopupSuccessUrl(payment._id, base);
+    }
+    if (!payment.orderId) {
+      return base.replace(/\/$/, '');
+    }
+    return this.getOrderSuccessRedirectUrl(payment.orderId, payment._id, base);
   }
 
   async getForOrder(userId: string, orderId: string) {
@@ -38,7 +82,7 @@ export class PaymentsService {
     }
 
     const payment = await this.paymentModel
-      .findOne({ orderId: order._id })
+      .findOne({ orderId: order._id, purpose: 'order' })
       .sort({ createdAt: -1 });
 
     return {
@@ -61,11 +105,25 @@ export class PaymentsService {
     if (payment.userId.toString() !== userId) {
       throw new BadRequestException('Not your payment');
     }
-    const order = await this.orderModel.findById(payment.orderId);
+
+    if (payment.status === PaymentStatus.PENDING && payment.paymongoSessionId) {
+      try {
+        await this.syncPaymongoPayment(payment);
+      } catch (err) {
+        this.logger.debug(`PayMongo sync skipped for ${paymentId}: ${err}`);
+      }
+    }
+
+    const refreshed = await this.paymentModel.findById(paymentId);
+    const order =
+      refreshed?.orderId != null
+        ? await this.orderModel.findById(refreshed.orderId)
+        : null;
+
     return {
       success: true,
       data: {
-        payment: this.serializePayment(payment),
+        payment: this.serializePayment(refreshed!),
         order: order
           ? {
               _id: order._id,
@@ -78,12 +136,25 @@ export class PaymentsService {
     };
   }
 
+  async syncPayment(userId: string, paymentId: string) {
+    const payment = await this.paymentModel.findById(paymentId);
+    if (!payment) throw new NotFoundException('Payment not found');
+    if (payment.userId.toString() !== userId) {
+      throw new BadRequestException('Not your payment');
+    }
+    await this.syncPaymongoPayment(payment);
+    const refreshed = await this.paymentModel.findById(paymentId);
+    return { success: true, data: this.serializePayment(refreshed!) };
+  }
+
   async createIntent(
     userId: string,
     orderId: string,
     method: PaymentMethod,
     cashTiming?: CashTiming,
+    clientOrigin?: string,
   ) {
+    const webOrigin = this.resolveWebOrigin(clientOrigin);
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
     if (order.customerId.toString() !== userId) {
@@ -95,6 +166,7 @@ export class PaymentsService {
 
     const paid = await this.paymentModel.findOne({
       orderId: order._id,
+      purpose: 'order',
       status: PaymentStatus.PAID,
     });
     if (paid) throw new BadRequestException('Order already paid');
@@ -105,16 +177,19 @@ export class PaymentsService {
 
     await this.paymentModel.deleteMany({
       orderId: order._id,
+      purpose: 'order',
       status: PaymentStatus.PENDING,
     });
 
     const payment = await this.paymentModel.create({
       orderId: order._id,
       userId: new Types.ObjectId(userId),
+      purpose: 'order',
       method,
       amount: order.total,
       status: PaymentStatus.PENDING,
       cashTiming: method === PaymentMethod.CASH ? cashTiming : undefined,
+      returnOrigin: webOrigin,
     });
 
     payment.receiptCode = generatePaymentReceiptCode(orderId, payment._id.toString());
@@ -126,7 +201,7 @@ export class PaymentsService {
         payment._id.toString(),
         `Payment for order ${orderId}`,
       );
-      await this.markPaid(payment, order, `wallet-${payment._id}`);
+      await this.markOrderPaid(payment, order, `wallet-${payment._id}`);
       return {
         success: true,
         data: {
@@ -157,16 +232,25 @@ export class PaymentsService {
     }
 
     if (isPaymongoMethod(method)) {
-      const checkoutUrl = this.getPaymongoCheckoutUrl(payment._id.toString(), method, order.total);
-      payment.checkoutUrl = checkoutUrl;
-      payment.externalId = `paymongo-${method}-${payment._id}`;
-      await payment.save();
+      const checkout = await this.startPaymongoCheckout(payment, {
+        description: `Lunara order ${orderId.slice(-6)}`,
+        lineItemName: 'Laundry service',
+        paymentMethod: method,
+        successUrl: this.getOrderSuccessRedirectUrl(orderId, payment._id.toString(), webOrigin),
+        cancelUrl: `${webOrigin}/checkout/${orderId}`,
+        metadata: {
+          lunara_payment_id: payment._id.toString(),
+          lunara_purpose: 'order',
+          lunara_user_id: userId,
+        },
+      });
+
       return {
         success: true,
         data: {
           payment: this.serializePayment(payment),
           paid: false,
-          checkoutUrl,
+          checkoutUrl: checkout.checkoutUrl,
           provider: 'paymongo',
           message: 'Continue to PayMongo to complete payment',
         },
@@ -177,6 +261,59 @@ export class PaymentsService {
     return { success: true, data: { payment: this.serializePayment(payment) } };
   }
 
+  async createWalletTopupIntent(
+    userId: string,
+    amount: number,
+    method: PaymentMethod,
+    clientOrigin?: string,
+  ) {
+    if (!isPaymongoMethod(method)) {
+      throw new BadRequestException('Wallet top-up requires GCash, Maya, or card via PayMongo');
+    }
+
+    const webOrigin = this.resolveWebOrigin(clientOrigin);
+
+    await this.paymentModel.deleteMany({
+      userId: new Types.ObjectId(userId),
+      purpose: 'wallet_topup',
+      status: PaymentStatus.PENDING,
+    });
+
+    const payment = await this.paymentModel.create({
+      userId: new Types.ObjectId(userId),
+      purpose: 'wallet_topup',
+      method,
+      amount,
+      status: PaymentStatus.PENDING,
+      returnOrigin: webOrigin,
+    });
+
+    payment.receiptCode = generatePaymentReceiptCode(userId, payment._id.toString());
+
+    const checkout = await this.startPaymongoCheckout(payment, {
+      description: 'Lunara wallet top-up',
+      lineItemName: 'Wallet top-up',
+      paymentMethod: method,
+      successUrl: this.getWalletTopupSuccessUrl(payment._id.toString(), webOrigin),
+      cancelUrl: `${webOrigin}/wallet`,
+      metadata: {
+        lunara_payment_id: payment._id.toString(),
+        lunara_purpose: 'wallet_topup',
+        lunara_user_id: userId,
+      },
+    });
+
+    return {
+      success: true,
+      data: {
+        payment: this.serializePayment(payment),
+        checkoutUrl: checkout.checkoutUrl,
+        provider: 'paymongo',
+        message: 'Continue to PayMongo to complete your top-up',
+      },
+    };
+  }
+
   async confirmPayment(paymentId: string, externalId?: string) {
     const payment = await this.paymentModel.findById(paymentId);
     if (!payment) throw new NotFoundException('Payment not found');
@@ -184,14 +321,130 @@ export class PaymentsService {
       return { success: true, data: this.serializePayment(payment) };
     }
 
-    const order = await this.orderModel.findById(payment.orderId);
-    if (!order) throw new NotFoundException('Order not found');
-
-    await this.markPaid(payment, order, externalId);
-    return { success: true, data: this.serializePayment(payment) };
+    await this.fulfillPayment(payment, externalId);
+    const refreshed = await this.paymentModel.findById(paymentId);
+    return { success: true, data: this.serializePayment(refreshed!) };
   }
 
-  private async markPaid(
+  async handlePaymongoWebhook(rawBody: Buffer, signatureHeader: string | undefined) {
+    if (!this.paymongo.verifyWebhookSignature(rawBody, signatureHeader)) {
+      throw new BadRequestException('Invalid PayMongo webhook signature');
+    }
+
+    const event = this.paymongo.parseWebhookEvent(rawBody);
+    if (!event || !this.paymongo.isPaidWebhookEvent(event.type)) {
+      return { success: true, data: { ignored: true } };
+    }
+
+    const paymentId = event.metadata.lunara_payment_id;
+    if (!paymentId) {
+      this.logger.warn('PayMongo webhook missing lunara_payment_id metadata');
+      return { success: true, data: { ignored: true } };
+    }
+
+    const payment = await this.paymentModel.findById(paymentId);
+    if (!payment) {
+      this.logger.warn(`PayMongo webhook for unknown payment ${paymentId}`);
+      return { success: true, data: { ignored: true } };
+    }
+
+    if (payment.status === PaymentStatus.PAID) {
+      return { success: true, data: this.serializePayment(payment) };
+    }
+
+    await this.fulfillPayment(payment, event.paymongoPaymentId);
+    const refreshed = await this.paymentModel.findById(paymentId);
+    return { success: true, data: this.serializePayment(refreshed!) };
+  }
+
+  private async startPaymongoCheckout(
+    payment: PaymentDocument,
+    params: {
+      description: string;
+      lineItemName: string;
+      paymentMethod: PaymentMethod;
+      successUrl: string;
+      cancelUrl: string;
+      metadata: Record<string, string>;
+    },
+  ) {
+    if (this.paymongo.isConfigured()) {
+      const session = await this.paymongo.createCheckoutSession({
+        amount: payment.amount,
+        description: params.description,
+        lineItemName: params.lineItemName,
+        paymentMethod: params.paymentMethod,
+        successUrl: params.successUrl,
+        cancelUrl: params.cancelUrl,
+        metadata: params.metadata,
+      });
+      payment.checkoutUrl = session.checkoutUrl;
+      payment.paymongoSessionId = session.sessionId;
+      payment.externalId = session.sessionId;
+      await payment.save();
+      return { checkoutUrl: session.checkoutUrl };
+    }
+
+    const checkoutUrl = this.getMockPaymongoCheckoutUrl(
+      payment._id.toString(),
+      params.paymentMethod,
+      payment.amount,
+      payment.purpose,
+    );
+    payment.checkoutUrl = checkoutUrl;
+    payment.externalId = `mock-paymongo-${payment._id}`;
+    await payment.save();
+    return { checkoutUrl };
+  }
+
+  private getMockPaymongoCheckoutUrl(
+    paymentId: string,
+    method: PaymentMethod,
+    amount: number,
+    purpose: string,
+  ) {
+    const base = process.env.API_URL ?? 'http://localhost:3001';
+    return `${base}/api/v1/payments/mock/paymongo/checkout?paymentId=${paymentId}&method=${method}&amount=${amount}&purpose=${purpose}`;
+  }
+
+  private async syncPaymongoPayment(payment: PaymentDocument) {
+    if (!payment.paymongoSessionId || !this.paymongo.isConfigured()) return;
+    if (payment.status === PaymentStatus.PAID) return;
+
+    const session = await this.paymongo.getCheckoutSession(payment.paymongoSessionId);
+    if (session.status === 'paid') {
+      await this.fulfillPayment(payment, session.paymentId);
+    }
+  }
+
+  private async fulfillPayment(payment: PaymentDocument, externalId?: string) {
+    if (payment.status === PaymentStatus.PAID) return;
+
+    if (payment.purpose === 'wallet_topup') {
+      await this.markWalletTopupPaid(payment, externalId);
+      return;
+    }
+
+    const order = await this.orderModel.findById(payment.orderId);
+    if (!order) throw new NotFoundException('Order not found');
+    await this.markOrderPaid(payment, order, externalId);
+  }
+
+  private async markWalletTopupPaid(payment: PaymentDocument, externalId?: string) {
+    payment.status = PaymentStatus.PAID;
+    payment.paidAt = new Date();
+    if (externalId) payment.externalId = externalId;
+    await payment.save();
+
+    await this.walletsService.credit(
+      payment.userId.toString(),
+      payment.amount,
+      `topup-${payment._id}`,
+      'Wallet top-up via PayMongo',
+    );
+  }
+
+  private async markOrderPaid(
     payment: PaymentDocument,
     order: OrderDocument,
     externalId?: string,
@@ -235,15 +488,11 @@ export class PaymentsService {
     }
   }
 
-  private getPaymongoCheckoutUrl(paymentId: string, method: PaymentMethod, amount: number) {
-    const base = process.env.API_URL ?? 'http://localhost:3001';
-    return `${base}/api/v1/payments/mock/paymongo/checkout?paymentId=${paymentId}&method=${method}&amount=${amount}`;
-  }
-
   serializePayment(payment: PaymentDocument) {
     return {
       _id: payment._id.toString(),
-      orderId: payment.orderId.toString(),
+      orderId: payment.orderId?.toString(),
+      purpose: payment.purpose,
       method: payment.method,
       status: payment.status,
       amount: payment.amount,
@@ -252,6 +501,8 @@ export class PaymentsService {
       paidAt: payment.paidAt,
       checkoutUrl: payment.checkoutUrl,
       externalId: payment.externalId,
+      paymongoSessionId: payment.paymongoSessionId,
+      returnOrigin: payment.returnOrigin,
       createdAt: payment.createdAt,
     };
   }

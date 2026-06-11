@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { WalletsModule } from '../wallets/wallets.module';
+import { PaymongoService } from './paymongo.service';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 import { Payment, PaymentSchema } from './schemas/payment.schema';
@@ -17,7 +18,7 @@ import { Payment, PaymentSchema } from './schemas/payment.schema';
     RealtimeModule,
   ],
   controllers: [PaymentsController],
-  providers: [PaymentsService],
-  exports: [PaymentsService],
+  providers: [PaymentsService, PaymongoService],
+  exports: [PaymentsService, PaymongoService],
 })
 export class PaymentsModule {}

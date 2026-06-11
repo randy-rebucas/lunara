@@ -12,7 +12,9 @@ async function bootstrap() {
   assertProductionJwtSecrets();
   ensureUploadDirectories();
 
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true,
+  });
 
   app.setGlobalPrefix('api/v1');
   // Avatars only — rider documents and task photos require JWT via MediaController.

@@ -4,12 +4,20 @@ export interface ApiClientOptions {
   baseUrl: string;
   getAccessToken?: () => string | null;
   onUnauthorized?: () => void;
+  /** Retry once after refreshing tokens when the API returns 401. */
+  refreshSession?: () => Promise<void>;
 }
 
-export function createApiClient({ baseUrl, getAccessToken, onUnauthorized }: ApiClientOptions) {
+export function createApiClient({
+  baseUrl,
+  getAccessToken,
+  onUnauthorized,
+  refreshSession,
+}: ApiClientOptions) {
   async function request<T>(
     path: string,
     init: RequestInit = {},
+    allowRefresh = true,
   ): Promise<ApiResponse<T>> {
     const token = getAccessToken?.();
     const headers: HeadersInit = {
@@ -28,6 +36,16 @@ export function createApiClient({ baseUrl, getAccessToken, onUnauthorized }: Api
         );
       }
       throw e;
+    }
+
+    if (res.status === 401 && allowRefresh && refreshSession) {
+      try {
+        await refreshSession();
+        return request<T>(path, init, false);
+      } catch {
+        onUnauthorized?.();
+        throw new Error('Session expired. Please sign in again.');
+      }
     }
 
     let body: ApiResponse<T> | ApiError;
@@ -50,9 +68,14 @@ export function createApiClient({ baseUrl, getAccessToken, onUnauthorized }: Api
       throw new Error('Session expired. Please sign in again.');
     }
 
-    if (!res.ok || !body.success) {
-      const err = body as ApiError;
-      throw new Error(err.error?.message ?? 'Request failed');
+    if (!res.ok || !('success' in body) || body.success === false) {
+      const err = body as ApiError & { message?: string | string[] };
+      const nestMessage = Array.isArray(err.message)
+        ? err.message[0]
+        : typeof err.message === 'string'
+          ? err.message
+          : undefined;
+      throw new Error(err.error?.message ?? nestMessage ?? 'Request failed');
     }
 
     return body as ApiResponse<T>;
@@ -92,7 +115,7 @@ export function createApiClient({ baseUrl, getAccessToken, onUnauthorized }: Api
       throw new Error('Session expired. Please sign in again.');
     }
 
-    if (!res.ok || !body.success) {
+    if (!res.ok || !('success' in body) || body.success === false) {
       const err = body as ApiError;
       throw new Error(err.error?.message ?? 'Upload failed');
     }

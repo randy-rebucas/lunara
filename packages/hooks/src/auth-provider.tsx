@@ -178,8 +178,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         baseUrl: getApiUrl(),
         getAccessToken: () => authRef.current?.tokens.accessToken ?? null,
         onUnauthorized: handleUnauthorized,
+        refreshSession: () => refreshAccessToken(),
       }),
-    [handleUnauthorized],
+    [handleUnauthorized, refreshAccessToken],
   );
 
   const login = useCallback(

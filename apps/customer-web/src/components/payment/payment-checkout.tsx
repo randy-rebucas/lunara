@@ -100,6 +100,7 @@ export function PaymentCheckout({ orderId }: PaymentCheckoutProps) {
       }>('/payments/intent', {
         orderId,
         method,
+        clientOrigin: window.location.origin,
         ...(method === PaymentMethod.CASH ? { cashTiming } : {}),
       });
 

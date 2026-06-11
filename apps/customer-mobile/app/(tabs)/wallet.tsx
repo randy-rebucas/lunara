@@ -2,12 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   FlatList,
+  Linking,
   RefreshControl,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { formatCurrency } from '@lunara/utils';
+import { PaymentMethod } from '@lunara/types';
+import { CUSTOMER_PAYMENT_OPTIONS, formatCurrency } from '@lunara/utils';
 import { Button } from '../../src/components/ui/button';
 import { Card } from '../../src/components/ui/card';
 import { Screen } from '../../src/components/ui/screen';
@@ -15,6 +17,9 @@ import { colors, spacing, typography } from '../../src/theme';
 import { DataLoadState } from '../../src/components/data-load-state';
 import { useTabScreenPadding } from '../../src/hooks/use-tab-bar-height';
 import { useAuthStore } from '../../src/store/auth';
+
+const TOP_UP_AMOUNT = 500;
+const PAYMONGO_OPTIONS = CUSTOMER_PAYMENT_OPTIONS.filter((o) => o.channel === 'paymongo');
 
 interface WalletTransaction {
   type: 'credit' | 'debit';
@@ -42,6 +47,7 @@ export default function WalletScreen() {
   const [error, setError] = useState('');
   const [topUpLoading, setTopUpLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [topUpMethod, setTopUpMethod] = useState<PaymentMethod>(PaymentMethod.GCASH);
 
   const load = useCallback(async () => {
     setError('');
@@ -76,13 +82,21 @@ export default function WalletScreen() {
   async function topUp() {
     setTopUpLoading(true);
     try {
-      const data = await apiFetch<{ balance: number }>('/wallets/topup', {
+      const data = await apiFetch<{ checkoutUrl?: string }>('/payments/wallet-topup/intent', {
         method: 'POST',
-        body: JSON.stringify({ amount: 500 }),
+        body: JSON.stringify({ amount: TOP_UP_AMOUNT, method: topUpMethod }),
       });
-      setBalance(data.balance);
-      await load();
-      Alert.alert('Wallet topped up', formatCurrency(500));
+
+      if (data.checkoutUrl) {
+        await Linking.openURL(data.checkoutUrl);
+        Alert.alert(
+          'Complete top-up',
+          'Finish payment in your browser, then return here and pull to refresh your balance.',
+        );
+        return;
+      }
+
+      Alert.alert('Top up failed', 'Could not start PayMongo checkout');
     } catch (e) {
       Alert.alert('Top up failed', e instanceof Error ? e.message : 'Try again');
     } finally {
@@ -106,9 +120,25 @@ export default function WalletScreen() {
         <Card elevated style={styles.balanceCard}>
           <Text style={styles.label}>Available balance</Text>
           <Text style={styles.balance}>{formatCurrency(balance)}</Text>
-          <Text style={styles.hint}>Use your Lunara wallet to pay for laundry orders</Text>
+          <Text style={styles.hint}>
+            Top up via PayMongo (GCash, Maya, or card), then pay for orders from your wallet
+          </Text>
+
+          <View style={styles.methodRow}>
+            {PAYMONGO_OPTIONS.map((opt) => (
+              <Button
+                key={opt.method}
+                label={opt.label}
+                variant={topUpMethod === opt.method ? 'primary' : 'outline'}
+                size="sm"
+                onPress={() => setTopUpMethod(opt.method)}
+                style={styles.methodBtn}
+              />
+            ))}
+          </View>
+
           <Button
-            label={topUpLoading ? 'Processing…' : 'Top up ₱500'}
+            label={topUpLoading ? 'Processing…' : `Top up ${formatCurrency(TOP_UP_AMOUNT)}`}
             variant="accent"
             onPress={topUp}
             disabled={topUpLoading}
@@ -118,7 +148,7 @@ export default function WalletScreen() {
       ) : null}
 
       {!loading && !error ? (
-        <Text style={styles.sectionTitle}>Top-up history</Text>
+        <Text style={styles.sectionTitle}>Transaction history</Text>
       ) : null}
     </>
   );
@@ -137,8 +167,8 @@ export default function WalletScreen() {
         ListEmptyComponent={
           !loading && !error ? (
             <Card muted style={styles.emptyCard}>
-              <Text style={styles.emptyText}>No top-ups yet</Text>
-              <Text style={styles.emptyHint}>Your wallet transactions will appear here</Text>
+              <Text style={styles.emptyText}>No transactions yet</Text>
+              <Text style={styles.emptyHint}>Top-ups and order payments will appear here</Text>
             </Card>
           ) : null
         }
@@ -182,7 +212,16 @@ const styles = StyleSheet.create({
   },
   label: { ...typography.label, marginBottom: spacing.sm },
   balance: { fontSize: 40, fontWeight: '700', color: colors.primary, letterSpacing: -0.5 },
-  hint: { ...typography.caption, textAlign: 'center', marginTop: spacing.md, marginBottom: spacing.xxl },
+  hint: { ...typography.caption, textAlign: 'center', marginTop: spacing.md, marginBottom: spacing.lg },
+  methodRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+    width: '100%',
+  },
+  methodBtn: { flexGrow: 1, minWidth: 90 },
   topUpBtn: { width: '100%' },
   sectionTitle: { ...typography.subheading, marginBottom: spacing.sm },
   txCard: { paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
