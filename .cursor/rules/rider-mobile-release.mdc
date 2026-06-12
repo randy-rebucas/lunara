@@ -1,0 +1,47 @@
+---
+description: Generate rider-mobile store release notes when publishing or preparing an EAS/App Store/Play release
+globs: apps/rider-mobile/**
+alwaysApply: false
+---
+
+# Rider Mobile — Release Notes
+
+## Trigger
+
+Run this workflow when the user mentions any of:
+
+- publish / release / ship **rider-mobile**
+- App Store, Google Play, TestFlight, or EAS submit for **rider-mobile**
+- "release notes" or "release details" for **rider-mobile**
+- **`we're publishing rider-mobile X.X.X`** (see `apps/rider-mobile/NOTE.md`)
+- bumping `apps/rider-mobile/app.json` version for store submission
+
+Do **not** skip release notes because the change "seems small" — every store publish gets a versioned file.
+
+## Workflow
+
+1. **Read version** from `apps/rider-mobile/app.json` (`expo.version`).
+2. **Find the previous release** — latest file in `apps/rider-mobile/release/` (by semver) or git history.
+3. **Gather changes** — `git log` and diff for `apps/rider-mobile/` (and shared packages/API if they affect rider behavior) since the previous release.
+4. **Write** `apps/rider-mobile/release/<version>.md` using `release/1.0.0.md` as the template:
+   - Title: `# Version X.Y.Z`
+   - Store copy: What's New (short), App Store minimal, Google Play bullets
+   - Full changelog grouped by area (shift, tasks, earnings, compliance, etc.)
+   - API/backend dependencies, build/submit commands, pre-release checklist, reviewer notes, known limitations
+5. **Align version** — if publishing, ensure `app.json` version matches the new release file; bump `package.json` version to match when appropriate.
+
+## File locations
+
+| File | Purpose |
+|------|---------|
+| `apps/rider-mobile/NOTE.md` | Trigger phrase for agents |
+| `apps/rider-mobile/release/<version>.md` | Canonical per-release doc (store copy + checklist) |
+| `docs/DEPLOYMENT_RIDER_MOBILE.md` | EAS build/submit steps |
+| `docs/STORE_LISTING_RIDER_MOBILE.md` | Store metadata and screenshots |
+
+## Store copy rules
+
+- Workforce app — state clearly this is for Lunara riders, not customers.
+- Mention location, camera, and background location permissions (store reviewers care).
+- Include demo rider credentials in reviewer notes section.
+- Keep App Store minimal copy under 170 characters.

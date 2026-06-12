@@ -1,0 +1,46 @@
+---
+description: Generate customer-mobile store release notes when publishing or preparing an EAS/App Store/Play release
+globs: apps/customer-mobile/**
+alwaysApply: false
+---
+
+# Customer Mobile — Release Notes
+
+## Trigger
+
+Run this workflow when the user mentions any of:
+
+- publish / release / ship **customer-mobile**
+- App Store, Google Play, TestFlight, or EAS submit for **customer-mobile**
+- "release notes" or "release details" for **customer-mobile**
+- bumping `apps/customer-mobile/app.json` version for store submission
+- **`we're publishing customer-mobile X.X.X`** (see `apps/customer-mobile/NOTE.md`)
+
+Do **not** skip release notes because the change "seems small" — every store publish gets a versioned file.
+
+## Workflow
+
+1. **Read version** from `apps/customer-mobile/app.json` (`expo.version`).
+2. **Find the previous release** — latest file in `apps/customer-mobile/release/` (by semver) or git history.
+3. **Gather changes** — `git log` and diff for `apps/customer-mobile/` (and shared packages/API if they affect mobile behavior) since the previous release.
+4. **Write** `apps/customer-mobile/release/<version>.md` using `release/1.0.1.md` as the template:
+   - Title: `# Version X.Y.Z`
+   - Store copy: What's New (short), App Store minimal, Google Play bullets
+   - Full changelog grouped by area (auth, booking, payments, etc.)
+   - API/backend dependencies, build/submit commands, pre-release checklist, known limitations
+5. **Align version** — if publishing, ensure `app.json` version matches the new release file; bump `package.json` version to match when appropriate.
+
+## File locations
+
+| File | Purpose |
+|------|---------|
+| `apps/customer-mobile/NOTE.md` | Trigger phrase for agents |
+| `apps/customer-mobile/release/<version>.md` | Canonical per-release doc (store copy + checklist) |
+| `docs/DEPLOYMENT_CUSTOMER_MOBILE.md` | EAS build/submit steps |
+| `docs/STORE_LISTING_CUSTOMER_MOBILE.md` | Store metadata and screenshots |
+
+## Store copy rules
+
+- User-facing highlights only in What's New; technical details in changelog.
+- Mention new payment methods, auth changes, and permissions explicitly (store reviewers care).
+- Keep App Store minimal copy under 170 characters.
