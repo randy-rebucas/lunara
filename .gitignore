@@ -40,3 +40,9 @@ docker/data/
 
 # API uploads (local dev storage)
 apps/api/uploads/
+
+# Release notes
+release/
+
+# Google Play service account JSON
+apps/rider-mobile/lunara-777ad-aab9d557da7c.json

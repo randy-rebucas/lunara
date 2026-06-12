@@ -2,7 +2,7 @@
   "expo": {
     "name": "Lunara Rider",
     "slug": "lunara-rider",
-    "version": "1.0.1",
+    "version": "1.0.3",
     "scheme": "lunara-rider",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
