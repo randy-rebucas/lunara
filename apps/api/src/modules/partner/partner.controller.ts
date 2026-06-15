@@ -211,6 +211,12 @@ export class PartnerController {
     return this.operationsService.getRevenue(req.user.sub, req.user.role);
   }
 
+  @Get('settlements')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  getSettlements(@Req() req: { user: { sub: string; role: UserRole } }) {
+    return this.operationsService.getSettlements(req.user.sub, req.user.role);
+  }
+
   @Get('orders/:orderId/receiving')
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
   getReceiving(

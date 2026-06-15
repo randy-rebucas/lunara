@@ -7,7 +7,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import * as bcrypt from 'bcrypt';
 import { Model, Types } from 'mongoose';
-import { OrderStatus, UserRole } from '@lunara/types';
+import { OrderStatus, PaymentMethod, PaymentStatus, UserRole } from '@lunara/types';
 import {
   computePickupSla,
   formatPartnerPreProcessingLabel,
@@ -23,6 +23,10 @@ import { User, UserDocument } from '../users/schemas/user.schema';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { RiderAssignmentService } from '../riders/rider-assignment.service';
 import { ShopInventoryDocument, ShopInventoryItem } from './schemas/shop-inventory.schema';
+import {
+  PartnerSettlement,
+  PartnerSettlementDocument,
+} from './schemas/partner-settlement.schema';
 import {
   Branch,
   BranchDocument,
@@ -91,6 +95,7 @@ export class PartnerOperationsService {
     @InjectModel(Branch.name) private branchModel: Model<BranchDocument>,
     @InjectModel(ShopInventoryItem.name) private inventoryModel: Model<ShopInventoryDocument>,
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
+    @InjectModel(PartnerSettlement.name) private settlementModel: Model<PartnerSettlementDocument>,
     private trackingGateway: TrackingGateway,
     private riderAssignmentService: RiderAssignmentService,
     private partnerOrderNotifications: PartnerOrderNotificationService,
@@ -606,7 +611,7 @@ export class PartnerOperationsService {
       this.orderModel.find({ ...baseFilter, updatedAt: { $gte: startOfDay } }),
       this.orderModel.find({ ...baseFilter, updatedAt: { $gte: weekStart } }),
       this.orderModel.find({ ...baseFilter, updatedAt: { $gte: startOfMonth } }),
-      this.orderModel.find(baseFilter),
+      this.orderModel.find(baseFilter).sort({ updatedAt: -1 }).limit(200),
     ]);
 
     const todayTotal = today.reduce((s, o) => s + o.total, 0);
@@ -631,6 +636,42 @@ export class PartnerOperationsService {
       });
     }
 
+    // Fetch payment details and branch commission rate for per-order breakdown
+    const [paymentsByOrderId, branch] = await Promise.all([
+      loadLatestOrderPaymentsByOrderId(this.paymentModel, allCompleted.map((o) => o._id)),
+      role !== UserRole.ADMIN
+        ? this.resolvePartnerBranchId(userId, role)
+            .then((id) => this.branchModel.findById(id).select('commissionRate'))
+            .catch(() => null)
+        : Promise.resolve(null),
+    ]);
+
+    const commissionRate = branch?.commissionRate ?? 0.20;
+
+    const recentOrders = allCompleted.map((o) => {
+      const payment = paymentsByOrderId.get(o._id.toString());
+      const isCash = payment?.method === PaymentMethod.CASH;
+      const cashCollected = isCash && payment?.status === PaymentStatus.PAID;
+      const subtotal = o.subtotal ?? o.total;
+      const lunaraFee = Math.round(subtotal * commissionRate);
+      const partnerPayout = o.total - lunaraFee;
+      return {
+        orderId: o._id.toString(),
+        completedAt: o.updatedAt?.toISOString() ?? o.createdAt?.toISOString(),
+        amount: o.total,
+        subtotal,
+        lunaraFee,
+        partnerPayout,
+        commissionRate,
+        bookingType: o.bookingType,
+        paymentMethod: payment?.method ?? null,
+        cashTiming: payment?.cashTiming ?? null,
+        cashCollected,
+        cashCollectedAt: cashCollected ? payment?.paidAt?.toISOString() : null,
+        receiptCode: payment?.receiptCode ?? null,
+      };
+    });
+
     return {
       success: true,
       data: {
@@ -645,7 +686,124 @@ export class PartnerOperationsService {
         allTimeCompletedOrders: allCompleted.length,
         allTimeRevenue,
         daily: last7,
+        recentOrders,
       },
+    };
+  }
+
+  async getSettlements(userId: string, role: UserRole) {
+    if (role === UserRole.ADMIN) {
+      const settlements = await this.settlementModel
+        .find()
+        .sort({ createdAt: -1 })
+        .limit(100);
+      return { success: true, data: settlements.map((s) => this.formatSettlement(s)) };
+    }
+    const settlements = await this.settlementModel
+      .find({ partnerId: new Types.ObjectId(userId) })
+      .sort({ createdAt: -1 });
+    return { success: true, data: settlements.map((s) => this.formatSettlement(s)) };
+  }
+
+  async getPartnerSettlementsForAdmin(partnerId: string) {
+    const settlements = await this.settlementModel
+      .find({ partnerId: new Types.ObjectId(partnerId) })
+      .sort({ createdAt: -1 });
+    return { success: true, data: settlements.map((s) => this.formatSettlement(s)) };
+  }
+
+  async createSettlement(
+    adminUserId: string,
+    partnerId: string,
+    dto: { periodStart: string; periodEnd: string; adminNote?: string },
+  ) {
+    const start = new Date(dto.periodStart);
+    const end = new Date(dto.periodEnd);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      throw new BadRequestException('Invalid period dates');
+    }
+    if (start >= end) {
+      throw new BadRequestException('periodStart must be before periodEnd');
+    }
+
+    // Find partner's branch
+    const branch = await this.branchModel.findOne({
+      partnerUserId: new Types.ObjectId(partnerId),
+    });
+    if (!branch) throw new NotFoundException('Partner branch not found');
+
+    const completedOrders = await this.orderModel.find({
+      branchId: branch._id,
+      status: { $in: COMPLETED_STATUSES },
+      updatedAt: { $gte: start, $lte: end },
+    });
+
+    if (completedOrders.length === 0) {
+      throw new BadRequestException('No completed orders found in this period');
+    }
+
+    const paymentsByOrderId = await loadLatestOrderPaymentsByOrderId(
+      this.paymentModel,
+      completedOrders.map((o) => o._id),
+    );
+
+    let cashOrders = 0;
+    let digitalOrders = 0;
+    for (const order of completedOrders) {
+      const payment = paymentsByOrderId.get(order._id.toString());
+      if (payment?.method === PaymentMethod.CASH) {
+        cashOrders++;
+      } else {
+        digitalOrders++;
+      }
+    }
+
+    const commissionRate = branch.commissionRate ?? 0.20;
+    const totalAmount = completedOrders.reduce((s, o) => s + o.total, 0);
+    // Commission is taken from the laundry subtotal only — not from delivery fee
+    const lunaraFee = Math.round(
+      completedOrders.reduce((s, o) => s + (o.subtotal ?? o.total) * commissionRate, 0),
+    );
+    const partnerPayout = totalAmount - lunaraFee;
+
+    const settlement = await this.settlementModel.create({
+      partnerId: new Types.ObjectId(partnerId),
+      periodStart: start,
+      periodEnd: end,
+      totalOrders: completedOrders.length,
+      cashOrders,
+      digitalOrders,
+      totalAmount,
+      lunaraFee,
+      partnerPayout,
+      commissionRate,
+      status: 'paid',
+      paidAt: new Date(),
+      paidBy: new Types.ObjectId(adminUserId),
+      adminNote: dto.adminNote,
+    });
+
+    return { success: true, data: this.formatSettlement(settlement) };
+  }
+
+  private formatSettlement(s: PartnerSettlementDocument) {
+    return {
+      _id: s._id.toString(),
+      partnerId: s.partnerId.toString(),
+      periodStart: s.periodStart.toISOString(),
+      periodEnd: s.periodEnd.toISOString(),
+      totalOrders: s.totalOrders,
+      cashOrders: s.cashOrders,
+      digitalOrders: s.digitalOrders,
+      totalAmount: s.totalAmount,
+      lunaraFee: s.lunaraFee ?? 0,
+      partnerPayout: s.partnerPayout ?? s.totalAmount,
+      commissionRate: s.commissionRate ?? 0.20,
+      status: s.status,
+      paidAt: s.paidAt?.toISOString(),
+      paidBy: s.paidBy?.toString(),
+      adminNote: s.adminNote,
+      createdAt: s.createdAt.toISOString(),
     };
   }
 

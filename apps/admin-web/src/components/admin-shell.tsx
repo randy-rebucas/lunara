@@ -13,7 +13,6 @@ const nav = [
   { href: '/orders', label: 'Orders' },
   { href: '/dispatch', label: 'Dispatch' },
   { href: '/riders', label: 'Riders' },
-  { href: '/riders/withdrawals', label: 'Withdrawals' },
   { href: '/branches', label: 'Branches' },
   { href: '/shops', label: 'Shops' },
   { href: '/revenue', label: 'Revenue' },
@@ -23,8 +22,6 @@ const nav = [
   { href: '/promotions', label: 'Promotions' },
   { href: '/services', label: 'Services' },
   { href: '/addons', label: 'Add-ons' },
-  { href: '/profile', label: 'Profile' },
-  { href: '/settings', label: 'Settings' },
 ];
 
 function isActive(pathname: string, href: string) {

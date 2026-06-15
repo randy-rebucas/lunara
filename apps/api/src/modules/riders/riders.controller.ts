@@ -476,6 +476,18 @@ export class RidersController {
     return this.riderWalletService.listWithdrawals(req.user.sub);
   }
 
+  @Get('cash-summary')
+  @Roles(UserRole.RIDER)
+  getCashSummary(@Req() req: { user: { sub: string } }) {
+    return this.riderWalletService.getCashSummary(req.user.sub);
+  }
+
+  @Post('remit-cash')
+  @Roles(UserRole.RIDER)
+  submitRemittance(@Req() req: { user: { sub: string } }) {
+    return this.riderWalletService.submitRemittance(req.user.sub);
+  }
+
   @Post('wallet/withdraw')
   @Roles(UserRole.RIDER)
   requestWithdrawal(

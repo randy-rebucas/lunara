@@ -147,6 +147,42 @@ export interface PartnerRevenueData {
   allTimeCompletedOrders: number;
   allTimeRevenue: number;
   daily: PartnerRevenueDailyPoint[];
+  recentOrders: PartnerOrderDetail[];
+}
+
+export interface PartnerSettlement {
+  _id: string;
+  partnerId: string;
+  periodStart: string;
+  periodEnd: string;
+  totalOrders: number;
+  cashOrders: number;
+  digitalOrders: number;
+  totalAmount: number;
+  lunaraFee: number;
+  partnerPayout: number;
+  commissionRate: number;
+  status: 'pending' | 'paid';
+  paidAt?: string;
+  paidBy?: string;
+  adminNote?: string;
+  createdAt: string;
+}
+
+export interface PartnerOrderDetail {
+  orderId: string;
+  completedAt: string;
+  amount: number;
+  subtotal?: number;
+  lunaraFee?: number;
+  partnerPayout?: number;
+  commissionRate?: number;
+  bookingType: string;
+  paymentMethod: string | null;
+  cashTiming: 'pickup' | 'delivery' | null;
+  cashCollected: boolean;
+  cashCollectedAt: string | null;
+  receiptCode: string | null;
 }
 
 export interface PartnerReceivingView {

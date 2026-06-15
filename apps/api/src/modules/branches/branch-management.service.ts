@@ -210,6 +210,7 @@ export class BranchManagementService {
           maxWeightCapacityKg: capacityKg,
           dailyQuotaOrders: branch.dailyQuotaOrders ?? 30,
           dailyQuotaWeightKg: branch.dailyQuotaWeightKg ?? 250,
+          commissionRate: branch.commissionRate ?? 0.20,
           serviceRadiusKm: branch.serviceRadiusKm,
           location: {
             longitude: branch.location.coordinates[0],
@@ -305,6 +306,7 @@ export class BranchManagementService {
       dailyQuotaOrders: dto.dailyQuotaOrders ?? 25,
       dailyQuotaWeightKg: dto.dailyQuotaWeightKg ?? 200,
       serviceRadiusKm: dto.serviceRadiusKm ?? 12,
+      ...(dto.commissionRate !== undefined ? { commissionRate: dto.commissionRate } : {}),
       machines: DEFAULT_MACHINES,
       isActive: true,
       location: { type: 'Point', coordinates: dto.coordinates },
@@ -348,6 +350,7 @@ export class BranchManagementService {
     if (dto.serviceRadiusKm !== undefined) branch.serviceRadiusKm = dto.serviceRadiusKm;
     if (dto.isActive !== undefined) branch.isActive = dto.isActive;
     if (dto.machines !== undefined) branch.machines = dto.machines;
+    if (dto.commissionRate !== undefined) branch.commissionRate = dto.commissionRate;
 
     await branch.save();
     return this.getBranchProfile(branchId);

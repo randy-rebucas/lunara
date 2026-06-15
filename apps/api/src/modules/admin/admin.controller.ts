@@ -36,6 +36,7 @@ import { RiderNotificationService } from '../riders/rider-notification.service';
 import { RiderWalletService } from '../riders/rider-wallet.service';
 import { ReviewWithdrawalDto, SetWalletHoldDto } from '../riders/dto/rider-wallet.dto';
 import { CreatePartnerDto } from './dto/create-partner.dto';
+import { OnboardPartnerDto } from './dto/onboard-partner.dto';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { CreateRiderDto } from './dto/create-rider.dto';
 import { RiderAnnouncementDto } from './dto/rider-announcement.dto';
@@ -43,6 +44,8 @@ import { UpdatePromotionDto } from './dto/update-promotion.dto';
 import { UpdateLaundryAddonDto } from './dto/update-laundry-addon.dto';
 import { UpdateLaundryServiceDto } from './dto/update-laundry-service.dto';
 import { CatalogService } from '../catalog/catalog.service';
+import { PartnerOperationsService } from '../partner/partner-operations.service';
+import { CreateSettlementDto } from '../partner/dto/create-settlement.dto';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -61,6 +64,7 @@ export class AdminController {
     private readonly ridersService: RidersService,
     private readonly riderNotificationService: RiderNotificationService,
     private readonly riderWalletService: RiderWalletService,
+    private readonly partnerOperationsService: PartnerOperationsService,
   ) {}
 
   @Get('sos/active')
@@ -199,6 +203,23 @@ export class AdminController {
     return this.riderWalletService.rejectWithdrawal(id, req.user.sub, dto.adminNote);
   }
 
+  @Get('riders/:userId/cash-remittances')
+  listRiderCashRemittances(
+    @Param('userId') userId: string,
+    @Query('status') status?: string,
+  ) {
+    return this.riderWalletService.listRemittancesForAdmin(userId, status);
+  }
+
+  @Post('riders/:userId/cash-remittances/verify')
+  verifyRiderCashRemittances(
+    @Param('userId') userId: string,
+    @Req() req: { user: { sub: string } },
+    @Body() dto: { remittanceIds?: string[] },
+  ) {
+    return this.riderWalletService.verifyRemittanceBatch(userId, req.user.sub, dto.remittanceIds);
+  }
+
   @Post('riders/:userId/wallet/hold')
   setRiderWalletHold(@Param('userId') userId: string, @Body() dto: SetWalletHoldDto) {
     return this.riderWalletService.setWalletHold(userId, dto.pendingHold);
@@ -250,6 +271,25 @@ export class AdminController {
   @Post('partners')
   createPartner(@Body() dto: CreatePartnerDto) {
     return this.adminService.createPartner(dto);
+  }
+
+  @Post('partners/onboard')
+  onboardPartner(@Body() dto: OnboardPartnerDto) {
+    return this.adminService.onboardPartner(dto);
+  }
+
+  @Get('partners/:partnerId/settlements')
+  getPartnerSettlements(@Param('partnerId') partnerId: string) {
+    return this.partnerOperationsService.getPartnerSettlementsForAdmin(partnerId);
+  }
+
+  @Post('partners/:partnerId/settlements')
+  createPartnerSettlement(
+    @Param('partnerId') partnerId: string,
+    @Req() req: { user: { sub: string } },
+    @Body() dto: CreateSettlementDto,
+  ) {
+    return this.partnerOperationsService.createSettlement(req.user.sub, partnerId, dto);
   }
 
   @Get('branches')

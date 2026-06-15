@@ -32,6 +32,8 @@ const partnerNav = [
 
   { href: '/revenue', label: 'Revenue' },
 
+  { href: '/settlements', label: 'Settlements' },
+
 ];
 
 

@@ -8,8 +8,8 @@ export class RiderWalletTransaction {
   @Prop({ type: Types.ObjectId, required: true, index: true })
   riderUserId!: Types.ObjectId;
 
-  @Prop({ required: true, enum: ['credit', 'debit', 'hold', 'release'] })
-  type!: 'credit' | 'debit' | 'hold' | 'release';
+  @Prop({ required: true, enum: ['credit', 'debit', 'hold', 'release', 'netting'] })
+  type!: 'credit' | 'debit' | 'hold' | 'release' | 'netting';
 
   @Prop({ required: true })
   amount!: number;
@@ -77,3 +77,56 @@ export class RiderWithdrawal {
 }
 
 export const RiderWithdrawalSchema = SchemaFactory.createForClass(RiderWithdrawal);
+
+export type RiderCashRemittanceDocument = HydratedDocument<RiderCashRemittance>;
+
+/**
+ * Tracks each cash collection event where the rider's earned fee is netted off
+ * against the cash amount before remitting to Lunara admin.
+ */
+@Schema({ timestamps: true, collection: 'rider_cash_remittances' })
+export class RiderCashRemittance {
+  @Prop({ type: Types.ObjectId, required: true, index: true })
+  riderUserId!: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, required: true, index: true })
+  orderId!: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, required: true })
+  paymentId!: Types.ObjectId;
+
+  /** 'pickup' or 'delivery' — the stage at which cash was collected */
+  @Prop({ required: true, enum: ['pickup', 'delivery'] })
+  stage!: 'pickup' | 'delivery';
+
+  /** Full cash amount collected from the customer */
+  @Prop({ required: true })
+  cashAmount!: number;
+
+  /** Rider's earned fee for this task (offsetted amount) */
+  @Prop({ required: true })
+  earningOffset!: number;
+
+  /** Net amount the rider must remit to admin (cashAmount - earningOffset) */
+  @Prop({ required: true })
+  netRemittance!: number;
+
+  /** pending → rider submits → admin confirms (remitted) */
+  @Prop({ required: true, enum: ['pending', 'submitted', 'remitted'], default: 'pending', index: true })
+  status!: 'pending' | 'submitted' | 'remitted';
+
+  @Prop()
+  submittedAt?: Date;
+
+  @Prop()
+  remittedAt?: Date;
+
+  @Prop({ type: Types.ObjectId })
+  verifiedBy?: Types.ObjectId;
+
+  createdAt!: Date;
+  updatedAt!: Date;
+}
+
+export const RiderCashRemittanceSchema = SchemaFactory.createForClass(RiderCashRemittance);
+RiderCashRemittanceSchema.index({ riderUserId: 1, orderId: 1, stage: 1 }, { unique: true });

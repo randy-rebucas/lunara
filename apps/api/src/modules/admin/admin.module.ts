@@ -18,6 +18,7 @@ import { PromotionsModule } from '../promotions/promotions.module';
 import { AdminService } from './admin.service';
 import { Promotion, PromotionSchema } from './schemas/promotion.schema';
 import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
+import { PartnerModule } from '../partner/partner.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
     SosModule,
     PromotionsModule,
     CatalogModule,
+    PartnerModule,
   ],
   controllers: [AdminController],
   providers: [AdminService, AdminOperationsService, AdminDispatchService],

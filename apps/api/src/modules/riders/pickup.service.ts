@@ -22,6 +22,7 @@ import { CollectLaundryDto, DropAtShopDto, VerifyCustomerDto } from './dto/picku
 import { HandoffQrService } from '../handoff/handoff-qr.service';
 import { PaymentsService } from '../payments/payments.service';
 import { RidersService } from './riders.service';
+import { RiderWalletService } from './rider-wallet.service';
 import { buildRiderTaskDetails } from './rider-task-summary';
 
 function generateReceiptCode(orderId: string) {
@@ -48,6 +49,7 @@ export class PickupService {
     private riderOfferPush: RiderOfferPushService,
     private handoffQrService: HandoffQrService,
     private paymentsService: PaymentsService,
+    private riderWalletService: RiderWalletService,
   ) {}
 
   async dispatchPickupSearch(orderId: string) {
@@ -238,7 +240,14 @@ export class PickupService {
     if (!order.pickup?.customerVerifiedAt) {
       throw new BadRequestException('Verify customer before collecting cash');
     }
-    await this.paymentsService.collectCashForOrder(orderId, riderUserId, 'pickup');
+    const payment = await this.paymentsService.collectCashForOrder(orderId, riderUserId, 'pickup');
+    void this.riderWalletService.netEarningsAgainstCash(
+      riderUserId,
+      orderId,
+      payment._id.toString(),
+      payment.amount,
+      'pickup',
+    );
     return { success: true, data: await this.buildPickupSummary(order, riderUserId) };
   }
 
@@ -445,6 +454,17 @@ export class PickupService {
       'pickup',
       !!order.pickup?.customerVerifiedAt,
     );
+
+    if (cashPayment?.collected) {
+      const remittance = await this.riderWalletService.getRemittanceForOrder(
+        order._id.toString(),
+        'pickup',
+      );
+      if (remittance) {
+        cashPayment.earningOffset = remittance.earningOffset;
+        cashPayment.netRemittance = remittance.netRemittance;
+      }
+    }
 
     return {
       _id: order._id.toString(),

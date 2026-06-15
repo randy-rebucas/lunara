@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useMemo } from 'react';
-import type { PartnerRevenueData } from '@lunara/types';
+import { useCallback, useMemo, useState } from 'react';
+import type { PartnerOrderDetail, PartnerRevenueData } from '@lunara/types';
 import { AuthLoading } from '../../components/auth-loading';
 import { DataPageStatus } from '../../components/data-page-status';
 import { Card, CardBody } from '../../components/ui/card';
@@ -12,8 +12,29 @@ import { formatChartDate, formatChartDay, formatPeso } from '../../lib/format-pe
 import { partnerFetch } from '../../lib/partner-api';
 import { usePartnerQuery } from '../../lib/use-partner-query';
 
+function PaymentBadge({ method, cashCollected }: { method: string | null; cashCollected: boolean }) {
+  if (!method) return <span className="text-muted">—</span>;
+  if (method === 'CASH') {
+    return cashCollected ? (
+      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+        Cash collected
+      </span>
+    ) : (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+        Cash pending
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+      {method === 'GCASH' ? 'GCash' : method === 'MAYA' ? 'Maya' : method === 'WALLET' ? 'Wallet' : method}
+    </span>
+  );
+}
+
 export default function RevenuePage() {
   const { ready } = useRequirePartner();
+  const [paymentFilter, setPaymentFilter] = useState<'all' | 'CASH' | 'digital'>('all');
 
   const load = useCallback(async () => {
     return partnerFetch<PartnerRevenueData>('/partner/revenue');
@@ -28,6 +49,13 @@ export default function RevenuePage() {
     const best = [...data.daily].sort((a, b) => b.revenue - a.revenue)[0];
     return { maxRevenue, totalWeek, bestDay: best?.date ?? null };
   }, [data]);
+
+  const filteredOrders = useMemo((): PartnerOrderDetail[] => {
+    if (!data?.recentOrders) return [];
+    if (paymentFilter === 'all') return data.recentOrders;
+    if (paymentFilter === 'CASH') return data.recentOrders.filter((o) => o.paymentMethod === 'CASH');
+    return data.recentOrders.filter((o) => o.paymentMethod !== 'CASH');
+  }, [data, paymentFilter]);
 
   if (!ready) return <AuthLoading message="Loading revenue…" />;
 
@@ -159,6 +187,101 @@ export default function RevenuePage() {
               </tfoot>
             </table>
           </div>
+
+          {/* Per-order payment breakdown */}
+          {data.recentOrders?.length > 0 && (
+            <div className="mt-10">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-semibold text-slate-900">Completed orders</h3>
+                  <p className="mt-0.5 text-sm text-muted">Payment method and cash collection status per order</p>
+                </div>
+                <div className="flex gap-2">
+                  {(['all', 'CASH', 'digital'] as const).map((f) => (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => setPaymentFilter(f)}
+                      className={paymentFilter === f ? 'btn-sm bg-primary text-white' : 'btn-outline btn-sm'}
+                    >
+                      {f === 'all' ? 'All' : f === 'CASH' ? 'Cash' : 'Digital'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="section-panel overflow-hidden">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Completed</th>
+                      <th>Order ID</th>
+                      <th>Payment</th>
+                      <th>Cash status</th>
+                      <th className="text-right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredOrders.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="py-6 text-center text-sm text-muted">
+                          No orders match this filter
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredOrders.map((o) => (
+                        <tr key={o.orderId}>
+                          <td className="text-muted text-sm">
+                            {o.completedAt
+                              ? new Date(o.completedAt).toLocaleDateString('en-PH', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })
+                              : '—'}
+                          </td>
+                          <td className="font-mono text-xs text-muted">
+                            {o.orderId.slice(-8).toUpperCase()}
+                          </td>
+                          <td>
+                            <PaymentBadge method={o.paymentMethod} cashCollected={o.cashCollected} />
+                          </td>
+                          <td className="text-sm">
+                            {o.paymentMethod === 'CASH' ? (
+                              o.cashCollected ? (
+                                <span className="text-green-700">
+                                  Collected
+                                  {o.cashTiming ? ` at ${o.cashTiming}` : ''}
+                                  {o.cashCollectedAt
+                                    ? ` · ${new Date(o.cashCollectedAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}`
+                                    : ''}
+                                </span>
+                              ) : (
+                                <span className="text-amber-600">Pending collection</span>
+                              )
+                            ) : (
+                              <span className="text-muted">N/A</span>
+                            )}
+                          </td>
+                          <td className="text-right font-medium text-slate-900">
+                            {formatPeso(o.amount)}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <p className="mt-2 text-xs text-muted-foreground">
+                Showing most recent {data.recentOrders.length} completed orders.{' '}
+                <Link href="/settlements" className="underline hover:text-primary">
+                  View settlements →
+                </Link>
+              </p>
+            </div>
+          )}
         </>
       )}
     </div>

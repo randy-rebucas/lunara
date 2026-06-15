@@ -74,14 +74,6 @@ export function ShopsBoard() {
   const [partnerSearch, setPartnerSearch] = useState('');
   const [branchLimit, setBranchLimit] = useState(50);
   const [partnerLimit, setPartnerLimit] = useState(50);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [invitePhone, setInvitePhone] = useState('');
-  const [invitePassword, setInvitePassword] = useState('');
-  const [inviteBusy, setInviteBusy] = useState(false);
-  const [inviteError, setInviteError] = useState('');
-  const [inviteSuccess, setInviteSuccess] = useState<{ partnerId: string; email: string } | null>(
-    null,
-  );
 
   const load = useCallback(async () => {
     const [shopsRes, branches] = await Promise.all([
@@ -137,41 +129,6 @@ export function ShopsBoard() {
       })
     : '—';
 
-  function generateInvitePassword() {
-    setInvitePassword(`Lunara${Math.random().toString(36).slice(2, 10)}!`);
-  }
-
-  async function invitePartner(e: React.FormEvent) {
-    e.preventDefault();
-    if (!inviteEmail.trim() || !invitePassword.trim()) return;
-
-    setInviteBusy(true);
-    setInviteError('');
-    setInviteSuccess(null);
-    try {
-      const created = await adminFetch<Shop>('/admin/partners', {
-        method: 'POST',
-        body: JSON.stringify({
-          email: inviteEmail.trim(),
-          phone: invitePhone.trim() || undefined,
-          password: invitePassword,
-        }),
-      });
-      setInviteSuccess({
-        partnerId: created._id,
-        email: created.email ?? inviteEmail.trim(),
-      });
-      setInviteEmail('');
-      setInvitePhone('');
-      setInvitePassword('');
-      await reload();
-    } catch (err) {
-      setInviteError(err instanceof Error ? err.message : 'Invite failed');
-    } finally {
-      setInviteBusy(false);
-    }
-  }
-
   return (
     <div>
       <header className="mb-8">
@@ -205,9 +162,9 @@ export function ShopsBoard() {
             <Link href="/branches" className="btn-outline btn-sm">
               Branch network
             </Link>
-            <a href="#partner-invite" className="btn-primary btn-sm">
-              Invite partner
-            </a>
+            <Link href="/partners/new" className="btn-primary btn-sm">
+              Create partner
+            </Link>
           </div>
         </div>
       </header>
@@ -347,9 +304,9 @@ export function ShopsBoard() {
                   Showing {filteredShops.length} of {shops.length} partner logins
                 </p>
               </div>
-              <a href="#partner-invite" className="link-primary text-xs font-medium">
-                Invite partner →
-              </a>
+              <Link href="/partners/new" className="link-primary text-xs font-medium">
+                Create partner →
+              </Link>
             </div>
 
             {filteredShops.length === 0 ? (
@@ -492,155 +449,17 @@ export function ShopsBoard() {
             )}
           </section>
 
-          <div className="grid gap-4 xl:grid-cols-2">
-            <section className="dc-panel flex h-full flex-col" id="partner-invite">
-              <div className="dc-panel-header">
-                <h2 className="text-sm font-semibold text-slate-900">Invite partner</h2>
-                <p className="text-xs text-muted">
-                  Portal login credentials — partner completes shop setup in Branch network
-                </p>
+          <section className="dc-panel" id="partner-create">
+            <div className="dc-panel-body flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Add a new partner</p>
+                <p className="mt-0.5 text-xs text-muted">Creates a portal login account and branch in one step.</p>
               </div>
-              <form onSubmit={invitePartner} className="dc-panel-body flex flex-1 flex-col">
-                <div className="dc-form-grid flex-1">
-                  <div>
-                    <label htmlFor="partner-email" className="form-label">
-                      Email
-                    </label>
-                    <input
-                      id="partner-email"
-                      type="email"
-                      className="input-field"
-                      value={inviteEmail}
-                      onChange={(e) => setInviteEmail(e.target.value)}
-                      required
-                      autoComplete="off"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="partner-phone" className="form-label">
-                      Phone <span className="font-normal text-muted">(optional)</span>
-                    </label>
-                    <input
-                      id="partner-phone"
-                      type="tel"
-                      className="input-field"
-                      value={invitePhone}
-                      onChange={(e) => setInvitePhone(e.target.value)}
-                      placeholder="+63917…"
-                      autoComplete="off"
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label htmlFor="partner-password" className="form-label">
-                      Temporary password
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        id="partner-password"
-                        type="text"
-                        className="input-field min-w-0 flex-1 font-mono text-xs"
-                        value={invitePassword}
-                        onChange={(e) => setInvitePassword(e.target.value)}
-                        required
-                        minLength={8}
-                        autoComplete="new-password"
-                        placeholder="Min. 8 characters"
-                      />
-                      <button
-                        type="button"
-                        className="btn-outline btn-sm shrink-0 self-end"
-                        onClick={generateInvitePassword}
-                      >
-                        Generate
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {inviteError ? (
-                  <div className="alert-error mt-3" role="alert">
-                    {inviteError}
-                  </div>
-                ) : null}
-                {inviteSuccess ? (
-                  <div className="alert-info mt-3">
-                    <p className="text-sm">
-                      <span className="font-medium">{inviteSuccess.email}</span> invited. Share the
-                      password for partner-web login, then{' '}
-                      <Link
-                        href={`/branches?partner=${inviteSuccess.partnerId}`}
-                        className="link-primary underline"
-                      >
-                        create their branch
-                      </Link>
-                      .
-                    </p>
-                  </div>
-                ) : null}
-
-                <div className="dc-form-actions mt-4">
-                  <button type="submit" className="btn-primary btn-sm" disabled={inviteBusy}>
-                    {inviteBusy ? 'Inviting…' : 'Create partner account'}
-                  </button>
-                </div>
-              </form>
-            </section>
-
-            <section className="dc-panel flex h-full flex-col">
-              <div className="dc-panel-header">
-                <h2 className="text-sm font-semibold text-slate-900">Partner onboarding</h2>
-                <p className="text-xs text-muted">How a new laundry partner goes live on Lunara</p>
-              </div>
-              <div className="dc-panel-body flex flex-1 flex-col">
-                <ol className="space-y-4 text-sm">
-                  <li className="flex gap-3">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                      1
-                    </span>
-                    <div>
-                      <p className="font-medium text-slate-900">Create partner account</p>
-                      <p className="mt-0.5 text-muted">
-                        Invite with email and temporary password. They use these on partner-web.
-                      </p>
-                    </div>
-                  </li>
-                  <li className="flex gap-3">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                      2
-                    </span>
-                    <div>
-                      <p className="font-medium text-slate-900">Register branch location</p>
-                      <p className="mt-0.5 text-muted">
-                        In{' '}
-                        <Link href="/branches" className="link-primary">
-                          Branch network
-                        </Link>
-                        , create a partner shop with address, parent branch, and capacity limits.
-                      </p>
-                    </div>
-                  </li>
-                  <li className="flex gap-3">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                      3
-                    </span>
-                    <div>
-                      <p className="font-medium text-slate-900">Partner goes operational</p>
-                      <p className="mt-0.5 text-muted">
-                        Partner signs in, adds staff, and accepts orders. Monitor load on this page
-                        and in Dispatch.
-                      </p>
-                    </div>
-                  </li>
-                </ol>
-                <div className="mt-auto border-t border-border/60 pt-4">
-                  <p className="text-xs text-muted">
-                    Partner account = login identity. Branch = physical shop that receives orders.
-                    One partner can operate multiple branches.
-                  </p>
-                </div>
-              </div>
-            </section>
-          </div>
+              <Link href="/partners/new" className="btn-primary btn-sm shrink-0">
+                Create partner →
+              </Link>
+            </div>
+          </section>
         </div>
       ) : null}
     </div>

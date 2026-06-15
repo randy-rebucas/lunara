@@ -78,6 +78,12 @@ export class UpdateBranchDto {
   isActive?: boolean;
 
   @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(1)
+  commissionRate?: number;
+
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => BranchMachineDto)

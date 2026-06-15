@@ -1,6 +1,7 @@
 import './preload-env';
 
 import { ValidationPipe } from '@nestjs/common';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
@@ -21,6 +22,7 @@ async function bootstrap() {
   app.useStaticAssets(AVATAR_UPLOAD_DIR, { prefix: '/api/v1/uploads/avatars/' });
   app.useStaticAssets(CATALOG_ADDON_UPLOAD_DIR, { prefix: '/api/v1/uploads/catalog-addons/' });
   app.enableCors({ origin: true, credentials: true });
+  app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

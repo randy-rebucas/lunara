@@ -113,6 +113,10 @@ export class Branch {
   @Prop({ default: true })
   isActive!: boolean;
 
+  /** Platform commission rate on laundry subtotal (0–1). Default 20%. */
+  @Prop({ default: 0.20, min: 0, max: 1 })
+  commissionRate!: number;
+
   @Prop({ type: PartnerPortalSettings, default: () => ({ ...DEFAULT_PARTNER_PORTAL_SETTINGS }) })
   portalSettings!: PartnerPortalSettings;
 

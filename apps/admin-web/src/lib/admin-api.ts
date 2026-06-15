@@ -281,7 +281,13 @@ export async function adminFetch<T>(path: string, init?: RequestInit): Promise<T
   }
 
   if (!body.success) {
-    throw new Error(body.error?.message ?? 'Request failed');
+    const b = body as unknown as Record<string, unknown>;
+    const nestMsg = typeof b['message'] === 'string'
+      ? b['message']
+      : Array.isArray(b['message'])
+        ? (b['message'] as string[]).join(', ')
+        : undefined;
+    throw new Error(body.error?.message ?? nestMsg ?? 'Request failed');
   }
 
   return body.data as T;

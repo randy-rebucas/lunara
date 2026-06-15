@@ -17,6 +17,8 @@ import { Review, ReviewSchema } from '../reviews/schemas/review.schema';
 import { RiderNotificationService } from './rider-notification.service';
 import { Rider, RiderSchema } from './schemas/rider.schema';
 import {
+  RiderCashRemittance,
+  RiderCashRemittanceSchema,
   RiderWalletTransaction,
   RiderWalletTransactionSchema,
   RiderWithdrawal,
@@ -40,6 +42,7 @@ import { SosModule } from '../sos/sos.module';
       { name: Review.name, schema: ReviewSchema },
       { name: RiderWalletTransaction.name, schema: RiderWalletTransactionSchema },
       { name: RiderWithdrawal.name, schema: RiderWithdrawalSchema },
+      { name: RiderCashRemittance.name, schema: RiderCashRemittanceSchema },
     ]),
     RealtimeModule,
     ReviewsModule,

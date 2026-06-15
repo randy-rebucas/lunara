@@ -20,7 +20,7 @@ import { Input } from '../src/components/ui/input';
 import { Screen } from '../src/components/ui/screen';
 import { SectionHeader } from '../src/components/ui/section-header';
 import { riderFetch } from '../src/api';
-import type { PayoutMethodData, WalletData, WithdrawalRequest } from '../src/lib/rider-types';
+import type { CashSummaryData, PayoutMethodData, WalletData, WithdrawalRequest } from '../src/lib/rider-types';
 import { colors, radius, spacing, typography } from '../src/theme';
 
 const MIN_WITHDRAWAL = typeof RIDER_MIN_WITHDRAWAL === 'number' ? RIDER_MIN_WITHDRAWAL : 100;
@@ -56,11 +56,13 @@ function statusColor(status: WithdrawalRequest['status']) {
 export default function WalletScreen() {
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [withdrawals, setWithdrawals] = useState<WithdrawalRequest[]>([]);
+  const [cashSummary, setCashSummary] = useState<CashSummaryData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [savingPayout, setSavingPayout] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
+  const [submittingRemittance, setSubmittingRemittance] = useState(false);
 
   const [method, setMethod] = useState<RiderPayoutMethod>('gcash');
   const [gcashNumber, setGcashNumber] = useState('');
@@ -93,6 +95,13 @@ export default function WalletScreen() {
       setError(e instanceof Error ? e.message : 'Could not load wallet');
     } finally {
       setLoading(false);
+    }
+
+    try {
+      const cashData = await riderFetch<{ success: boolean; data: CashSummaryData }>('/riders/cash-summary');
+      setCashSummary(cashData.data);
+    } catch {
+      setCashSummary({ pendingRemittance: { count: 0, totalCashCollected: 0, totalEarningOffset: 0, totalNetRemittance: 0, items: [] }, recentRemitted: [] });
     }
   }, []);
 
@@ -132,6 +141,37 @@ export default function WalletScreen() {
     } finally {
       setSavingPayout(false);
     }
+  }
+
+  async function submitRemittance() {
+    Alert.alert(
+      'Confirm remittance',
+      'This tells Lunara admin you have handed over the cash. Make sure you have already given the money before confirming.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'I\'ve handed it over',
+          onPress: async () => {
+            setSubmittingRemittance(true);
+            try {
+              const res = await riderFetch<{ success: boolean; data: { submittedCount: number; totalNetRemittance: number } }>(
+                '/riders/remit-cash',
+                { method: 'POST' },
+              );
+              Alert.alert(
+                'Remittance submitted',
+                `${res.data.submittedCount} order${res.data.submittedCount !== 1 ? 's' : ''} · ${formatCurrency(res.data.totalNetRemittance)} — waiting for admin confirmation.`,
+              );
+              await load();
+            } catch (e) {
+              Alert.alert('Error', e instanceof Error ? e.message : 'Could not submit remittance');
+            } finally {
+              setSubmittingRemittance(false);
+            }
+          },
+        },
+      ],
+    );
   }
 
   async function requestWithdrawal() {
@@ -264,6 +304,82 @@ export default function WalletScreen() {
           style={styles.action}
         />
       </Card>
+
+      <SectionHeader title="Cash to remit" />
+      <Card elevated style={styles.sectionCard}>
+        {cashSummary ? (
+          cashSummary.pendingRemittance.count > 0 ? (
+            <>
+              <View style={styles.remitSummaryRow}>
+                <View style={styles.remitSummaryCol}>
+                  <Text style={styles.remitLabel}>Cash collected</Text>
+                  <Text style={styles.remitValue}>{formatCurrency(cashSummary.pendingRemittance.totalCashCollected)}</Text>
+                </View>
+                <View style={styles.remitSummaryCol}>
+                  <Text style={styles.remitLabel}>Your fee (offset)</Text>
+                  <Text style={[styles.remitValue, styles.remitOffset]}>− {formatCurrency(cashSummary.pendingRemittance.totalEarningOffset)}</Text>
+                </View>
+                <View style={styles.remitSummaryCol}>
+                  <Text style={styles.remitLabel}>Hand to admin</Text>
+                  <Text style={[styles.remitValue, styles.remitTotal]}>{formatCurrency(cashSummary.pendingRemittance.totalNetRemittance)}</Text>
+                </View>
+              </View>
+              {cashSummary.pendingRemittance.items.map((item) => (
+                <View key={item._id} style={styles.remitItemRow}>
+                  <Text style={styles.remitItemStage}>{item.stage === 'pickup' ? 'Pickup' : 'Delivery'}</Text>
+                  <Text style={styles.remitItemOrder}>…{item.orderId.slice(-6)}</Text>
+                  <Text style={[styles.remitItemAmount, item.status === 'submitted' && styles.remitItemSubmitted]}>
+                    {formatCurrency(item.netRemittance)}
+                  </Text>
+                  {item.status === 'submitted' ? (
+                    <Text style={styles.remitItemTag}>Submitted</Text>
+                  ) : null}
+                </View>
+              ))}
+              {cashSummary.pendingRemittance.items.some((i) => i.status === 'pending') ? (
+                <>
+                  <Text style={[styles.hint, { marginTop: spacing.md }]}>
+                    Hand the net amount to a Lunara admin in person, then tap below.
+                  </Text>
+                  <Button
+                    label={submittingRemittance ? 'Submitting…' : "I've handed over the cash"}
+                    variant="accent"
+                    disabled={submittingRemittance}
+                    onPress={submitRemittance}
+                    style={styles.action}
+                  />
+                </>
+              ) : (
+                <Text style={[styles.hint, { marginTop: spacing.sm }]}>
+                  All submitted — waiting for admin confirmation.
+                </Text>
+              )}
+            </>
+          ) : (
+            <Text style={styles.hint}>No pending cash to remit.</Text>
+          )
+        ) : (
+          <Text style={styles.hint}>Loading…</Text>
+        )}
+      </Card>
+      {cashSummary && cashSummary.recentRemitted.length > 0 ? (
+        <>
+          <Text style={styles.remitHistoryLabel}>Recent remitted</Text>
+          {cashSummary.recentRemitted.slice(0, 5).map((item) => (
+            <Card key={item._id} style={styles.remitHistoryCard}>
+              <View style={styles.withdrawalRow}>
+                <View style={styles.withdrawalMain}>
+                  <Text style={styles.withdrawalAmount}>{formatCurrency(item.netRemittance)}</Text>
+                  <Text style={styles.withdrawalMeta}>
+                    {item.stage === 'pickup' ? 'Pickup' : 'Delivery'} · order …{item.orderId.slice(-6)} · {item.remittedAt ? formatDate(item.remittedAt) : '—'}
+                  </Text>
+                </View>
+                <Text style={[styles.withdrawalStatus, { color: colors.accent }]}>Remitted</Text>
+              </View>
+            </Card>
+          ))}
+        </>
+      ) : null}
 
       <SectionHeader title="Withdraw" />
       <Card elevated style={styles.sectionCard}>
@@ -398,4 +514,35 @@ const styles = StyleSheet.create({
   withdrawalStatus: { fontSize: 12, fontWeight: '700' },
   emptyCard: { alignItems: 'center', paddingVertical: spacing.xl },
   emptyText: { ...typography.bodySm },
+  remitSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  remitSummaryCol: { flex: 1, alignItems: 'center' },
+  remitLabel: { ...typography.caption, color: colors.mutedForeground, textAlign: 'center' },
+  remitValue: { marginTop: spacing.xs, fontSize: 16, fontWeight: '700', color: colors.foreground },
+  remitOffset: { color: colors.warning ?? '#d97706' },
+  remitTotal: { color: colors.accent ?? '#0ea5e9' },
+  remitItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border ?? '#e2e8f0',
+  },
+  remitItemStage: { fontSize: 12, fontWeight: '600', color: colors.foreground, width: 52 },
+  remitItemOrder: { flex: 1, ...typography.caption, color: colors.mutedForeground },
+  remitItemAmount: { fontSize: 14, fontWeight: '700', color: colors.foreground },
+  remitItemSubmitted: { color: colors.warning ?? '#d97706' },
+  remitItemTag: { fontSize: 10, fontWeight: '700', color: colors.warning ?? '#d97706', textTransform: 'uppercase' as const },
+  remitHistoryLabel: {
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
+    ...typography.label,
+    color: colors.mutedForeground,
+  },
+  remitHistoryCard: { paddingVertical: spacing.md, marginBottom: spacing.sm },
 });

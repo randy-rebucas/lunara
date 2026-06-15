@@ -402,6 +402,30 @@ export interface WithdrawalRequest {
 
 
 
+export interface CashRemittanceItem {
+  _id: string;
+  orderId: string;
+  stage: 'pickup' | 'delivery';
+  cashAmount: number;
+  earningOffset: number;
+  netRemittance: number;
+  status: 'pending' | 'submitted' | 'remitted';
+  submittedAt?: string;
+  remittedAt?: string;
+  createdAt: string;
+}
+
+export interface CashSummaryData {
+  pendingRemittance: {
+    count: number;
+    totalCashCollected: number;
+    totalEarningOffset: number;
+    totalNetRemittance: number;
+    items: CashRemittanceItem[];
+  };
+  recentRemitted: CashRemittanceItem[];
+}
+
 export const VEHICLE_TYPES = ['motorcycle', 'bicycle', 'car', 'van'] as const;
 
 export type VehicleType = (typeof VEHICLE_TYPES)[number];

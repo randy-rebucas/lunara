@@ -21,6 +21,8 @@ import {
 import { UpdatePayoutMethodDto } from './dto/rider-wallet.dto';
 import { Rider, RiderDocument } from './schemas/rider.schema';
 import {
+  RiderCashRemittance,
+  RiderCashRemittanceDocument,
   RiderWalletTransaction,
   RiderWalletTransactionDocument,
   RiderWithdrawal,
@@ -79,6 +81,8 @@ export class RiderWalletService {
     private transactionModel: Model<RiderWalletTransactionDocument>,
     @InjectModel(RiderWithdrawal.name)
     private withdrawalModel: Model<RiderWithdrawalDocument>,
+    @InjectModel(RiderCashRemittance.name)
+    private remittanceModel: Model<RiderCashRemittanceDocument>,
   ) {}
 
   private riderObjectId(userId: string) {
@@ -430,6 +434,187 @@ export class RiderWalletService {
     );
 
     return { success: true, data: balances };
+  }
+
+  /**
+   * Called immediately after cash is collected for an order. Creates a netting
+   * debit that offsets the rider's earned fee for that task against the cash
+   * amount, reducing what the rider owes to admin on remittance.
+   *
+   * Idempotent: if a remittance record already exists for the same order+stage,
+   * this returns early without creating a duplicate.
+   */
+  async netEarningsAgainstCash(
+    riderUserId: string,
+    orderId: string,
+    paymentId: string,
+    cashAmount: number,
+    stage: 'pickup' | 'delivery',
+  ) {
+    const earningType = stage === 'pickup' ? 'pickup' : 'delivery';
+    const earningRef = taskEarningReference(orderId, earningType);
+
+    // Check idempotency via unique index on (riderUserId, orderId, stage)
+    const existing = await this.remittanceModel.findOne({
+      riderUserId: new Types.ObjectId(riderUserId),
+      orderId: new Types.ObjectId(orderId),
+      stage,
+    });
+    if (existing) return { alreadyNetted: true, remittance: this.serializeRemittance(existing) };
+
+    // Find the credit transaction for this earning to get the exact amount
+    const earningTx = await this.transactionModel.findOne({
+      riderUserId: new Types.ObjectId(riderUserId),
+      reference: earningRef,
+      type: 'credit',
+    });
+
+    // If the earning hasn't been credited yet (race condition), skip netting
+    if (!earningTx) return { alreadyNetted: false, remittance: null };
+
+    const earningOffset = earningTx.amount;
+    const netRemittance = Math.max(0, cashAmount - earningOffset);
+    const nettingRef = `netting:${stage}:${orderId}`;
+
+    const rider = await this.findOrCreateRider(riderUserId);
+    rider.walletBalance = Math.max(0, rider.walletBalance - earningOffset);
+    await rider.save();
+
+    await this.transactionModel.create({
+      riderUserId: new Types.ObjectId(riderUserId),
+      type: 'netting',
+      amount: earningOffset,
+      reference: nettingRef,
+      description: `Fee offset against cash collected at ${stage} · order ${orderId.slice(-6)}`,
+    });
+
+    const remittance = await this.remittanceModel.create({
+      riderUserId: new Types.ObjectId(riderUserId),
+      orderId: new Types.ObjectId(orderId),
+      paymentId: new Types.ObjectId(paymentId),
+      stage,
+      cashAmount,
+      earningOffset,
+      netRemittance,
+      status: 'pending',
+    });
+
+    return { alreadyNetted: false, remittance: this.serializeRemittance(remittance) };
+  }
+
+  async submitRemittance(riderUserId: string) {
+    const items = await this.remittanceModel.find({
+      riderUserId: new Types.ObjectId(riderUserId),
+      status: 'pending',
+    });
+    if (items.length === 0) throw new NotFoundException('No pending cash remittances to submit');
+
+    await this.remittanceModel.updateMany(
+      { _id: { $in: items.map((i) => i._id) } },
+      { status: 'submitted', submittedAt: new Date() },
+    );
+
+    return {
+      success: true,
+      data: {
+        submittedCount: items.length,
+        totalNetRemittance: items.reduce((s, r) => s + r.netRemittance, 0),
+      },
+    };
+  }
+
+  async getCashSummary(riderUserId: string) {
+    const pending = await this.remittanceModel
+      .find({ riderUserId: new Types.ObjectId(riderUserId), status: { $in: ['pending', 'submitted'] } })
+      .sort({ createdAt: -1 });
+
+    const recent = await this.remittanceModel
+      .find({ riderUserId: new Types.ObjectId(riderUserId), status: 'remitted' })
+      .sort({ remittedAt: -1 })
+      .limit(20);
+
+    const totalCashCollected = pending.reduce((s, r) => s + r.cashAmount, 0);
+    const totalEarningOffset = pending.reduce((s, r) => s + r.earningOffset, 0);
+    const totalNetRemittance = pending.reduce((s, r) => s + r.netRemittance, 0);
+
+    return {
+      success: true,
+      data: {
+        pendingRemittance: {
+          count: pending.length,
+          totalCashCollected,
+          totalEarningOffset,
+          totalNetRemittance,
+          items: pending.map((r) => this.serializeRemittance(r)),
+        },
+        recentRemitted: recent.map((r) => this.serializeRemittance(r)),
+      },
+    };
+  }
+
+  async verifyRemittanceBatch(riderUserId: string, adminUserId: string, remittanceIds?: string[]) {
+    const filter: Record<string, unknown> = {
+      riderUserId: new Types.ObjectId(riderUserId),
+      status: { $in: ['pending', 'submitted'] },
+    };
+    if (remittanceIds?.length) {
+      filter._id = { $in: remittanceIds.map((id) => new Types.ObjectId(id)) };
+    }
+
+    const items = await this.remittanceModel.find(filter);
+    if (items.length === 0) throw new NotFoundException('No pending remittances found');
+
+    const now = new Date();
+    await this.remittanceModel.updateMany(
+      { _id: { $in: items.map((i) => i._id) } },
+      { status: 'remitted', remittedAt: now, verifiedBy: new Types.ObjectId(adminUserId) },
+    );
+
+    const totalVerified = items.reduce((s, r) => s + r.netRemittance, 0);
+    return {
+      success: true,
+      data: { verifiedCount: items.length, totalNetRemittance: totalVerified },
+    };
+  }
+
+  async getRemittanceForOrder(orderId: string, stage: 'pickup' | 'delivery') {
+    const record = await this.remittanceModel.findOne({
+      orderId: new Types.ObjectId(orderId),
+      stage,
+    });
+    if (!record) return null;
+    return {
+      earningOffset: record.earningOffset,
+      netRemittance: record.netRemittance,
+      status: record.status,
+    };
+  }
+
+  async listRemittancesForAdmin(riderUserId?: string, status?: string) {
+    const filter: Record<string, unknown> = {};
+    if (riderUserId) filter.riderUserId = new Types.ObjectId(riderUserId);
+    if (status) filter.status = status;
+
+    const items = await this.remittanceModel.find(filter).sort({ createdAt: -1 }).limit(100);
+    return { success: true, data: items.map((r) => this.serializeRemittance(r)) };
+  }
+
+  private serializeRemittance(r: RiderCashRemittanceDocument) {
+    return {
+      _id: r._id.toString(),
+      riderUserId: r.riderUserId.toString(),
+      orderId: r.orderId.toString(),
+      paymentId: r.paymentId.toString(),
+      stage: r.stage,
+      cashAmount: r.cashAmount,
+      earningOffset: r.earningOffset,
+      netRemittance: r.netRemittance,
+      status: r.status,
+      submittedAt: r.submittedAt?.toISOString(),
+      remittedAt: r.remittedAt?.toISOString(),
+      verifiedBy: r.verifiedBy?.toString(),
+      createdAt: r.createdAt.toISOString(),
+    };
   }
 
   private serializeWithdrawal(withdrawal: RiderWithdrawalDocument) {

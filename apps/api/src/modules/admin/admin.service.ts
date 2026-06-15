@@ -14,8 +14,10 @@ import {
 import { computePickupSla } from '@lunara/utils';
 import { PromotionsService } from '../promotions/promotions.service';
 import { BranchesService } from '../branches/branches.service';
+import { BranchManagementService } from '../branches/branch-management.service';
 import { SupportService } from '../support/support.service';
 import { CreatePartnerDto } from './dto/create-partner.dto';
+import { OnboardPartnerDto } from './dto/onboard-partner.dto';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { CreateRiderDto } from './dto/create-rider.dto';
 import { UpdatePromotionDto } from './dto/update-promotion.dto';
@@ -40,6 +42,7 @@ export class AdminService {
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
     private supportService: SupportService,
     private branchesService: BranchesService,
+    private branchManagementService: BranchManagementService,
     private promotionsService: PromotionsService,
   ) {}
 
@@ -323,6 +326,61 @@ export class AdminService {
         staffCount: 0,
         totalOrders: 0,
         revenue: 0,
+      },
+    };
+  }
+
+  async onboardPartner(dto: OnboardPartnerDto) {
+    const email = dto.email.trim().toLowerCase();
+    const phone = dto.phone?.trim();
+
+    const duplicateFilter: Record<string, unknown>[] = [{ email }];
+    if (phone) duplicateFilter.push({ phone });
+
+    const existing = await this.userModel.findOne({ $or: duplicateFilter });
+    if (existing) {
+      throw new ConflictException('A user with this email or phone already exists');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, 12);
+    const user = await this.userModel.create({
+      email,
+      phone,
+      passwordHash,
+      role: UserRole.PARTNER,
+      isActive: true,
+    });
+
+    let branch;
+    try {
+      branch = await this.branchManagementService.createBranch({
+        code: dto.branchCode,
+        name: dto.branchName,
+        branchType: dto.branchType,
+        parentBranchId: dto.parentBranchId,
+        partnerUserId: user._id.toString(),
+        line1: dto.line1,
+        city: dto.city,
+        province: dto.province,
+        coordinates: dto.coordinates,
+        commissionRate: dto.commissionRate,
+        maxActiveOrders: dto.maxActiveOrders,
+        maxWeightCapacityKg: dto.maxWeightCapacityKg,
+      });
+    } catch (err) {
+      await this.userModel.deleteOne({ _id: user._id });
+      throw err;
+    }
+
+    return {
+      success: true,
+      data: {
+        partner: {
+          _id: user._id.toString(),
+          email: user.email,
+          phone: user.phone,
+        },
+        branch: branch.data,
       },
     };
   }

@@ -139,6 +139,32 @@ export interface Deal {
   audience?: 'all' | 'new_customers';
 }
 
+export interface RiderCashRemittance {
+  _id: string;
+  riderUserId: string;
+  orderId: string;
+  paymentId: string;
+  stage: 'pickup' | 'delivery';
+  cashAmount: number;
+  earningOffset: number;
+  netRemittance: number;
+  status: 'pending' | 'remitted';
+  remittedAt?: string;
+  verifiedBy?: string;
+  createdAt: string;
+}
+
+export interface RiderCashSummary {
+  pendingRemittance: {
+    count: number;
+    totalCashCollected: number;
+    totalEarningOffset: number;
+    totalNetRemittance: number;
+    items: RiderCashRemittance[];
+  };
+  recentRemitted: RiderCashRemittance[];
+}
+
 export interface CustomerPromo {
   _id: string;
   userId: string;

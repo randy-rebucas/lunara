@@ -24,6 +24,7 @@ import { HandoffQrService } from '../handoff/handoff-qr.service';
 import { PaymentsService } from '../payments/payments.service';
 import { VerifyQrDto } from './dto/pickup.dto';
 import { RidersService } from './riders.service';
+import { RiderWalletService } from './rider-wallet.service';
 import { buildRiderTaskDetails } from './rider-task-summary';
 
 function generateDeliveryReceipt(orderId: string) {
@@ -51,6 +52,7 @@ export class DeliveryService {
     private riderOfferPush: RiderOfferPushService,
     private handoffQrService: HandoffQrService,
     private paymentsService: PaymentsService,
+    private riderWalletService: RiderWalletService,
   ) {}
 
   async dispatchDeliverySearch(orderId: string) {
@@ -406,7 +408,14 @@ export class DeliveryService {
     if (!this.hasCustomerReceived(order)) {
       throw new BadRequestException('Customer must receive laundry before collecting cash');
     }
-    await this.paymentsService.collectCashForOrder(orderId, riderUserId, 'delivery');
+    const payment = await this.paymentsService.collectCashForOrder(orderId, riderUserId, 'delivery');
+    void this.riderWalletService.netEarningsAgainstCash(
+      riderUserId,
+      orderId,
+      payment._id.toString(),
+      payment.amount,
+      'delivery',
+    );
     return { success: true, data: await this.buildDeliverySummary(order, riderUserId) };
   }
 
@@ -551,6 +560,18 @@ export class DeliveryService {
       'delivery',
       order.status === OrderStatus.OUT_FOR_DELIVERY && this.hasCustomerReceived(order),
     );
+
+    if (cashPayment?.collected) {
+      const remittance = await this.riderWalletService.getRemittanceForOrder(
+        order._id.toString(),
+        'delivery',
+      );
+      if (remittance) {
+        cashPayment.earningOffset = remittance.earningOffset;
+        cashPayment.netRemittance = remittance.netRemittance;
+      }
+    }
+
     const cashCollected = !cashPayment || cashPayment.collected;
 
     return {

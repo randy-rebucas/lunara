@@ -10,6 +10,7 @@ import { ProcessingService } from './processing.service';
 import { ShopReceivingService } from './shop-receiving.service';
 import { PartnerNotificationsService } from './partner-notifications.service';
 import { ShopInventoryItem, ShopInventorySchema } from './schemas/shop-inventory.schema';
+import { PartnerSettlement, PartnerSettlementSchema } from './schemas/partner-settlement.schema';
 import { Notification, NotificationSchema } from '../reviews/schemas/notification.schema';
 import { Branch, BranchSchema } from '../branches/schemas/branch.schema';
 import { PartnerSettingsService } from './partner-settings.service';
@@ -24,6 +25,7 @@ import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
       { name: Notification.name, schema: NotificationSchema },
       { name: Branch.name, schema: BranchSchema },
       { name: Payment.name, schema: PaymentSchema },
+      { name: PartnerSettlement.name, schema: PartnerSettlementSchema },
     ]),
     RealtimeModule,
     RidersModule,

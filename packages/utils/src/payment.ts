@@ -115,6 +115,10 @@ export interface RiderCashPaymentInfo {
   /** Rider can tap "Cash collected" on this task now. */
   canCollect: boolean;
   collected: boolean;
+  /** Rider's earned fee for this task, offset against the cash amount. */
+  earningOffset?: number;
+  /** Net cash to remit to admin after subtracting earningOffset. */
+  netRemittance?: number;
 }
 
 export function buildRiderCashPaymentInfo(input: {

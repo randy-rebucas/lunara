@@ -35,6 +35,7 @@ interface BranchProfile {
     maxWeightCapacityKg: number;
     dailyQuotaOrders: number;
     dailyQuotaWeightKg: number;
+    commissionRate: number;
   };
   hierarchy: {
     parent: { id: string; code: string; name: string } | null;
@@ -183,6 +184,7 @@ export function BranchesBoard() {
     maxWeightCapacityKg: '',
     dailyQuotaOrders: '',
     dailyQuotaWeightKg: '',
+    commissionRate: '',
     isActive: true,
   });
 
@@ -252,6 +254,7 @@ export function BranchesBoard() {
       maxWeightCapacityKg: String(profile.branch.maxWeightCapacityKg),
       dailyQuotaOrders: String(profile.branch.dailyQuotaOrders),
       dailyQuotaWeightKg: String(profile.branch.dailyQuotaWeightKg),
+      commissionRate: String(Math.round((profile.branch.commissionRate ?? 0.2) * 100)),
       isActive: profile.branch.isActive,
     });
   }, [profile]);
@@ -310,6 +313,7 @@ export function BranchesBoard() {
     setBranchBusy(true);
     setBranchMsg('');
     try {
+      const commissionPct = Number(editForm.commissionRate);
       await adminFetch(`/admin/branches/${selectedId}`, {
         method: 'PATCH',
         body: JSON.stringify({
@@ -319,6 +323,9 @@ export function BranchesBoard() {
           dailyQuotaOrders: Number(editForm.dailyQuotaOrders),
           dailyQuotaWeightKg: Number(editForm.dailyQuotaWeightKg),
           isActive: editForm.isActive,
+          ...(Number.isFinite(commissionPct) && commissionPct > 0
+            ? { commissionRate: commissionPct / 100 }
+            : {}),
         }),
       });
       setBranchMsg('Branch updated.');
@@ -884,6 +891,24 @@ export function BranchesBoard() {
                               setEditForm((f) => ({ ...f, dailyQuotaWeightKg: e.target.value }))
                             }
                           />
+                        </div>
+                        <div>
+                          <label htmlFor="edit-commission" className="form-label">
+                            Commission rate (%)
+                          </label>
+                          <input
+                            id="edit-commission"
+                            type="number"
+                            min="0"
+                            max="50"
+                            step="0.5"
+                            className="input-field"
+                            value={editForm.commissionRate}
+                            onChange={(e) =>
+                              setEditForm((f) => ({ ...f, commissionRate: e.target.value }))
+                            }
+                          />
+                          <p className="mt-1 text-xs text-muted">Platform fee on laundry subtotal. Default 20%.</p>
                         </div>
                       </div>
                       <div className="dc-form-actions mt-4">
