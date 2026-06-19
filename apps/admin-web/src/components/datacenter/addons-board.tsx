@@ -225,15 +225,32 @@ export function AddonsBoard() {
             <MetricCell label="Catalog size" value={addons.length} sub="booking extras" />
           </div>
 
-          <ListControls
-            search={search}
-            onSearchChange={setSearch}
-            searchPlaceholder="Slug, label, description…"
-            limit={limit}
-            onLimitChange={setLimit}
-            total={addons.length}
-            filtered={filteredAddons.length}
-          />
+          <div className="flex flex-wrap items-end gap-4">
+            <div>
+              <label htmlFor="addon-status-filter" className="form-label">
+                Status
+              </label>
+              <select
+                id="addon-status-filter"
+                className="input-field"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}
+              >
+                <option value="all">All</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
+            <ListControls
+              search={search}
+              onSearchChange={setSearch}
+              searchPlaceholder="Slug, label, description…"
+              limit={limit}
+              onLimitChange={setLimit}
+              total={addons.length}
+              filtered={filteredAddons.length}
+            />
+          </div>
 
           <section className="dc-panel">
             <div className="dc-panel-header">
