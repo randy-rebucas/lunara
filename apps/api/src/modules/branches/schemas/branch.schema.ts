@@ -132,4 +132,3 @@ export class Branch {
 
 export const BranchSchema = SchemaFactory.createForClass(Branch);
 BranchSchema.index({ location: '2dsphere' });
-BranchSchema.index({ parentBranchId: 1 });

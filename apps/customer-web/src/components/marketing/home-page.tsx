@@ -4,7 +4,9 @@ import Link from 'next/link';
 
 import { useRouter } from 'next/navigation';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+
+import QRCode from 'react-qr-code';
 
 import { appConfig } from '@lunara/config';
 
@@ -62,8 +64,53 @@ function StarRating({ count }: { count: number }) {
 const ANDROID_PLAY_STORE_URL =
   'https://play.google.com/store/apps/details?id=com.lunara.customer&pcampaignid=web_share';
 
+function GooglePlayQrModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Download on Google Play"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="float-right -mr-2 -mt-2 rounded-full p-2 text-muted-foreground transition hover:bg-slate-100"
+        >
+          ✕
+        </button>
+
+        <p className="text-sm font-semibold text-slate-900">Get the app on Google Play</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Scan with your phone camera to download
+        </p>
+
+        <div className="mx-auto mt-5 inline-block rounded-lg bg-white p-4 ring-1 ring-border/60">
+          <QRCode value={ANDROID_PLAY_STORE_URL} size={180} />
+        </div>
+
+        <Link
+          href={ANDROID_PLAY_STORE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-5 inline-flex w-full items-center justify-center rounded-lg bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+        >
+          Open Google Play
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 function AppStoreBadge({ store }: { store: 'ios' | 'android' }) {
   const isIos = store === 'ios';
+  const [showQr, setShowQr] = useState(false);
 
   if (isIos) {
     return (
@@ -81,16 +128,19 @@ function AppStoreBadge({ store }: { store: 'ios' | 'android' }) {
   }
 
   return (
-    <Link
-      href={ANDROID_PLAY_STORE_URL}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex min-h-11 w-full flex-col justify-center rounded-lg bg-slate-900 px-5 py-3 text-left text-white ring-1 ring-slate-800 transition hover:bg-slate-800 sm:min-h-12 sm:min-w-[12rem] sm:w-auto sm:px-6"
-    >
-      <span className="block text-[10px] uppercase tracking-wide text-slate-400">Get it on</span>
+    <>
+      <button
+        type="button"
+        onClick={() => setShowQr(true)}
+        className="inline-flex min-h-11 w-full flex-col justify-center rounded-lg bg-slate-900 px-5 py-3 text-left text-white ring-1 ring-slate-800 transition hover:bg-slate-800 sm:min-h-12 sm:min-w-[12rem] sm:w-auto sm:px-6"
+      >
+        <span className="block text-[10px] uppercase tracking-wide text-slate-400">Get it on</span>
 
-      <span className="block text-sm font-semibold">Google Play</span>
-    </Link>
+        <span className="block text-sm font-semibold">Google Play</span>
+      </button>
+
+      {showQr ? <GooglePlayQrModal onClose={() => setShowQr(false)} /> : null}
+    </>
   );
 }
 
