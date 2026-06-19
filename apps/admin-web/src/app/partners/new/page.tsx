@@ -203,7 +203,7 @@ export default function CreatePartnerPage() {
         <section className="section-panel">
           <div className="border-b border-border px-6 py-4">
             <h2 className="text-sm font-semibold text-slate-900">Capacity &amp; commission</h2>
-            <p className="mt-0.5 text-xs text-muted">Operational limits and Lunara's platform fee on this branch.</p>
+            <p className="mt-0.5 text-xs text-muted">Operational limits and Lunara&apos;s platform fee on this branch.</p>
           </div>
           <div className="p-6">
             <div className="dc-form-grid">

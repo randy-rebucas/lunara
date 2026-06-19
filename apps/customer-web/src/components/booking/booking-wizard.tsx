@@ -376,7 +376,7 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
     } catch {
       return null;
     }
-  }, [form.bookingType, form.weightKg, form.addonIds, config?.services, config?.addons]);
+  }, [form.bookingType, form.weightKg, form.addonIds, config]);
 
   const loadAvailability = useCallback(
     async (addressId: string) => {
