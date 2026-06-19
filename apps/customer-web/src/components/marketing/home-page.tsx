@@ -59,19 +59,37 @@ function StarRating({ count }: { count: number }) {
   );
 }
 
+const ANDROID_PLAY_STORE_URL =
+  'https://play.google.com/store/apps/details?id=com.lunara.customer&pcampaignid=web_share';
+
 function AppStoreBadge({ store }: { store: 'ios' | 'android' }) {
   const isIos = store === 'ios';
 
+  if (isIos) {
+    return (
+      <span
+        aria-disabled="true"
+        className="inline-flex min-h-11 w-full cursor-not-allowed flex-col justify-center rounded-lg bg-slate-900/40 px-5 py-3 text-left text-white/40 ring-1 ring-slate-800/40 sm:min-h-12 sm:min-w-[12rem] sm:w-auto sm:px-6"
+      >
+        <span className="block text-[10px] uppercase tracking-wide text-slate-400/60">
+          Coming soon to the
+        </span>
+
+        <span className="block text-sm font-semibold">App Store</span>
+      </span>
+    );
+  }
+
   return (
     <Link
-      href="/signup"
+      href={ANDROID_PLAY_STORE_URL}
+      target="_blank"
+      rel="noopener noreferrer"
       className="inline-flex min-h-11 w-full flex-col justify-center rounded-lg bg-slate-900 px-5 py-3 text-left text-white ring-1 ring-slate-800 transition hover:bg-slate-800 sm:min-h-12 sm:min-w-[12rem] sm:w-auto sm:px-6"
     >
-      <span className="block text-[10px] uppercase tracking-wide text-slate-400">
-        {isIos ? 'Download on the' : 'Get it on'}
-      </span>
+      <span className="block text-[10px] uppercase tracking-wide text-slate-400">Get it on</span>
 
-      <span className="block text-sm font-semibold">{isIos ? 'App Store' : 'Google Play'}</span>
+      <span className="block text-sm font-semibold">Google Play</span>
     </Link>
   );
 }

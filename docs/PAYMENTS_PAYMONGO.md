@@ -6,17 +6,32 @@ Lunara uses [PayMongo](https://paymongo.com) Checkout Sessions for online paymen
 
 ---
 
+## Payment methods at a glance
+
+| Method | Provider | Redirect? | Notes |
+|--------|----------|-----------|-------|
+| `gcash` | PayMongo | Yes | GCash checkout session |
+| `maya` | PayMongo | Yes | Maya (`paymaya`) checkout session |
+| `stripe` | PayMongo | Yes | Card (enum name is legacy — not Stripe) |
+| `wallet` | Internal | No | Instant wallet debit; no external redirect |
+| `cash` | Internal | No | Collected by rider at pickup or delivery |
+
+---
+
 ## Cash on pickup / delivery
 
 | Step | Behavior |
 |------|----------|
 | Customer checkout | `POST /payments/intent` with `method: cash`, `cashTiming: pickup \| delivery` |
-| Rider pickup | `POST /riders/pickup-tasks/:orderId/collect-cash` before collecting laundry |
-| Rider delivery | `POST /riders/delivery-tasks/:orderId/collect-cash` before completing delivery |
+| Order confirmed | Order moves to `pending_dispatch` immediately (no payment needed upfront) |
+| Rider pickup | `POST /riders/pickup-tasks/:orderId/collect-cash` — API blocks pickup until cash collected if `cashTiming: pickup` |
+| Rider delivery | `POST /riders/delivery-tasks/:orderId/collect-cash` — API blocks delivery completion if `cashTiming: delivery` and cash not yet collected |
 | Customer track | Orders include `paymentMethod`, `paymentStatus`, `cashTiming`, receipt ref |
-| Realtime | `paymentReceived` when rider records cash |
+| Realtime | `paymentReceived` event emitted when rider records cash |
 
 Cash is not refundable via the app. Rider mobile supports offline `collect-cash` queue.
+
+Stage enforcement: `assertCashCollectedForStage` throws if the rider tries to advance the order (pickup or delivery) without first calling `collect-cash` for that stage.
 
 ---
 
@@ -27,10 +42,10 @@ Cash is not refundable via the app. Rider mobile supports offline `collect-cash`
 | **Order checkout** | `POST /payments/intent` | Order → `pending_dispatch`, receipt shown |
 | **Wallet top-up** | `POST /payments/wallet-topup/intent` | Wallet credited, user returns to `/wallet` |
 
-Other methods (unchanged):
+Other methods:
 
-- **Lunara Wallet** — instant debit, no PayMongo
-- **Cash** — booking confirmed, payment stays `pending` until collected by rider
+- **Lunara Wallet** — instant wallet debit, order confirmed synchronously, no redirect
+- **Cash** — booking confirmed immediately, payment stays `pending` until rider calls `collect-cash`
 
 ---
 
@@ -146,6 +161,26 @@ Payments are marked **paid** when:
 
 Wallet credits are **idempotent** (duplicate webhooks do not double-credit).
 
+### Pending payment cleanup
+
+Before creating a new payment intent, any previous `pending` payments for the same order (or wallet top-up) are **deleted** automatically. This prevents stale sessions from blocking a retry.
+
+### Session expiry
+
+If `syncPaymongoPayment` finds that a PayMongo session status is `expired` and the local payment is still `pending`, the payment is marked `failed`. The customer can start a new checkout.
+
+### Realtime events on fulfillment
+
+When an order payment is confirmed (webhook or sync), the API emits three Socket.IO events via `TrackingGateway`:
+
+| Event | Audience | Payload |
+|-------|----------|---------|
+| `awaitingDispatch` | Customer (order room) | Message that pickup starts after dispatch |
+| `adminDispatcherAlert` | Admin web | `{ type: 'awaiting_shop', orderId, status }` — prompts assigning a laundry shop |
+| `dispatchQueueUpdated` | Admin web | `{ reason: 'payment_confirmed', orderId }` — refreshes dispatch board |
+
+For cash payments, a `paymentReceived` event is emitted when the rider records cash collection.
+
 ---
 
 ## API reference
@@ -154,18 +189,29 @@ Wallet credits are **idempotent** (duplicate webhooks do not double-credit).
 |--------|------|------|-------------|
 | `POST` | `/payments/intent` | JWT | Start order payment. Body: `orderId`, `method`, optional `cashTiming`, `clientOrigin` |
 | `POST` | `/payments/wallet-topup/intent` | JWT | Start wallet top-up. Body: `amount` (min ₱100), `method`, `clientOrigin` |
-| `GET` | `/payments/orders/:orderId` | JWT | Checkout summary |
+| `GET` | `/payments/orders/:orderId` | JWT | Checkout summary; auto-syncs pending PayMongo session |
 | `GET` | `/payments/:id` | JWT | Payment + order; auto-syncs pending PayMongo session |
 | `POST` | `/payments/:id/sync` | JWT | Poll PayMongo and fulfill if paid |
 | `POST` | `/payments/webhooks/paymongo` | PayMongo signature | Webhook handler |
+| `POST` | `/payments/:id/confirm` | `x-payment-webhook-secret` header | Legacy confirm (deprecated; use webhook or sync instead) |
+
+**`POST /payments/intent` response variants:**
+
+| method | `paid` | Additional fields | What happens |
+|--------|--------|-------------------|--------------|
+| `wallet` | `true` | `receiptCode` | Wallet debited synchronously, order confirmed |
+| `cash` | `false` | `cash: true`, `cashTiming`, `receiptCode`, `message` | Order confirmed, rider collects later |
+| `gcash` / `maya` / `stripe` | `false` | `checkoutUrl`, `provider: 'paymongo'` | Redirect user to `checkoutUrl` |
 
 ### Payment methods (`method` field)
 
-| Lunara enum | PayMongo checkout type | UI label |
-|-------------|------------------------|----------|
-| `gcash` | `gcash` | GCash |
-| `maya` | `paymaya` | Maya |
-| `stripe` | `card` | Card (enum name is legacy; not Stripe) |
+| Lunara enum | PayMongo checkout type | UI label | Notes |
+|-------------|------------------------|----------|-------|
+| `gcash` | `gcash` | GCash | PayMongo method |
+| `maya` | `paymaya` | Maya | PayMongo method |
+| `stripe` | `card` | Card | PayMongo method; enum name is legacy, not Stripe |
+| `wallet` | — | Lunara Wallet | Internal; instant debit |
+| `cash` | — | Cash | Collected by rider |
 
 ### Metadata on PayMongo sessions
 
@@ -263,6 +309,30 @@ Stored on each session for webhook matching:
 
 ---
 
+## Security notes
+
+### `clientOrigin` validation
+
+`resolveWebOrigin` validates the `clientOrigin` sent by the browser:
+- In **production**: origin host must match `CUSTOMER_WEB_URL` host exactly; any mismatch falls back to `CUSTOMER_WEB_URL`.
+- In **development**: any valid `http://` or `https://` origin is accepted.
+- Invalid URLs, empty strings, or non-http protocols always fall back to `CUSTOMER_WEB_URL`.
+
+This prevents an attacker from crafting a payment intent that redirects to an arbitrary host after PayMongo.
+
+### Webhook signature
+
+`verifyWebhookSignature` uses `timingSafeEqual` for constant-time comparison to prevent timing attacks. The `Paymongo-Signature` header format:
+
+```
+t=<timestamp>,te=<hmac-hex>       # test mode
+t=<timestamp>,li=<hmac-hex>       # live mode
+```
+
+HMAC input: `${timestamp}.${rawBody}` with `PAYMONGO_WEBHOOK_SECRET` as the key.
+
+---
+
 ## Related code
 
 | Area | Path |
@@ -271,8 +341,9 @@ Stored on each session for webhook matching:
 | Payment logic | `apps/api/src/modules/payments/payments.service.ts` |
 | Routes | `apps/api/src/modules/payments/payments.controller.ts` |
 | Payment schema | `apps/api/src/modules/payments/schemas/payment.schema.ts` |
-| Shared labels | `packages/utils/src/payment.ts` |
+| Shared helpers | `packages/utils/src/payment.ts` |
 | Web checkout UI | `apps/customer-web/src/components/payment/` |
+| Cash collection | `apps/api/src/modules/riders/pickup.service.ts`, `delivery.service.ts` |
 
 ---
 
