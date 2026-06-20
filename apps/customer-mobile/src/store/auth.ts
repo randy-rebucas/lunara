@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { AuthTokens, User } from '@lunara/types';
 import { UserRole } from '@lunara/types';
@@ -6,6 +7,11 @@ import { formatPhone } from '@lunara/utils';
 import { getApiV1BaseUrl } from '../api-config';
 import { parseApiError } from '../lib/api-error';
 import { apiUnreachableMessage } from '../lib/network-error';
+
+/** Baked in at build time per partner-brands/<slug>/manifest.json — null for the default Lunara app. */
+function getPartnerId(): string | null {
+  return (Constants.expoConfig?.extra?.partnerId as string | null) ?? null;
+}
 
 const STORAGE_KEY = 'lunara_auth';
 
@@ -31,6 +37,7 @@ async function authRequest<T>(
   onUnauthorized?: () => void,
 ): Promise<T> {
   const baseUrl = getApiV1BaseUrl();
+  const partnerId = getPartnerId();
   let res: Response;
   try {
     res = await fetch(`${baseUrl}${path}`, {
@@ -38,6 +45,7 @@ async function authRequest<T>(
       headers: {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(partnerId ? { 'x-lunara-partner-id': partnerId } : {}),
         ...(init?.headers ?? {}),
       },
     });
@@ -62,12 +70,14 @@ async function authUpload<T>(
   onUnauthorized?: () => void,
 ): Promise<T> {
   const baseUrl = getApiV1BaseUrl();
+  const partnerId = getPartnerId();
   let res: Response;
   try {
     res = await fetch(`${baseUrl}${path}`, {
       method: 'POST',
       headers: {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(partnerId ? { 'x-lunara-partner-id': partnerId } : {}),
       },
       body: formData,
     });

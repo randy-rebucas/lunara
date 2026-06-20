@@ -27,6 +27,8 @@ export interface BrandMarkProps {
   title?: string;
   subtitle?: string;
   className?: string;
+  /** Partner-branded logo URL override — defaults to the Lunara icon when unset. */
+  logoSrc?: string;
 }
 
 export function BrandMark({
@@ -36,6 +38,7 @@ export function BrandMark({
   title,
   subtitle,
   className = '',
+  logoSrc,
 }: BrandMarkProps) {
   const copy = variantCopy[variant];
   const label = title ?? copy.title;
@@ -48,10 +51,11 @@ export function BrandMark({
       className={`flex items-center gap-2.5 ${showText && variant === 'customer' ? 'justify-center' : ''} ${className}`}
     >
       <Image
-        src={brandIcon}
+        src={logoSrc ?? brandIcon}
         alt=""
         width={px}
         height={px}
+        unoptimized={Boolean(logoSrc)}
         className="shrink-0 rounded-xl shadow-[var(--shadow-card)]"
         aria-hidden
         priority

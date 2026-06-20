@@ -86,8 +86,10 @@ export class BranchesService {
     private trackingGateway: TrackingGateway,
   ) {}
 
-  operationalBranchFilter() {
-    return { isActive: true, branchType: { $ne: 'hq' as const } };
+  operationalBranchFilter(partnerUserId?: Types.ObjectId) {
+    const filter: Record<string, unknown> = { isActive: true, branchType: { $ne: 'hq' as const } };
+    if (partnerUserId) filter.partnerUserId = partnerUserId;
+    return filter;
   }
 
   async ensureSeeded() {
@@ -131,11 +133,14 @@ export class BranchesService {
     return { success: true, data: withCapacity };
   }
 
-  async findNearestForAddress(address: {
-    city: string;
-    latitude?: number;
-    longitude?: number;
-  }) {
+  async findNearestForAddress(
+    address: {
+      city: string;
+      latitude?: number;
+      longitude?: number;
+    },
+    partnerUserId?: Types.ObjectId,
+  ) {
     await this.ensureSeeded();
     const customerCoords = resolveCoordinates(
       address.city,
@@ -143,7 +148,7 @@ export class BranchesService {
       address.longitude,
     );
 
-    const branches = await this.branchModel.find(this.operationalBranchFilter());
+    const branches = await this.branchModel.find(this.operationalBranchFilter(partnerUserId));
     if (branches.length === 0) {
       throw new BadRequestException('No laundry branches available');
     }
@@ -311,9 +316,10 @@ export class BranchesService {
     },
     bookingType: string,
     estimatedWeightKg: number,
+    partnerUserId?: Types.ObjectId,
   ) {
-    const nearest = await this.findNearestForAddress(address);
-    const branches = await this.branchModel.find(this.operationalBranchFilter());
+    const nearest = await this.findNearestForAddress(address, partnerUserId);
+    const branches = await this.branchModel.find(this.operationalBranchFilter(partnerUserId));
 
     const inputs = await Promise.all(
       nearest.ranked.map(async (r) => {
@@ -355,6 +361,26 @@ export class BranchesService {
       },
       branchEvaluations: rankBranchesForDispatch(inputs),
     };
+  }
+
+  /**
+   * Same ranking as buildDispatchEvaluations, scoped to a single partner's own branches —
+   * used to auto-dispatch bookings placed through that partner's white-labeled app, which
+   * must never enter the shared admin /dispatch queue.
+   */
+  async buildDispatchEvaluationsForPartner(
+    address: {
+      line1: string;
+      city: string;
+      province: string;
+      latitude?: number;
+      longitude?: number;
+    },
+    bookingType: string,
+    estimatedWeightKg: number,
+    partnerUserId: Types.ObjectId,
+  ) {
+    return this.buildDispatchEvaluations(address, bookingType, estimatedWeightKg, partnerUserId);
   }
 
   async getDispatchQueue() {
@@ -463,6 +489,62 @@ export class BranchesService {
     };
   }
 
+  /**
+   * Mutates and saves the order with shop-assignment fields, pushes status history,
+   * and fires the tracking/dispatch websocket events. Shared by the admin manual-assign
+   * path (adminDispatchOrder) and the partner auto-dispatch path (payments.service.ts
+   * confirmOrder), which both end in the same SHOP_ASSIGNED state.
+   */
+  async applyShopAssignment(
+    order: OrderDocument,
+    branch: BranchDocument,
+    opts: { dispatchedByUserId?: string; activeOrders: number; noteOverride?: string } = {
+      activeOrders: 0,
+    },
+  ) {
+    order.branchId = branch._id;
+    order.branchCode = branch.code;
+    order.branchName = branch.name;
+    order.partnerId = branch.partnerUserId;
+    const turnaround = estimateTurnaroundHours(
+      order.bookingType,
+      order.estimatedWeightKg ?? 5,
+      opts.activeOrders,
+    );
+
+    order.status = OrderStatus.SHOP_ASSIGNED;
+    order.dispatchStatus = 'dispatched';
+    order.dispatchedAt = new Date();
+    if (opts.dispatchedByUserId) order.dispatchedBy = new Types.ObjectId(opts.dispatchedByUserId);
+    order.slaPickupDueAt = order.scheduledPickupAt;
+    order.estimatedTurnaroundHours = turnaround.hours;
+    order.statusHistory.push({
+      status: OrderStatus.SHOP_ASSIGNED,
+      timestamp: new Date(),
+      note: opts.noteOverride ?? `Shop assigned: ${branch.name} (ETA ${turnaround.label})`,
+    });
+    await order.save();
+
+    const orderId = order._id.toString();
+    this.trackingGateway.emitOrderEvent(orderId, 'shopAssigned', {
+      message: `Assigned to ${branch.name} — estimated turnaround ${turnaround.label}`,
+      branchId: branch._id.toString(),
+      branchName: branch.name,
+    });
+    this.trackingGateway.emitDispatchQueueUpdated({
+      reason: 'shop_assigned',
+      orderId,
+    });
+    this.trackingGateway.emitPartnerPipelineUpdated({
+      orderId,
+      status: order.status,
+      partnerId: order.partnerId?.toString(),
+      branchId: order.branchId?.toString(),
+    });
+
+    return turnaround;
+  }
+
   async adminDispatchOrder(orderId: string, branchId: string, adminUserId: string) {
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
@@ -486,43 +568,9 @@ export class BranchesService {
       );
     }
 
-    order.branchId = branch._id;
-    order.branchCode = branch.code;
-    order.branchName = branch.name;
-    order.partnerId = branch.partnerUserId;
-    const turnaround = estimateTurnaroundHours(
-      order.bookingType,
-      order.estimatedWeightKg ?? 5,
+    const turnaround = await this.applyShopAssignment(order, branch, {
+      dispatchedByUserId: adminUserId,
       activeOrders,
-    );
-
-    order.status = OrderStatus.SHOP_ASSIGNED;
-    order.dispatchStatus = 'dispatched';
-    order.dispatchedAt = new Date();
-    order.dispatchedBy = new Types.ObjectId(adminUserId);
-    order.slaPickupDueAt = order.scheduledPickupAt;
-    order.estimatedTurnaroundHours = turnaround.hours;
-    order.statusHistory.push({
-      status: OrderStatus.SHOP_ASSIGNED,
-      timestamp: new Date(),
-      note: `Shop assigned: ${branch.name} (ETA ${turnaround.label})`,
-    });
-    await order.save();
-
-    this.trackingGateway.emitOrderEvent(orderId, 'shopAssigned', {
-      message: `Assigned to ${branch.name} — estimated turnaround ${turnaround.label}`,
-      branchId: branch._id.toString(),
-      branchName: branch.name,
-    });
-    this.trackingGateway.emitDispatchQueueUpdated({
-      reason: 'shop_assigned',
-      orderId,
-    });
-    this.trackingGateway.emitPartnerPipelineUpdated({
-      orderId,
-      status: order.status,
-      partnerId: order.partnerId?.toString(),
-      branchId: order.branchId?.toString(),
     });
 
     return {
@@ -540,6 +588,24 @@ export class BranchesService {
         dispatchedAt: order.dispatchedAt,
       },
     };
+  }
+
+  /**
+   * Finalizes a partner auto-dispatch that was pre-resolved at booking time (booking.service.ts
+   * already picked the branch and stored branchId/partnerId on the order before payment).
+   * Capacity is not re-checked as a hard gate here — checkout already blocked the booking if the
+   * partner had no available branch, and money has already been captured by this point.
+   */
+  async finalizePreResolvedShopAssignment(order: OrderDocument) {
+    if (!order.branchId) return;
+    const branch = await this.branchModel.findById(order.branchId);
+    if (!branch) return;
+
+    const activeOrders = await this.countActiveOrders(branch._id);
+    await this.applyShopAssignment(order, branch, {
+      activeOrders,
+      noteOverride: `Payment confirmed — auto-dispatched to partner shop ${branch.name}`,
+    });
   }
 
   async getBranch(id: string) {

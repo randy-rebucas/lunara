@@ -41,6 +41,7 @@ import {
 import { inferRiderNotificationCategory } from './rider-notification.constants';
 import { RiderNotificationService } from './rider-notification.service';
 import { RiderWalletService } from './rider-wallet.service';
+import { LedgerService } from '../ledger/ledger.service';
 import { Rider, RiderDocument } from './schemas/rider.schema';
 import {
   buildActiveAssignmentPayload,
@@ -63,6 +64,7 @@ export class RidersService {
     @InjectModel(Review.name) private reviewModel: Model<ReviewDocument>,
     private riderNotificationService: RiderNotificationService,
     private riderWalletService: RiderWalletService,
+    private ledgerService: LedgerService,
   ) {}
 
   async listNotifications(userId: string, limit = 20) {
@@ -203,6 +205,27 @@ export class RidersService {
       .notifyEarningsCredited(userId, orderId, type, amount)
       .catch(() => {});
 
+    await this.ledgerService.post(
+      `rider-earning:${orderId}:${type}`,
+      'rider_earning',
+      `${orderId}:${type}`,
+      [
+        {
+          accountType: 'rider_payout_expense',
+          direction: 'debit',
+          amount,
+          description: `${RIDER_EARNING_TYPE_LABELS[type]} fee earned by rider ${userId} (order ${orderId.slice(-6)})`,
+        },
+        {
+          accountType: 'rider_payable',
+          accountSubject: userId,
+          direction: 'credit',
+          amount,
+          description: `Payable to rider ${userId} for ${RIDER_EARNING_TYPE_LABELS[type]}`,
+        },
+      ],
+    );
+
     return {
       amount,
       totalEarnings: rider.totalEarnings,
@@ -242,6 +265,27 @@ export class RidersService {
     void this.riderNotificationService
       .notifyEarningsCredited(userId, referenceId, type, amount, note)
       .catch(() => {});
+
+    await this.ledgerService.post(
+      `rider-earning:${referenceId}`,
+      'rider_earning',
+      referenceId,
+      [
+        {
+          accountType: 'rider_payout_expense',
+          direction: 'debit',
+          amount,
+          description: `${description} for rider ${userId}`,
+        },
+        {
+          accountType: 'rider_payable',
+          accountSubject: userId,
+          direction: 'credit',
+          amount,
+          description: `Payable to rider ${userId}: ${description}`,
+        },
+      ],
+    );
 
     return {
       amount,

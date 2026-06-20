@@ -47,10 +47,15 @@ export class BookingController {
   @Post('orders')
   @Roles(UserRole.CUSTOMER)
   async createOrder(
-    @Req() req: { user: { sub: string } },
+    @Req() req: { user: { sub: string }; headers: Record<string, string | undefined> },
     @Body() dto: CreateBookingOrderDto,
   ) {
-    const payload = await this.bookingService.prepareOrderPayload(req.user.sub, dto);
+    const partnerContextId = req.headers['x-lunara-partner-id']?.trim() || undefined;
+    const payload = await this.bookingService.prepareOrderPayload(
+      req.user.sub,
+      dto,
+      partnerContextId,
+    );
     const result = await this.ordersService.createFromBooking(req.user.sub, payload);
     const order = result.data as OrderDocument;
     return {

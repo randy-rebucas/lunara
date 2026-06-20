@@ -24,6 +24,12 @@
       "android": {
         "buildType": "app-bundle"
       }
+    },
+    "production-partner-example": {
+      "extends": "production",
+      "env": {
+        "LUNARA_PARTNER_SLUG": "partner-example"
+      }
     }
   },
   "submit": {

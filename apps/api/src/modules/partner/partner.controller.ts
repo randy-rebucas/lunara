@@ -217,6 +217,12 @@ export class PartnerController {
     return this.operationsService.getSettlements(req.user.sub, req.user.role);
   }
 
+  @Get('ledger-balance')
+  @Roles(UserRole.PARTNER)
+  getLedgerBalance(@Req() req: { user: { sub: string } }) {
+    return this.operationsService.getLedgerBalance(req.user.sub);
+  }
+
   @Get('orders/:orderId/receiving')
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
   getReceiving(

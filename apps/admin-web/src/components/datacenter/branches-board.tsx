@@ -290,11 +290,12 @@ export function BranchesBoard() {
     setBranchBusy(true);
     setBranchMsg('');
     try {
+      const { lat, lng, ...branchFields } = createForm;
       await adminFetch('/admin/branches', {
         method: 'POST',
         body: JSON.stringify({
-          ...createForm,
-          coordinates: [Number(createForm.lng), Number(createForm.lat)],
+          ...branchFields,
+          coordinates: [Number(lng), Number(lat)],
         }),
       });
       setBranchMsg('Branch created.');
@@ -302,6 +303,35 @@ export function BranchesBoard() {
       await reloadNetwork();
     } catch (err) {
       setBranchMsg(err instanceof Error ? err.message : 'Create failed');
+    } finally {
+      setBranchBusy(false);
+    }
+  }
+
+  async function toggleBranchActive() {
+    if (!profile || !selectedId) return;
+    const nextActive = !profile.branch.isActive;
+    if (
+      !nextActive &&
+      !window.confirm(
+        `Deactivate ${profile.branch.name}? This fails if it has orders still in progress.`,
+      )
+    ) {
+      return;
+    }
+    setBranchBusy(true);
+    setBranchMsg('');
+    try {
+      await adminFetch(`/admin/branches/${selectedId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isActive: nextActive }),
+      });
+      setBranchMsg(nextActive ? 'Branch reactivated.' : 'Branch deactivated.');
+      const refreshed = await adminFetch<BranchProfile>(`/admin/branches/${selectedId}/profile`);
+      setProfile(refreshed);
+      await reloadNetwork();
+    } catch (err) {
+      setBranchMsg(err instanceof Error ? err.message : 'Update failed');
     } finally {
       setBranchBusy(false);
     }
@@ -654,9 +684,21 @@ export function BranchesBoard() {
                   </p>
                 </div>
                 {profile ? (
-                  <span className={performanceBadgeClass(profile.performance.performanceScore)}>
-                    {profile.performance.performanceLabel} ({profile.performance.performanceScore})
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={performanceBadgeClass(profile.performance.performanceScore)}>
+                      {profile.performance.performanceLabel} ({profile.performance.performanceScore})
+                    </span>
+                    {profile.branch.branchType !== 'hq' ? (
+                      <button
+                        type="button"
+                        className="btn-outline btn-sm"
+                        disabled={branchBusy}
+                        onClick={() => void toggleBranchActive()}
+                      >
+                        {profile.branch.isActive ? 'Deactivate' : 'Reactivate'}
+                      </button>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
 

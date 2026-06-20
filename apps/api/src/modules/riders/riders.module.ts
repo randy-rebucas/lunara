@@ -28,6 +28,7 @@ import { RiderWalletService } from './rider-wallet.service';
 import { HandoffModule } from '../handoff/handoff.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { SosModule } from '../sos/sos.module';
+import { LedgerModule } from '../ledger/ledger.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { SosModule } from '../sos/sos.module';
     HandoffModule,
     PaymentsModule,
     SosModule,
+    LedgerModule,
   ],
   controllers: [RidersController],
   providers: [RidersService, PickupService, DeliveryService, RiderAssignmentService, RiderNotificationService, RiderWalletService],

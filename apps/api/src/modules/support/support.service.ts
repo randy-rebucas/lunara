@@ -12,6 +12,7 @@ import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { AddressesService } from '../addresses/addresses.service';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { WalletsService } from '../wallets/wallets.service';
+import { LedgerService } from '../ledger/ledger.service';
 import { CreateLostItemDto } from './dto/create-lost-item.dto';
 import { CreateAreaRequestDto } from './dto/create-area-request.dto';
 import { CreateTicketDto } from './dto/create-ticket.dto';
@@ -65,6 +66,7 @@ export class SupportService {
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     private addressesService: AddressesService,
     private walletsService: WalletsService,
+    private ledgerService: LedgerService,
   ) {}
 
   async ensureSeeded() {
@@ -385,6 +387,26 @@ export class SupportService {
         ticket.compensationCreditedAt = new Date();
         ticket.investigationStage = LostItemStage.COMPENSATION;
         ticket.status = TicketStatus.RESOLVED;
+        await this.ledgerService.post(
+          `lost-item-${ticket._id.toString()}`,
+          'refund',
+          ticket._id.toString(),
+          [
+            {
+              accountType: 'refund_expense',
+              direction: 'debit',
+              amount,
+              description: `Lost item compensation — ticket ${ticket._id.toString().slice(-6)}`,
+            },
+            {
+              accountType: 'customer_wallet_liability',
+              accountSubject: ticket.customerId.toString(),
+              direction: 'credit',
+              amount,
+              description: `Compensation credited to wallet for ticket ${ticket._id.toString().slice(-6)}`,
+            },
+          ],
+        );
         pushTimeline('compensation', `₱${amount} credited to wallet`, dto.adminNote);
         break;
 

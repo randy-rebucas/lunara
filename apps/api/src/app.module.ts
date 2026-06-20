@@ -6,6 +6,7 @@ import { RedisModule } from './common/redis/redis.module';
 import { AddressesModule } from './modules/addresses/addresses.module';
 import { BookingModule } from './modules/booking/booking.module';
 import { PartnerModule } from './modules/partner/partner.module';
+import { PartnersModule } from './modules/partners/partners.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { HealthModule } from './modules/health/health.module';
@@ -24,6 +25,7 @@ import { DealsModule } from './modules/deals/deals.module';
 import { PushModule } from './modules/push/push.module';
 import { SosModule } from './modules/sos/sos.module';
 import { MediaModule } from './modules/media/media.module';
+import { LedgerModule } from './modules/ledger/ledger.module';
 
 @Module({
   imports: [
@@ -42,6 +44,7 @@ import { MediaModule } from './modules/media/media.module';
     AddressesModule,
     BookingModule,
     PartnerModule,
+    PartnersModule,
     OrdersModule,
     RidersModule,
     WalletsModule,
@@ -55,6 +58,7 @@ import { MediaModule } from './modules/media/media.module';
     SosModule,
     RealtimeModule,
     MediaModule,
+    LedgerModule,
   ],
 })
 export class AppModule {}

@@ -1,8 +1,8 @@
 @import 'tailwindcss';
 
 @theme {
-  --color-primary: #4f46e5;
-  --color-secondary: #06b6d4;
-  --color-accent: #22c55e;
-  --color-border: #e2e8f0;
+  --color-primary: var(--lunara-primary, #4f46e5);
+  --color-secondary: var(--lunara-secondary, #06b6d4);
+  --color-accent: var(--lunara-accent, #22c55e);
+  --color-border: var(--lunara-border, #e2e8f0);
 }

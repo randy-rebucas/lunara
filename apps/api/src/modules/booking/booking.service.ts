@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Types } from 'mongoose';
 import { BookingType } from '@lunara/types';
 import {
   BOOKING_DELIVERY_FEE,
@@ -135,8 +136,12 @@ export class BookingService {
     return { success: true, data: breakdown };
   }
 
-  async prepareOrderPayload(userId: string, dto: CreateBookingOrderDto) {
-    const { area } = await this.validateAddressForUser(userId, dto.pickupAddressId);
+  async prepareOrderPayload(
+    userId: string,
+    dto: CreateBookingOrderDto,
+    partnerContextId?: string,
+  ) {
+    const { address, area } = await this.validateAddressForUser(userId, dto.pickupAddressId);
     const quote = await this.buildQuote(dto, area.availableServices, userId);
     const service = await this.catalogService.findActiveByType(dto.bookingType);
     if (!service) throw new BadRequestException('Invalid or inactive service type');
@@ -144,6 +149,10 @@ export class BookingService {
     if (!slot || !isPickupSlotBookable(slot)) {
       throw new BadRequestException('Selected pickup slot is no longer available');
     }
+
+    const partnerBranch = partnerContextId
+      ? await this.resolvePartnerBranch(partnerContextId, address, dto.bookingType, quote.weightKg)
+      : undefined;
 
     const items = [
       {
@@ -174,6 +183,38 @@ export class BookingService {
         deliveryFee: quote.deliveryFee,
         discount: quote.discount,
         total: quote.total,
+        branchId: partnerBranch?.branchId,
+        branchCode: partnerBranch?.code,
+        branchName: partnerBranch?.name,
+        partnerId: partnerContextId,
     };
+  }
+
+  /**
+   * Picks the best of this partner's own branches for a white-labeled booking. Per product
+   * decision, a partner-branded booking always stays with that partner — if none of their
+   * branches can accept it, checkout is blocked rather than falling back to admin dispatch.
+   */
+  private async resolvePartnerBranch(
+    partnerContextId: string,
+    address: { line1: string; city: string; province: string; latitude?: number; longitude?: number },
+    bookingType: BookingType,
+    estimatedWeightKg: number,
+  ) {
+    const evaluation = await this.branchesService.buildDispatchEvaluationsForPartner(
+      address,
+      bookingType,
+      estimatedWeightKg,
+      new Types.ObjectId(partnerContextId),
+    );
+
+    const eligible = evaluation.branchEvaluations.find((b) => b.availability.acceptingOrders);
+    if (!eligible) {
+      throw new BadRequestException(
+        'This laundry partner is fully booked right now. Please try again later.',
+      );
+    }
+
+    return { branchId: eligible.branchId, code: eligible.code, name: eligible.name };
   }
 }

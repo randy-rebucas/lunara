@@ -74,6 +74,8 @@ export function ShopsBoard() {
   const [partnerSearch, setPartnerSearch] = useState('');
   const [branchLimit, setBranchLimit] = useState(50);
   const [partnerLimit, setPartnerLimit] = useState(50);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [toggleError, setToggleError] = useState('');
 
   const load = useCallback(async () => {
     const [shopsRes, branches] = await Promise.all([
@@ -85,6 +87,32 @@ export function ShopsBoard() {
   }, []);
 
   const { data, loading, error, reload } = useAdminQuery(load, []);
+
+  async function toggleShopActive(shop: Shop) {
+    const nextActive = !shop.isActive;
+    if (
+      nextActive
+        ? false
+        : !window.confirm(
+            `Deactivate ${shop.email ?? shop._id}? This also deactivates all of their branches and blocks new dispatch to them. This fails if they have orders still in progress.`,
+          )
+    ) {
+      return;
+    }
+    setTogglingId(shop._id);
+    setToggleError('');
+    try {
+      await adminFetch(`/admin/shops/${shop._id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isActive: nextActive }),
+      });
+      await reload();
+    } catch (err) {
+      setToggleError(err instanceof Error ? err.message : 'Failed to update partner status');
+    } finally {
+      setTogglingId(null);
+    }
+  }
 
   const shops = data?.shops ?? [];
   const branches = data?.branches ?? [];
@@ -309,6 +337,12 @@ export function ShopsBoard() {
               </Link>
             </div>
 
+            {toggleError ? (
+              <div className="alert-error mx-6 mb-4" role="alert">
+                {toggleError}
+              </div>
+            ) : null}
+
             {filteredShops.length === 0 ? (
               <div className="dc-panel-empty">
                 <p className="font-medium text-slate-900">
@@ -337,7 +371,7 @@ export function ShopsBoard() {
                         Staff
                       </th>
                       <th scope="col">
-                        <span className="sr-only">Branch</span>
+                        <span className="sr-only">Actions</span>
                       </th>
                     </tr>
                   </thead>
@@ -356,13 +390,25 @@ export function ShopsBoard() {
                         <td className="text-right tabular-nums">{s.totalOrders}</td>
                         <td className="text-right tabular-nums">{formatPesoWhole(s.revenue)}</td>
                         <td className="text-right tabular-nums">{s.staffCount}</td>
-                        <td>
+                        <td className="flex items-center justify-end gap-3 whitespace-nowrap">
                           <Link
                             href={`/branches?partner=${s._id}`}
                             className="link-primary text-xs font-medium"
                           >
                             Add branch →
                           </Link>
+                          <button
+                            type="button"
+                            className="btn-outline btn-sm"
+                            disabled={togglingId === s._id}
+                            onClick={() => void toggleShopActive(s)}
+                          >
+                            {togglingId === s._id
+                              ? 'Saving…'
+                              : s.isActive
+                                ? 'Deactivate'
+                                : 'Reactivate'}
+                          </button>
                         </td>
                       </tr>
                     ))}

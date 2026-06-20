@@ -62,6 +62,15 @@ function getApiUrl() {
   return resolveApiV1BaseUrl(process.env.NEXT_PUBLIC_API_URL);
 }
 
+const TENANT_COOKIE = 'lunara_partner_id';
+
+/** Reads the partner tenant id set by customer-web's middleware when running under a white-labeled domain. */
+function getTenantIdFromCookie(): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp(`(?:^|; )${TENANT_COOKIE}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 function authDataFromSession(user: User, tokens: AuthTokens): AuthData {
   return {
     user,
@@ -179,6 +188,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         getAccessToken: () => authRef.current?.tokens.accessToken ?? null,
         onUnauthorized: handleUnauthorized,
         refreshSession: () => refreshAccessToken(),
+        getTenantId: getTenantIdFromCookie,
       }),
     [handleUnauthorized, refreshAccessToken],
   );

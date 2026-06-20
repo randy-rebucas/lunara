@@ -13,6 +13,7 @@ import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
 import { NotificationDispatchService } from '../push/notification-dispatch.service';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { WalletsService } from '../wallets/wallets.service';
+import { LedgerService } from '../ledger/ledger.service';
 import { CreateRefundDto } from './dto/create-refund.dto';
 import { RefundReviewAction, ReviewRefundDto } from './dto/review-refund.dto';
 import {
@@ -54,6 +55,7 @@ export class RefundsService {
     private walletsService: WalletsService,
     private trackingGateway: TrackingGateway,
     private notificationDispatch: NotificationDispatchService,
+    private ledgerService: LedgerService,
   ) {}
 
   async createRequest(customerId: string, dto: CreateRefundDto) {
@@ -339,6 +341,27 @@ export class RefundsService {
       payment.status = PaymentStatus.REFUNDED;
       await payment.save();
     }
+
+    await this.ledgerService.post(
+      `refund:${refund._id.toString()}`,
+      'refund',
+      refund._id.toString(),
+      [
+        {
+          accountType: 'order_revenue_clearing',
+          direction: 'debit',
+          amount,
+          description: `Refund reverses recognized revenue for order ${order._id.toString().slice(-6)}`,
+        },
+        {
+          accountType: 'customer_wallet_liability',
+          accountSubject: refund.customerId.toString(),
+          direction: 'credit',
+          amount,
+          description: `Refund credited to wallet for order ${order._id.toString().slice(-6)}`,
+        },
+      ],
+    );
 
     if (order.status !== OrderStatus.REFUNDED) {
       order.status = OrderStatus.REFUNDED;

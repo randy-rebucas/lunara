@@ -24,7 +24,12 @@ export default function SettlementsPage() {
     return partnerFetch<PartnerSettlement[]>('/partner/settlements');
   }, []);
 
+  const loadLedgerBalance = useCallback(async () => {
+    return partnerFetch<{ partnerId: string; payableBalance: number }>('/partner/ledger-balance');
+  }, []);
+
   const { data, loading, error, reload } = usePartnerQuery(load, []);
+  const { data: ledger } = usePartnerQuery(loadLedgerBalance, []);
 
   if (!ready) return <AuthLoading message="Loading settlements…" />;
 
@@ -49,7 +54,16 @@ export default function SettlementsPage() {
 
       {data && (
         <>
-          <div className="mt-6 grid gap-3 sm:grid-cols-3">
+          <div className="mt-6 grid gap-3 sm:grid-cols-4">
+            <div className="stat-card">
+              <p className="text-xs text-muted">Outstanding balance</p>
+              <p className="text-2xl font-semibold text-slate-900">
+                {ledger ? formatPeso(ledger.payableBalance) : '—'}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                What Lunara still owes you, from the accounting ledger
+              </p>
+            </div>
             <div className="stat-card">
               <p className="text-xs text-muted">Total paid out to you</p>
               <p className="text-2xl font-semibold text-slate-900">{formatPeso(totalPayout)}</p>
