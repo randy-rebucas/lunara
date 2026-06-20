@@ -73,6 +73,13 @@ export function RevenueBoard() {
   const revenueState = data ? deriveRevenueState(data) : 'nominal';
   const copy = revenueCopy[revenueState];
 
+  const todayVsYesterdayTrend = useMemo(() => {
+    if (!data || data.daily.length < 2) return undefined;
+    const yesterday = data.daily[data.daily.length - 2]?.revenue ?? 0;
+    if (yesterday === 0) return undefined;
+    return Math.round(((data.today - yesterday) / yesterday) * 100);
+  }, [data]);
+
   const avgOrderToday = data && data.todayOrders > 0 ? Math.round(data.today / data.todayOrders) : null;
   const avgOrderMonth =
     data && data.monthOrders > 0 ? Math.round(data.month / data.monthOrders) : null;
@@ -98,7 +105,7 @@ export function RevenueBoard() {
 
   return (
     <div>
-      <header className="mb-8">
+      <header className="mb-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="dc-eyebrow">Finance</p>
@@ -151,7 +158,7 @@ export function RevenueBoard() {
       ) : null}
 
       {data ? (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div className={`flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 ${copy.bar}`}>
             <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${copy.dot}`} aria-hidden />
             <div className="min-w-0 flex-1">
@@ -167,12 +174,13 @@ export function RevenueBoard() {
             )}
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             <MetricCell
               label="Today"
               value={formatPeso(data.today)}
               sub={`${data.todayOrders} orders`}
               highlight={data.today > 0 ? 'accent' : data.month > 0 ? 'warning' : undefined}
+              trend={todayVsYesterdayTrend}
             />
             <MetricCell
               label="This month"

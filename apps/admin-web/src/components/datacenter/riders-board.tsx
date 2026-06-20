@@ -267,7 +267,7 @@ export function RidersBoard() {
 
   return (
     <div>
-      <header className="mb-8">
+      <header className="mb-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="dc-eyebrow">Fleet</p>
@@ -319,7 +319,7 @@ export function RidersBoard() {
       ) : null}
 
       {riders ? (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div className={`flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 ${copy.bar}`}>
             <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${copy.dot}`} aria-hidden />
             <div className="min-w-0 flex-1">
@@ -336,7 +336,7 @@ export function RidersBoard() {
             ) : null}
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
             <MetricCell label="Fleet size" value={fleet.length} />
             <MetricCell
               label="Online now"

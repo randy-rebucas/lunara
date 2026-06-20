@@ -381,7 +381,7 @@ export function BranchesBoard() {
 
   return (
     <div>
-      <header className="mb-8">
+      <header className="mb-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="dc-eyebrow">Network</p>
@@ -439,7 +439,7 @@ export function BranchesBoard() {
       ) : null}
 
       {network ? (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div className={`flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 ${copy.bar}`}>
             <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${copy.dot}`} aria-hidden />
             <div className="min-w-0 flex-1">
@@ -453,7 +453,7 @@ export function BranchesBoard() {
             ) : null}
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
             <MetricCell label="Total locations" value={stats.totalBranches} />
             <MetricCell
               label="Operational"
@@ -721,7 +721,7 @@ export function BranchesBoard() {
                 ) : null}
 
                 {profile ? (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     <div>
                       <p className="text-code text-primary">{profile.branch.code}</p>
                       <h3 className="text-xl font-semibold text-slate-900">{profile.branch.name}</h3>
@@ -765,7 +765,7 @@ export function BranchesBoard() {
                       </div>
                     ) : null}
 
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
                       <MetricCell
                         label="Order capacity"
                         value={profileMetrics?.orderUtil ?? '—'}

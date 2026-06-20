@@ -66,7 +66,7 @@ export function AccountingBoard() {
 
   return (
     <div>
-      <header className="mb-8">
+      <header className="mb-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="dc-eyebrow">Ledger</p>
@@ -110,7 +110,7 @@ export function AccountingBoard() {
       ) : null}
 
       {data ? (
-        <div className="space-y-6">
+        <div className="space-y-4">
           <div
             className={`flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 ${
               Math.abs(clearingDrift) < 1
