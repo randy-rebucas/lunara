@@ -2,9 +2,11 @@
 
 import Link from 'next/link';
 import { resolveApiV1BaseUrl } from '@lunara/utils';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Card, CardBody, SectionPanel } from '../../components/ui/card';
 import { PageHeader } from '../../components/ui/page-header';
+import { adminFetch } from '../../lib/admin-api';
+import { useAdminQuery } from '../../lib/use-admin-query';
 import {
   loadAdminSettings,
   saveAdminSettings,
@@ -17,6 +19,190 @@ const DEFAULT_SETTINGS: AdminAppSettings = {
   denseTables: false,
   sosSoundAlerts: true,
 };
+
+interface DeliveryFeeSettings {
+  cityDeliveryFee: number;
+  provinceDeliveryFee: number;
+}
+
+interface BranchCoverageRow {
+  _id: string;
+  code: string;
+  name: string;
+  city: string;
+  province: string;
+  serviceRadiusKm: number;
+}
+
+function DeliveryFeeSection() {
+  const load = useCallback(() => adminFetch<DeliveryFeeSettings>('/admin/settings/delivery-fee'), []);
+  const { data, loading, error, reload } = useAdminQuery(load, []);
+  const [form, setForm] = useState<DeliveryFeeSettings | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState('');
+
+  useEffect(() => {
+    if (data) setForm(data);
+  }, [data]);
+
+  async function save() {
+    if (!form) return;
+    setSaving(true);
+    setSaveError('');
+    try {
+      await adminFetch('/admin/settings/delivery-fee', {
+        method: 'PATCH',
+        body: JSON.stringify(form),
+      });
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 2000);
+      await reload();
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'Failed to save delivery fees');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <SectionPanel
+      title="Delivery fee"
+      description="Charged per order based on the pickup address — Metro Manila addresses get the city rate, everywhere else gets the provincial rate."
+    >
+      <div className="border-b border-border/60 px-6 py-4 sm:px-8">
+        {loading && !form ? <p className="text-sm text-muted">Loading…</p> : null}
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {form ? (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="text-sm font-medium text-slate-900">City rate (Metro Manila)</span>
+              <div className="mt-1.5 flex items-center gap-2">
+                <span className="text-sm text-muted">₱</span>
+                <input
+                  type="number"
+                  min={0}
+                  className="input-field"
+                  value={form.cityDeliveryFee}
+                  onChange={(e) =>
+                    setForm((f) => (f ? { ...f, cityDeliveryFee: Number(e.target.value) } : f))
+                  }
+                />
+              </div>
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-900">Provincial rate</span>
+              <div className="mt-1.5 flex items-center gap-2">
+                <span className="text-sm text-muted">₱</span>
+                <input
+                  type="number"
+                  min={0}
+                  className="input-field"
+                  value={form.provinceDeliveryFee}
+                  onChange={(e) =>
+                    setForm((f) => (f ? { ...f, provinceDeliveryFee: Number(e.target.value) } : f))
+                  }
+                />
+              </div>
+            </label>
+          </div>
+        ) : null}
+        {saveError ? <p className="mt-3 text-sm text-destructive">{saveError}</p> : null}
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            type="button"
+            className="btn-primary btn-sm"
+            disabled={saving || !form}
+            onClick={() => void save()}
+          >
+            {saving ? 'Saving…' : 'Save delivery fees'}
+          </button>
+          {saved ? <span className="badge-accent text-xs">Saved</span> : null}
+        </div>
+      </div>
+    </SectionPanel>
+  );
+}
+
+function ServiceCoverageSection() {
+  const load = useCallback(() => adminFetch<BranchCoverageRow[]>('/admin/branches'), []);
+  const { data, loading, error, reload } = useAdminQuery(load, []);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [rowError, setRowError] = useState('');
+
+  async function updateRadius(branchId: string, serviceRadiusKm: number) {
+    setSavingId(branchId);
+    setRowError('');
+    try {
+      await adminFetch(`/admin/branches/${branchId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ serviceRadiusKm }),
+      });
+      await reload();
+    } catch (e) {
+      setRowError(e instanceof Error ? e.message : 'Failed to update service radius');
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  return (
+    <SectionPanel
+      title="Service coverage"
+      description="How far (km) each branch's pickup auto-detection reaches from its location. An address is bookable when it falls within at least one branch's radius."
+    >
+      <div className="px-6 py-4 sm:px-8">
+        {loading && !data ? <p className="text-sm text-muted">Loading…</p> : null}
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {rowError ? <p className="mb-3 text-sm text-destructive">{rowError}</p> : null}
+        {data && data.length === 0 ? (
+          <p className="text-sm text-muted">No branches yet.</p>
+        ) : null}
+        {data && data.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="data-table min-w-[480px]">
+              <caption className="sr-only">Branch service radius</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Branch</th>
+                  <th scope="col">Location</th>
+                  <th scope="col">Radius (km)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.map((b) => (
+                  <tr key={b._id}>
+                    <td>
+                      <span className="font-medium text-slate-900">{b.name}</span>
+                      <p className="text-code text-muted">{b.code}</p>
+                    </td>
+                    <td className="text-muted">
+                      {b.city}, {b.province}
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        min={1}
+                        max={50}
+                        defaultValue={b.serviceRadiusKm}
+                        disabled={savingId === b._id}
+                        className="input-field w-24"
+                        onBlur={(e) => {
+                          const next = Number(e.target.value);
+                          if (next > 0 && next !== b.serviceRadiusKm) void updateRadius(b._id, next);
+                        }}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </div>
+    </SectionPanel>
+  );
+}
 
 function SettingToggle({
   id,
@@ -195,6 +381,10 @@ export default function AdminSettingsPage() {
               onChange={(sosSoundAlerts) => update({ sosSoundAlerts })}
             />
           </SectionPanel>
+
+          <DeliveryFeeSection />
+
+          <ServiceCoverageSection />
 
           <SectionPanel
             title="Environment"

@@ -2,8 +2,9 @@ import { useEffect } from 'react';
 
 import { Stack, useRouter, useSegments } from 'expo-router';
 
+import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { Pressable, Text } from 'react-native';
+import { Pressable } from 'react-native';
 
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -52,6 +53,8 @@ const stackHeaderOptions = {
   headerTintColor: colors.primary,
 
   headerBackTitleVisible: false,
+
+  headerTitleAlign: 'center' as const,
 
 };
 
@@ -226,7 +229,7 @@ export default function RootLayout() {
             presentation: 'card',
             headerLeft: () => (
               <Pressable onPress={handleHeaderBack} hitSlop={10}>
-                <Text style={{ color: colors.primary, fontSize: 16, fontWeight: '600' }}>Back</Text>
+                <Ionicons name="chevron-back" size={26} color={colors.primary} />
               </Pressable>
             ),
 
@@ -285,7 +288,7 @@ export default function RootLayout() {
             presentation: 'card',
             headerLeft: () => (
               <Pressable onPress={handleHeaderBack} hitSlop={10}>
-                <Text style={{ color: colors.primary, fontSize: 16, fontWeight: '600' }}>Back</Text>
+                <Ionicons name="chevron-back" size={26} color={colors.primary} />
               </Pressable>
             ),
 
@@ -344,7 +347,7 @@ export default function RootLayout() {
             presentation: 'card',
             headerLeft: () => (
               <Pressable onPress={handleHeaderBack} hitSlop={10}>
-                <Text style={{ color: colors.primary, fontSize: 16, fontWeight: '600' }}>Back</Text>
+                <Ionicons name="chevron-back" size={26} color={colors.primary} />
               </Pressable>
             ),
 
@@ -367,7 +370,7 @@ export default function RootLayout() {
             presentation: 'card',
             headerLeft: () => (
               <Pressable onPress={handleHeaderBack} hitSlop={10}>
-                <Text style={{ color: colors.primary, fontSize: 16, fontWeight: '600' }}>Back</Text>
+                <Ionicons name="chevron-back" size={26} color={colors.primary} />
               </Pressable>
             ),
 
@@ -390,7 +393,7 @@ export default function RootLayout() {
             presentation: 'card',
             headerLeft: () => (
               <Pressable onPress={handleHeaderBack} hitSlop={10}>
-                <Text style={{ color: colors.primary, fontSize: 16, fontWeight: '600' }}>Back</Text>
+                <Ionicons name="chevron-back" size={26} color={colors.primary} />
               </Pressable>
             ),
 
@@ -413,7 +416,7 @@ export default function RootLayout() {
             presentation: 'card',
             headerLeft: () => (
               <Pressable onPress={handleHeaderBack} hitSlop={10}>
-                <Text style={{ color: colors.primary, fontSize: 16, fontWeight: '600' }}>Back</Text>
+                <Ionicons name="chevron-back" size={26} color={colors.primary} />
               </Pressable>
             ),
 
@@ -430,7 +433,7 @@ export default function RootLayout() {
             presentation: 'card',
             headerLeft: () => (
               <Pressable onPress={handleHeaderBack} hitSlop={10}>
-                <Text style={{ color: colors.primary, fontSize: 16, fontWeight: '600' }}>Back</Text>
+                <Ionicons name="chevron-back" size={26} color={colors.primary} />
               </Pressable>
             ),
           }}
@@ -451,7 +454,7 @@ export default function RootLayout() {
             presentation: 'card',
             headerLeft: () => (
               <Pressable onPress={handleHeaderBack} hitSlop={10}>
-                <Text style={{ color: colors.primary, fontSize: 16, fontWeight: '600' }}>Back</Text>
+                <Ionicons name="chevron-back" size={26} color={colors.primary} />
               </Pressable>
             ),
 

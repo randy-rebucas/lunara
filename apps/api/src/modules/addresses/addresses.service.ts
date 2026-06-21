@@ -40,7 +40,13 @@ export class AddressesService {
         { isDefault: false },
       );
     }
-    Object.assign(address, dto);
+    // class-transformer instantiates the DTO with every declared field present
+    // (set to undefined when omitted from the request body) — a plain
+    // Object.assign would overwrite untouched required fields with undefined.
+    const updates = Object.fromEntries(
+      Object.entries(dto).filter(([, value]) => value !== undefined),
+    );
+    Object.assign(address, updates);
     await address.save();
     return { success: true, data: address };
   }

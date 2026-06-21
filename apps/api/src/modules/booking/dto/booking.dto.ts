@@ -27,6 +27,10 @@ export class BookingQuoteDto {
   @IsOptional()
   @IsString()
   couponCode?: string;
+
+  @IsOptional()
+  @IsDateString()
+  scheduledPickupAt?: string;
 }
 
 export class BookingAvailabilityQueryDto {
@@ -43,5 +47,5 @@ export class CreateBookingOrderDto extends BookingQuoteDto {
   deliveryAddressId?: string;
 
   @IsDateString()
-  scheduledPickupAt!: string;
+  declare scheduledPickupAt: string;
 }

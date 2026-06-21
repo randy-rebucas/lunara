@@ -15,10 +15,12 @@ import { BookingType, PaymentMethod } from '@lunara/types';
 import {
   BOOKING_MACHINE_LOAD_INFO,
   BOOKING_MIN_ORDER_AMOUNT,
+  EXPRESS_RETURN_ADDON_ID,
   formatMachineLoadLabel,
   calculateQuote,
   formatCurrency,
   formatAddressTypeLabel,
+  isExpressReturnAllowed,
   type BookingAddonOption,
   type CashTiming,
   type LaundryServiceOption,
@@ -32,6 +34,7 @@ import { BookingProgress } from '../src/components/booking-progress';
 import { Button } from '../src/components/ui/button';
 import { ScheduleSupportPrompt } from '../src/components/schedule-support-prompt';
 import { NearestBranchesCard, type NearestBranchRow } from '../src/components/nearest-branches';
+import { PickupSchedulePicker } from '../src/components/pickup-schedule-picker';
 import { PaymentMethodPicker } from '../src/components/payment-method-picker';
 import { getCustomerClientOrigin } from '../src/lib/client-origin';
 import {
@@ -53,6 +56,7 @@ interface AddressOption {
   postalCode: string;
   latitude?: number;
   longitude?: number;
+  isDefault?: boolean;
 }
 
 function addressHasCoords(address?: AddressOption | null) {
@@ -113,7 +117,8 @@ export default function BookScreen() {
     apiFetch<AddressOption[]>('/addresses')
       .then((list) => {
         setAddresses(list);
-        if (list[0]) setForm((f) => ({ ...f, addressId: list[0]._id }));
+        const defaultAddress = list.find((a) => a.isDefault) ?? list[0];
+        if (defaultAddress) setForm((f) => ({ ...f, addressId: defaultAddress._id }));
         setAddressesError('');
       })
       .catch((e) =>
@@ -203,6 +208,17 @@ export default function BookScreen() {
       .catch(() => setWalletBalance(0));
   }, [apiFetch, step]);
 
+  const expressReturnAllowed = isExpressReturnAllowed(form.scheduledPickupAt);
+
+  useEffect(() => {
+    if (expressReturnAllowed) return;
+    setForm((f) =>
+      f.addonIds.includes(EXPRESS_RETURN_ADDON_ID)
+        ? { ...f, addonIds: f.addonIds.filter((id) => id !== EXPRESS_RETURN_ADDON_ID) }
+        : f,
+    );
+  }, [expressReturnAllowed]);
+
   async function refreshQuote(couponCode = form.couponCode) {
     if (!form.bookingType || !form.addressId) return null;
     const q = await apiFetch<QuoteBreakdown>(
@@ -213,6 +229,7 @@ export default function BookScreen() {
           bookingType: form.bookingType,
           weightKg: form.weightKg,
           addonIds: form.addonIds,
+          ...(form.scheduledPickupAt ? { scheduledPickupAt: form.scheduledPickupAt } : {}),
           ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}),
         }),
       },
@@ -449,7 +466,14 @@ export default function BookScreen() {
                   setForm((f) => ({ ...f, addressId: a._id, scheduledPickupAt: '' }))
                 }
               >
-                <Text style={styles.optionTitle}>{a.label}</Text>
+                <View style={styles.addressLabelRow}>
+                  <Text style={styles.optionTitle}>{a.label}</Text>
+                  {a.isDefault ? (
+                    <View style={styles.defaultBadge}>
+                      <Text style={styles.defaultBadgeText}>Default</Text>
+                    </View>
+                  ) : null}
+                </View>
                 <Text style={styles.optionSub}>
                   {formatAddressTypeLabel(a.addressType)} · {a.line1}, {a.city}
                 </Text>
@@ -489,23 +513,13 @@ export default function BookScreen() {
           {slots.length === 0 && !availabilityError ? (
             <Text style={styles.sub}>No pickup slots available for this address.</Text>
           ) : null}
-          {slots.map((slot) => {
-            const bookable = isPickupSlotBookable(slot);
-            return (
-            <Pressable
-              key={slot.id}
-              disabled={!bookable}
-              style={[
-                styles.option,
-                form.scheduledPickupAt === slot.startAt && styles.optionSelected,
-                !bookable && styles.optionDisabled,
-              ]}
-              onPress={() => setForm((f) => ({ ...f, scheduledPickupAt: slot.startAt }))}
-            >
-              <Text style={styles.optionTitle}>{slot.label}</Text>
-            </Pressable>
-            );
-          })}
+          {slots.length > 0 ? (
+            <PickupSchedulePicker
+              slots={slots}
+              selectedStartAt={form.scheduledPickupAt}
+              onSelectStartAt={(startAt) => setForm((f) => ({ ...f, scheduledPickupAt: startAt }))}
+            />
+          ) : null}
           {showScheduleSupport ? (
             <ScheduleSupportPrompt
               address={selectedAddress}
@@ -573,10 +587,17 @@ export default function BookScreen() {
             addons.map((a) => {
               const selected = form.addonIds.includes(a.id);
               const imageUri = resolveMediaUrl(a.imageUrl);
+              const isExpressReturn = a.id === EXPRESS_RETURN_ADDON_ID;
+              const disabled = isExpressReturn && !expressReturnAllowed;
               return (
                 <Pressable
                   key={a.id}
-                  style={[styles.option, selected && styles.optionSelected]}
+                  disabled={disabled}
+                  style={[
+                    styles.option,
+                    selected && styles.optionSelected,
+                    disabled && styles.optionDisabled,
+                  ]}
                   onPress={() =>
                     setForm((f) => ({
                       ...f,
@@ -596,6 +617,11 @@ export default function BookScreen() {
                         <Text style={styles.addonPrice}>+{formatCurrency(a.price)}</Text>
                       </View>
                       <Text style={styles.optionSub}>{a.description}</Text>
+                      {disabled ? (
+                        <Text style={styles.optionGpsMissing}>
+                          Not available for pickups at 3:00 PM or later
+                        </Text>
+                      ) : null}
                     </View>
                   </View>
                 </Pressable>
@@ -772,6 +798,14 @@ const styles = StyleSheet.create({
   optionPrice: { marginTop: spacing.sm - 2, fontSize: 13, color: colors.primary, fontWeight: '500' },
   optionGps: { marginTop: spacing.sm - 2, fontSize: 12, color: colors.accentDark, fontWeight: '500' },
   optionGpsMissing: { marginTop: spacing.sm - 2, fontSize: 12, color: colors.warning, fontWeight: '500' },
+  addressLabelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
+  defaultBadge: {
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+  },
+  defaultBadgeText: { fontSize: 10, fontWeight: '700', color: colors.primaryDark },
   addonCardRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   addonCardBody: { flex: 1, minWidth: 0 },
   addonImage: {

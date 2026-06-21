@@ -26,6 +26,7 @@ import { PushModule } from './modules/push/push.module';
 import { SosModule } from './modules/sos/sos.module';
 import { MediaModule } from './modules/media/media.module';
 import { LedgerModule } from './modules/ledger/ledger.module';
+import { SettingsModule } from './modules/settings/settings.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { LedgerModule } from './modules/ledger/ledger.module';
     RealtimeModule,
     MediaModule,
     LedgerModule,
+    SettingsModule,
   ],
 })
 export class AppModule {}

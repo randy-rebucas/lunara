@@ -48,6 +48,23 @@ export class UpdateBranchDto {
   managerUserId?: string;
 
   @IsOptional()
+  @IsString()
+  line1?: string;
+
+  @IsOptional()
+  @IsString()
+  city?: string;
+
+  @IsOptional()
+  @IsString()
+  province?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsNumber({}, { each: true })
+  coordinates?: [number, number];
+
+  @IsOptional()
   @IsNumber()
   @Min(0)
   maxActiveOrders?: number;

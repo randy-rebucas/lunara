@@ -371,6 +371,12 @@ export class BranchManagementService {
     if (dto.isActive !== undefined) branch.isActive = dto.isActive;
     if (dto.machines !== undefined) branch.machines = dto.machines;
     if (dto.commissionRate !== undefined) branch.commissionRate = dto.commissionRate;
+    if (dto.line1 !== undefined) branch.line1 = dto.line1;
+    if (dto.city !== undefined) branch.city = dto.city;
+    if (dto.province !== undefined) branch.province = dto.province;
+    if (dto.coordinates !== undefined) {
+      branch.location = { type: 'Point', coordinates: dto.coordinates };
+    }
 
     await branch.save();
     return this.getBranchProfile(branchId);

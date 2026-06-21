@@ -2,12 +2,13 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Types } from 'mongoose';
 import { BookingType } from '@lunara/types';
 import {
-  BOOKING_DELIVERY_FEE,
   BOOKING_MAX_WEIGHT_KG,
   BOOKING_MIN_ORDER_AMOUNT,
   BOOKING_MIN_WEIGHT_KG,
   calculateQuote,
+  EXPRESS_RETURN_ADDON_ID,
   generatePickupSlots,
+  isExpressReturnAllowed,
   isPickupSlotBookable,
   PICKUP_SCHEDULE_DAY_COUNT,
   isServiceAvailableInArea,
@@ -19,6 +20,7 @@ import { AddressesService } from '../addresses/addresses.service';
 import { BranchesService } from '../branches/branches.service';
 import { CatalogService } from '../catalog/catalog.service';
 import { PromotionsService } from '../promotions/promotions.service';
+import { SettingsService } from '../settings/settings.service';
 import { BookingQuoteDto, CreateBookingOrderDto } from './dto/booking.dto';
 
 @Injectable()
@@ -28,12 +30,14 @@ export class BookingService {
     private readonly branchesService: BranchesService,
     private readonly catalogService: CatalogService,
     private readonly promotionsService: PromotionsService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   async getConfig() {
-    const [services, addons] = await Promise.all([
+    const [services, addons, deliveryFees] = await Promise.all([
       this.catalogService.listActiveServices(),
       this.catalogService.listActiveAddons(),
+      this.settingsService.getDeliveryFeeSettings(),
     ]);
     return {
       success: true,
@@ -48,7 +52,8 @@ export class BookingService {
         minOrderAmount: BOOKING_MIN_ORDER_AMOUNT,
         minWeightKg: BOOKING_MIN_WEIGHT_KG,
         maxWeightKg: BOOKING_MAX_WEIGHT_KG,
-        deliveryFee: BOOKING_DELIVERY_FEE,
+        cityDeliveryFee: deliveryFees.data.cityDeliveryFee,
+        provinceDeliveryFee: deliveryFees.data.provinceDeliveryFee,
       },
     };
   }
@@ -67,8 +72,34 @@ export class BookingService {
     const fieldCheck = validateAddressFields(fields);
     if (!fieldCheck.valid) throw new BadRequestException(fieldCheck.message);
 
-    const area = validateServiceArea(fields);
-    if (!area.valid) throw new BadRequestException(area.message);
+    // The curated SERVICE_AREAS list gives nicer labels and (for Metro Manila) restricts
+    // which service types are offered. But it's a manually maintained whitelist that doesn't
+    // scale as new partners onboard in new cities — so it's an enrichment, not the sole gate.
+    // The real gate is whether any active branch (across all partners) actually covers this
+    // address within its service radius.
+    const curatedArea = validateServiceArea(fields);
+
+    const nearest = await this.branchesService.findNearestForAddress({
+      city: address.city,
+      latitude: address.latitude,
+      longitude: address.longitude,
+    });
+    const nearestWithinRadius = nearest.ranked.find((r) => r.withinRadius);
+
+    if (!curatedArea.valid && !nearestWithinRadius) {
+      throw new BadRequestException(
+        curatedArea.message ?? 'Laundry pickup is not available near this address yet.',
+      );
+    }
+
+    const area = curatedArea.valid
+      ? curatedArea
+      : {
+          valid: true as const,
+          areaId: nearestWithinRadius!.branchId,
+          areaLabel: nearestWithinRadius!.city,
+          availableServices: [] as BookingType[],
+        };
 
     return { address, area };
   }
@@ -97,7 +128,12 @@ export class BookingService {
     };
   }
 
-  async buildQuote(dto: BookingQuoteDto, areaServices: BookingType[], userId: string) {
+  async buildQuote(
+    dto: BookingQuoteDto,
+    areaServices: BookingType[],
+    userId: string,
+    address: { city: string; province: string },
+  ) {
     const service = await this.catalogService.findActiveByType(dto.bookingType);
     if (!service) throw new BadRequestException('Invalid or inactive service type');
     if (!isServiceAvailableInArea(dto.bookingType, areaServices)) {
@@ -110,6 +146,16 @@ export class BookingService {
     if (invalidAddon) {
       throw new BadRequestException('Invalid or inactive add-on');
     }
+    if (
+      addonIds.includes(EXPRESS_RETURN_ADDON_ID) &&
+      !isExpressReturnAllowed(dto.scheduledPickupAt)
+    ) {
+      throw new BadRequestException(
+        'Express return is not available for pickups starting at 3:00 PM or later',
+      );
+    }
+
+    const deliveryFee = await this.settingsService.getDeliveryFeeForAddress(address);
 
     const quote = calculateQuote(
       {
@@ -119,6 +165,7 @@ export class BookingService {
       },
       service,
       activeAddons,
+      deliveryFee,
     );
 
     if (!quote.meetsMinimum) {
@@ -131,8 +178,8 @@ export class BookingService {
   }
 
   async quote(userId: string, addressId: string, dto: BookingQuoteDto) {
-    const { area } = await this.validateAddressForUser(userId, addressId);
-    const breakdown = await this.buildQuote(dto, area.availableServices, userId);
+    const { address, area } = await this.validateAddressForUser(userId, addressId);
+    const breakdown = await this.buildQuote(dto, area.availableServices, userId, address);
     return { success: true, data: breakdown };
   }
 
@@ -142,7 +189,7 @@ export class BookingService {
     partnerContextId?: string,
   ) {
     const { address, area } = await this.validateAddressForUser(userId, dto.pickupAddressId);
-    const quote = await this.buildQuote(dto, area.availableServices, userId);
+    const quote = await this.buildQuote(dto, area.availableServices, userId, address);
     const service = await this.catalogService.findActiveByType(dto.bookingType);
     if (!service) throw new BadRequestException('Invalid or inactive service type');
     const slot = generatePickupSlots().find((s) => s.startAt === dto.scheduledPickupAt);
