@@ -32,7 +32,7 @@ export const initialBookingForm: BookingFormState = {
   bookingType: null,
   addressId: '',
   scheduledPickupAt: '',
-  weightKg: 5,
+  weightKg: 8,
   addonIds: [],
   couponCode: '',
 };

@@ -219,12 +219,14 @@ export default function RevenuePage() {
                       <th>Payment</th>
                       <th>Cash status</th>
                       <th className="text-right">Amount</th>
+                      <th className="text-right">Lunara fee</th>
+                      <th className="text-right">Your payout</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredOrders.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="py-6 text-center text-sm text-muted">
+                        <td colSpan={7} className="py-6 text-center text-sm text-muted">
                           No orders match this filter
                         </td>
                       </tr>
@@ -266,6 +268,17 @@ export default function RevenuePage() {
                           </td>
                           <td className="text-right font-medium text-slate-900">
                             {formatPeso(o.amount)}
+                          </td>
+                          <td className="text-right text-rose-600 text-sm">
+                            −{formatPeso(o.lunaraFee ?? 0)}
+                            {o.commissionRate != null && (
+                              <span className="ml-1 text-xs text-muted-foreground">
+                                ({Math.round(o.commissionRate * 100)}%)
+                              </span>
+                            )}
+                          </td>
+                          <td className="text-right font-semibold text-slate-900">
+                            {formatPeso(o.partnerPayout ?? o.amount)}
                           </td>
                         </tr>
                       ))

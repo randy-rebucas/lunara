@@ -9,6 +9,8 @@ export const RIDER_DOCUMENT_UPLOAD_DIR = join(UPLOADS_ROOT, 'rider-documents');
 export const RIDER_DOCUMENT_PUBLIC_PREFIX = '/api/v1/uploads/rider-documents';
 export const CATALOG_ADDON_UPLOAD_DIR = join(UPLOADS_ROOT, 'catalog-addons');
 export const CATALOG_ADDON_PUBLIC_PREFIX = '/api/v1/uploads/catalog-addons';
+export const PARTNER_BRAND_UPLOAD_DIR = join(UPLOADS_ROOT, 'partner-brands');
+export const PARTNER_BRAND_PUBLIC_PREFIX = '/api/v1/uploads/partner-brands';
 
 export function avatarPublicPath(filename: string) {
   return `${AVATAR_PUBLIC_PREFIX}/${filename}`;
@@ -36,4 +38,8 @@ export function riderDocumentFilePath(filename: string) {
 
 export function catalogAddonPublicPath(filename: string) {
   return `${CATALOG_ADDON_PUBLIC_PREFIX}/${filename}`;
+}
+
+export function partnerBrandPublicPath(filename: string) {
+  return `${PARTNER_BRAND_PUBLIC_PREFIX}/${filename}`;
 }

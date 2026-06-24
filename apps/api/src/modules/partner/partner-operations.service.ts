@@ -42,6 +42,7 @@ import {
   buildPartnerPaymentLabel,
   loadLatestOrderPaymentsByOrderId,
 } from '../payments/payment-summary';
+import { LedgerService } from '../ledger/ledger.service';
 
 const INCOMING_STATUSES = [
   OrderStatus.SHOP_ASSIGNED,
@@ -99,6 +100,7 @@ export class PartnerOperationsService {
     private trackingGateway: TrackingGateway,
     private riderAssignmentService: RiderAssignmentService,
     private partnerOrderNotifications: PartnerOrderNotificationService,
+    private ledgerService: LedgerService,
   ) {}
 
   async ensureInventorySeeded() {
@@ -712,6 +714,12 @@ export class PartnerOperationsService {
     return { success: true, data: settlements.map((s) => this.formatSettlement(s)) };
   }
 
+  /** Net amount Lunara still owes this partner per the ledger — should track unpaid settlements. */
+  async getLedgerBalance(partnerId: string) {
+    const balance = await this.ledgerService.getAccountBalance('partner_payable', partnerId);
+    return { success: true, data: { partnerId, payableBalance: balance } };
+  }
+
   async createSettlement(
     adminUserId: string,
     partnerId: string,
@@ -782,6 +790,33 @@ export class PartnerOperationsService {
       paidBy: new Types.ObjectId(adminUserId),
       adminNote: dto.adminNote,
     });
+
+    await this.ledgerService.post(
+      `settlement:${settlement._id.toString()}`,
+      'settlement',
+      settlement._id.toString(),
+      [
+        {
+          accountType: 'order_revenue_clearing',
+          direction: 'debit',
+          amount: totalAmount,
+          description: `Orders settled for partner ${partnerId} (${start.toISOString().slice(0, 10)}..${end.toISOString().slice(0, 10)})`,
+        },
+        {
+          accountType: 'partner_payable',
+          accountSubject: partnerId,
+          direction: 'credit',
+          amount: partnerPayout,
+          description: `Payout owed to partner ${partnerId}`,
+        },
+        {
+          accountType: 'platform_revenue',
+          direction: 'credit',
+          amount: lunaraFee,
+          description: `Commission earned on partner ${partnerId} settlement`,
+        },
+      ],
+    );
 
     return { success: true, data: this.formatSettlement(settlement) };
   }

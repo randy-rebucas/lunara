@@ -10,12 +10,11 @@ import { buildPhotoFormData, deletePhoto } from './photo-store';
 import {
   collapseGpsItems,
   getQueueItems,
-  groupQueueByKind,
   incrementRetry,
   removeItems,
 } from './queue-store';
 import { removeTaskCache } from './task-cache';
-import type { GpsQueueItem, PhotoQueueItem, QueueItem, StatusQueueItem } from './types';
+import type { GpsQueueItem, PhotoQueueItem, StatusQueueItem } from './types';
 
 let syncing = false;
 let syncListeners = new Set<(syncing: boolean) => void>();

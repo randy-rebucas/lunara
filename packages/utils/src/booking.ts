@@ -138,6 +138,24 @@ export const BOOKING_ADDONS: BookingAddonOption[] = [
   },
 ];
 
+export const EXPRESS_RETURN_ADDON_ID = 'express_delivery';
+/** Pickups starting at or after this hour (Asia/Manila) can't take the express-return add-on. */
+export const EXPRESS_RETURN_CUTOFF_HOUR = 15;
+
+/** Hour-of-day (0-23) of an ISO instant, read in Asia/Manila time regardless of the runtime's own timezone. */
+function manilaHourOf(isoOrDate: string | Date): number {
+  const date = typeof isoOrDate === 'string' ? new Date(isoOrDate) : isoOrDate;
+  return Number(
+    date.toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'Asia/Manila' }),
+  );
+}
+
+/** No slot chosen yet → don't block add-on browsing prematurely. */
+export function isExpressReturnAllowed(scheduledPickupAt?: string | null): boolean {
+  if (!scheduledPickupAt) return true;
+  return manilaHourOf(scheduledPickupAt) < EXPRESS_RETURN_CUTOFF_HOUR;
+}
+
 /** Metro Manila coverage for MVP. */
 export const SERVICE_AREAS: ServiceAreaRule[] = [
   {
@@ -164,6 +182,18 @@ export const SERVICE_AREAS: ServiceAreaRule[] = [
     ],
     provinces: ['Metro Manila', 'NCR', 'National Capital Region'],
     postalPrefixes: ['10', '11', '12', '13', '14', '15', '16', '17'],
+    services: [
+      BookingType.WASH_FOLD,
+      BookingType.WASH_DRY_FOLD,
+      BookingType.DRY_CLEANING,
+    ],
+  },
+  {
+    id: 'baybay-leyte',
+    label: 'Baybay City, Leyte',
+    cities: ['Baybay', 'Baybay City'],
+    provinces: ['Leyte'],
+    postalPrefixes: ['65'],
     services: [
       BookingType.WASH_FOLD,
       BookingType.WASH_DRY_FOLD,
@@ -240,6 +270,15 @@ export function validateServiceArea(address: AddressInput): {
   };
 }
 
+/** Metro Manila / NCR addresses get the lower "city" delivery fee tier; everywhere else is "provincial". */
+export function isMetroManilaAddress(address: { city: string; province: string }): boolean {
+  const metro = SERVICE_AREAS.find((a) => a.id === 'metro-manila');
+  if (!metro) return false;
+  const cityMatch = metro.cities.some((c) => cityMatches(c, address.city));
+  const provinceMatch = metro.provinces.some((p) => provinceMatches(p, address.province));
+  return cityMatch || provinceMatch;
+}
+
 export function isServiceAvailableInArea(bookingType: BookingType, areaServices: BookingType[]) {
   return areaServices.length === 0 || areaServices.includes(bookingType);
 }
@@ -262,6 +301,8 @@ export function calculateQuote(
   input: QuoteInput,
   serviceOverride?: LaundryServiceOption,
   addonOptions?: BookingAddonOption[],
+  /** Resolved server-side per address (city vs. provincial tier); falls back to the flat default for client-side previews before the server confirms. */
+  deliveryFeeOverride?: number,
 ): QuoteBreakdown {
   const service = serviceOverride ?? getService(input.bookingType);
   if (!service) throw new Error('Unknown service type');
@@ -275,7 +316,7 @@ export function calculateQuote(
     .map((a) => ({ id: a.id, label: a.label, price: a.price }));
   const addonsSubtotal = addons.reduce((sum, a) => sum + a.price, 0);
   const subtotal = serviceSubtotal + addonsSubtotal;
-  const deliveryFee = BOOKING_DELIVERY_FEE;
+  const deliveryFee = deliveryFeeOverride ?? BOOKING_DELIVERY_FEE;
   const discount = 0;
   const total = subtotal + deliveryFee - discount;
 
@@ -380,15 +421,28 @@ export function formatPickupSlotTimeWindow(slot: PickupSlot, locale = 'en-PH') {
   return `${start.toLocaleTimeString(locale, opts)} – ${end.toLocaleTimeString(locale, opts)}`;
 }
 
+/** First pickup window start hour (8:00 AM). */
+export const PICKUP_WINDOW_START_HOUR = 8;
+/** Last pickup window end hour (5:00 PM) — windows run hourly up to this. */
+export const PICKUP_WINDOW_END_HOUR = 17;
+
+function formatHourLabel(hour: number): string {
+  const period = hour >= 12 ? 'PM' : 'AM';
+  const displayHour = hour % 12 === 0 ? 12 : hour % 12;
+  return `${displayHour}:00 ${period}`;
+}
+
+function buildHourlyPickupWindows(startHour: number, endHour: number) {
+  const windows: { start: number; end: number; label: string }[] = [];
+  for (let h = startHour; h < endHour; h++) {
+    windows.push({ start: h, end: h + 1, label: `${formatHourLabel(h)} – ${formatHourLabel(h + 1)}` });
+  }
+  return windows;
+}
+
 export function generatePickupSlots(fromDate: Date = new Date(), days = 7): PickupSlot[] {
   const slots: PickupSlot[] = [];
-  const windows = [
-    { start: 8, end: 10, label: '8:00 AM – 10:00 AM' },
-    { start: 10, end: 12, label: '10:00 AM – 12:00 PM' },
-    { start: 13, end: 15, label: '1:00 PM – 3:00 PM' },
-    { start: 15, end: 17, label: '3:00 PM – 5:00 PM' },
-    { start: 17, end: 19, label: '5:00 PM – 7:00 PM' },
-  ];
+  const windows = buildHourlyPickupWindows(PICKUP_WINDOW_START_HOUR, PICKUP_WINDOW_END_HOUR);
 
   for (let d = 0; d < days; d++) {
     const day = new Date(fromDate);

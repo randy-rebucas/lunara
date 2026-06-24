@@ -5,6 +5,17 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { BranchesService } from './branches.service';
 
+/** No auth — consumed by the public marketing site (service-areas section, /locations page). */
+@Controller('public/branches')
+export class PublicBranchesController {
+  constructor(private readonly branchesService: BranchesService) {}
+
+  @Get()
+  list() {
+    return this.branchesService.listPublicBranches();
+  }
+}
+
 @Controller('branches')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class BranchesController {

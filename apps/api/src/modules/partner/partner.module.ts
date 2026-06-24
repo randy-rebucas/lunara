@@ -15,6 +15,7 @@ import { Notification, NotificationSchema } from '../reviews/schemas/notificatio
 import { Branch, BranchSchema } from '../branches/schemas/branch.schema';
 import { PartnerSettingsService } from './partner-settings.service';
 import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
+import { LedgerModule } from '../ledger/ledger.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
     ]),
     RealtimeModule,
     RidersModule,
+    LedgerModule,
   ],
   controllers: [PartnerController],
   providers: [

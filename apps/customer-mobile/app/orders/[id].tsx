@@ -478,7 +478,6 @@ const styles = StyleSheet.create({
     borderColor: colors.warningBorder,
   },
   bannerTitle: { fontWeight: '600', color: colors.warning },
-  bannerText: { marginTop: spacing.sm - 2, fontSize: 13, color: colors.warning, lineHeight: 20, opacity: 0.9 },
   bannerText: { marginTop: spacing.xs, fontSize: 13, color: colors.muted, lineHeight: 20 },
   paymentCard: {
     marginTop: spacing.lg,

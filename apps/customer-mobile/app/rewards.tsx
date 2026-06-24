@@ -1,6 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Button } from '../src/components/ui/button';
 import { Card } from '../src/components/ui/card';
 import { DataLoadState } from '../src/components/data-load-state';
@@ -17,7 +15,6 @@ const REWARDS_CATALOG = [
 ] as const;
 
 export default function RewardsScreen() {
-  const router = useRouter();
   const { profile, loading, error, refresh } = useHomeDashboard();
   const points = profile?.loyaltyPoints ?? 0;
 

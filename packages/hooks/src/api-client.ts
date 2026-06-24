@@ -6,6 +6,8 @@ export interface ApiClientOptions {
   onUnauthorized?: () => void;
   /** Retry once after refreshing tokens when the API returns 401. */
   refreshSession?: () => Promise<void>;
+  /** Resolves the white-labeled partner's tenant id, if this app is running under a partner brand. */
+  getTenantId?: () => string | null;
 }
 
 export function createApiClient({
@@ -13,6 +15,7 @@ export function createApiClient({
   getAccessToken,
   onUnauthorized,
   refreshSession,
+  getTenantId,
 }: ApiClientOptions) {
   async function request<T>(
     path: string,
@@ -20,10 +23,12 @@ export function createApiClient({
     allowRefresh = true,
   ): Promise<ApiResponse<T>> {
     const token = getAccessToken?.();
+    const tenantId = getTenantId?.();
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
       ...(init.headers ?? {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(tenantId ? { 'x-lunara-partner-id': tenantId } : {}),
     };
 
     let res: Response;
@@ -83,8 +88,10 @@ export function createApiClient({
 
   async function upload<T>(path: string, formData: FormData): Promise<ApiResponse<T>> {
     const token = getAccessToken?.();
+    const tenantId = getTenantId?.();
     const headers: HeadersInit = {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(tenantId ? { 'x-lunara-partner-id': tenantId } : {}),
     };
 
     let res: Response;

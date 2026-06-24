@@ -89,6 +89,7 @@ export interface PartnerQueueOrder {
   status: string;
   bookingType: string;
   total: number;
+  currentStepId: string;
   currentStepLabel: string;
   progress: number;
   assignedStaffId?: string;
@@ -209,6 +210,36 @@ export interface PartnerReceivingView {
   canVerifyWeight: boolean;
   canConfirmItems: boolean;
   isComplete: boolean;
+}
+
+export interface PartnerBrandColors {
+  primary: string;
+  secondary: string;
+  accent: string;
+  background: string;
+  foreground: string;
+  muted: string;
+  border: string;
+  destructive: string;
+}
+
+export interface PartnerBrandFonts {
+  sans: string;
+  heading?: string;
+}
+
+export interface PartnerBrandConfig {
+  domain?: string;
+  customDomainVerified: boolean;
+  appDisplayName: string;
+  colors: PartnerBrandColors;
+  fonts: PartnerBrandFonts;
+  logoUrl?: string;
+  iconUrl?: string;
+  splashUrl?: string;
+  faviconUrl?: string;
+  mobileBundleId?: { ios?: string; android?: string };
+  status: 'draft' | 'pending_review' | 'live';
 }
 
 export interface PartnerProcessingView {

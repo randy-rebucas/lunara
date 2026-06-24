@@ -5,7 +5,7 @@ import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { BranchManagementService } from './branch-management.service';
-import { BranchesController } from './branches.controller';
+import { BranchesController, PublicBranchesController } from './branches.controller';
 import { BranchesService } from './branches.service';
 import { Branch, BranchSchema } from './schemas/branch.schema';
 
@@ -19,7 +19,7 @@ import { Branch, BranchSchema } from './schemas/branch.schema';
     ]),
     RealtimeModule,
   ],
-  controllers: [BranchesController],
+  controllers: [BranchesController, PublicBranchesController],
   providers: [BranchesService, BranchManagementService],
   exports: [BranchesService, BranchManagementService],
 })

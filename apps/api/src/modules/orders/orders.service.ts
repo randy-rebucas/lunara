@@ -17,6 +17,7 @@ import { BranchesService } from '../branches/branches.service';
 import { RiderAssignmentService } from '../riders/rider-assignment.service';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { WalletsService } from '../wallets/wallets.service';
+import { LedgerService } from '../ledger/ledger.service';
 import { AssignRiderDto, CreateOrderDto, UpdateOrderStatusDto } from './dto/order.dto';
 import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
 import {
@@ -56,6 +57,7 @@ export class OrdersService {
     private walletsService: WalletsService,
     private branchesService: BranchesService,
     private promotionsService: PromotionsService,
+    private ledgerService: LedgerService,
   ) {}
 
   private isBranchAssigned(order: OrderDocument) {
@@ -334,6 +336,28 @@ export class OrdersService {
         );
         paidPayment.status = PaymentStatus.REFUNDED;
         await paidPayment.save();
+
+        await this.ledgerService.post(
+          `cancel-refund:${paidPayment._id.toString()}`,
+          'refund',
+          paidPayment._id.toString(),
+          [
+            {
+              accountType: 'order_revenue_clearing',
+              direction: 'debit',
+              amount: paidPayment.amount,
+              description: `Refund reverses recognized revenue for cancelled order ${orderId.slice(-6)}`,
+            },
+            {
+              accountType: 'customer_wallet_liability',
+              accountSubject: customerId,
+              direction: 'credit',
+              amount: paidPayment.amount,
+              description: `Refund credited to wallet for cancelled order ${orderId.slice(-6)}`,
+            },
+          ],
+        );
+
         refunded = true;
       }
 

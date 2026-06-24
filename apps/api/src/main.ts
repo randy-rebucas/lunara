@@ -7,7 +7,11 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { assertProductionJwtSecrets } from './common/config/jwt-config';
 import { ensureUploadDirectories } from './common/uploads/ensure-upload-dirs';
-import { AVATAR_UPLOAD_DIR, CATALOG_ADDON_UPLOAD_DIR } from './common/uploads/upload-paths';
+import {
+  AVATAR_UPLOAD_DIR,
+  CATALOG_ADDON_UPLOAD_DIR,
+  PARTNER_BRAND_UPLOAD_DIR,
+} from './common/uploads/upload-paths';
 
 async function bootstrap() {
   assertProductionJwtSecrets();
@@ -21,6 +25,7 @@ async function bootstrap() {
   // Avatars only — rider documents and task photos require JWT via MediaController.
   app.useStaticAssets(AVATAR_UPLOAD_DIR, { prefix: '/api/v1/uploads/avatars/' });
   app.useStaticAssets(CATALOG_ADDON_UPLOAD_DIR, { prefix: '/api/v1/uploads/catalog-addons/' });
+  app.useStaticAssets(PARTNER_BRAND_UPLOAD_DIR, { prefix: '/api/v1/uploads/partner-brands/' });
   app.enableCors({ origin: true, credentials: true });
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalPipes(

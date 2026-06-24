@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -13,6 +14,13 @@ import { BranchesService } from './branches.service';
 import { CreateBranchDto } from './dto/create-branch.dto';
 import { UpdateBranchDto } from './dto/update-branch.dto';
 import { Branch, BranchDocument } from './schemas/branch.schema';
+
+const TERMINAL_ORDER_STATUSES = [
+  OrderStatus.DELIVERED,
+  OrderStatus.COMPLETED,
+  OrderStatus.CANCELLED,
+  OrderStatus.REFUNDED,
+];
 
 const DEFAULT_MACHINES = [
   { id: 'w1', label: 'Washer 1', machineType: 'washer', status: 'active', capacityKg: 15 },
@@ -334,6 +342,18 @@ export class BranchManagementService {
       branch.parentBranchId = parent._id;
     }
 
+    if (dto.isActive === false && branch.isActive) {
+      const activeOrderCount = await this.orderModel.countDocuments({
+        branchId: branch._id,
+        status: { $nin: TERMINAL_ORDER_STATUSES },
+      });
+      if (activeOrderCount > 0) {
+        throw new ConflictException(
+          `Cannot deactivate: ${activeOrderCount} order(s) still in progress at this branch`,
+        );
+      }
+    }
+
     if (dto.name !== undefined) branch.name = dto.name;
     if (dto.branchType !== undefined) branch.branchType = dto.branchType;
     if (dto.managerUserId !== undefined) {
@@ -351,9 +371,62 @@ export class BranchManagementService {
     if (dto.isActive !== undefined) branch.isActive = dto.isActive;
     if (dto.machines !== undefined) branch.machines = dto.machines;
     if (dto.commissionRate !== undefined) branch.commissionRate = dto.commissionRate;
+    if (dto.line1 !== undefined) branch.line1 = dto.line1;
+    if (dto.city !== undefined) branch.city = dto.city;
+    if (dto.province !== undefined) branch.province = dto.province;
+    if (dto.coordinates !== undefined) {
+      branch.location = { type: 'Point', coordinates: dto.coordinates };
+    }
 
     await branch.save();
     return this.getBranchProfile(branchId);
+  }
+
+  /**
+   * Soft-removes (or restores) a partner: deactivates their login and all of their
+   * branches together, so they stop receiving dispatch and disappear from active
+   * capacity views. Refuses to deactivate while any of their branches has an order
+   * still in flight, since orders keep a branchId reference rather than a snapshot —
+   * an in-flight order pointing at a deactivated branch would orphan that delivery.
+   */
+  async setPartnerActive(partnerUserId: string, isActive: boolean) {
+    const partner = await this.userModel.findById(partnerUserId);
+    if (!partner || partner.role !== UserRole.PARTNER) {
+      throw new NotFoundException('Partner not found');
+    }
+
+    const branches = await this.branchModel.find({
+      partnerUserId: partner._id,
+    });
+
+    if (!isActive) {
+      const activeOrderCount = await this.orderModel.countDocuments({
+        branchId: { $in: branches.map((b) => b._id) },
+        status: { $nin: TERMINAL_ORDER_STATUSES },
+      });
+      if (activeOrderCount > 0) {
+        throw new ConflictException(
+          `Cannot deactivate: ${activeOrderCount} order(s) still in progress at this partner's branch(es)`,
+        );
+      }
+    }
+
+    partner.isActive = isActive;
+    await partner.save();
+
+    await this.branchModel.updateMany(
+      { partnerUserId: partner._id },
+      { $set: { isActive } },
+    );
+
+    return {
+      success: true,
+      data: {
+        partnerId: partner._id.toString(),
+        isActive: partner.isActive,
+        branchesUpdated: branches.length,
+      },
+    };
   }
 
   private async buildPerformanceMetrics(

@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { BRANCH_TYPE_LABELS, type BranchNetworkType } from '@lunara/utils';
-import { colors, radius, spacing, typography } from '../theme';
+import { colors, radius, spacing } from '../theme';
 
 export interface NearestBranchRow {
   branchId: string;

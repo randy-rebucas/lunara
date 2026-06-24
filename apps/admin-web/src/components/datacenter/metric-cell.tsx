@@ -6,23 +6,26 @@ export function MetricCell({
   sub,
   href,
   highlight,
+  trend,
 }: {
   label: string;
   value: string | number;
   sub?: string;
   href?: string;
   highlight?: 'warning' | 'accent' | 'primary' | 'danger';
+  /** Optional delta vs. a prior period, e.g. +12 or -4.5. Rendered as a signed % pill. */
+  trend?: number;
 }) {
-  const highlightRing =
+  const borderAccent =
     highlight === 'warning'
-      ? 'ring-amber-400/50 bg-amber-50/30'
+      ? 'border-amber-400'
       : highlight === 'danger'
-        ? 'ring-red-400/50 bg-red-50/30'
+        ? 'border-red-400'
         : highlight === 'accent'
-          ? 'ring-accent/30 bg-accent/5'
+          ? 'border-accent'
           : highlight === 'primary'
-            ? 'ring-primary/25 bg-primary/5'
-            : 'ring-border/50 bg-slate-50/50';
+            ? 'border-primary'
+            : 'border-border';
 
   const valueClass =
     highlight === 'warning' && Number(value) > 0
@@ -31,15 +34,29 @@ export function MetricCell({
         ? 'text-red-700'
         : '';
 
+  const trendClass =
+    trend == null || trend === 0
+      ? 'dc-metric-trend-flat'
+      : trend > 0
+        ? 'dc-metric-trend-up'
+        : 'dc-metric-trend-down';
+
   const inner = (
     <>
-      <p className="dc-label">{label}</p>
-      <p className={`dc-value mt-2 ${valueClass}`}>{value}</p>
-      {sub ? <p className="dc-sublabel mt-1">{sub}</p> : null}
+      <div className="relative flex items-start justify-between gap-2">
+        <p className="dc-label">{label}</p>
+        {trend != null ? (
+          <span className={`dc-metric-trend ${trendClass} shrink-0`}>
+            {trend > 0 ? '▲' : trend < 0 ? '▼' : '–'} {Math.abs(trend)}%
+          </span>
+        ) : null}
+      </div>
+      <p className={`dc-value relative mt-1.5 ${valueClass}`}>{value}</p>
+      {sub ? <p className="dc-sublabel relative mt-0.5">{sub}</p> : null}
     </>
   );
 
-  const className = `dc-metric ${highlightRing} transition-colors hover:bg-slate-50`;
+  const className = `dc-metric ${borderAccent} transition-all hover:shadow-md hover:ring-border/70`;
 
   if (href) {
     return (

@@ -293,6 +293,40 @@ export async function adminFetch<T>(path: string, init?: RequestInit): Promise<T
   return body.data as T;
 }
 
+export async function adminUpload<T>(path: string, formData: FormData): Promise<T> {
+  const token = getAdminToken();
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      method: 'POST',
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: formData,
+    });
+  } catch {
+    throw new Error(
+      `Cannot reach API at ${API_URL}. Start the API: npm run dev --workspace=@lunara/api`,
+    );
+  }
+
+  let body: { success?: boolean; data?: T; error?: { message?: string } };
+  try {
+    body = await res.json();
+  } catch {
+    throw new Error(`API error (${res.status}). Upload failed.`);
+  }
+
+  if (res.status === 401) {
+    handleUnauthorized();
+    throw new Error('Session expired. Please sign in again.');
+  }
+
+  if (!body.success) {
+    throw new Error(body.error?.message ?? 'Upload failed');
+  }
+
+  return body.data as T;
+}
+
 /** Fetch a protected upload URL and return a blob object URL for use in img src. */
 export async function fetchAuthenticatedMediaUrl(publicPath: string): Promise<string> {
   const token = getAdminToken();

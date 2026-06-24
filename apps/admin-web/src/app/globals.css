@@ -202,19 +202,19 @@
 
   /* Datacenter / metric typography — matches StatCard + PageHeader (sans) */
   .dc-eyebrow {
-    @apply text-xs font-semibold uppercase tracking-wider text-muted;
+    @apply text-[0.6875rem] font-semibold uppercase tracking-wider text-muted;
   }
 
   .dc-label {
-    @apply text-sm font-medium text-muted;
+    @apply text-xs font-medium text-muted;
   }
 
   .dc-value {
-    @apply text-3xl font-semibold tabular-nums tracking-tight text-slate-900;
+    @apply text-2xl font-bold tabular-nums tracking-tight text-slate-900;
   }
 
   .dc-value-sm {
-    @apply text-xl font-semibold tabular-nums text-slate-900;
+    @apply text-lg font-semibold tabular-nums text-slate-900;
   }
 
   .dc-sublabel {
@@ -230,8 +230,30 @@
     @apply font-mono text-xs tabular-nums;
   }
 
+  /* Metric cards: left accent edge + glass texture for a denser, more "instrumented" look */
   .dc-metric {
-    @apply rounded-lg p-4 ring-1;
+    @apply relative overflow-hidden rounded-lg border-l-2 border-border bg-surface p-3 shadow-sm ring-1 ring-border/40;
+  }
+
+  .dc-metric::before {
+    content: '';
+    @apply pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-50/80 via-transparent to-transparent;
+  }
+
+  .dc-metric-trend {
+    @apply inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[0.6875rem] font-semibold tabular-nums;
+  }
+
+  .dc-metric-trend-up {
+    @apply bg-emerald-100 text-emerald-700;
+  }
+
+  .dc-metric-trend-down {
+    @apply bg-red-100 text-red-700;
+  }
+
+  .dc-metric-trend-flat {
+    @apply bg-slate-100 text-slate-500;
   }
 
   .dc-panel {
@@ -239,15 +261,15 @@
   }
 
   .dc-panel-header {
-    @apply border-b border-border/60 bg-slate-50/90 px-4 py-3;
+    @apply border-b border-border/60 bg-slate-50/90 px-3.5 py-2.5;
   }
 
   .dc-panel-body {
-    @apply p-4;
+    @apply p-3.5;
   }
 
   .dc-panel-empty {
-    @apply px-4 py-10 text-center sm:text-left;
+    @apply px-4 py-8 text-center sm:text-left;
   }
 
   .dc-form-grid {

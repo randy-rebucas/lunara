@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { BranchAddressEditor, type BranchAddressValue } from './branch-address-editor';
 import { MetricCell } from './metric-cell';
 import { adminFetch } from '../../lib/admin-api';
 import { formatPeso } from '../../lib/format-peso';
@@ -36,6 +37,7 @@ interface BranchProfile {
     dailyQuotaOrders: number;
     dailyQuotaWeightKg: number;
     commissionRate: number;
+    location: { latitude: number; longitude: number };
   };
   hierarchy: {
     parent: { id: string; code: string; name: string } | null;
@@ -172,12 +174,15 @@ export function BranchesBoard() {
     branchType: 'partner_shop' as 'franchise' | 'partner_shop',
     parentBranchId: '',
     partnerUserId: '',
+  });
+  const [createAddressForm, setCreateAddressForm] = useState<BranchAddressValue>({
     line1: '',
     city: '',
     province: '',
-    lat: '14.5995',
-    lng: '120.9842',
+    latitude: 14.5995,
+    longitude: 120.9842,
   });
+  const [createAddressResetToken, setCreateAddressResetToken] = useState(0);
   const [editForm, setEditForm] = useState({
     name: '',
     maxActiveOrders: '',
@@ -186,6 +191,13 @@ export function BranchesBoard() {
     dailyQuotaWeightKg: '',
     commissionRate: '',
     isActive: true,
+  });
+  const [addressForm, setAddressForm] = useState<BranchAddressValue>({
+    line1: '',
+    city: '',
+    province: '',
+    latitude: 14.5995,
+    longitude: 120.9842,
   });
 
   const loadNetwork = useCallback(async () => {
@@ -257,6 +269,13 @@ export function BranchesBoard() {
       commissionRate: String(Math.round((profile.branch.commissionRate ?? 0.2) * 100)),
       isActive: profile.branch.isActive,
     });
+    setAddressForm({
+      line1: profile.branch.line1,
+      city: profile.branch.city,
+      province: profile.branch.province,
+      latitude: profile.branch.location.latitude,
+      longitude: profile.branch.location.longitude,
+    });
   }, [profile]);
 
   useEffect(() => {
@@ -294,14 +313,54 @@ export function BranchesBoard() {
         method: 'POST',
         body: JSON.stringify({
           ...createForm,
-          coordinates: [Number(createForm.lng), Number(createForm.lat)],
+          line1: createAddressForm.line1,
+          city: createAddressForm.city,
+          province: createAddressForm.province,
+          coordinates: [createAddressForm.longitude, createAddressForm.latitude],
         }),
       });
       setBranchMsg('Branch created.');
       setShowCreate(false);
+      setCreateAddressForm({
+        line1: '',
+        city: '',
+        province: '',
+        latitude: 14.5995,
+        longitude: 120.9842,
+      });
+      setCreateAddressResetToken((t) => t + 1);
       await reloadNetwork();
     } catch (err) {
       setBranchMsg(err instanceof Error ? err.message : 'Create failed');
+    } finally {
+      setBranchBusy(false);
+    }
+  }
+
+  async function toggleBranchActive() {
+    if (!profile || !selectedId) return;
+    const nextActive = !profile.branch.isActive;
+    if (
+      !nextActive &&
+      !window.confirm(
+        `Deactivate ${profile.branch.name}? This fails if it has orders still in progress.`,
+      )
+    ) {
+      return;
+    }
+    setBranchBusy(true);
+    setBranchMsg('');
+    try {
+      await adminFetch(`/admin/branches/${selectedId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isActive: nextActive }),
+      });
+      setBranchMsg(nextActive ? 'Branch reactivated.' : 'Branch deactivated.');
+      const refreshed = await adminFetch<BranchProfile>(`/admin/branches/${selectedId}/profile`);
+      setProfile(refreshed);
+      await reloadNetwork();
+    } catch (err) {
+      setBranchMsg(err instanceof Error ? err.message : 'Update failed');
     } finally {
       setBranchBusy(false);
     }
@@ -313,19 +372,37 @@ export function BranchesBoard() {
     setBranchBusy(true);
     setBranchMsg('');
     try {
-      const commissionPct = Number(editForm.commissionRate);
+      // Blank fields must be skipped, not sent as 0 — Number('') is 0, and silently zeroing
+      // a branch's order/weight capacity or quota would block it from accepting any orders.
+      const numericField = (raw: string) => {
+        if (raw.trim() === '') return undefined;
+        const n = Number(raw);
+        return Number.isFinite(n) ? n : undefined;
+      };
+      const commissionPct = numericField(editForm.commissionRate);
+
       await adminFetch(`/admin/branches/${selectedId}`, {
         method: 'PATCH',
         body: JSON.stringify({
           name: editForm.name,
-          maxActiveOrders: Number(editForm.maxActiveOrders),
-          maxWeightCapacityKg: Number(editForm.maxWeightCapacityKg),
-          dailyQuotaOrders: Number(editForm.dailyQuotaOrders),
-          dailyQuotaWeightKg: Number(editForm.dailyQuotaWeightKg),
-          isActive: editForm.isActive,
-          ...(Number.isFinite(commissionPct) && commissionPct > 0
-            ? { commissionRate: commissionPct / 100 }
+          ...(numericField(editForm.maxActiveOrders) !== undefined
+            ? { maxActiveOrders: numericField(editForm.maxActiveOrders) }
             : {}),
+          ...(numericField(editForm.maxWeightCapacityKg) !== undefined
+            ? { maxWeightCapacityKg: numericField(editForm.maxWeightCapacityKg) }
+            : {}),
+          ...(numericField(editForm.dailyQuotaOrders) !== undefined
+            ? { dailyQuotaOrders: numericField(editForm.dailyQuotaOrders) }
+            : {}),
+          ...(numericField(editForm.dailyQuotaWeightKg) !== undefined
+            ? { dailyQuotaWeightKg: numericField(editForm.dailyQuotaWeightKg) }
+            : {}),
+          isActive: editForm.isActive,
+          ...(commissionPct !== undefined ? { commissionRate: commissionPct / 100 } : {}),
+          line1: addressForm.line1,
+          city: addressForm.city,
+          province: addressForm.province,
+          coordinates: [addressForm.longitude, addressForm.latitude],
         }),
       });
       setBranchMsg('Branch updated.');
@@ -351,7 +428,7 @@ export function BranchesBoard() {
 
   return (
     <div>
-      <header className="mb-8">
+      <header className="mb-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="dc-eyebrow">Network</p>
@@ -409,7 +486,7 @@ export function BranchesBoard() {
       ) : null}
 
       {network ? (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div className={`flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 ${copy.bar}`}>
             <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${copy.dot}`} aria-hidden />
             <div className="min-w-0 flex-1">
@@ -423,7 +500,7 @@ export function BranchesBoard() {
             ) : null}
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
             <MetricCell label="Total locations" value={stats.totalBranches} />
             <MetricCell
               label="Operational"
@@ -570,43 +647,22 @@ export function BranchesBoard() {
                       ))}
                     </select>
                   </div>
-                  <div className="sm:col-span-2">
-                    <label htmlFor="branch-line1" className="form-label">
-                      Address line
-                    </label>
-                    <input
-                      id="branch-line1"
-                      className="input-field"
-                      value={createForm.line1}
-                      onChange={(e) => setCreateForm((f) => ({ ...f, line1: e.target.value }))}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="branch-city" className="form-label">
-                      City
-                    </label>
-                    <input
-                      id="branch-city"
-                      className="input-field"
-                      value={createForm.city}
-                      onChange={(e) => setCreateForm((f) => ({ ...f, city: e.target.value }))}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="branch-province" className="form-label">
-                      Province
-                    </label>
-                    <input
-                      id="branch-province"
-                      className="input-field"
-                      value={createForm.province}
-                      onChange={(e) => setCreateForm((f) => ({ ...f, province: e.target.value }))}
-                      required
+                </div>
+
+                <div className="mt-4 border-t border-border/60 pt-4">
+                  <h4 className="text-sm font-semibold text-slate-900">Address</h4>
+                  <p className="mt-0.5 text-xs text-muted">
+                    Search to auto-fill, or pin the exact pickup location on the map.
+                  </p>
+                  <div className="mt-3">
+                    <BranchAddressEditor
+                      value={createAddressForm}
+                      onChange={setCreateAddressForm}
+                      resetKey={createAddressResetToken}
                     />
                   </div>
                 </div>
+
                 <div className="dc-form-actions mt-4">
                   <button type="submit" className="btn-primary btn-sm" disabled={branchBusy}>
                     {branchBusy ? 'Creating…' : 'Create branch'}
@@ -654,9 +710,21 @@ export function BranchesBoard() {
                   </p>
                 </div>
                 {profile ? (
-                  <span className={performanceBadgeClass(profile.performance.performanceScore)}>
-                    {profile.performance.performanceLabel} ({profile.performance.performanceScore})
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={performanceBadgeClass(profile.performance.performanceScore)}>
+                      {profile.performance.performanceLabel} ({profile.performance.performanceScore})
+                    </span>
+                    {profile.branch.branchType !== 'hq' ? (
+                      <button
+                        type="button"
+                        className="btn-outline btn-sm"
+                        disabled={branchBusy}
+                        onClick={() => void toggleBranchActive()}
+                      >
+                        {profile.branch.isActive ? 'Deactivate' : 'Reactivate'}
+                      </button>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
 
@@ -679,7 +747,7 @@ export function BranchesBoard() {
                 ) : null}
 
                 {profile ? (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     <div>
                       <p className="text-code text-primary">{profile.branch.code}</p>
                       <h3 className="text-xl font-semibold text-slate-900">{profile.branch.name}</h3>
@@ -723,7 +791,7 @@ export function BranchesBoard() {
                       </div>
                     ) : null}
 
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
                       <MetricCell
                         label="Order capacity"
                         value={profileMetrics?.orderUtil ?? '—'}
@@ -900,7 +968,7 @@ export function BranchesBoard() {
                             id="edit-commission"
                             type="number"
                             min="0"
-                            max="50"
+                            max="100"
                             step="0.5"
                             className="input-field"
                             value={editForm.commissionRate}
@@ -911,6 +979,21 @@ export function BranchesBoard() {
                           <p className="mt-1 text-xs text-muted">Platform fee on laundry subtotal. Default 20%.</p>
                         </div>
                       </div>
+
+                      <div className="mt-4 border-t border-border/60 pt-4">
+                        <h4 className="text-sm font-semibold text-slate-900">Address</h4>
+                        <p className="mt-0.5 text-xs text-muted">
+                          Used for dispatch distance ranking — keep the pin accurate.
+                        </p>
+                        <div className="mt-3">
+                          <BranchAddressEditor
+                            value={addressForm}
+                            onChange={setAddressForm}
+                            resetKey={selectedId ?? undefined}
+                          />
+                        </div>
+                      </div>
+
                       <div className="dc-form-actions mt-4">
                         <button type="submit" className="btn-primary btn-sm" disabled={branchBusy}>
                           {branchBusy ? 'Saving…' : 'Save changes'}

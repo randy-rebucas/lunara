@@ -139,7 +139,7 @@ export function ReportsBoard() {
 
   return (
     <div>
-      <header className="mb-8">
+      <header className="mb-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="dc-eyebrow">Analytics</p>
@@ -192,7 +192,7 @@ export function ReportsBoard() {
       ) : null}
 
       {report ? (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <section className="dc-panel">
             <div className="dc-panel-header flex flex-wrap items-center justify-between gap-2">
               <div>
@@ -240,7 +240,7 @@ export function ReportsBoard() {
             ) : null}
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
             <MetricCell label="Total orders" value={report.totalOrders} href="/orders" />
             <MetricCell
               label="Completed"

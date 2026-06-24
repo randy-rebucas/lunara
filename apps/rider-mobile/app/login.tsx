@@ -108,7 +108,7 @@ export default function LoginScreen() {
 
     try {
 
-      const result = await riderRequestOtp(phone.trim());
+      await riderRequestOtp(phone.trim());
 
       setOtpSent(true);
 

@@ -74,6 +74,8 @@ export function ShopsBoard() {
   const [partnerSearch, setPartnerSearch] = useState('');
   const [branchLimit, setBranchLimit] = useState(50);
   const [partnerLimit, setPartnerLimit] = useState(50);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [toggleError, setToggleError] = useState('');
 
   const load = useCallback(async () => {
     const [shopsRes, branches] = await Promise.all([
@@ -85,6 +87,32 @@ export function ShopsBoard() {
   }, []);
 
   const { data, loading, error, reload } = useAdminQuery(load, []);
+
+  async function toggleShopActive(shop: Shop) {
+    const nextActive = !shop.isActive;
+    if (
+      nextActive
+        ? false
+        : !window.confirm(
+            `Deactivate ${shop.email ?? shop._id}? This also deactivates all of their branches and blocks new dispatch to them. This fails if they have orders still in progress.`,
+          )
+    ) {
+      return;
+    }
+    setTogglingId(shop._id);
+    setToggleError('');
+    try {
+      await adminFetch(`/admin/shops/${shop._id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isActive: nextActive }),
+      });
+      await reload();
+    } catch (err) {
+      setToggleError(err instanceof Error ? err.message : 'Failed to update partner status');
+    } finally {
+      setTogglingId(null);
+    }
+  }
 
   const shops = data?.shops ?? [];
   const branches = data?.branches ?? [];
@@ -131,7 +159,7 @@ export function ShopsBoard() {
 
   return (
     <div>
-      <header className="mb-8">
+      <header className="mb-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="dc-eyebrow">Partner network</p>
@@ -186,7 +214,7 @@ export function ShopsBoard() {
       ) : null}
 
       {data ? (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div className={`flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 ${copy.bar}`}>
             <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${copy.dot}`} aria-hidden />
             <div className="min-w-0 flex-1">
@@ -200,7 +228,7 @@ export function ShopsBoard() {
             ) : null}
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
             <MetricCell label="Branches" value={branches.length} href="/branches" />
             <MetricCell
               label="At capacity"
@@ -309,6 +337,12 @@ export function ShopsBoard() {
               </Link>
             </div>
 
+            {toggleError ? (
+              <div className="alert-error mx-6 mb-4" role="alert">
+                {toggleError}
+              </div>
+            ) : null}
+
             {filteredShops.length === 0 ? (
               <div className="dc-panel-empty">
                 <p className="font-medium text-slate-900">
@@ -337,7 +371,7 @@ export function ShopsBoard() {
                         Staff
                       </th>
                       <th scope="col">
-                        <span className="sr-only">Branch</span>
+                        <span className="sr-only">Actions</span>
                       </th>
                     </tr>
                   </thead>
@@ -356,13 +390,25 @@ export function ShopsBoard() {
                         <td className="text-right tabular-nums">{s.totalOrders}</td>
                         <td className="text-right tabular-nums">{formatPesoWhole(s.revenue)}</td>
                         <td className="text-right tabular-nums">{s.staffCount}</td>
-                        <td>
+                        <td className="flex items-center justify-end gap-3 whitespace-nowrap">
                           <Link
                             href={`/branches?partner=${s._id}`}
                             className="link-primary text-xs font-medium"
                           >
                             Add branch →
                           </Link>
+                          <button
+                            type="button"
+                            className="btn-outline btn-sm"
+                            disabled={togglingId === s._id}
+                            onClick={() => void toggleShopActive(s)}
+                          >
+                            {togglingId === s._id
+                              ? 'Saving…'
+                              : s.isActive
+                                ? 'Deactivate'
+                                : 'Reactivate'}
+                          </button>
                         </td>
                       </tr>
                     ))}

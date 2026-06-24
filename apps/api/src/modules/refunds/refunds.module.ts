@@ -7,6 +7,7 @@ import { WalletsModule } from '../wallets/wallets.module';
 import { RefundRequest, RefundRequestSchema } from './schemas/refund-request.schema';
 import { RefundsController } from './refunds.controller';
 import { RefundsService } from './refunds.service';
+import { LedgerModule } from '../ledger/ledger.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { RefundsService } from './refunds.service';
     ]),
     WalletsModule,
     RealtimeModule,
+    LedgerModule,
   ],
   controllers: [RefundsController],
   providers: [RefundsService],

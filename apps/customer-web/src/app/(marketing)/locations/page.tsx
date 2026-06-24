@@ -8,16 +8,23 @@ import {
   MarketingFeatureCard,
   MarketingInfoCard,
 } from '../../../components/marketing/marketing-design';
-import { EXPANDING_AREAS, SERVICE_AREAS } from '../../../components/marketing/home-page-data';
+import {
+  EXPANDING_AREAS,
+  fetchActiveServiceAreas,
+} from '../../../components/marketing/home-page-data';
 import { MarketingActions } from '../../../components/marketing/marketing-actions';
 import { ButtonLink } from '../../../components/ui/button-link';
+import { resolveApiV1BaseUrl } from '@lunara/hooks';
 
 export const metadata: Metadata = {
   title: `Service areas — ${appConfig.name}`,
   description: `See where ${appConfig.name} offers laundry pickup and delivery in Metro Manila.`,
 };
 
-export default function LocationsPage() {
+export default async function LocationsPage() {
+  const apiBase = resolveApiV1BaseUrl(process.env.NEXT_PUBLIC_API_URL);
+  const serviceAreas = await fetchActiveServiceAreas(apiBase);
+
   return (
     <MarketingContentPage
       badge="Metro Manila"
@@ -25,7 +32,7 @@ export default function LocationsPage() {
       description="Lunara partner branches and pickup zones across Metro Manila. Enter your address when booking to confirm coverage."
     >
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {SERVICE_AREAS.map((branch) => (
+        {serviceAreas.map((branch) => (
           <MarketingFeatureCard
             key={branch.name}
             badge={branch.province}

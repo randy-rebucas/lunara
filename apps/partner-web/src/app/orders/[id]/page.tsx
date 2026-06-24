@@ -109,6 +109,23 @@ export default function StaffOrderProcessingPage() {
     }
   }
 
+  async function moveToStep(targetStepId: string) {
+    if (!id || !view || targetStepId === view.currentStep.id) return;
+    setLoading(true);
+    setError('');
+    try {
+      await partnerFetch<PartnerOrderDetailView>(`/partner/orders/${id}/processing/move`, {
+        method: 'POST',
+        body: JSON.stringify({ targetStepId }),
+      });
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not move to that step');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function advance() {
     if (!id || !view) return;
     setLoading(true);
@@ -157,7 +174,10 @@ export default function StaffOrderProcessingPage() {
 
   return (
     <div>
-      <Link href={backHref} className="text-sm text-slate-500 hover:text-primary">
+      <Link
+        href={backHref}
+        className="touch-manipulation inline-flex items-center py-2 text-sm text-slate-500 hover:text-primary active:text-primary"
+      >
         ← Back to {backLabel}
       </Link>
 
@@ -196,7 +216,7 @@ export default function StaffOrderProcessingPage() {
           </p>
           <Link
             href={`/orders/${id}/receiving`}
-            className="mt-3 inline-block rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white"
+            className="touch-manipulation mt-3 inline-flex min-h-[3rem] items-center rounded-lg bg-amber-600 px-5 py-3 text-base font-medium text-white active:bg-amber-700"
           >
             Open shop receiving →
           </Link>
@@ -211,9 +231,9 @@ export default function StaffOrderProcessingPage() {
               ? 'Staff member is assigned and can process this order.'
               : 'Choose staff before processing begins.'}
           </p>
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-4 flex flex-wrap gap-3">
             <select
-              className="rounded-lg border px-3 py-2 text-sm"
+              className="min-h-[3rem] flex-1 touch-manipulation rounded-lg border px-3 py-3 text-base sm:flex-none"
               value={assignStaffId || view.assignedStaffId || ''}
               onChange={(e) => setAssignStaffId(e.target.value)}
             >
@@ -228,7 +248,7 @@ export default function StaffOrderProcessingPage() {
             <button
               type="button"
               disabled={loading || !assignStaffId}
-              className="btn-primary disabled:opacity-50"
+              className="btn-primary min-h-[3rem] touch-manipulation px-5 text-base disabled:opacity-50"
               onClick={assignStaff}
             >
               {view.assignedStaffId ? 'Reassign' : 'Assign'}
@@ -246,7 +266,7 @@ export default function StaffOrderProcessingPage() {
           <button
             type="button"
             disabled={loading}
-            className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white"
+            className="mt-4 min-h-[3rem] w-full touch-manipulation rounded-lg bg-primary px-5 py-3 text-base font-medium text-white active:bg-primary/90 disabled:opacity-50 sm:w-auto"
             onClick={acceptJob}
           >
             Accept job
@@ -260,36 +280,47 @@ export default function StaffOrderProcessingPage() {
             <div className="h-full bg-primary transition-all" style={{ width: `${view.progress}%` }} />
           </div>
 
-          <ol className="mt-8 space-y-2">
+          <p className="mt-2 text-xs text-slate-500">
+            Click any stage to move this order there directly — useful for correcting a mistake
+            or skipping ahead.
+          </p>
+          {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+
+          <ol className="mt-3 space-y-3">
             {view.steps.map((step, i) => {
               const done = i < stepIndex || view.isComplete;
               const active = i === stepIndex && !view.isComplete;
               const stepRecord = view.processing?.completedSteps?.find((s) => s.stepId === step.id);
+              const clickable = !needsAccept && !active && !loading;
               return (
-                <li
-                  key={step.id}
-                  className={`rounded-lg border px-4 py-3 text-sm ${
-                    active
-                      ? 'border-primary bg-primary/5'
-                      : done
-                        ? 'border-accent/30 bg-green-50'
-                        : 'bg-white'
-                  }`}
-                >
-                  <span className="font-medium">
-                    {done ? '✓ ' : active ? '→ ' : '○ '}
-                    {step.label}
-                  </span>
-                  {active && <p className="mt-1 text-slate-600">{step.description}</p>}
-                  {stepRecord?.photoUrl && (
-                    <div className="mt-2">
-                      <AuthenticatedImage
-                        publicPath={stepRecord.photoUrl}
-                        alt={`${step.label} photo`}
-                        className="max-h-36 rounded-lg border border-border/60 object-cover"
-                      />
-                    </div>
-                  )}
+                <li key={step.id}>
+                  <button
+                    type="button"
+                    disabled={!clickable}
+                    onClick={() => moveToStep(step.id)}
+                    className={`min-h-[3.5rem] w-full touch-manipulation rounded-lg border px-5 py-4 text-left text-base transition ${
+                      active
+                        ? 'border-primary bg-primary/5'
+                        : done
+                          ? 'border-accent/30 bg-green-50'
+                          : 'bg-white'
+                    } ${clickable ? 'cursor-pointer hover:border-primary/50 hover:ring-1 hover:ring-primary/20 active:bg-primary/10 active:ring-2 active:ring-primary/30' : 'cursor-default'}`}
+                  >
+                    <span className="font-medium">
+                      {done ? '✓ ' : active ? '→ ' : '○ '}
+                      {step.label}
+                    </span>
+                    {active && <p className="mt-1 text-slate-600">{step.description}</p>}
+                    {stepRecord?.photoUrl && (
+                      <div className="mt-2">
+                        <AuthenticatedImage
+                          publicPath={stepRecord.photoUrl}
+                          alt={`${step.label} photo`}
+                          className="max-h-36 rounded-lg border border-border/60 object-cover"
+                        />
+                      </div>
+                    )}
+                  </button>
                 </li>
               );
             })}
@@ -306,11 +337,12 @@ export default function StaffOrderProcessingPage() {
           </p>
 
           {view.canSkipIroning && view.currentStep.id === 'folding' && (
-            <label className="mt-4 flex items-center gap-2 text-sm">
+            <label className="mt-4 flex min-h-[3rem] touch-manipulation items-center gap-3 text-base active:bg-slate-50">
               <input
                 type="checkbox"
                 checked={skipIroning}
                 onChange={(e) => setSkipIroning(e.target.checked)}
+                className="h-5 w-5 shrink-0"
               />
               Skip ironing (optional step)
             </label>
@@ -323,7 +355,7 @@ export default function StaffOrderProcessingPage() {
                 Assign a tag to track this order through the shop pipeline
               </p>
               <input
-                className="mt-2 w-full rounded border px-3 py-2 text-sm font-mono uppercase"
+                className="mt-2 min-h-[3rem] w-full touch-manipulation rounded border px-4 py-3 text-base font-mono uppercase"
                 placeholder="e.g. LNR-1042"
                 value={tagCode}
                 onChange={(e) => setTagCode(e.target.value)}
@@ -339,19 +371,17 @@ export default function StaffOrderProcessingPage() {
           />
 
           <textarea
-            className="mt-4 w-full rounded border px-3 py-2 text-sm"
+            className="mt-4 min-h-[5rem] w-full touch-manipulation rounded border px-4 py-3 text-base"
             placeholder="Notes (optional)"
             rows={2}
             value={note}
             onChange={(e) => setNote(e.target.value)}
           />
 
-          {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
-
           <button
             type="button"
             disabled={loading}
-            className="mt-4 w-full rounded-lg bg-accent px-4 py-3 text-sm font-medium text-white disabled:opacity-50"
+            className="mt-4 min-h-[3.5rem] w-full touch-manipulation rounded-lg bg-accent px-5 py-4 text-base font-medium text-white active:bg-accent/90 disabled:opacity-50"
             onClick={advance}
           >
             {loading ? 'Saving…' : 'Complete stage & forward'}
@@ -368,7 +398,7 @@ export default function StaffOrderProcessingPage() {
           <button
             type="button"
             disabled={loading}
-            className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm text-white disabled:opacity-50"
+            className="mt-4 min-h-[3rem] w-full touch-manipulation rounded-lg bg-primary px-5 py-3 text-base text-white active:bg-primary/90 disabled:opacity-50 sm:w-auto"
             onClick={async () => {
               if (!id) return;
               setLoading(true);

@@ -10,7 +10,7 @@ export interface GeocodedAddressFields {
 
 const PH_POSTAL_RE = /\b(\d{4})\b/;
 
-function extractPhilippinePostalCode(...values: Array<string | null | undefined>): string {
+function extractPhilippinePostalCode(...values: (string | null | undefined)[]): string {
   for (const value of values) {
     const text = value?.trim();
     if (!text) continue;

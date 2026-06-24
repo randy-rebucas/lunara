@@ -55,6 +55,34 @@ export const SERVICE_AREAS = [
   },
 ] as const;
 
+export interface ServiceArea {
+  name: string;
+  city: string;
+  province: string;
+  area: string;
+  radiusKm: number;
+}
+
+/** Fetches live, active branches from the public API; falls back to the static list on any failure. */
+export async function fetchActiveServiceAreas(apiBase: string): Promise<ServiceArea[]> {
+  try {
+    const res = await fetch(`${apiBase}/public/branches`, { next: { revalidate: 60 } });
+    if (!res.ok) return [...SERVICE_AREAS];
+    const body = await res.json();
+    const data = body?.data;
+    if (!Array.isArray(data) || data.length === 0) return [...SERVICE_AREAS];
+    return data.map((branch: { name: string; city: string; province: string; radiusKm?: number }) => ({
+      name: branch.name,
+      city: branch.city,
+      province: branch.province,
+      area: `${branch.city}, ${branch.province}`,
+      radiusKm: branch.radiusKm ?? 10,
+    }));
+  } catch {
+    return [...SERVICE_AREAS];
+  }
+}
+
 export const EXPANDING_AREAS = [
   'Pasig & Ortigas',
   'Manila & Ermita',

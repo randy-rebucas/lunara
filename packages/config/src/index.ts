@@ -36,3 +36,22 @@ export const appConfig = {
 export function getShareWebsiteUrl(): string {
   return appConfig.marketing?.websiteUrl ?? marketingConfig.websiteUrl;
 }
+
+export interface PartnerThemeOverride {
+  appDisplayName?: string;
+  colors?: Partial<typeof theme.colors>;
+  fonts?: Partial<typeof theme.fonts>;
+}
+
+/**
+ * Merges a partner's brand override (resolved server-side from the public branding
+ * endpoint) onto the default Lunara theme. Only used by customer-facing apps —
+ * admin-web/partner-web/rider-mobile keep importing the bare `theme`/`appConfig`.
+ */
+export function resolveTheme(override?: PartnerThemeOverride) {
+  return {
+    appName: override?.appDisplayName ?? appConfig.name,
+    colors: { ...theme.colors, ...(override?.colors ?? {}) },
+    fonts: { ...theme.fonts, ...(override?.fonts ?? {}) },
+  };
+}

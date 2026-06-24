@@ -26,7 +26,7 @@ import {
 import { PickupService } from '../riders/pickup.service';
 import { AssignStaffDto } from './dto/assign-staff.dto';
 import { CreateStaffDto } from './dto/create-staff.dto';
-import { AdvanceProcessingDto } from './dto/processing.dto';
+import { AdvanceProcessingDto, MoveProcessingStepDto } from './dto/processing.dto';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
 import { PartnerOperationsService } from './partner-operations.service';
 import { ProcessingService } from './processing.service';
@@ -217,6 +217,12 @@ export class PartnerController {
     return this.operationsService.getSettlements(req.user.sub, req.user.role);
   }
 
+  @Get('ledger-balance')
+  @Roles(UserRole.PARTNER)
+  getLedgerBalance(@Req() req: { user: { sub: string } }) {
+    return this.operationsService.getLedgerBalance(req.user.sub);
+  }
+
   @Get('orders/:orderId/receiving')
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
   getReceiving(
@@ -321,6 +327,16 @@ export class PartnerController {
     @Body() dto: AdvanceProcessingDto,
   ) {
     return this.processingService.advance(orderId, req.user.sub, req.user.role, dto);
+  }
+
+  @Post('orders/:orderId/processing/move')
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
+  moveProcessingStep(
+    @Param('orderId') orderId: string,
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Body() dto: MoveProcessingStepDto,
+  ) {
+    return this.processingService.moveToStep(orderId, req.user.sub, req.user.role, dto);
   }
 
   @Post('orders/:orderId/delivery/dispatch')

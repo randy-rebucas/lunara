@@ -7,6 +7,7 @@ import { WalletsModule } from '../wallets/wallets.module';
 import { SupportTicket, SupportTicketSchema } from './schemas/support-ticket.schema';
 import { SupportController } from './support.controller';
 import { SupportService } from './support.service';
+import { LedgerModule } from '../ledger/ledger.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { SupportService } from './support.service';
     ]),
     AddressesModule,
     WalletsModule,
+    LedgerModule,
   ],
   controllers: [SupportController],
   providers: [SupportService],

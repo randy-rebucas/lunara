@@ -8,6 +8,7 @@ import { Model, Types } from 'mongoose';
 import {
   computeRiderWalletBalances,
   parseEarningReference,
+  riderEarningAmount,
   RIDER_EARNING_TYPE_LABELS,
   RIDER_MIN_WITHDRAWAL,
   RIDER_PAYOUT_METHOD,
@@ -19,6 +20,7 @@ import {
   type RiderPayoutMethod,
 } from '@lunara/utils';
 import { UpdatePayoutMethodDto } from './dto/rider-wallet.dto';
+import { LedgerService } from '../ledger/ledger.service';
 import { Rider, RiderDocument } from './schemas/rider.schema';
 import {
   RiderCashRemittance,
@@ -83,6 +85,7 @@ export class RiderWalletService {
     private withdrawalModel: Model<RiderWithdrawalDocument>,
     @InjectModel(RiderCashRemittance.name)
     private remittanceModel: Model<RiderCashRemittanceDocument>,
+    private ledgerService: LedgerService,
   ) {}
 
   private riderObjectId(userId: string) {
@@ -399,6 +402,28 @@ export class RiderWalletService {
       description: `Withdrawal paid via ${RIDER_PAYOUT_METHOD_LABELS[withdrawal.method]}`,
     });
 
+    await this.ledgerService.post(
+      `withdrawal:${withdrawal._id.toString()}`,
+      'withdrawal',
+      withdrawal._id.toString(),
+      [
+        {
+          accountType: 'rider_payable',
+          accountSubject: withdrawal.riderUserId.toString(),
+          direction: 'debit',
+          amount: withdrawal.amount,
+          description: `Withdrawal liability cleared for rider ${withdrawal.riderUserId.toString()}`,
+        },
+        {
+          accountType: 'cash_out',
+          accountSubject: withdrawal.method,
+          direction: 'credit',
+          amount: withdrawal.amount,
+          description: `Cash paid out via ${RIDER_PAYOUT_METHOD_LABELS[withdrawal.method]}`,
+        },
+      ],
+    );
+
     return { success: true, data: this.serializeWithdrawal(withdrawal) };
   }
 
@@ -451,8 +476,7 @@ export class RiderWalletService {
     cashAmount: number,
     stage: 'pickup' | 'delivery',
   ) {
-    const earningType = stage === 'pickup' ? 'pickup' : 'delivery';
-    const earningRef = taskEarningReference(orderId, earningType);
+    const earningType: RiderEarningType = stage === 'pickup' ? 'pickup' : 'delivery';
 
     // Check idempotency via unique index on (riderUserId, orderId, stage)
     const existing = await this.remittanceModel.findOne({
@@ -462,22 +486,21 @@ export class RiderWalletService {
     });
     if (existing) return { alreadyNetted: true, remittance: this.serializeRemittance(existing) };
 
-    // Find the credit transaction for this earning to get the exact amount
-    const earningTx = await this.transactionModel.findOne({
-      riderUserId: new Types.ObjectId(riderUserId),
-      reference: earningRef,
-      type: 'credit',
-    });
-
-    // If the earning hasn't been credited yet (race condition), skip netting
-    if (!earningTx) return { alreadyNetted: false, remittance: null };
-
-    const earningOffset = earningTx.amount;
+    // The fee is a fixed constant (not looked up from a wallet transaction) so this doesn't
+    // depend on creditEarning() having already run — collectCash() fires this before the task
+    // is marked complete (where creditEarning() actually runs), so a lookup-based amount would
+    // never find a match and would silently skip creating the remittance record every time.
+    const earningOffset = riderEarningAmount(earningType);
     const netRemittance = Math.max(0, cashAmount - earningOffset);
     const nettingRef = `netting:${stage}:${orderId}`;
 
+    // Not clamped to 0: this fires before creditEarning() has added the matching task fee to
+    // the wallet (collectCash happens mid-task; creditEarning runs once the task is marked
+    // complete), so the balance may dip briefly negative here and self-correct moments later.
+    // Clamping to 0 would silently donate the rider a phantom credit whenever their balance is
+    // currently below the fee amount.
     const rider = await this.findOrCreateRider(riderUserId);
-    rider.walletBalance = Math.max(0, rider.walletBalance - earningOffset);
+    rider.walletBalance -= earningOffset;
     await rider.save();
 
     await this.transactionModel.create({
@@ -498,6 +521,29 @@ export class RiderWalletService {
       netRemittance,
       status: 'pending',
     });
+
+    if (netRemittance > 0) {
+      await this.ledgerService.post(
+        `remittance-created:${remittance._id.toString()}`,
+        'remittance',
+        remittance._id.toString(),
+        [
+          {
+            accountType: 'rider_remittance_receivable',
+            accountSubject: riderUserId,
+            direction: 'debit',
+            amount: netRemittance,
+            description: `Cash collected by rider ${riderUserId} pending remittance (order ${orderId.slice(-6)})`,
+          },
+          {
+            accountType: 'order_revenue_clearing',
+            direction: 'credit',
+            amount: netRemittance,
+            description: `Order revenue recognized from cash collection (order ${orderId.slice(-6)})`,
+          },
+        ],
+      );
+    }
 
     return { alreadyNetted: false, remittance: this.serializeRemittance(remittance) };
   }
@@ -569,6 +615,30 @@ export class RiderWalletService {
       { _id: { $in: items.map((i) => i._id) } },
       { status: 'remitted', remittedAt: now, verifiedBy: new Types.ObjectId(adminUserId) },
     );
+
+    for (const item of items) {
+      if (item.netRemittance <= 0) continue;
+      await this.ledgerService.post(
+        `remittance:${item._id.toString()}`,
+        'remittance',
+        item._id.toString(),
+        [
+          {
+            accountType: 'platform_cash',
+            direction: 'debit',
+            amount: item.netRemittance,
+            description: `Cash remittance received from rider ${item.riderUserId.toString()} (order ${item.orderId.toString().slice(-6)})`,
+          },
+          {
+            accountType: 'rider_remittance_receivable',
+            accountSubject: item.riderUserId.toString(),
+            direction: 'credit',
+            amount: item.netRemittance,
+            description: `Remittance receivable cleared for rider ${item.riderUserId.toString()}`,
+          },
+        ],
+      );
+    }
 
     const totalVerified = items.reduce((s, r) => s + r.netRemittance, 0);
     return {

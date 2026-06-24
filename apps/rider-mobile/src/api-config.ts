@@ -1,6 +1,6 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-import { resolveApiOrigin, resolveApiV1BaseUrl } from '@lunara/utils';
+import { resolveApiV1BaseUrl } from '@lunara/utils';
 
 /** Dev machine LAN IP from Expo (e.g. 192.168.1.5:8082 → 192.168.1.5). */
 function devMachineHost(): string | undefined {

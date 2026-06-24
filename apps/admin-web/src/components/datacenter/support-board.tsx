@@ -158,7 +158,7 @@ export function SupportBoard() {
 
   return (
     <div>
-      <header className="mb-8">
+      <header className="mb-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="dc-eyebrow">Customer success</p>
@@ -206,7 +206,7 @@ export function SupportBoard() {
       ) : null}
 
       {data ? (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div className={`flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 ${copy.bar}`}>
             <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${copy.dot}`} aria-hidden />
             <div className="min-w-0 flex-1">
@@ -234,7 +234,7 @@ export function SupportBoard() {
             ) : null}
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
             <MetricCell
               label="Open"
               value={counts.open}

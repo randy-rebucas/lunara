@@ -22,6 +22,15 @@ The rate is stored per branch and defaults to **20%**.
 
 Admin can update a branch's rate at any time via `PATCH /admin/branches/:id`. The rate is **snapshotted** into each `PartnerSettlement` record at creation time so historical settlements are auditable even if the rate changes later.
 
+### Managing it in admin-web
+
+This is already fully manageable through the UI — no raw API calls needed. Go to `/branches`, select a branch, and edit the **"Commission rate (%)"** field in the branch edit panel (`apps/admin-web/src/components/datacenter/branches-board.tsx`). The form:
+- Loads the current rate as a percentage (`commissionRate * 100`, line ~269)
+- Lets admin type a new percentage (input accepts 0–100)
+- Converts back to decimal and saves via `PATCH /admin/branches/:id` (`commissionPct / 100`, line ~401)
+
+Blank input is skipped on save rather than treated as 0, so admin can leave the field untouched without accidentally zeroing the rate.
+
 ---
 
 ## How fees are computed
@@ -104,9 +113,10 @@ Full schema: `apps/api/src/modules/partner/schemas/partner-settlement.schema.ts`
 
 ### Get branch commission rate
 ```
-GET /admin/branches/:id
-Response includes: { commissionRate: 0.20 }
+GET /admin/branches/:id/profile
+Response: { success: true, data: { branch: { ..., commissionRate: 0.20 }, ... } }
 ```
+Note the `/profile` suffix and the nested `data.branch.commissionRate` path — there is no plain `GET /admin/branches/:id`.
 
 ### Update branch commission rate
 ```
@@ -138,7 +148,7 @@ Response: PartnerSettlement[]
 
 ## Revenue visibility (per-order)
 
-The partner revenue page (`/revenue`) includes a per-order breakdown showing the commission split for each completed order:
+`GET /partner/revenue` (service method `getRevenue()` in `partner-operations.service.ts`) computes and returns a per-order commission split in `recentOrders[]`:
 
 | Field | Description |
 |---|---|
@@ -148,8 +158,7 @@ The partner revenue page (`/revenue`) includes a per-order breakdown showing the
 | `partnerPayout` | `amount − lunaraFee` |
 | `commissionRate` | Branch rate at time of revenue fetch |
 
-Endpoint: `GET /partner/revenue`
-Service method: `getRevenue()` in `partner-operations.service.ts`
+The partner revenue page (`apps/partner-web/src/app/revenue/page.tsx`) renders this breakdown in the "Completed orders" table: alongside Date / Order ID / Payment badge / Cash status / Amount, each row also shows **Lunara fee** (`−lunaraFee`, with the commission % alongside) and **Your payout** (`partnerPayout`) — the same visual style as the aggregate breakdown on `/settlements`.
 
 ---
 
@@ -165,7 +174,9 @@ Service method: `getRevenue()` in `partner-operations.service.ts`
 | `apps/api/src/modules/admin/admin.controller.ts` | Admin settlement endpoints |
 | `apps/api/src/modules/partner/partner.controller.ts` | Partner settlement endpoint |
 | `apps/partner-web/src/app/settlements/page.tsx` | Partner-facing payout breakdown |
+| `apps/partner-web/src/app/revenue/page.tsx` | Per-order commission breakdown (Lunara fee / payout columns) |
 | `apps/admin-web/src/app/partners/settlements/page.tsx` | Admin settlement management |
+| `apps/admin-web/src/components/datacenter/branches-board.tsx` | Admin commission-rate editor (branch edit panel) |
 | `packages/types/src/partner.ts` | `PartnerSettlement`, `PartnerOrderDetail` interfaces |
 
 ---

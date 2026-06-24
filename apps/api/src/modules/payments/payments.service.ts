@@ -9,11 +9,13 @@ import {
   type CashTiming,
   type RiderCashPaymentInfo,
 } from '@lunara/utils';
+import { BranchesService } from '../branches/branches.service';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { WalletsService } from '../wallets/wallets.service';
 import { PaymongoService } from './paymongo.service';
 import { Payment, PaymentDocument } from './schemas/payment.schema';
+import { LedgerService } from '../ledger/ledger.service';
 
 @Injectable()
 export class PaymentsService {
@@ -25,6 +27,8 @@ export class PaymentsService {
     private walletsService: WalletsService,
     private trackingGateway: TrackingGateway,
     private paymongo: PaymongoService,
+    private branchesService: BranchesService,
+    private ledgerService: LedgerService,
   ) {}
 
   getCustomerWebUrl() {
@@ -477,6 +481,27 @@ export class PaymentsService {
       `topup-${payment._id}`,
       'Wallet top-up via PayMongo',
     );
+
+    await this.ledgerService.post(
+      `payment:${payment._id.toString()}`,
+      'wallet_topup',
+      payment._id.toString(),
+      [
+        {
+          accountType: 'platform_cash',
+          direction: 'debit',
+          amount: payment.amount,
+          description: `PayMongo wallet top-up received from user ${payment.userId.toString()}`,
+        },
+        {
+          accountType: 'customer_wallet_liability',
+          accountSubject: payment.userId.toString(),
+          direction: 'credit',
+          amount: payment.amount,
+          description: `Wallet balance increased for user ${payment.userId.toString()}`,
+        },
+      ],
+    );
   }
 
   private async markOrderPaid(
@@ -494,33 +519,75 @@ export class PaymentsService {
       );
     }
     await payment.save();
+
+    // Wallet-funded orders draw down an already-recognized liability, not new cash —
+    // crediting platform_cash again here would double-count money already posted at top-up.
+    const sourceAccount =
+      payment.method === PaymentMethod.WALLET
+        ? ({
+            accountType: 'customer_wallet_liability' as const,
+            accountSubject: payment.userId.toString(),
+          })
+        : ({ accountType: 'platform_cash' as const });
+
+    await this.ledgerService.post(
+      `payment:${payment._id.toString()}`,
+      'payment',
+      payment._id.toString(),
+      [
+        {
+          ...sourceAccount,
+          direction: 'debit',
+          amount: payment.amount,
+          description:
+            payment.method === PaymentMethod.WALLET
+              ? `Wallet debited for order ${order._id.toString().slice(-6)}`
+              : `PayMongo payment received for order ${order._id.toString().slice(-6)}`,
+        },
+        {
+          accountType: 'order_revenue_clearing',
+          direction: 'credit',
+          amount: payment.amount,
+          description: `Order revenue recognized from digital payment (order ${order._id.toString().slice(-6)})`,
+        },
+      ],
+    );
+
     await this.confirmOrder(order);
   }
 
   private async confirmOrder(order: OrderDocument) {
-    if (order.status === OrderStatus.PENDING) {
-      order.status = OrderStatus.PENDING_DISPATCH;
-      order.statusHistory.push({
-        status: OrderStatus.PENDING_DISPATCH,
-        timestamp: new Date(),
-        note: 'Payment confirmed — pending dispatch to laundry shop',
-      });
-      await order.save();
-      this.trackingGateway.emitOrderEvent(order._id.toString(), 'awaitingDispatch', {
-        message:
-          'Payment received. Lunara is assigning your laundry partner — pickup starts after dispatch.',
-      });
-      this.trackingGateway.emitAdminDispatcherAlert({
-        type: 'awaiting_shop',
-        orderId: order._id.toString(),
-        status: order.status,
-        message: 'New paid order — assign laundry shop',
-      });
-      this.trackingGateway.emitDispatchQueueUpdated({
-        reason: 'payment_confirmed',
-        orderId: order._id.toString(),
-      });
+    if (order.status !== OrderStatus.PENDING) return;
+
+    // Partner white-labeled bookings already have their branch pre-resolved at checkout
+    // (booking.service.ts) — those go straight to their own shop and skip the shared
+    // admin dispatch queue entirely.
+    if (order.branchId) {
+      await this.branchesService.finalizePreResolvedShopAssignment(order);
+      return;
     }
+
+    order.status = OrderStatus.PENDING_DISPATCH;
+    order.statusHistory.push({
+      status: OrderStatus.PENDING_DISPATCH,
+      timestamp: new Date(),
+      note: 'Payment confirmed — pending dispatch to laundry shop',
+    });
+    await order.save();
+    this.trackingGateway.emitOrderEvent(order._id.toString(), 'awaitingDispatch', {
+      message:
+        'Payment received. Lunara is assigning your laundry partner — pickup starts after dispatch.',
+    });
+    this.trackingGateway.emitAdminDispatcherAlert({
+      type: 'awaiting_shop',
+      orderId: order._id.toString(),
+      status: order.status,
+      message: 'New paid order — assign laundry shop',
+    });
+    this.trackingGateway.emitDispatchQueueUpdated({
+      reason: 'payment_confirmed',
+      orderId: order._id.toString(),
+    });
   }
 
   async getRiderCashPaymentInfo(
