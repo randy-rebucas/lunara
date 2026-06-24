@@ -11,8 +11,19 @@ export interface CustomerTimelineStep {
   note?: string;
 }
 
-/** Customer-facing milestones (ironing omitted; covered while between folding and QC). */
-export const CUSTOMER_TRACK_TIMELINE: { id: string; label: string; milestone: OrderStatus }[] = [
+interface CustomerTimelineDef {
+  id: string;
+  label: string;
+  milestone: OrderStatus;
+  /** When set, this entry represents every status from `milestone` through `rangeEnd`
+   * (inclusive) collapsed into one customer-facing step, instead of one exact status. */
+  rangeEnd?: OrderStatus;
+}
+
+/** Customer-facing milestones — the in-shop processing stages (sorting through quality check,
+ * ironing included) collapse into one generic "Processing" step; customers don't need to see
+ * each internal stage, just that their order is being worked on. */
+export const CUSTOMER_TRACK_TIMELINE: CustomerTimelineDef[] = [
   { id: 'order_created', label: 'Order Created', milestone: OrderStatus.PENDING },
   { id: 'pending_dispatch', label: 'Pending Dispatch', milestone: OrderStatus.PENDING_DISPATCH },
   { id: 'shop_assigned', label: 'Shop Assigned', milestone: OrderStatus.SHOP_ASSIGNED },
@@ -33,11 +44,7 @@ export const CUSTOMER_TRACK_TIMELINE: { id: string; label: string; milestone: Or
     milestone: OrderStatus.RECEIVED_AT_SHOP,
   },
   { id: 'laundry_received', label: 'Received', milestone: OrderStatus.RECEIVED },
-  { id: 'sorting', label: 'Sorting', milestone: OrderStatus.SORTING },
-  { id: 'washing', label: 'Washing', milestone: OrderStatus.WASHING },
-  { id: 'drying', label: 'Drying', milestone: OrderStatus.DRYING },
-  { id: 'folding', label: 'Folding', milestone: OrderStatus.FOLDING },
-  { id: 'quality_check', label: 'Quality Check', milestone: OrderStatus.QUALITY_CHECK },
+  { id: 'processing', label: 'Processing', milestone: OrderStatus.SORTING, rangeEnd: OrderStatus.QUALITY_CHECK },
   { id: 'ready_for_delivery', label: 'Ready For Delivery', milestone: OrderStatus.READY_FOR_DELIVERY },
   {
     id: 'rider_assigned_delivery',
@@ -104,17 +111,13 @@ export function buildCustomerTimeline(
 
   const steps: CustomerTimelineStep[] = CUSTOMER_TRACK_TIMELINE.map((def) => {
     const milestoneIdx = statusIndex(def.milestone);
+    const rangeEndIdx = def.rangeEnd ? statusIndex(def.rangeEnd) : milestoneIdx;
     let state: TimelineStepState = 'upcoming';
     if (currentIdx < 0) {
       state = 'upcoming';
-    } else if (currentIdx > milestoneIdx) {
+    } else if (currentIdx > rangeEndIdx) {
       state = 'done';
-    } else if (currentIdx === milestoneIdx) {
-      state = 'current';
-    } else if (
-      currentStatus === OrderStatus.IRONING &&
-      def.milestone === OrderStatus.QUALITY_CHECK
-    ) {
+    } else if (currentIdx >= milestoneIdx) {
       state = 'current';
     } else if (currentStatus === OrderStatus.COMPLETED && def.milestone === OrderStatus.DELIVERED) {
       state = 'done';
@@ -162,13 +165,6 @@ export function buildCustomerTimeline(
     if (created) created.state = 'done';
     if (pending) pending.state = 'done';
     if (shop) shop.state = 'current';
-  }
-
-  if (currentStatus === OrderStatus.IRONING) {
-    const folding = steps.find((s) => s.id === 'folding');
-    const qc = steps.find((s) => s.id === 'quality_check');
-    if (folding) folding.state = 'done';
-    if (qc) qc.state = 'current';
   }
 
   if (currentStatus === OrderStatus.COMPLETED) {

@@ -89,6 +89,7 @@ export interface PartnerQueueOrder {
   status: string;
   bookingType: string;
   total: number;
+  currentStepId: string;
   currentStepLabel: string;
   progress: number;
   assignedStaffId?: string;

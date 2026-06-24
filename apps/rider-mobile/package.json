@@ -12,6 +12,7 @@
     "eas:build:android": "eas build --platform android --profile production",
     "eas:build:ios": "eas build --platform ios --profile production",
     "eas-build-post-install": "cd ../.. && npm run build --workspace=@lunara/types && npm run build --workspace=@lunara/utils && npm run build --workspace=@lunara/config",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test src/lib/**/*.test.ts"
   },
@@ -41,6 +42,8 @@
   "devDependencies": {
     "@babel/core": "^7.27.4",
     "@types/react": "~19.1.10",
+    "eslint": "^9.39.4",
+    "eslint-config-expo": "^10.0.0",
     "tsx": "^4.20.3",
     "typescript": "^5.8.3"
   }

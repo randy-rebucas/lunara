@@ -69,6 +69,7 @@ export function TaskDetailsCard({
         <Text style={styles.sectionTitle}>Shop information</Text>
         <DetailRow label="Shop" value={task.shopName ?? task.branchName} />
         <DetailRow label="Branch" value={task.branchCode ?? task.branchName} />
+        <DetailRow label="Mobile" value={shopPhoneDisplay} />
         {shop ? <DetailRow label="Address" value={formatAddress(shop)} /> : null}
       </Card>
 

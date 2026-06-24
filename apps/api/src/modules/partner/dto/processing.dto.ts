@@ -1,4 +1,4 @@
-import { IsBoolean, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
 export class AdvanceProcessingDto {
   @IsOptional()
@@ -24,4 +24,11 @@ export class AdvanceProcessingDto {
   @IsString()
   @MaxLength(500)
   photoUrl?: string;
+}
+
+export class MoveProcessingStepDto {
+  /** Validated against LaundryProcessingStepId via normalizeProcessingStepId() in the service. */
+  @IsString()
+  @IsNotEmpty()
+  targetStepId!: string;
 }

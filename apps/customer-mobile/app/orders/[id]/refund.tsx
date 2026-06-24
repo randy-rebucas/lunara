@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import { Button } from '../../../src/components/ui/button';
 import { Card } from '../../../src/components/ui/card';
 import { Input } from '../../../src/components/ui/input';

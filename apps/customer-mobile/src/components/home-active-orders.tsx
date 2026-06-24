@@ -9,7 +9,7 @@ import {
   formatOrderNumber,
 } from '../lib/active-order';
 import type { HomeOrderRow } from '../hooks/use-home-dashboard';
-import { colors, radius, spacing, typography } from '../theme';
+import { colors, spacing, typography } from '../theme';
 
 interface HomeActiveOrdersProps {
   orders: HomeOrderRow[];

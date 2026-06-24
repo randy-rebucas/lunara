@@ -533,7 +533,7 @@ export default function BookScreen() {
         <View>
           <Text style={styles.heading}>Estimate weight</Text>
           <Text style={styles.sub}>
-            We'll confirm actual weight at pickup. Min order{' '}
+            We&apos;ll confirm actual weight at pickup. Min order{' '}
             {formatCurrency(config?.minOrderAmount ?? BOOKING_MIN_ORDER_AMOUNT)}.
           </Text>
           <View style={styles.loadInfo}>

@@ -2,7 +2,7 @@ import { Pressable, StyleSheet, Text, type PressableProps, type ViewStyle } from
 import { colors, radius, spacing } from '../../theme';
 
 type ButtonVariant = 'primary' | 'secondary' | 'accent' | 'outline' | 'ghost';
-type ButtonSize = 'md' | 'lg';
+type ButtonSize = 'sm' | 'md' | 'lg';
 
 interface ButtonProps extends Omit<PressableProps, 'style'> {
   label: string;
@@ -24,6 +24,7 @@ export function Button({
       style={({ pressed }) => [
         styles.base,
         size === 'lg' && styles.lg,
+        size === 'sm' && styles.sm,
         styles[variant],
         disabled && styles.disabled,
         pressed && !disabled && styles.pressed,
@@ -32,7 +33,14 @@ export function Button({
       disabled={disabled}
       {...props}
     >
-      <Text style={[styles.text, styles[`${variant}Text` as keyof typeof styles], size === 'lg' && styles.lgText]}>
+      <Text
+        style={[
+          styles.text,
+          styles[`${variant}Text` as keyof typeof styles],
+          size === 'lg' && styles.lgText,
+          size === 'sm' && styles.smText,
+        ]}
+      >
         {label}
       </Text>
     </Pressable>
@@ -51,6 +59,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
     paddingHorizontal: spacing.xxxl,
   },
+  sm: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+  },
   primary: { backgroundColor: colors.primary },
   secondary: { backgroundColor: colors.secondary },
   accent: { backgroundColor: colors.accent },
@@ -64,6 +76,7 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.88 },
   text: { fontWeight: '600', fontSize: 16 },
   lgText: { fontSize: 17 },
+  smText: { fontSize: 14 },
   primaryText: { color: colors.onPrimary },
   secondaryText: { color: colors.onPrimary },
   accentText: { color: colors.onPrimary },

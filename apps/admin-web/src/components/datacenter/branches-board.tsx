@@ -968,7 +968,7 @@ export function BranchesBoard() {
                             id="edit-commission"
                             type="number"
                             min="0"
-                            max="50"
+                            max="100"
                             step="0.5"
                             className="input-field"
                             value={editForm.commissionRate}

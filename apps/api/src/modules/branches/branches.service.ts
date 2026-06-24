@@ -133,6 +133,24 @@ export class BranchesService {
     return { success: true, data: withCapacity };
   }
 
+  /** Marketing-safe listing for the public website — active branches only, no internal fields. */
+  async listPublicBranches() {
+    await this.ensureSeeded();
+    const branches = await this.branchModel
+      .find(this.operationalBranchFilter())
+      .select('name city province serviceRadiusKm')
+      .sort({ name: 1 });
+    return {
+      success: true,
+      data: branches.map((b) => ({
+        name: b.name,
+        city: b.city,
+        province: b.province,
+        radiusKm: b.serviceRadiusKm,
+      })),
+    };
+  }
+
   async findNearestForAddress(
     address: {
       city: string;

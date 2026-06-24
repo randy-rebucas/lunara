@@ -6,7 +6,7 @@ import {
   inferStepKey,
 } from './optimistic-task';
 import { isOnline } from './network';
-import { buildPhotoFormData, persistPhoto } from './photo-store';
+import { persistPhoto } from './photo-store';
 import {
   createQueueId,
   enqueueItem,

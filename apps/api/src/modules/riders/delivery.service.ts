@@ -409,7 +409,9 @@ export class DeliveryService {
       throw new BadRequestException('Customer must receive laundry before collecting cash');
     }
     const payment = await this.paymentsService.collectCashForOrder(orderId, riderUserId, 'delivery');
-    void this.riderWalletService.netEarningsAgainstCash(
+    // Awaited (not fire-and-forget): a silently-dropped failure here means real cash the rider
+    // collected is never tracked as owed back to the platform.
+    await this.riderWalletService.netEarningsAgainstCash(
       riderUserId,
       orderId,
       payment._id.toString(),

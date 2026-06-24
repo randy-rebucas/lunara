@@ -45,7 +45,8 @@ export function ProcessingPhotoUpload({
         ref={inputRef}
         type="file"
         accept="image/jpeg,image/png,image/webp"
-        className="mt-2 block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-primary/10 file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary"
+        capture="environment"
+        className="mt-2 block min-h-[3rem] w-full touch-manipulation text-base text-muted file:mr-3 file:min-h-[3rem] file:touch-manipulation file:rounded-lg file:border-0 file:bg-primary/10 file:px-5 file:py-3 file:text-base file:font-medium file:text-primary active:file:bg-primary/20"
         disabled={disabled || uploading}
         onChange={handleFileChange}
       />

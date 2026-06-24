@@ -98,8 +98,8 @@ export default function WalletScreen() {
     }
 
     try {
-      const cashData = await riderFetch<{ success: boolean; data: CashSummaryData }>('/riders/cash-summary');
-      setCashSummary(cashData.data);
+      const cashData = await riderFetch<CashSummaryData>('/riders/cash-summary');
+      setCashSummary(cashData);
     } catch {
       setCashSummary({ pendingRemittance: { count: 0, totalCashCollected: 0, totalEarningOffset: 0, totalNetRemittance: 0, items: [] }, recentRemitted: [] });
     }
@@ -154,13 +154,13 @@ export default function WalletScreen() {
           onPress: async () => {
             setSubmittingRemittance(true);
             try {
-              const res = await riderFetch<{ success: boolean; data: { submittedCount: number; totalNetRemittance: number } }>(
+              const res = await riderFetch<{ submittedCount: number; totalNetRemittance: number }>(
                 '/riders/remit-cash',
                 { method: 'POST' },
               );
               Alert.alert(
                 'Remittance submitted',
-                `${res.data.submittedCount} order${res.data.submittedCount !== 1 ? 's' : ''} · ${formatCurrency(res.data.totalNetRemittance)} — waiting for admin confirmation.`,
+                `${res.submittedCount} order${res.submittedCount !== 1 ? 's' : ''} · ${formatCurrency(res.totalNetRemittance)} — waiting for admin confirmation.`,
               );
               await load();
             } catch (e) {

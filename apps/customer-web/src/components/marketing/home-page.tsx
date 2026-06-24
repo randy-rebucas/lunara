@@ -14,6 +14,8 @@ import { fetchOnboardingStatus, getOnboardingPath } from '@lunara/hooks/onboardi
 
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 
+import { resolveApiV1BaseUrl } from '@lunara/hooks';
+
 import { AuthLoading } from '../auth-loading';
 
 import { ButtonAnchor, ButtonLink } from '../ui/button-link';
@@ -39,6 +41,8 @@ import {
   PARTNER_HIGHLIGHTS,
   SERVICE_AREAS,
   WHY_CHOOSE,
+  fetchActiveServiceAreas,
+  type ServiceArea,
 } from './home-page-data';
 
 const accentBadge = {
@@ -149,6 +153,8 @@ export function HomePage() {
 
   const router = useRouter();
 
+  const [serviceAreas, setServiceAreas] = useState<ServiceArea[]>([...SERVICE_AREAS]);
+
   useEffect(() => {
     if (isLoading || !isAuthenticated) return;
 
@@ -156,6 +162,11 @@ export function HomePage() {
       router.replace(getOnboardingPath(status));
     });
   }, [isLoading, isAuthenticated, api, router]);
+
+  useEffect(() => {
+    const apiBase = resolveApiV1BaseUrl(process.env.NEXT_PUBLIC_API_URL);
+    fetchActiveServiceAreas(apiBase).then(setServiceAreas);
+  }, []);
 
   if (isLoading) return <AuthLoading />;
 
@@ -318,7 +329,7 @@ export function HomePage() {
         />
 
         <div className="mt-12 grid gap-6 md:grid-cols-3">
-          {SERVICE_AREAS.map((branch) => (
+          {serviceAreas.map((branch) => (
             <MarketingFeatureCard
               key={branch.name}
               badge={branch.province}
