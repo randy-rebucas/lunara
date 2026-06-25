@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { resolveMonorepoEnvPaths } from './common/config/load-env';
 import { MongooseModule } from '@nestjs/mongoose';
 import { RedisModule } from './common/redis/redis.module';
+import { CloudinaryModule } from './common/cloudinary/cloudinary.module';
 import { AddressesModule } from './modules/addresses/addresses.module';
 import { BookingModule } from './modules/booking/booking.module';
 import { PartnerModule } from './modules/partner/partner.module';
@@ -35,6 +36,7 @@ import { SettingsModule } from './modules/settings/settings.module';
       envFilePath: resolveMonorepoEnvPaths(),
       ignoreEnvFile: resolveMonorepoEnvPaths().length === 0,
     }),
+    CloudinaryModule,
     RedisModule,
     MongooseModule.forRoot(process.env.MONGODB_URI ?? 'mongodb://localhost:27017/lunara'),
     PushModule,

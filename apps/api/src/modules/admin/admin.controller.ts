@@ -13,6 +13,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { UserRole } from '@lunara/types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -50,8 +51,7 @@ import { UpdatePromotionDto } from './dto/update-promotion.dto';
 import { UpdateLaundryAddonDto } from './dto/update-laundry-addon.dto';
 import { UpdateLaundryServiceDto } from './dto/update-laundry-service.dto';
 import { CatalogService } from '../catalog/catalog.service';
-import { catalogAddonImageUploadOptions } from '../catalog/catalog-addon-upload.options';
-import { catalogAddonPublicPath } from '../../common/uploads/upload-paths';
+import { CloudinaryService } from '../../common/cloudinary/cloudinary.service';
 import { PartnerOperationsService } from '../partner/partner-operations.service';
 import { CreateSettlementDto } from '../partner/dto/create-settlement.dto';
 
@@ -73,6 +73,7 @@ export class AdminController {
     private readonly riderNotificationService: RiderNotificationService,
     private readonly riderWalletService: RiderWalletService,
     private readonly partnerOperationsService: PartnerOperationsService,
+    private readonly cloudinaryService: CloudinaryService,
   ) {}
 
   @Get('sos/active')
@@ -470,14 +471,33 @@ export class AdminController {
   }
 
   @Post('addons/:id/image')
-  @UseInterceptors(FileInterceptor('file', catalogAddonImageUploadOptions))
+  @UseInterceptors(FileInterceptor('file', {
+    storage: memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (
+      _req: unknown,
+      file: Express.Multer.File,
+      cb: (error: Error | null, ok: boolean) => void,
+    ) => {
+      const allowed = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/svg+xml']);
+      if (!allowed.has(file.mimetype)) {
+        cb(new BadRequestException('Only JPEG, PNG, WebP, or SVG images are allowed'), false);
+        return;
+      }
+      cb(null, true);
+    },
+  }))
   async uploadAddonImage(
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,
   ) {
     if (!file) throw new BadRequestException('No file uploaded');
-    const imageUrl = catalogAddonPublicPath(file.filename);
-    const data = await this.catalogService.updateAddon(id, { imageUrl });
+    const result = await this.cloudinaryService.uploadBuffer(
+      file.buffer,
+      'lunara/catalog-addons',
+      `addon-${id}`,
+    );
+    const data = await this.catalogService.updateAddon(id, { imageUrl: result.secure_url });
     return { success: true, data };
   }
 }
