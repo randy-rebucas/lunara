@@ -321,6 +321,11 @@ export class AdminController {
     return this.adminService.createSetupBranch(req.user.sub, dto);
   }
 
+  @Get('branches/parents')
+  getParentBranches() {
+    return this.branchesService.listParentBranches();
+  }
+
   @Get('branches')
   getBranches() {
     return this.branchesService.listBranches();

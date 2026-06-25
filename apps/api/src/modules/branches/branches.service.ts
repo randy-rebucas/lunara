@@ -133,6 +133,24 @@ export class BranchesService {
     return { success: true, data: withCapacity };
   }
 
+  /** All active branches including HQ — lightweight list for parent branch selectors. */
+  async listParentBranches() {
+    const branches = await this.branchModel
+      .find({ isActive: true })
+      .select('code name branchType city')
+      .sort({ branchType: 1, name: 1 });
+    return {
+      success: true,
+      data: branches.map((b) => ({
+        _id: b._id.toString(),
+        code: b.code,
+        name: b.name,
+        branchType: b.branchType,
+        city: b.city,
+      })),
+    };
+  }
+
   /** Marketing-safe listing for the public website — active branches only, no internal fields. */
   async listPublicBranches() {
     await this.ensureSeeded();

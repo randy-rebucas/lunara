@@ -10,6 +10,8 @@ interface Branch {
   _id: string;
   code: string;
   name: string;
+  branchType: string;
+  city: string;
 }
 
 const INITIAL_FORM = {
@@ -43,7 +45,7 @@ export default function CreatePartnerPage() {
 
   const loadBranches = useCallback(async () => {
     try {
-      const data = await adminFetch<Branch[]>('/admin/branches');
+      const data = await adminFetch<Branch[]>('/admin/branches/parents');
       setBranches(data);
     } catch (err) {
       setError(err instanceof Error ? `Failed to load branches: ${err.message}` : 'Failed to load branches');
@@ -178,7 +180,9 @@ export default function CreatePartnerPage() {
                     {branches.length === 0 ? 'No branches — complete Setup first' : 'Select parent'}
                   </option>
                   {branches.map((b) => (
-                    <option key={b._id} value={b._id}>{b.code} — {b.name}</option>
+                    <option key={b._id} value={b._id}>
+                      {b.code} — {b.name} ({b.city}){b.branchType === 'hq' ? ' [HQ]' : ''}
+                    </option>
                   ))}
                 </select>
                 {branches.length === 0 && !error && (
