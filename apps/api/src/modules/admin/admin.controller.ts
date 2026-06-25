@@ -8,8 +8,11 @@ import {
   Post,
   Query,
   Req,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { UserRole } from '@lunara/types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -47,6 +50,8 @@ import { UpdatePromotionDto } from './dto/update-promotion.dto';
 import { UpdateLaundryAddonDto } from './dto/update-laundry-addon.dto';
 import { UpdateLaundryServiceDto } from './dto/update-laundry-service.dto';
 import { CatalogService } from '../catalog/catalog.service';
+import { catalogAddonImageUploadOptions } from '../catalog/catalog-addon-upload.options';
+import { catalogAddonPublicPath } from '../../common/uploads/upload-paths';
 import { PartnerOperationsService } from '../partner/partner-operations.service';
 import { CreateSettlementDto } from '../partner/dto/create-settlement.dto';
 
@@ -462,5 +467,17 @@ export class AdminController {
   @Patch('addons/:id')
   updateAddon(@Param('id') id: string, @Body() dto: UpdateLaundryAddonDto) {
     return this.catalogService.updateAddon(id, dto);
+  }
+
+  @Post('addons/:id/image')
+  @UseInterceptors(FileInterceptor('file', catalogAddonImageUploadOptions))
+  async uploadAddonImage(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('No file uploaded');
+    const imageUrl = catalogAddonPublicPath(file.filename);
+    const data = await this.catalogService.updateAddon(id, { imageUrl });
+    return { success: true, data };
   }
 }

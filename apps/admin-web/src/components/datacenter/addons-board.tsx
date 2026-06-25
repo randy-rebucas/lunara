@@ -1,10 +1,10 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { resolveMediaUrl } from '@lunara/utils';
 import { filterBySearch, ListControls } from '../list-controls';
 import { MetricCell } from './metric-cell';
-import { adminFetch } from '../../lib/admin-api';
+import { adminFetch, adminUpload } from '../../lib/admin-api';
 import { formatPeso } from '../../lib/format-peso';
 import { useAdminQuery } from '../../lib/use-admin-query';
 
@@ -57,7 +57,9 @@ export function AddonsBoard() {
   const [imageUrl, setImageUrl] = useState('');
   const [sortOrder, setSortOrder] = useState('');
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [actionError, setActionError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     const data = await adminFetch<LaundryAddonRow[]>('/admin/addons');
@@ -103,6 +105,23 @@ export function AddonsBoard() {
     setSortOrder(String(addon.sortOrder));
     setActionError('');
     document.getElementById('addon-edit')?.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  async function uploadImage(file: File) {
+    if (!editing) return;
+    setUploading(true);
+    setActionError('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const updated = await adminUpload<LaundryAddonRow>(`/admin/addons/${editing._id}/image`, fd);
+      setImageUrl(updated.imageUrl ?? '');
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to upload image');
+    } finally {
+      setUploading(false);
+    }
   }
 
   async function saveEdit(e: React.FormEvent) {
@@ -357,22 +376,55 @@ export function AddonsBoard() {
                 </button>
               </div>
               <form onSubmit={saveEdit} className="dc-panel-body">
-                <div className="mb-4 flex items-center gap-4">
-                  {resolveAddonImage(imageUrl) ? (
-                    <img
-                      src={resolveAddonImage(imageUrl)}
-                      alt=""
-                      className="h-16 w-16 rounded-lg bg-slate-50 object-cover ring-1 ring-border/40"
-                    />
-                  ) : (
-                    <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-slate-100 text-xs text-muted">
-                      No image
+                <div className="mb-4 flex flex-wrap items-start gap-4">
+                  <button
+                    type="button"
+                    className="relative shrink-0 overflow-hidden rounded-lg ring-1 ring-border/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    title="Click to upload image"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                  >
+                    {resolveAddonImage(imageUrl) ? (
+                      <img
+                        src={resolveAddonImage(imageUrl)}
+                        alt=""
+                        className="h-16 w-16 bg-slate-50 object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-16 w-16 items-center justify-center bg-slate-100 text-xs text-muted">
+                        No image
+                      </div>
+                    )}
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity hover:opacity-100">
+                      <span className="text-xs font-medium text-white">
+                        {uploading ? 'Uploading…' : 'Upload'}
+                      </span>
                     </div>
-                  )}
-                  <p className="text-xs text-muted">
-                    Public path or full URL. Seed images live under{' '}
-                    <code className="text-code">/api/v1/uploads/catalog-addons/</code>
-                  </p>
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                    className="sr-only"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void uploadImage(file);
+                      e.target.value = '';
+                    }}
+                  />
+                  <div className="flex-1 space-y-1">
+                    <p className="text-xs font-medium text-slate-700">Add-on image</p>
+                    <p className="text-xs text-muted">
+                      Click the thumbnail to upload a new image (JPEG, PNG, WebP, SVG · max 5 MB).
+                      Or enter a URL below.
+                    </p>
+                    {uploading && (
+                      <p className="flex items-center gap-1.5 text-xs text-primary">
+                        <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+                        Uploading…
+                      </p>
+                    )}
+                  </div>
                 </div>
                 <div className="dc-form-grid">
                   <div>
@@ -417,7 +469,7 @@ export function AddonsBoard() {
                   </div>
                   <div className="sm:col-span-2">
                     <label htmlFor="addon-image" className="form-label">
-                      Image URL
+                      Image URL <span className="font-normal text-muted">(optional override)</span>
                     </label>
                     <input
                       id="addon-image"
