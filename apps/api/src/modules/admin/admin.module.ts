@@ -4,6 +4,7 @@ import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { Rider, RiderSchema } from '../riders/schemas/rider.schema';
 import { Address, AddressSchema } from '../addresses/schemas/address.schema';
+import { Branch, BranchSchema } from '../branches/schemas/branch.schema';
 import { SupportModule } from '../support/support.module';
 import { RefundsModule } from '../refunds/refunds.module';
 import { BranchesModule } from '../branches/branches.module';
@@ -29,6 +30,7 @@ import { PartnerModule } from '../partner/partner.module';
       { name: Address.name, schema: AddressSchema },
       { name: Promotion.name, schema: PromotionSchema },
       { name: Payment.name, schema: PaymentSchema },
+      { name: Branch.name, schema: BranchSchema },
     ]),
     SupportModule,
     RefundsModule,

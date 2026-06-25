@@ -37,6 +37,8 @@ import { RiderWalletService } from '../riders/rider-wallet.service';
 import { ReviewWithdrawalDto, SetWalletHoldDto } from '../riders/dto/rider-wallet.dto';
 import { CreatePartnerDto } from './dto/create-partner.dto';
 import { OnboardPartnerDto } from './dto/onboard-partner.dto';
+import { InitNetworkDto } from './dto/init-network.dto';
+import { CreateSetupBranchDto } from './dto/create-setup-branch.dto';
 import { SetShopActiveDto } from './dto/set-shop-active.dto';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { CreateRiderDto } from './dto/create-rider.dto';
@@ -296,6 +298,27 @@ export class AdminController {
     @Body() dto: CreateSettlementDto,
   ) {
     return this.partnerOperationsService.createSettlement(req.user.sub, partnerId, dto);
+  }
+
+  @Get('setup/status')
+  getSetupStatus() {
+    return this.adminService.getSetupStatus();
+  }
+
+  @Post('setup/init')
+  initializeNetwork(
+    @Req() req: { user: { sub: string } },
+    @Body() dto: InitNetworkDto,
+  ) {
+    return this.adminService.initializeNetwork(req.user.sub, dto);
+  }
+
+  @Post('setup/branch')
+  createSetupBranch(
+    @Req() req: { user: { sub: string } },
+    @Body() dto: CreateSetupBranchDto,
+  ) {
+    return this.adminService.createSetupBranch(req.user.sub, dto);
   }
 
   @Get('branches')

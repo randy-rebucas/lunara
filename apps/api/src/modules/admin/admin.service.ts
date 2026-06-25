@@ -1,7 +1,7 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import * as bcrypt from 'bcrypt';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { OrderStatus, UserRole } from '@lunara/types';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
@@ -16,8 +16,11 @@ import { PromotionsService } from '../promotions/promotions.service';
 import { BranchesService } from '../branches/branches.service';
 import { BranchManagementService } from '../branches/branch-management.service';
 import { SupportService } from '../support/support.service';
+import { Branch, BranchDocument } from '../branches/schemas/branch.schema';
 import { CreatePartnerDto } from './dto/create-partner.dto';
 import { OnboardPartnerDto } from './dto/onboard-partner.dto';
+import { InitNetworkDto } from './dto/init-network.dto';
+import { CreateSetupBranchDto } from './dto/create-setup-branch.dto';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { CreateRiderDto } from './dto/create-rider.dto';
 import { UpdatePromotionDto } from './dto/update-promotion.dto';
@@ -40,6 +43,7 @@ export class AdminService {
     @InjectModel(Rider.name) private riderModel: Model<RiderDocument>,
     @InjectModel(Promotion.name) private promotionModel: Model<PromotionDocument>,
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
+    @InjectModel(Branch.name) private branchModel: Model<BranchDocument>,
     private supportService: SupportService,
     private branchesService: BranchesService,
     private branchManagementService: BranchManagementService,
@@ -614,6 +618,98 @@ export class AdminService {
       discountValue: p.discountValue,
       minOrderAmount: p.minOrderAmount,
       endsAt: p.endsAt?.toISOString(),
+    };
+  }
+
+  async getSetupStatus() {
+    const hq = await this.branchModel.findOne({ branchType: 'hq' });
+    const operationalBranchCount = hq
+      ? await this.branchModel.countDocuments({ branchType: { $ne: 'hq' } })
+      : 0;
+
+    return {
+      success: true,
+      data: {
+        initialized: !!hq,
+        hqBranch: hq
+          ? { id: hq._id.toString(), code: hq.code, name: hq.name, city: hq.city }
+          : null,
+        operationalBranchCount,
+      },
+    };
+  }
+
+  async initializeNetwork(adminUserId: string, dto: InitNetworkDto) {
+    const existing = await this.branchModel.findOne({ branchType: 'hq' });
+    if (existing) throw new ConflictException('Network is already initialized');
+
+    const adminObjectId = new Types.ObjectId(adminUserId);
+    const hq = await this.branchModel.create({
+      code: dto.code,
+      name: dto.name,
+      branchType: 'hq',
+      line1: dto.line1,
+      city: dto.city,
+      province: dto.province,
+      partnerUserId: adminObjectId,
+      managerUserId: adminObjectId,
+      maxActiveOrders: 0,
+      maxWeightCapacityKg: 0,
+      dailyQuotaOrders: 0,
+      dailyQuotaWeightKg: 0,
+      serviceRadiusKm: 0,
+      machines: [],
+      isActive: true,
+      location: { type: 'Point', coordinates: dto.coordinates },
+    });
+
+    return {
+      success: true,
+      data: { hqBranchId: hq._id.toString(), code: hq.code, name: hq.name },
+    };
+  }
+
+  async createSetupBranch(adminUserId: string, dto: CreateSetupBranchDto) {
+    const hq = await this.branchModel.findOne({ branchType: 'hq' });
+    if (!hq) throw new BadRequestException('Network not initialized — create the HQ branch first via /admin/setup/init');
+
+    const existing = await this.branchModel.findOne({ code: dto.code });
+    if (existing) throw new BadRequestException('Branch code already exists');
+
+    const adminObjectId = new Types.ObjectId(adminUserId);
+    const parentId = hq._id;
+
+    const DEFAULT_MACHINES = [
+      { id: 'w1', label: 'Washer 1', machineType: 'washer', status: 'active', capacityKg: 15 },
+      { id: 'w2', label: 'Washer 2', machineType: 'washer', status: 'active', capacityKg: 15 },
+      { id: 'd1', label: 'Dryer 1', machineType: 'dryer', status: 'active', capacityKg: 20 },
+      { id: 'f1', label: 'Folding station', machineType: 'folder', status: 'active', capacityKg: 10 },
+    ];
+
+    const branch = await this.branchModel.create({
+      code: dto.code,
+      name: dto.name,
+      branchType: dto.branchType,
+      parentBranchId: parentId,
+      line1: dto.line1,
+      city: dto.city,
+      province: dto.province,
+      partnerUserId: adminObjectId,
+      managerUserId: adminObjectId,
+      maxActiveOrders: dto.maxActiveOrders ?? 20,
+      maxWeightCapacityKg: dto.maxWeightCapacityKg ?? 200,
+      dailyQuotaOrders: dto.dailyQuotaOrders ?? 25,
+      dailyQuotaWeightKg: dto.dailyQuotaWeightKg ?? 200,
+      serviceRadiusKm: dto.serviceRadiusKm ?? 12,
+      commissionRate: dto.commissionRate ?? 0.20,
+      machines: DEFAULT_MACHINES,
+      isActive: true,
+      location: { type: 'Point', coordinates: dto.coordinates },
+    });
+
+    return {
+      success: true,
+      data: { branchId: branch._id.toString(), code: branch.code, name: branch.name },
     };
   }
 }
