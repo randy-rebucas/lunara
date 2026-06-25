@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { adminFetch } from '../../../lib/admin-api';
+import { BranchAddressEditor, type BranchAddressValue } from '../../../components/datacenter/branch-address-editor';
 
 interface Branch {
   _id: string;
@@ -19,19 +20,23 @@ const INITIAL_FORM = {
   branchName: '',
   branchType: 'partner_shop' as 'partner_shop' | 'franchise',
   parentBranchId: '',
-  line1: '',
-  city: '',
-  province: '',
-  lat: '14.5995',
-  lng: '120.9842',
   commissionRate: '20',
   maxActiveOrders: '20',
   maxWeightCapacityKg: '200',
 };
 
+const INITIAL_ADDRESS: BranchAddressValue = {
+  line1: '',
+  city: '',
+  province: '',
+  latitude: 14.5995,
+  longitude: 120.9842,
+};
+
 export default function CreatePartnerPage() {
   const router = useRouter();
   const [form, setForm] = useState(INITIAL_FORM);
+  const [address, setAddress] = useState<BranchAddressValue>(INITIAL_ADDRESS);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -73,10 +78,10 @@ export default function CreatePartnerPage() {
           branchName: form.branchName.trim(),
           branchType: form.branchType,
           parentBranchId: form.parentBranchId,
-          line1: form.line1.trim(),
-          city: form.city.trim(),
-          province: form.province.trim(),
-          coordinates: [Number(form.lng), Number(form.lat)],
+          line1: address.line1.trim(),
+          city: address.city.trim(),
+          province: address.province.trim(),
+          coordinates: [address.longitude, address.latitude],
           commissionRate: Number(form.commissionRate) / 100,
           maxActiveOrders: Number(form.maxActiveOrders),
           maxWeightCapacityKg: Number(form.maxWeightCapacityKg),
@@ -176,24 +181,8 @@ export default function CreatePartnerPage() {
                 </select>
               </div>
               <div className="sm:col-span-2">
-                <label htmlFor="line1" className="form-label">Address</label>
-                <input id="line1" className="input-field" value={form.line1} onChange={set('line1')} required placeholder="Street address" />
-              </div>
-              <div>
-                <label htmlFor="city" className="form-label">City</label>
-                <input id="city" className="input-field" value={form.city} onChange={set('city')} required />
-              </div>
-              <div>
-                <label htmlFor="province" className="form-label">Province</label>
-                <input id="province" className="input-field" value={form.province} onChange={set('province')} required />
-              </div>
-              <div>
-                <label htmlFor="lat" className="form-label">Latitude</label>
-                <input id="lat" type="number" step="any" className="input-field" value={form.lat} onChange={set('lat')} required />
-              </div>
-              <div>
-                <label htmlFor="lng" className="form-label">Longitude</label>
-                <input id="lng" type="number" step="any" className="input-field" value={form.lng} onChange={set('lng')} required />
+                <label className="form-label">Location</label>
+                <BranchAddressEditor value={address} onChange={setAddress} />
               </div>
             </div>
           </div>
