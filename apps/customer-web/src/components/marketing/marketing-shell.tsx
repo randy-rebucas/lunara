@@ -1,96 +1,201 @@
+'use client';
+
 import Link from 'next/link';
+import { useState } from 'react';
+import { Menu, X } from 'lucide-react';
 import { appConfig } from '@lunara/config';
 import { BrandMark } from '@lunara/ui';
 import { ButtonLink } from '../ui/button-link';
 
+const NAV_LINKS = [
+  { href: '/#how-it-works', label: 'How it works' },
+  { href: '/#service-areas', label: 'Service areas' },
+  { href: '/locations', label: 'Locations' },
+  { href: '/faq', label: 'FAQ' },
+  { href: '/partners', label: 'Partners' },
+  { href: '/riders', label: 'Riders' },
+] as const;
+
 export function MarketingShell({ children }: { children: React.ReactNode }) {
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const close = () => setMobileNavOpen(false);
+
   return (
     <div className="laundry-bg flex min-h-screen flex-col">
-      <header className="marketing-container sticky top-0 z-10 border-b border-border/40 bg-surface-muted/80 py-4 backdrop-blur-md">
-        <div className="flex items-center justify-between gap-4">
-          <Link href="/" className="flex items-center gap-2.5">
-            <BrandMark variant="customer" compact size="sm" />
-            <span className="font-bold tracking-tight text-primary">{appConfig.name}</span>
-          </Link>
-          <nav className="hidden items-center gap-5 text-sm font-medium text-muted lg:flex">
-            <Link href="/#how-it-works" className="transition-colors hover:text-primary">
-              How it works
+      {/* Skip to main */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
+      >
+        Skip to main content
+      </a>
+
+      <header className="sticky top-0 z-30 border-b border-border/40 bg-surface-muted/80 backdrop-blur-md">
+        <div className="marketing-container py-4">
+          <div className="flex items-center justify-between gap-4">
+            <Link href="/" className="flex items-center gap-2.5" onClick={close}>
+              <BrandMark variant="customer" compact size="sm" />
+              <span className="font-bold tracking-tight text-primary">{appConfig.name}</span>
             </Link>
-            <Link href="/#service-areas" className="transition-colors hover:text-primary">
-              Service areas
-            </Link>
-            <Link href="/locations" className="transition-colors hover:text-primary">
-              Locations
-            </Link>
-            <Link href="/faq" className="transition-colors hover:text-primary">
-              FAQ
-            </Link>
-            <Link href="/partners" className="transition-colors hover:text-primary">
-              Partners
-            </Link>
-            <Link href="/riders" className="transition-colors hover:text-primary">
-              Riders
-            </Link>
-          </nav>
-          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-            <Link href="/login" className="link-primary hidden text-sm sm:inline">
-              Sign in
-            </Link>
-            <ButtonLink
-              href="/signup"
-              variant="outline"
-              size="sm"
-              layout="inline"
-              className="hidden sm:inline-flex"
-            >
-              Book pickup
-            </ButtonLink>
-            <ButtonLink href="/signup" size="sm" layout="inline">
-              Get started
-            </ButtonLink>
+
+            {/* Desktop nav */}
+            <nav className="hidden items-center gap-5 text-sm font-medium text-muted lg:flex" aria-label="Main navigation">
+              {NAV_LINKS.map((link) => (
+                <Link key={link.href} href={link.href} className="transition-colors hover:text-primary">
+                  {link.label}
+                </Link>
+              ))}
+            </nav>
+
+            <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+              <Link href="/login" className="link-primary hidden text-sm sm:inline">
+                Sign in
+              </Link>
+              <ButtonLink
+                href="/signup"
+                variant="outline"
+                size="sm"
+                layout="inline"
+                className="hidden sm:inline-flex"
+              >
+                Book pickup
+              </ButtonLink>
+              <ButtonLink href="/signup" size="sm" layout="inline" className="hidden sm:inline-flex">
+                Get started
+              </ButtonLink>
+
+              {/* Hamburger — mobile only */}
+              <button
+                type="button"
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-700 transition hover:bg-slate-100 lg:hidden"
+                aria-label={mobileNavOpen ? 'Close menu' : 'Open menu'}
+                aria-expanded={mobileNavOpen}
+                onClick={() => setMobileNavOpen((v) => !v)}
+              >
+                {mobileNavOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+              </button>
+            </div>
           </div>
         </div>
+
+        {/* Mobile nav drawer */}
+        {mobileNavOpen && (
+          <div className="border-t border-border/40 bg-surface-muted/95 backdrop-blur-md lg:hidden">
+            <nav className="marketing-container flex flex-col gap-1 py-4" aria-label="Mobile navigation">
+              {NAV_LINKS.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-primary"
+                  onClick={close}
+                >
+                  {link.label}
+                </Link>
+              ))}
+              <div className="mt-3 flex flex-col gap-2 border-t border-border/40 pt-4">
+                <Link
+                  href="/login"
+                  className="rounded-lg px-3 py-2.5 text-sm font-medium text-muted transition hover:bg-slate-100 hover:text-primary"
+                  onClick={close}
+                >
+                  Sign in
+                </Link>
+                <ButtonLink href="/signup" size="sm" layout="responsive" onClick={close}>
+                  Book laundry pickup
+                </ButtonLink>
+              </div>
+            </nav>
+          </div>
+        )}
       </header>
 
-      <main className="flex-1">{children}</main>
+      <main id="main-content" className="flex-1">{children}</main>
 
-      <footer className="marketing-container border-t border-border/60 py-10">
-        <div className="flex flex-col items-center justify-between gap-6 sm:flex-row">
-          <div className="flex items-center gap-2.5">
-            <BrandMark variant="customer" compact size="sm" />
-            <span className="text-sm font-semibold text-slate-900">{appConfig.name}</span>
+      <footer className="border-t border-border/60 bg-surface-muted/60">
+        <div className="marketing-container py-12">
+          <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+            {/* Brand col */}
+            <div className="sm:col-span-2 lg:col-span-1">
+              <div className="flex items-center gap-2.5">
+                <BrandMark variant="customer" compact size="sm" />
+                <span className="text-sm font-semibold text-slate-900">{appConfig.name}</span>
+              </div>
+              <p className="mt-3 max-w-xs text-sm leading-relaxed text-muted-foreground">
+                {appConfig.tagline}
+              </p>
+              <a
+                href="https://play.google.com/store/apps/details?id=com.lunara.customer"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800"
+              >
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                  <path d="M3.18 23.76a2 2 0 0 0 2.85-.06l.06-.07 9.74-9.73-2.6-2.6L3.18 23.76zM20.47 10.7l-2.5-1.44-2.91 2.91 2.91 2.9 2.52-1.45a1.43 1.43 0 0 0 0-2.92zM2 2.45A1.42 1.42 0 0 0 1.5 3.5v17a1.42 1.42 0 0 0 .5 1.06l.07.06 9.56-9.56v-.22L2.07 2.38 2 2.45zm10.27 10.6L3.18.24A2 2 0 0 0 .33.18L13.23 13.05l-1-2z" />
+                </svg>
+                Get it on Google Play
+              </a>
+            </div>
+
+            {/* Product links */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Product</h3>
+              <ul className="mt-4 space-y-2.5 text-sm">
+                {[
+                  { href: '/#how-it-works', label: 'How it works' },
+                  { href: '/#service-areas', label: 'Service areas' },
+                  { href: '/locations', label: 'Locations' },
+                  { href: '/faq', label: 'FAQ' },
+                ].map((l) => (
+                  <li key={l.href}>
+                    <Link href={l.href} className="text-muted transition-colors hover:text-primary">
+                      {l.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Company links */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Company</h3>
+              <ul className="mt-4 space-y-2.5 text-sm">
+                {[
+                  { href: '/partners', label: 'Partner with us' },
+                  { href: '/riders', label: 'Become a rider' },
+                  { href: '/privacy', label: 'Privacy policy' },
+                  { href: '/terms', label: 'Terms of service' },
+                ].map((l) => (
+                  <li key={l.href}>
+                    <Link href={l.href} className="text-muted transition-colors hover:text-primary">
+                      {l.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Account links */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Account</h3>
+              <ul className="mt-4 space-y-2.5 text-sm">
+                {[
+                  { href: '/signup', label: 'Sign up' },
+                  { href: '/login', label: 'Sign in' },
+                ].map((l) => (
+                  <li key={l.href}>
+                    <Link href={l.href} className="text-muted transition-colors hover:text-primary">
+                      {l.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
-          <p className="text-center text-sm text-muted-foreground">{appConfig.tagline}</p>
-          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm">
-            <Link href="/" className="link-primary">
-              Home
-            </Link>
-            <Link href="/locations" className="link-primary">
-              Locations
-            </Link>
-            <Link href="/faq" className="link-primary">
-              FAQ
-            </Link>
-            <Link href="/partners" className="link-primary">
-              Partners
-            </Link>
-            <Link href="/riders" className="link-primary">
-              Riders
-            </Link>
-            <Link href="/privacy" className="link-primary">
-              Privacy
-            </Link>
-            <Link href="/login" className="link-primary">
-              Sign in
-            </Link>
-            <Link href="/signup" className="link-primary">
-              Sign up
-            </Link>
+
+          <div className="mt-10 border-t border-border/40 pt-6 text-center text-xs text-muted-foreground">
+            © {new Date().getFullYear()} {appConfig.name}. Laundry pickup &amp; delivery, simplified.
           </div>
         </div>
-        <p className="mt-6 text-center text-xs text-muted-foreground">
-          © {new Date().getFullYear()} {appConfig.name}. Laundry pickup &amp; delivery, simplified.
-        </p>
       </footer>
     </div>
   );

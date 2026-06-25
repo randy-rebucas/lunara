@@ -1,27 +1,18 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
-
 import { useRouter } from 'next/navigation';
-
 import { useEffect, useState } from 'react';
-
 import QRCode from 'react-qr-code';
-
+import { ShoppingBag, X } from 'lucide-react';
 import { appConfig } from '@lunara/config';
-
 import { fetchOnboardingStatus, getOnboardingPath } from '@lunara/hooks/onboarding';
-
 import { useAuthContext } from '@lunara/hooks/auth-provider';
-
 import { resolveApiV1BaseUrl } from '@lunara/hooks';
-
 import { AuthLoading } from '../auth-loading';
-
 import { ButtonAnchor, ButtonLink } from '../ui/button-link';
-
 import { MarketingActions } from './marketing-actions';
-
 import {
   MarketingCtaPanel,
   MarketingFeatureCard,
@@ -30,28 +21,26 @@ import {
   MarketingSection,
   MarketingSectionHeader,
 } from './marketing-design';
-
 import { MarketingShell } from './marketing-shell';
-
 import {
   CUSTOMER_REVIEWS,
   EXPANDING_AREAS,
+  HERO_IMAGE,
   HERO_STATS,
   HOW_IT_WORKS,
-  PARTNER_HIGHLIGHTS,
+  PRICING_TIERS,
   SERVICE_AREAS,
+  SOCIAL_PROOF,
   WHY_CHOOSE,
   fetchActiveServiceAreas,
   type ServiceArea,
 } from './home-page-data';
 
-const accentBadge = {
-  primary: 'primary',
-
-  secondary: 'secondary',
-
-  accent: 'accent',
-} as const;
+const avatarBg: Record<'primary' | 'secondary' | 'accent', string> = {
+  primary: 'bg-primary/10 text-primary',
+  secondary: 'bg-secondary/10 text-secondary',
+  accent: 'bg-accent/10 text-accent',
+};
 
 function StarRating({ count }: { count: number }) {
   return (
@@ -87,7 +76,7 @@ function GooglePlayQrModal({ onClose }: { onClose: () => void }) {
           aria-label="Close"
           className="float-right -mr-2 -mt-2 rounded-full p-2 text-muted-foreground transition hover:bg-slate-100"
         >
-          ✕
+          <X className="h-4 w-4" aria-hidden />
         </button>
 
         <p className="text-sm font-semibold text-slate-900">Get the app on Google Play</p>
@@ -125,7 +114,6 @@ function AppStoreBadge({ store }: { store: 'ios' | 'android' }) {
         <span className="block text-[10px] uppercase tracking-wide text-slate-400/60">
           Coming soon to the
         </span>
-
         <span className="block text-sm font-semibold">App Store</span>
       </span>
     );
@@ -139,7 +127,6 @@ function AppStoreBadge({ store }: { store: 'ios' | 'android' }) {
         className="inline-flex min-h-11 w-full flex-col justify-center rounded-lg bg-slate-900 px-5 py-3 text-left text-white ring-1 ring-slate-800 transition hover:bg-slate-800 sm:min-h-12 sm:min-w-[12rem] sm:w-auto sm:px-6"
       >
         <span className="block text-[10px] uppercase tracking-wide text-slate-400">Get it on</span>
-
         <span className="block text-sm font-semibold">Google Play</span>
       </button>
 
@@ -150,14 +137,11 @@ function AppStoreBadge({ store }: { store: 'ios' | 'android' }) {
 
 export function HomePage() {
   const { isAuthenticated, isLoading, api } = useAuthContext();
-
   const router = useRouter();
-
   const [serviceAreas, setServiceAreas] = useState<ServiceArea[]>([...SERVICE_AREAS]);
 
   useEffect(() => {
     if (isLoading || !isAuthenticated) return;
-
     fetchOnboardingStatus(api).then((status) => {
       router.replace(getOnboardingPath(status));
     });
@@ -169,11 +153,11 @@ export function HomePage() {
   }, []);
 
   if (isLoading) return <AuthLoading />;
-
   if (isAuthenticated) return <AuthLoading message="Redirecting…" />;
 
   return (
     <MarketingShell>
+      {/* ── Hero ── */}
       <section className="marketing-container relative overflow-hidden pb-20 pt-12 sm:pt-16 lg:pb-28 lg:pt-20">
         <MarketingHeroGlow />
 
@@ -195,7 +179,6 @@ export function HomePage() {
               <ButtonLink href="/signup" size="lg" layout="responsive">
                 Book laundry pickup
               </ButtonLink>
-
               <ButtonLink href="/#download-app" variant="outline" size="lg" layout="responsive">
                 Download app
               </ButtonLink>
@@ -206,23 +189,41 @@ export function HomePage() {
             </p>
           </div>
 
-          <div className="card-elevated relative mx-auto w-full max-w-md lg:max-w-none">
+          {/* Hero card */}
+          <div className="card-elevated relative mx-auto w-full max-w-md overflow-hidden lg:max-w-none">
+            {/* Hero lifestyle image */}
+            <div className="relative h-52 w-full sm:h-60">
+              <Image
+                src={HERO_IMAGE.src}
+                alt={HERO_IMAGE.alt}
+                fill
+                sizes="(max-width: 768px) 100vw, 50vw"
+                className="object-cover"
+                priority
+              />
+              <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-surface/60" aria-hidden />
+            </div>
             <div className="card-body space-y-5 bg-gradient-to-br from-primary/5 via-surface to-secondary/5 sm:p-8">
-              <p className="text-xs font-semibold uppercase tracking-wider text-primary">
-                Your next pickup
-              </p>
+              <div className="flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10">
+                  <ShoppingBag className="h-3.5 w-3.5 text-primary" aria-hidden />
+                </span>
+                <p className="text-xs font-semibold uppercase tracking-wider text-primary">
+                  Your next pickup
+                </p>
+              </div>
 
               <div className="space-y-3 rounded-xl bg-surface p-4 ring-1 ring-border/50">
                 <div className="flex items-center justify-between text-sm">
                   <span className="font-medium text-slate-900">Wash &amp; Fold</span>
-
                   <span className="text-primary">~₱400</span>
                 </div>
-
                 <div className="flex items-center justify-between text-sm text-muted">
                   <span>Tomorrow · 8–10 AM</span>
-
-                  <span className="badge-accent">Live tracking</span>
+                  <span className="badge-accent flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" aria-hidden />
+                    Live tracking
+                  </span>
                 </div>
               </div>
 
@@ -233,7 +234,6 @@ export function HomePage() {
                     className="rounded-lg bg-surface/80 px-2 py-3 text-center ring-1 ring-border/40"
                   >
                     <p className="text-lg font-bold text-primary">{stat.value}</p>
-
                     <p className="mt-0.5 text-[10px] leading-tight text-muted">{stat.label}</p>
                   </div>
                 ))}
@@ -243,6 +243,21 @@ export function HomePage() {
         </div>
       </section>
 
+      {/* ── Social proof strip ── */}
+      <section className="bg-slate-900" aria-label="Social proof">
+        <div className="marketing-container py-8">
+          <dl className="grid grid-cols-2 gap-6 md:grid-cols-4">
+            {SOCIAL_PROOF.map((item) => (
+              <div key={item.label} className="text-center">
+                <dt className="text-2xl font-bold text-white sm:text-3xl">{item.value}</dt>
+                <dd className="mt-1 text-xs text-slate-400">{item.label}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </section>
+
+      {/* ── Download app ── */}
       <MarketingSection
         id="download-app"
         tint="muted"
@@ -256,10 +271,8 @@ export function HomePage() {
           <div className="flex w-full flex-col gap-3 sm:w-auto sm:items-end">
             <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:justify-end">
               <AppStoreBadge store="ios" />
-
               <AppStoreBadge store="android" />
             </div>
-
             <p className="text-xs text-slate-400">
               Or{' '}
               <Link
@@ -274,6 +287,7 @@ export function HomePage() {
         </MarketingCtaPanel>
       </MarketingSection>
 
+      {/* ── Book CTA ── */}
       <MarketingSection>
         <MarketingCtaPanel
           badge="Ready when you are"
@@ -286,7 +300,6 @@ export function HomePage() {
             <ButtonLink href="/signup" size="lg" layout="responsive">
               Book laundry pickup
             </ButtonLink>
-
             <ButtonLink href="/login" variant="outline" size="lg" layout="responsive">
               Sign in
             </ButtonLink>
@@ -294,6 +307,7 @@ export function HomePage() {
         </MarketingCtaPanel>
       </MarketingSection>
 
+      {/* ── How it works ── */}
       <MarketingSection id="how-it-works" tint="muted">
         <MarketingSectionHeader
           title="How Lunara works"
@@ -301,27 +315,41 @@ export function HomePage() {
         />
 
         <ol className="mx-auto mt-12 grid max-w-5xl gap-6 sm:grid-cols-2">
-          {HOW_IT_WORKS.map((item) => (
-            <li key={item.step} className="card h-full">
-              <div className="card-body flex gap-4">
-                <span
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-white"
-                  aria-hidden
-                >
-                  {item.step}
-                </span>
-
-                <div>
-                  <h3 className="font-semibold text-slate-900">{item.title}</h3>
-
-                  <p className="mt-1.5 text-sm leading-relaxed text-muted">{item.description}</p>
+          {HOW_IT_WORKS.map((item) => {
+            const Icon = item.icon;
+            return (
+              <li key={item.step} className="card h-full overflow-hidden">
+                {/* Step image */}
+                <div className="relative aspect-video w-full">
+                  <Image
+                    src={item.image}
+                    alt={item.imageAlt}
+                    fill
+                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 40vw"
+                    className="object-cover"
+                  />
+                  {/* Step number badge overlaid on image */}
+                  <span
+                    className="absolute left-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-primary text-sm font-bold text-white shadow-md"
+                    aria-hidden
+                  >
+                    {item.step}
+                  </span>
                 </div>
-              </div>
-            </li>
-          ))}
+                <div className="card-body flex gap-3">
+                  <Icon className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden />
+                  <div>
+                    <h3 className="font-semibold text-slate-900">{item.title}</h3>
+                    <p className="mt-1.5 text-sm leading-relaxed text-muted">{item.description}</p>
+                  </div>
+                </div>
+              </li>
+            );
+          })}
         </ol>
       </MarketingSection>
 
+      {/* ── Service areas ── */}
       <MarketingSection id="service-areas">
         <MarketingSectionHeader
           title="Service areas"
@@ -347,7 +375,6 @@ export function HomePage() {
         <div className="card mt-8">
           <div className="card-body text-center sm:text-left">
             <h3 className="font-semibold text-slate-900">Expanding soon</h3>
-
             <ul className="mt-4 flex flex-wrap justify-center gap-2 sm:justify-start">
               {EXPANDING_AREAS.map((city) => (
                 <li
@@ -358,7 +385,6 @@ export function HomePage() {
                 </li>
               ))}
             </ul>
-
             <div className="mt-6 flex justify-center sm:justify-start">
               <ButtonLink href="/locations" variant="outline" size="sm" layout="responsive">
                 View all locations
@@ -368,6 +394,7 @@ export function HomePage() {
         </div>
       </MarketingSection>
 
+      {/* ── Why choose Lunara ── */}
       <MarketingSection id="why-lunara" tint="muted">
         <MarketingSectionHeader
           title="Why choose Lunara"
@@ -375,19 +402,116 @@ export function HomePage() {
         />
 
         <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {WHY_CHOOSE.map((item) => (
-            <MarketingFeatureCard
-              key={item.title}
-              badge={item.label}
-              badgeVariant={accentBadge[item.accent]}
-              title={item.title}
-              description={item.description}
-            />
-          ))}
+          {WHY_CHOOSE.map((item) => {
+            const Icon = item.icon;
+            return (
+              <article key={item.title} className="card flex h-full flex-col">
+                <div className="card-body flex flex-1 flex-col">
+                  <div
+                    className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl ${
+                      item.accent === 'primary'
+                        ? 'bg-primary/10'
+                        : item.accent === 'secondary'
+                          ? 'bg-secondary/10'
+                          : 'bg-accent/10'
+                    }`}
+                  >
+                    <Icon
+                      className={`h-5 w-5 ${
+                        item.accent === 'primary'
+                          ? 'text-primary'
+                          : item.accent === 'secondary'
+                            ? 'text-secondary'
+                            : 'text-accent'
+                      }`}
+                      aria-hidden
+                    />
+                  </div>
+                  <span
+                    className={`w-fit ${
+                      item.accent === 'primary'
+                        ? 'badge-primary'
+                        : item.accent === 'secondary'
+                          ? 'badge-secondary'
+                          : 'badge-accent'
+                    }`}
+                  >
+                    {item.label}
+                  </span>
+                  <h3 className="mt-3 text-lg font-semibold text-slate-900">{item.title}</h3>
+                  <p className="mt-2 flex-1 text-sm leading-relaxed text-muted">{item.description}</p>
+                </div>
+              </article>
+            );
+          })}
         </div>
       </MarketingSection>
 
-      <MarketingSection id="reviews">
+      {/* ── Pricing teaser ── */}
+      <MarketingSection id="pricing">
+        <MarketingSectionHeader
+          title="Simple, transparent pricing"
+          description="Know what you'll pay before you confirm. No hidden fees."
+        />
+
+        <div className="mt-12 grid gap-6 md:grid-cols-3">
+          {PRICING_TIERS.map((tier) => (
+            <div key={tier.service} className="card-elevated flex h-full flex-col overflow-hidden">
+              {/* Service image */}
+              <div className="relative h-44 w-full">
+                <Image
+                  src={tier.image}
+                  alt={tier.imageAlt}
+                  fill
+                  sizes="(max-width: 768px) 100vw, 33vw"
+                  className="object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-surface/50 to-transparent" aria-hidden />
+              </div>
+              <div className="card-body flex flex-1 flex-col">
+                <span
+                  className={`w-fit ${
+                    tier.badgeVariant === 'primary'
+                      ? 'badge-primary'
+                      : tier.badgeVariant === 'secondary'
+                        ? 'badge-secondary'
+                        : 'badge-accent'
+                  }`}
+                >
+                  {tier.badge}
+                </span>
+                <h3 className="mt-3 text-lg font-semibold text-slate-900">{tier.service}</h3>
+                <div className="mt-3 flex items-baseline gap-1">
+                  <span className="text-3xl font-bold text-primary">{tier.from}</span>
+                  <span className="text-sm text-muted">{tier.unit}</span>
+                </div>
+                <ul className="mt-4 flex-1 space-y-2">
+                  {tier.highlights.map((h) => (
+                    <li key={h} className="flex items-center gap-2 text-sm text-muted">
+                      <svg className="h-4 w-4 shrink-0 text-accent" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                      {h}
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-6">
+                  <ButtonLink href="/signup" size="sm" layout="responsive">
+                    Book now
+                  </ButtonLink>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <p className="mt-6 text-center text-sm text-muted-foreground">
+          Final prices confirmed at checkout based on actual weight and service selection.
+        </p>
+      </MarketingSection>
+
+      {/* ── Customer reviews ── */}
+      <MarketingSection id="reviews" tint="muted">
         <MarketingSectionHeader
           title="Customer reviews"
           description={`What customers say about booking with ${appConfig.name}.`}
@@ -403,10 +527,17 @@ export function HomePage() {
                   &ldquo;{review.quote}&rdquo;
                 </p>
 
-                <footer className="mt-4 border-t border-border/40 pt-4">
-                  <p className="font-semibold text-slate-900">{review.name}</p>
-
-                  <p className="text-xs text-muted">{review.location}</p>
+                <footer className="mt-4 flex items-center gap-3 border-t border-border/40 pt-4">
+                  <span
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold ${avatarBg[review.avatarColor]}`}
+                    aria-hidden
+                  >
+                    {review.initials}
+                  </span>
+                  <div>
+                    <p className="font-semibold text-slate-900">{review.name}</p>
+                    <p className="text-xs text-muted">{review.location} · Verified customer</p>
+                  </div>
                 </footer>
               </div>
             </blockquote>
@@ -414,26 +545,7 @@ export function HomePage() {
         </div>
       </MarketingSection>
 
-      <MarketingSection id="partners" tint="muted">
-        <MarketingSectionHeader
-          title="Partner highlights"
-          description={`Quality laundry shops on the ${appConfig.name} network — vetted, tracked, and supported by our operations team.`}
-        />
-
-        <div className="mt-12 grid gap-6 md:grid-cols-3">
-          {PARTNER_HIGHLIGHTS.map((partner) => (
-            <MarketingFeatureCard
-              key={partner.name}
-              badge={partner.city}
-              badgeVariant="secondary"
-              title={partner.name}
-              subtitle={partner.specialty}
-              description={partner.highlight}
-            />
-          ))}
-        </div>
-      </MarketingSection>
-
+      {/* ── Partner & Rider CTA ── */}
       <MarketingSection className="pb-20 sm:pb-28" containerClassName="pt-0">
         <div className="grid gap-6 lg:grid-cols-2">
           <MarketingCtaPanel
@@ -446,7 +558,6 @@ export function HomePage() {
               <ButtonLink href="/partners" size="lg" layout="responsive">
                 Learn about partnering
               </ButtonLink>
-
               <ButtonAnchor
                 href={`mailto:${appConfig.supportEmail}?subject=${encodeURIComponent('Lunara partner application')}`}
                 variant="outline"
@@ -469,7 +580,6 @@ export function HomePage() {
               <ButtonLink href="/riders" size="lg" layout="responsive">
                 Drive with Lunara
               </ButtonLink>
-
               <ButtonAnchor
                 href={`mailto:${appConfig.supportEmail}?subject=${encodeURIComponent('Lunara rider application')}`}
                 variant="outline"

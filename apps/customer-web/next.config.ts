@@ -13,6 +13,14 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: monorepoRoot,
   },
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'images.unsplash.com',
+      },
+    ],
+  },
 };
 
 export default nextConfig;
