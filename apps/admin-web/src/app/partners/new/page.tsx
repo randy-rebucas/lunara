@@ -45,8 +45,8 @@ export default function CreatePartnerPage() {
     try {
       const data = await adminFetch<Branch[]>('/admin/branches');
       setBranches(data);
-    } catch {
-      // non-fatal — dropdown will be empty
+    } catch (err) {
+      setError(err instanceof Error ? `Failed to load branches: ${err.message}` : 'Failed to load branches');
     }
   }, []);
 
@@ -174,11 +174,20 @@ export default function CreatePartnerPage() {
               <div>
                 <label htmlFor="parentBranchId" className="form-label">Parent branch</label>
                 <select id="parentBranchId" className="input-field" value={form.parentBranchId} onChange={set('parentBranchId')} required>
-                  <option value="">Select parent</option>
+                  <option value="">
+                    {branches.length === 0 ? 'No branches — complete Setup first' : 'Select parent'}
+                  </option>
                   {branches.map((b) => (
                     <option key={b._id} value={b._id}>{b.code} — {b.name}</option>
                   ))}
                 </select>
+                {branches.length === 0 && !error && (
+                  <p className="mt-1 text-xs text-amber-700">
+                    No branches found. Go to{' '}
+                    <a href="/setup" className="underline">Setup</a>{' '}
+                    to create the first operational branch.
+                  </p>
+                )}
               </div>
               <div className="sm:col-span-2">
                 <label className="form-label">Location</label>
