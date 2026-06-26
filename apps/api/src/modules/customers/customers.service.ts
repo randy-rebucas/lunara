@@ -5,7 +5,7 @@ import { Model, Types } from 'mongoose';
 import { basename } from 'path';
 import { AddressesService } from '../addresses/addresses.service';
 import { avatarFilePath, AVATAR_PUBLIC_PREFIX } from '../../common/uploads/upload-paths';
-import { OTP_PROFILE_PLACEHOLDER_FIRST_NAME } from './customers.constants';
+import { OTP_PROFILE_PLACEHOLDER_FIRST_NAME, OTP_PROFILE_PLACEHOLDER_LAST_NAME } from './customers.constants';
 import { UpdateCustomerDto } from './dto/customer.dto';
 import { Customer, CustomerDocument } from './schemas/customer.schema';
 
@@ -40,8 +40,16 @@ export class CustomersService {
   }
 
   async updateProfile(userId: string, dto: UpdateCustomerDto) {
-    const customer = await this.findByUserId(userId);
-    if (!customer) throw new NotFoundException('Customer profile not found');
+    let customer = await this.findByUserId(userId);
+    if (!customer) {
+      customer = await this.customerModel.create({
+        userId: new Types.ObjectId(userId),
+        firstName: dto.firstName?.trim() ?? OTP_PROFILE_PLACEHOLDER_FIRST_NAME,
+        lastName: dto.lastName?.trim() ?? OTP_PROFILE_PLACEHOLDER_LAST_NAME,
+        loyaltyPoints: 0,
+      });
+      return { success: true, data: customer };
+    }
     if (dto.firstName) customer.firstName = dto.firstName.trim();
     if (dto.lastName) customer.lastName = dto.lastName.trim();
     await customer.save();

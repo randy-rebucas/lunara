@@ -2,7 +2,6 @@ import { StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing, typography } from '../theme';
 
 const steps = [
-  { key: 'phone', label: 'Phone' },
   { key: 'profile', label: 'Profile' },
   { key: 'address', label: 'Address' },
   { key: 'done', label: 'Done' },

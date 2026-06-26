@@ -1,6 +1,6 @@
 import { Image, StyleSheet, View, type ViewStyle } from 'react-native';
-import brandIcon from '@lunara/brand/assets/icon.png';
-import { radius, shadow } from '../../theme';
+
+const brandIcon = require('../../../assets/logo.png');
 
 interface BrandMarkProps {
   size?: 'sm' | 'md' | 'lg';
@@ -16,14 +16,7 @@ const sizes = {
 export function BrandMark({ size = 'md', style }: BrandMarkProps) {
   const box = sizes[size];
   return (
-    <View
-      style={[
-        styles.mark,
-        shadow.card,
-        { width: box, height: box, borderRadius: size === 'lg' ? radius.xxl : radius.xl },
-        style,
-      ]}
-    >
+    <View style={[styles.mark, { width: box, height: box }, style]}>
       <Image source={brandIcon} style={{ width: box, height: box }} resizeMode="contain" accessibilityLabel="Lunara" />
     </View>
   );
@@ -32,6 +25,5 @@ export function BrandMark({ size = 'md', style }: BrandMarkProps) {
 const styles = StyleSheet.create({
   mark: {
     overflow: 'hidden',
-    backgroundColor: 'transparent',
   },
 });

@@ -10,7 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { KeyboardSafeScrollView } from '../../src/components/ui/keyboard-safe-scroll-view';
+import { KeyboardSafeScrollView } from '../../../src/components/ui/keyboard-safe-scroll-view';
 import { OrderStatus, PaymentMethod, PaymentStatus } from '@lunara/types';
 import {
   buildCustomerTimeline,
@@ -20,14 +20,14 @@ import {
   formatPaymentMethodLabel,
   formatPaymentStatusLabel,
 } from '@lunara/utils';
-import { Button } from '../../src/components/ui/button';
-import { colors, radius, spacing, typography } from '../../src/theme';
-import { useOrderTrackingSocket } from '../../src/hooks/use-order-tracking-socket';
-import { DataLoadState } from '../../src/components/data-load-state';
-import { OrderTimeline } from '../../src/components/order-timeline';
-import { HandoffQrCard } from '../../src/components/handoff-qr-card';
-import { branchTypeLabel } from '../../src/components/nearest-branches';
-import { useAuthStore } from '../../src/store/auth';
+import { Button } from '../../../src/components/ui/button';
+import { colors, radius, spacing, typography } from '../../../src/theme';
+import { useOrderTrackingSocket } from '../../../src/hooks/use-order-tracking-socket';
+import { DataLoadState } from '../../../src/components/data-load-state';
+import { OrderTimeline } from '../../../src/components/order-timeline';
+import { HandoffQrCard } from '../../../src/components/handoff-qr-card';
+import { branchTypeLabel } from '../../../src/components/nearest-branches';
+import { useAuthStore } from '../../../src/store/auth';
 
 interface OrderDetail {
   _id: string;

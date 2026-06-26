@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, OnModuleInit, UnauthorizedException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { OrderStatus, PromotionAudience, PromotionKind } from '@lunara/types';
@@ -35,7 +35,7 @@ type ResolvedPromo =
     };
 
 @Injectable()
-export class PromotionsService {
+export class PromotionsService implements OnModuleInit {
   constructor(
     @InjectModel(Promotion.name) private promotionModel: Model<PromotionDocument>,
     @InjectModel(CustomerPromo.name) private customerPromoModel: Model<CustomerPromoDocument>,
@@ -45,6 +45,10 @@ export class PromotionsService {
     @InjectModel(User.name) private userModel: Model<UserDocument>,
   ) {}
 
+  async onModuleInit() {
+    await this.reseedDefaults();
+  }
+
   async ensureSeeded() {
     const promoCount = await this.promotionModel.countDocuments();
     if (promoCount === 0) await this.promotionModel.insertMany(DEFAULT_PROMOTIONS);
@@ -53,11 +57,20 @@ export class PromotionsService {
   async reseedDefaults() {
     const now = new Date();
     for (const promo of DEFAULT_PROMOTIONS) {
+      // endsAt/startsAt only on insert — don't overwrite admin-edited schedules on restart
+      const { endsAt, startsAt, ...coreFields } = promo as typeof promo & {
+        endsAt?: Date;
+        startsAt?: Date;
+      };
       await this.promotionModel.updateOne(
         { code: promo.code },
         {
-          $set: { ...promo, updatedAt: now },
-          $setOnInsert: { createdAt: now },
+          $set: { ...coreFields, updatedAt: now },
+          $setOnInsert: {
+            createdAt: now,
+            ...(startsAt != null ? { startsAt } : {}),
+            ...(endsAt != null ? { endsAt } : {}),
+          },
         },
         { upsert: true },
       );
@@ -65,8 +78,6 @@ export class PromotionsService {
   }
 
   async grantSignupPromo(userId: string) {
-    await this.ensureSeeded();
-
     const existing = await this.customerPromoModel.findOne({
       userId: new Types.ObjectId(userId),
       redeemedAt: { $exists: false },
@@ -122,7 +133,7 @@ export class PromotionsService {
 
   private async buildCustomerContext(userId: string, subtotal: number) {
     const user = await this.userModel.findById(userId);
-    if (!user) throw new BadRequestException('User not found');
+    if (!user) throw new UnauthorizedException('Session expired. Please sign in again.');
 
     const completedOrderCount = await this.countCompletedOrders(userId);
     return {
@@ -144,7 +155,6 @@ export class PromotionsService {
       return { type: 'personal', customerPromo: personal };
     }
 
-    await this.ensureSeeded();
     const promotion = await this.promotionModel.findOne({ code: normalized });
     if (!promotion) return null;
     if (promotion.kind === PromotionKind.SIGNUP_TEMPLATE) {
@@ -283,7 +293,6 @@ export class PromotionsService {
   }
 
   async listDealsForCustomer(userId: string) {
-    await this.ensureSeeded();
     const now = new Date();
     const user = await this.userModel.findById(userId);
     if (!user) return [];

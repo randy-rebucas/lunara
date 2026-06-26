@@ -1,5 +1,5 @@
 import { Link, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { appConfig } from '@lunara/config';
 import { formatPhone, isValidPhilippineMobile } from '@lunara/utils';
@@ -24,6 +24,22 @@ export default function SignUpScreen() {
   const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => { if (cooldownRef.current) clearInterval(cooldownRef.current); };
+  }, []);
+
+  function startResendCooldown() {
+    setResendCooldown(30);
+    cooldownRef.current = setInterval(() => {
+      setResendCooldown((prev) => {
+        if (prev <= 1) { clearInterval(cooldownRef.current!); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+  }
 
   async function handleSendOtp() {
     setError('');
@@ -37,6 +53,7 @@ export default function SignUpScreen() {
       setVerifiedPhone(result.phone);
       setOtp('');
       setStep('otp');
+      startResendCooldown();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not send OTP');
     } finally {
@@ -73,7 +90,7 @@ export default function SignUpScreen() {
       </View>
 
       <Card elevated style={styles.formCard}>
-        <OnboardingProgress current={step === 'phone' ? 'phone' : 'profile'} />
+        <OnboardingProgress current="profile" />
         <Text style={styles.title}>Create your account</Text>
         <Text style={styles.subtitle}>Sign up with your mobile number to book laundry</Text>
 
@@ -111,8 +128,10 @@ export default function SignUpScreen() {
               onPress={handleVerifyOtp}
               disabled={submitting || otp.length < 6}
             />
-            <Pressable onPress={handleSendOtp} style={styles.backLink} disabled={submitting}>
-              <Text style={styles.backLinkText}>Resend code</Text>
+            <Pressable onPress={handleSendOtp} style={styles.backLink} disabled={submitting || resendCooldown > 0}>
+              <Text style={[styles.backLinkText, resendCooldown > 0 && styles.backLinkDisabled]}>
+                {resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : 'Resend code'}
+              </Text>
             </Pressable>
             <Pressable onPress={handleChangeNumber} style={styles.backLink}>
               <Text style={styles.backLinkText}>Change phone number</Text>
@@ -148,6 +167,7 @@ const styles = StyleSheet.create({
   error: { color: colors.destructive, marginBottom: spacing.sm, fontSize: 14 },
   backLink: { marginTop: spacing.md, alignItems: 'center' },
   backLinkText: { color: colors.primary, fontWeight: '600', fontSize: 14 },
+  backLinkDisabled: { color: colors.muted },
   footer: { ...typography.bodySm, textAlign: 'center', marginTop: spacing.xxl },
   footerLink: { color: colors.primary, fontWeight: '600' },
 });

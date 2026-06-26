@@ -275,7 +275,7 @@ export default function RootLayout() {
 
         <Stack.Screen
 
-          name="orders/[id]"
+          name="orders/[id]/index"
 
           options={{
 

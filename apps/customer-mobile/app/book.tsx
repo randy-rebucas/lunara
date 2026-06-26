@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
@@ -11,6 +11,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BookingType, PaymentMethod } from '@lunara/types';
 import {
   BOOKING_MACHINE_LOAD_INFO,
@@ -72,7 +74,9 @@ interface BookingConfig {
 }
 
 export default function BookScreen() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
+  const navigation = useNavigation();
   const { service: serviceParam, code: codeParam } = useLocalSearchParams<{
     service?: string;
     code?: string;
@@ -317,12 +321,21 @@ export default function BookScreen() {
     else router.back();
   }
 
+  useEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => (
+        <Pressable onPress={goBack} hitSlop={10}>
+          <Ionicons name="chevron-back" size={26} color={colors.primary} />
+        </Pressable>
+      ),
+    });
+  }, [step]);
+
   async function placeOrder() {
     if (!form.bookingType || !form.addressId || !form.scheduledPickupAt) return;
     setLoading(true);
     setError('');
     try {
-      await refreshQuote();
       const order = await apiFetch<{ _id: string; total: number }>('/booking/orders', {
         method: 'POST',
         body: JSON.stringify({
@@ -365,9 +378,9 @@ export default function BookScreen() {
         Alert.alert(
           'Booking confirmed',
           payment.message ??
-            (payment.receiptCode
-              ? `Pay cash as arranged. Reference: ${payment.receiptCode}`
-              : 'Pay cash as arranged. Lunara will assign your partner branch shortly.'),
+          (payment.receiptCode
+            ? `Pay cash as arranged. Reference: ${payment.receiptCode}`
+            : 'Pay cash as arranged. Lunara will assign your partner branch shortly.'),
           [{ text: 'Track order', onPress: goToOrder }],
         );
         return;
@@ -409,367 +422,367 @@ export default function BookScreen() {
     <View style={styles.container}>
       <BookingProgress current={step} />
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-        {configLoading && !config ? (
-          <Text style={styles.sub}>Loading services…</Text>
-        ) : null}
-
-      {step === 'service' && config && (
-        <View>
-          <Text style={styles.heading}>Choose service</Text>
-          {config.services.map((s) => (
-            <Pressable
-              key={s.type}
-              style={[
-                styles.option,
-                form.bookingType === s.type && styles.optionSelected,
-              ]}
-              onPress={() => setForm((f) => ({ ...f, bookingType: s.type as BookingType }))}
-            >
-              <Text style={styles.optionTitle}>{s.label}</Text>
-              <Text style={styles.optionSub}>{s.description}</Text>
-              <Text style={styles.optionPrice}>
-                {formatCurrency(s.pricePerKg)} / kg · min {s.minWeightKg} kg
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      )}
-
-      {step === 'address' && (
-        <View>
-          <Text style={styles.heading}>Pickup address</Text>
-          {addressesError ? <Text style={styles.error}>{addressesError}</Text> : null}
-          {dispatchNote ? (
-            <View style={styles.infoBox}>
-              <Text style={styles.infoText}>{dispatchNote}</Text>
-            </View>
+        <ScrollView style={styles.scroll} contentContainerStyle={[styles.content, { paddingBottom: spacing.xxxl + insets.bottom }]}>
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+          {configLoading && !config ? (
+            <Text style={styles.sub}>Loading services…</Text>
           ) : null}
-          {addresses.length === 0 ? (
-            <Pressable style={styles.option} onPress={() => router.push('/(tabs)/profile')}>
-              <Text style={styles.optionTitle}>Add address in Profile</Text>
-              <Text style={styles.optionSub}>
-                Save a pickup address with GPS so riders can navigate to you
-              </Text>
-            </Pressable>
-          ) : (
-            addresses.map((a) => (
-              <Pressable
-                key={a._id}
-                style={[
-                  styles.option,
-                  form.addressId === a._id && styles.optionSelected,
-                  !addressHasCoords(a) && styles.optionDisabled,
-                ]}
-                onPress={() =>
-                  setForm((f) => ({ ...f, addressId: a._id, scheduledPickupAt: '' }))
-                }
-              >
-                <View style={styles.addressLabelRow}>
-                  <Text style={styles.optionTitle}>{a.label}</Text>
-                  {a.isDefault ? (
-                    <View style={styles.defaultBadge}>
-                      <Text style={styles.defaultBadgeText}>Default</Text>
+
+          {step === 'service' && config && (
+            <View>
+              <Text style={styles.heading}>Choose service</Text>
+              {config.services.map((s) => (
+                <Pressable
+                  key={s.type}
+                  style={[
+                    styles.option,
+                    form.bookingType === s.type && styles.optionSelected,
+                  ]}
+                  onPress={() => setForm((f) => ({ ...f, bookingType: s.type as BookingType }))}
+                >
+                  <Text style={styles.optionTitle}>{s.label}</Text>
+                  <Text style={styles.optionSub}>{s.description}</Text>
+                  <Text style={styles.optionPrice}>
+                    {formatCurrency(s.pricePerKg)} / kg · min {s.minWeightKg} kg
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          {step === 'address' && (
+            <View>
+              <Text style={styles.heading}>Pickup address</Text>
+              {addressesError ? <Text style={styles.error}>{addressesError}</Text> : null}
+              {dispatchNote ? (
+                <View style={styles.infoBox}>
+                  <Text style={styles.infoText}>{dispatchNote}</Text>
+                </View>
+              ) : null}
+              {addresses.length === 0 ? (
+                <Pressable style={styles.option} onPress={() => router.push('/(tabs)/profile')}>
+                  <Text style={styles.optionTitle}>Add address in Profile</Text>
+                  <Text style={styles.optionSub}>
+                    Save a pickup address with GPS so riders can navigate to you
+                  </Text>
+                </Pressable>
+              ) : (
+                addresses.map((a) => (
+                  <Pressable
+                    key={a._id}
+                    style={[
+                      styles.option,
+                      form.addressId === a._id && styles.optionSelected,
+                      !addressHasCoords(a) && styles.optionDisabled,
+                    ]}
+                    onPress={() =>
+                      setForm((f) => ({ ...f, addressId: a._id, scheduledPickupAt: '' }))
+                    }
+                  >
+                    <View style={styles.addressLabelRow}>
+                      <Text style={styles.optionTitle}>{a.label}</Text>
+                      {a.isDefault ? (
+                        <View style={styles.defaultBadge}>
+                          <Text style={styles.defaultBadgeText}>Default</Text>
+                        </View>
+                      ) : null}
                     </View>
+                    <Text style={styles.optionSub}>
+                      {formatAddressTypeLabel(a.addressType)} · {a.line1}, {a.city}
+                    </Text>
+                    {addressHasCoords(a) ? (
+                      <Text style={styles.optionGps}>GPS pinned for rider navigation</Text>
+                    ) : (
+                      <Text style={styles.optionGpsMissing}>
+                        No GPS pin — update in Profile before booking
+                      </Text>
+                    )}
+                  </Pressable>
+                ))
+              )}
+              {form.addressId ? (
+                <NearestBranchesCard branches={nearestBranches} note={nearestNote} />
+              ) : null}
+            </View>
+          )}
+
+          {step === 'schedule' && (
+            <View>
+              <Text style={styles.heading}>Pickup time</Text>
+              {availabilityError ? (
+                <View style={styles.errorBlock}>
+                  <Text style={styles.error}>{availabilityError}</Text>
+                  {form.addressId ? (
+                    <Button
+                      label="Try again"
+                      variant="secondary"
+                      onPress={() => loadAvailability(form.addressId)}
+                      style={styles.retryBtn}
+                    />
                   ) : null}
                 </View>
-                <Text style={styles.optionSub}>
-                  {formatAddressTypeLabel(a.addressType)} · {a.line1}, {a.city}
-                </Text>
-                {addressHasCoords(a) ? (
-                  <Text style={styles.optionGps}>GPS pinned for rider navigation</Text>
-                ) : (
-                  <Text style={styles.optionGpsMissing}>
-                    No GPS pin — update in Profile before booking
-                  </Text>
-                )}
-              </Pressable>
-            ))
-          )}
-          {form.addressId ? (
-            <NearestBranchesCard branches={nearestBranches} note={nearestNote} />
-          ) : null}
-        </View>
-      )}
-
-      {step === 'schedule' && (
-        <View>
-          <Text style={styles.heading}>Pickup time</Text>
-          {availabilityError ? (
-            <View style={styles.errorBlock}>
-              <Text style={styles.error}>{availabilityError}</Text>
-              {form.addressId ? (
-                <Button
-                  label="Try again"
-                  variant="secondary"
-                  onPress={() => loadAvailability(form.addressId)}
-                  style={styles.retryBtn}
+              ) : null}
+              {areaLabel ? <Text style={styles.sub}>Serving: {areaLabel}</Text> : null}
+              {slots.length === 0 && !availabilityError ? (
+                <Text style={styles.sub}>No pickup slots available for this address.</Text>
+              ) : null}
+              {slots.length > 0 ? (
+                <PickupSchedulePicker
+                  slots={slots}
+                  selectedStartAt={form.scheduledPickupAt}
+                  onSelectStartAt={(startAt) => setForm((f) => ({ ...f, scheduledPickupAt: startAt }))}
+                />
+              ) : null}
+              {showScheduleSupport ? (
+                <ScheduleSupportPrompt
+                  address={selectedAddress}
+                  reason={availabilityError || 'No pickup slots are available for this address yet.'}
                 />
               ) : null}
             </View>
-          ) : null}
-          {areaLabel ? <Text style={styles.sub}>Serving: {areaLabel}</Text> : null}
-          {slots.length === 0 && !availabilityError ? (
-            <Text style={styles.sub}>No pickup slots available for this address.</Text>
-          ) : null}
-          {slots.length > 0 ? (
-            <PickupSchedulePicker
-              slots={slots}
-              selectedStartAt={form.scheduledPickupAt}
-              onSelectStartAt={(startAt) => setForm((f) => ({ ...f, scheduledPickupAt: startAt }))}
-            />
-          ) : null}
-          {showScheduleSupport ? (
-            <ScheduleSupportPrompt
-              address={selectedAddress}
-              reason={availabilityError || 'No pickup slots are available for this address yet.'}
-            />
-          ) : null}
-        </View>
-      )}
+          )}
 
-      {step === 'weight' && (
-        <View>
-          <Text style={styles.heading}>Estimate weight</Text>
-          <Text style={styles.sub}>
-            We&apos;ll confirm actual weight at pickup. Min order{' '}
-            {formatCurrency(config?.minOrderAmount ?? BOOKING_MIN_ORDER_AMOUNT)}.
-          </Text>
-          <View style={styles.loadInfo}>
-            <Text style={styles.loadInfoText}>{BOOKING_MACHINE_LOAD_INFO}</Text>
-            <Text style={styles.loadInfoHighlight}>
-              Your estimate: {formatMachineLoadLabel(form.weightKg)}
-            </Text>
-          </View>
-          <View style={styles.weightHeader}>
-            <Text style={styles.weightValue}>{form.weightKg} kg</Text>
-            {activeQuote ? (
-              <Text style={styles.weightService}>
-                Service: {formatCurrency(activeQuote.serviceSubtotal)}
+          {step === 'weight' && (
+            <View>
+              <Text style={styles.heading}>Estimate weight</Text>
+              <Text style={styles.sub}>
+                We&apos;ll confirm actual weight at pickup. Min order{' '}
+                {formatCurrency(config?.minOrderAmount ?? BOOKING_MIN_ORDER_AMOUNT)}.
               </Text>
-            ) : null}
-          </View>
-          <View style={styles.weightRow}>
-            <Pressable
-              onPress={() =>
-                setForm((f) => ({
-                  ...f,
-                  weightKg: Math.max(config?.minWeightKg ?? 1, f.weightKg - 1),
-                }))
-              }
-            >
-              <Text style={styles.weightBtn}>−</Text>
-            </Pressable>
-            <Pressable
-              onPress={() =>
-                setForm((f) => ({
-                  ...f,
-                  weightKg: Math.min(config?.maxWeightKg ?? 50, f.weightKg + 1),
-                }))
-              }
-            >
-              <Text style={styles.weightBtn}>+</Text>
-            </Pressable>
-          </View>
-          <Text style={styles.weightRange}>
-            {config?.minWeightKg ?? 1} kg – {config?.maxWeightKg ?? 50} kg
-          </Text>
-        </View>
-      )}
-
-      {step === 'addons' && (
-        <View>
-          <Text style={styles.heading}>Add-ons (optional)</Text>
-          {addons.length === 0 ? (
-            <Text style={styles.sub}>No add-ons available.</Text>
-          ) : (
-            addons.map((a) => {
-              const selected = form.addonIds.includes(a.id);
-              const imageUri = resolveMediaUrl(a.imageUrl);
-              const isExpressReturn = a.id === EXPRESS_RETURN_ADDON_ID;
-              const disabled = isExpressReturn && !expressReturnAllowed;
-              return (
+              <View style={styles.loadInfo}>
+                <Text style={styles.loadInfoText}>{BOOKING_MACHINE_LOAD_INFO}</Text>
+                <Text style={styles.loadInfoHighlight}>
+                  Your estimate: {formatMachineLoadLabel(form.weightKg)}
+                </Text>
+              </View>
+              <View style={styles.weightHeader}>
+                <Text style={styles.weightValue}>{form.weightKg} kg</Text>
+                {activeQuote ? (
+                  <Text style={styles.weightService}>
+                    Service: {formatCurrency(activeQuote.serviceSubtotal)}
+                  </Text>
+                ) : null}
+              </View>
+              <View style={styles.weightRow}>
                 <Pressable
-                  key={a.id}
-                  disabled={disabled}
-                  style={[
-                    styles.option,
-                    selected && styles.optionSelected,
-                    disabled && styles.optionDisabled,
-                  ]}
                   onPress={() =>
                     setForm((f) => ({
                       ...f,
-                      addonIds: selected
-                        ? f.addonIds.filter((id) => id !== a.id)
-                        : [...f.addonIds, a.id],
+                      weightKg: Math.max(config?.minWeightKg ?? 1, f.weightKg - 1),
                     }))
                   }
                 >
-                  <View style={styles.addonCardRow}>
-                    {imageUri ? (
-                      <Image source={{ uri: imageUri }} style={styles.addonImage} />
-                    ) : null}
-                    <View style={styles.addonCardBody}>
-                      <View style={styles.addonRow}>
-                        <Text style={styles.optionTitle}>{a.label}</Text>
-                        <Text style={styles.addonPrice}>+{formatCurrency(a.price)}</Text>
+                  <Text style={styles.weightBtn}>−</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() =>
+                    setForm((f) => ({
+                      ...f,
+                      weightKg: Math.min(config?.maxWeightKg ?? 50, f.weightKg + 1),
+                    }))
+                  }
+                >
+                  <Text style={styles.weightBtn}>+</Text>
+                </Pressable>
+              </View>
+              <Text style={styles.weightRange}>
+                {config?.minWeightKg ?? 1} kg – {config?.maxWeightKg ?? 50} kg
+              </Text>
+            </View>
+          )}
+
+          {step === 'addons' && (
+            <View>
+              <Text style={styles.heading}>Add-ons (optional)</Text>
+              {addons.length === 0 ? (
+                <Text style={styles.sub}>No add-ons available.</Text>
+              ) : (
+                addons.map((a) => {
+                  const selected = form.addonIds.includes(a.id);
+                  const imageUri = resolveMediaUrl(a.imageUrl);
+                  const isExpressReturn = a.id === EXPRESS_RETURN_ADDON_ID;
+                  const disabled = isExpressReturn && !expressReturnAllowed;
+                  return (
+                    <Pressable
+                      key={a.id}
+                      disabled={disabled}
+                      style={[
+                        styles.option,
+                        selected && styles.optionSelected,
+                        disabled && styles.optionDisabled,
+                      ]}
+                      onPress={() =>
+                        setForm((f) => ({
+                          ...f,
+                          addonIds: selected
+                            ? f.addonIds.filter((id) => id !== a.id)
+                            : [...f.addonIds, a.id],
+                        }))
+                      }
+                    >
+                      <View style={styles.addonCardRow}>
+                        {imageUri ? (
+                          <Image source={{ uri: imageUri }} style={styles.addonImage} />
+                        ) : null}
+                        <View style={styles.addonCardBody}>
+                          <View style={styles.addonRow}>
+                            <Text style={styles.optionTitle}>{a.label}</Text>
+                            <Text style={styles.addonPrice}>+{formatCurrency(a.price)}</Text>
+                          </View>
+                          <Text style={styles.optionSub}>{a.description}</Text>
+                          {disabled ? (
+                            <Text style={styles.optionGpsMissing}>
+                              Not available for pickups at 3:00 PM or later
+                            </Text>
+                          ) : null}
+                        </View>
                       </View>
-                      <Text style={styles.optionSub}>{a.description}</Text>
-                      {disabled ? (
-                        <Text style={styles.optionGpsMissing}>
-                          Not available for pickups at 3:00 PM or later
-                        </Text>
+                    </Pressable>
+                  );
+                })
+              )}
+            </View>
+          )}
+
+          {step === 'review' && activeQuote && (
+            <View>
+              <Text style={styles.heading}>Price estimate</Text>
+              <View style={styles.promoCard}>
+                <Text style={styles.promoTitle}>Promo code</Text>
+                {activeQuote.couponCode ? (
+                  <View style={styles.promoAppliedRow}>
+                    <View style={styles.promoAppliedText}>
+                      <Text style={styles.promoAppliedCode}>{activeQuote.couponCode}</Text>
+                      {activeQuote.promotionTitle ? (
+                        <Text style={styles.promoAppliedSub}>{activeQuote.promotionTitle}</Text>
                       ) : null}
                     </View>
+                    <Pressable onPress={() => void removePromoCode()} disabled={promoLoading}>
+                      <Text style={styles.promoRemove}>Remove</Text>
+                    </Pressable>
                   </View>
-                </Pressable>
-              );
-            })
-          )}
-        </View>
-      )}
-
-      {step === 'review' && activeQuote && (
-        <View>
-          <Text style={styles.heading}>Price estimate</Text>
-          <View style={styles.promoCard}>
-            <Text style={styles.promoTitle}>Promo code</Text>
-            {activeQuote.couponCode ? (
-              <View style={styles.promoAppliedRow}>
-                <View style={styles.promoAppliedText}>
-                  <Text style={styles.promoAppliedCode}>{activeQuote.couponCode}</Text>
-                  {activeQuote.promotionTitle ? (
-                    <Text style={styles.promoAppliedSub}>{activeQuote.promotionTitle}</Text>
-                  ) : null}
+                ) : (
+                  <View style={styles.promoInputRow}>
+                    <TextInput
+                      value={form.couponCode}
+                      onChangeText={(text) => setForm((f) => ({ ...f, couponCode: text.toUpperCase() }))}
+                      placeholder="e.g. WELCOME10"
+                      autoCapitalize="characters"
+                      style={styles.promoInput}
+                    />
+                    <Pressable
+                      style={[styles.promoApplyBtn, (!form.couponCode.trim() || promoLoading) && styles.btnDisabled]}
+                      onPress={() => void applyPromoCode()}
+                      disabled={!form.couponCode.trim() || promoLoading}
+                    >
+                      <Text style={styles.promoApplyText}>Apply</Text>
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+              <View style={styles.estimateCard}>
+                <View style={styles.estimateRow}>
+                  <Text style={styles.estimateLabel}>
+                    {activeQuote.serviceLabel} × {activeQuote.weightKg} kg
+                  </Text>
+                  <Text>{formatCurrency(activeQuote.serviceSubtotal)}</Text>
                 </View>
-                <Pressable onPress={() => void removePromoCode()} disabled={promoLoading}>
-                  <Text style={styles.promoRemove}>Remove</Text>
-                </Pressable>
+                {activeQuote.addons.map((a) => (
+                  <View key={a.id} style={styles.estimateRow}>
+                    <Text style={styles.estimateLabelMuted}>{a.label}</Text>
+                    <Text style={styles.estimateLabelMuted}>{formatCurrency(a.price)}</Text>
+                  </View>
+                ))}
+                <View style={[styles.estimateRow, styles.estimateDivider]}>
+                  <Text style={styles.estimateLabel}>Delivery fee</Text>
+                  <Text>{formatCurrency(activeQuote.deliveryFee)}</Text>
+                </View>
+                {activeQuote.discount > 0 && (
+                  <View style={styles.estimateRow}>
+                    <Text style={styles.estimateLabel}>
+                      Discount{activeQuote.promotionTitle ? ` — ${activeQuote.promotionTitle}` : ''}
+                    </Text>
+                    <Text>−{formatCurrency(activeQuote.discount)}</Text>
+                  </View>
+                )}
+                <View style={styles.estimateRow}>
+                  <Text style={styles.estimateTotalLabel}>Estimated total</Text>
+                  <Text style={styles.estimateTotal}>{formatCurrency(activeQuote.total)}</Text>
+                </View>
               </View>
-            ) : (
-              <View style={styles.promoInputRow}>
-                <TextInput
-                  value={form.couponCode}
-                  onChangeText={(text) => setForm((f) => ({ ...f, couponCode: text.toUpperCase() }))}
-                  placeholder="e.g. WELCOME10"
-                  autoCapitalize="characters"
-                  style={styles.promoInput}
-                />
-                <Pressable
-                  style={[styles.promoApplyBtn, (!form.couponCode.trim() || promoLoading) && styles.btnDisabled]}
-                  onPress={() => void applyPromoCode()}
-                  disabled={!form.couponCode.trim() || promoLoading}
-                >
-                  <Text style={styles.promoApplyText}>Apply</Text>
-                </Pressable>
-              </View>
-            )}
-          </View>
-          <View style={styles.estimateCard}>
-            <View style={styles.estimateRow}>
-              <Text style={styles.estimateLabel}>
-                {activeQuote.serviceLabel} × {activeQuote.weightKg} kg
-              </Text>
-              <Text>{formatCurrency(activeQuote.serviceSubtotal)}</Text>
-            </View>
-            {activeQuote.addons.map((a) => (
-              <View key={a.id} style={styles.estimateRow}>
-                <Text style={styles.estimateLabelMuted}>{a.label}</Text>
-                <Text style={styles.estimateLabelMuted}>{formatCurrency(a.price)}</Text>
-              </View>
-            ))}
-            <View style={[styles.estimateRow, styles.estimateDivider]}>
-              <Text style={styles.estimateLabel}>Delivery fee</Text>
-              <Text>{formatCurrency(activeQuote.deliveryFee)}</Text>
-            </View>
-            {activeQuote.discount > 0 && (
-              <View style={styles.estimateRow}>
-                <Text style={styles.estimateLabel}>
-                  Discount{activeQuote.promotionTitle ? ` — ${activeQuote.promotionTitle}` : ''}
+              {!activeQuote.meetsMinimum && (
+                <Text style={styles.error}>
+                  Below minimum order of {formatCurrency(activeQuote.minimumOrderAmount)}.
                 </Text>
-                <Text>−{formatCurrency(activeQuote.discount)}</Text>
-              </View>
-            )}
-            <View style={styles.estimateRow}>
-              <Text style={styles.estimateTotalLabel}>Estimated total</Text>
-              <Text style={styles.estimateTotal}>{formatCurrency(activeQuote.total)}</Text>
+              )}
             </View>
-          </View>
-          {!activeQuote.meetsMinimum && (
-            <Text style={styles.error}>
-              Below minimum order of {formatCurrency(activeQuote.minimumOrderAmount)}.
-            </Text>
           )}
-        </View>
-      )}
 
-      {step === 'confirm' && activeQuote && (
-        <View>
-          <Text style={styles.heading}>Confirm booking</Text>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryLine}>
-              <Text style={styles.summaryMuted}>Service: </Text>
-              {activeQuote.serviceLabel}
-            </Text>
-            <Text style={styles.summaryLine}>
-              <Text style={styles.summaryMuted}>Weight: </Text>~{activeQuote.weightKg} kg
-            </Text>
-            <Text style={styles.summaryLine}>
-              <Text style={styles.summaryMuted}>Pickup: </Text>
-              {slots.find((s) => s.startAt === form.scheduledPickupAt)?.label ?? 'Selected slot'}
-            </Text>
-            <Text style={styles.summaryLine}>
-              <Text style={styles.summaryMuted}>Total: </Text>
-              <Text style={styles.summaryTotal}>{formatCurrency(activeQuote.total)}</Text>
-            </Text>
-          </View>
-          <Text style={styles.confirmNote}>
-            Lunara operations assigns your partner branch after payment. Pickup riders are
-            notified once dispatched. Final amount may adjust after weigh-in.
-          </Text>
-          {nearestBranches.length > 0 && (
-            <NearestBranchesCard branches={nearestBranches} note={nearestNote} />
+          {step === 'confirm' && activeQuote && (
+            <View>
+              <Text style={styles.heading}>Confirm booking</Text>
+              <View style={styles.summaryCard}>
+                <Text style={styles.summaryLine}>
+                  <Text style={styles.summaryMuted}>Service: </Text>
+                  {activeQuote.serviceLabel}
+                </Text>
+                <Text style={styles.summaryLine}>
+                  <Text style={styles.summaryMuted}>Weight: </Text>~{activeQuote.weightKg} kg
+                </Text>
+                <Text style={styles.summaryLine}>
+                  <Text style={styles.summaryMuted}>Pickup: </Text>
+                  {slots.find((s) => s.startAt === form.scheduledPickupAt)?.label ?? 'Selected slot'}
+                </Text>
+                <Text style={styles.summaryLine}>
+                  <Text style={styles.summaryMuted}>Total: </Text>
+                  <Text style={styles.summaryTotal}>{formatCurrency(activeQuote.total)}</Text>
+                </Text>
+              </View>
+              <Text style={styles.confirmNote}>
+                Lunara operations assigns your partner branch after payment. Pickup riders are
+                notified once dispatched. Final amount may adjust after weigh-in.
+              </Text>
+              {nearestBranches.length > 0 && (
+                <NearestBranchesCard branches={nearestBranches} note={nearestNote} />
+              )}
+              <PaymentMethodPicker
+                method={paymentMethod}
+                onMethodChange={setPaymentMethod}
+                cashTiming={cashTiming}
+                onCashTimingChange={setCashTiming}
+                walletBalance={walletBalance}
+                orderTotal={activeQuote.total}
+                onTopUpWallet={() => router.push('/(tabs)/wallet')}
+              />
+            </View>
           )}
-          <PaymentMethodPicker
-            method={paymentMethod}
-            onMethodChange={setPaymentMethod}
-            cashTiming={cashTiming}
-            onCashTimingChange={setCashTiming}
-            walletBalance={walletBalance}
-            orderTotal={activeQuote.total}
-            onTopUpWallet={() => router.push('/(tabs)/wallet')}
-          />
-        </View>
-      )}
 
-      <View style={styles.actions}>
-        <Pressable style={styles.secondaryBtn} onPress={goBack}>
-          <Text style={styles.secondaryBtnText}>Back</Text>
-        </Pressable>
-        {step === 'confirm' ? (
-          <Pressable
-            style={[
-              styles.primaryBtn,
-              (loading || insufficientWallet) && styles.btnDisabled,
-            ]}
-            onPress={placeOrder}
-            disabled={loading || insufficientWallet}
-          >
-            <Text style={styles.primaryBtnText}>{payButtonLabel()}</Text>
-          </Pressable>
-        ) : (
-          <Pressable
-            style={[styles.primaryBtn, reviewBlocked && styles.btnDisabled]}
-            onPress={goNext}
-            disabled={reviewBlocked}
-          >
-            <Text style={styles.primaryBtnText}>Continue</Text>
-          </Pressable>
-        )}
-      </View>
-      </ScrollView>
+          <View style={styles.actions}>
+            <Pressable style={styles.secondaryBtn} onPress={goBack}>
+              <Text style={styles.secondaryBtnText}>Back</Text>
+            </Pressable>
+            {step === 'confirm' ? (
+              <Pressable
+                style={[
+                  styles.primaryBtn,
+                  (loading || insufficientWallet) && styles.btnDisabled,
+                ]}
+                onPress={placeOrder}
+                disabled={loading || insufficientWallet}
+              >
+                <Text style={styles.primaryBtnText}>{payButtonLabel()}</Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                style={[styles.primaryBtn, reviewBlocked && styles.btnDisabled]}
+                onPress={goNext}
+                disabled={reviewBlocked}
+              >
+                <Text style={styles.primaryBtnText}>Continue</Text>
+              </Pressable>
+            )}
+          </View>
+        </ScrollView>
     </View>
   );
 }
@@ -777,7 +790,7 @@ export default function BookScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surfaceMuted },
   scroll: { flex: 1 },
-  content: { padding: spacing.xl, paddingBottom: spacing.xxxl + spacing.sm },
+  content: { padding: spacing.xl },
   heading: { ...typography.heading, marginBottom: spacing.md },
   sub: { ...typography.bodySm, marginBottom: spacing.md },
   error: { color: colors.destructive, marginBottom: spacing.md },

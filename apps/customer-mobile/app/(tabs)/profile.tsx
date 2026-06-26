@@ -247,11 +247,6 @@ export default function ProfileScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
       >
-        <View style={styles.header}>
-          <Text style={styles.heading}>Profile</Text>
-          <Text style={styles.sub}>Manage your account, addresses, and preferences</Text>
-        </View>
-
         <DataLoadState
           loading={loading && !refreshing}
           error={error}
@@ -488,9 +483,6 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm },
-  header: { marginBottom: spacing.lg },
-  heading: { ...typography.title },
-  sub: { ...typography.bodySm, marginTop: spacing.xs },
   heroCard: { alignItems: 'center', paddingVertical: spacing.xxl, marginBottom: spacing.lg },
   heroName: { ...typography.subheading },
   heroMeta: { ...typography.caption, marginTop: spacing.xs },

@@ -11,6 +11,18 @@ import { formatSlugLabel } from '../../../lib/format-label';
 import { formatPeso } from '../../../lib/format-peso';
 import { useAdminQuery } from '../../../lib/use-admin-query';
 
+interface CashRemittance {
+  _id: string;
+  orderId: string;
+  stage: string;
+  cashAmount: number;
+  earningOffset: number;
+  netRemittance: number;
+  status: string;
+  submittedAt?: string;
+  remittedAt?: string;
+}
+
 interface RiderDocument {
   type: string;
   fileUrl?: string;
@@ -69,13 +81,10 @@ export default function RiderProfileReviewPage() {
   const [creditNote, setCreditNote] = useState('');
   const [creditType, setCreditType] = useState<'bonus' | 'adjustment'>('bonus');
   const [walletBusy, setWalletBusy] = useState(false);
-
-  const load = useCallback(async () => {
-    if (!userId) throw new Error('Rider not found');
-    return adminFetch<RiderProfileData>(`/admin/riders/${userId}/profile`);
-  }, [userId]);
-
-  const { data, loading, error, reload } = useAdminQuery(load, [userId]);
+  const [remittances, setRemittances] = useState<CashRemittance[]>([]);
+  const [remittancesLoading, setRemittancesLoading] = useState(false);
+  const [remittancesError, setRemittancesError] = useState('');
+  const [verifyBusy, setVerifyBusy] = useState(false);
 
   async function reviewDocument(type: string, status: 'approved' | 'rejected', reason?: string) {
     if (!userId) return;
@@ -143,6 +152,50 @@ export default function RiderProfileReviewPage() {
       setActionError(e instanceof Error ? e.message : 'Credit failed');
     } finally {
       setWalletBusy(false);
+    }
+  }
+
+  const loadRemittances = useCallback(async () => {
+    if (!userId) return;
+    setRemittancesLoading(true);
+    setRemittancesError('');
+    try {
+      const res = await adminFetch<CashRemittance[]>(
+        `/admin/riders/${userId}/cash-remittances`,
+      );
+      setRemittances((res ?? []).filter((r) => r.status !== 'remitted'));
+    } catch (e) {
+      setRemittancesError(e instanceof Error ? e.message : 'Failed to load remittances');
+    } finally {
+      setRemittancesLoading(false);
+    }
+  }, [userId]);
+
+  // Load remittances alongside profile
+  const { data, loading, error, reload } = useAdminQuery(
+    useCallback(async () => {
+      if (!userId) throw new Error('Rider not found');
+      const profile = await adminFetch<RiderProfileData>(`/admin/riders/${userId}/profile`);
+      void loadRemittances();
+      return profile;
+    }, [userId, loadRemittances]),
+    [userId],
+  );
+
+  async function verifyRemittances(ids?: string[]) {
+    if (!userId) return;
+    setVerifyBusy(true);
+    setRemittancesError('');
+    try {
+      await adminFetch(`/admin/riders/${userId}/cash-remittances/verify`, {
+        method: 'POST',
+        body: JSON.stringify({ remittanceIds: ids }),
+      });
+      await loadRemittances();
+    } catch (e) {
+      setRemittancesError(e instanceof Error ? e.message : 'Verify failed');
+    } finally {
+      setVerifyBusy(false);
     }
   }
 
@@ -293,6 +346,86 @@ export default function RiderProfileReviewPage() {
                 </button>
               </div>
             </div>
+          </OpsPanel>
+
+          <OpsPanel
+            title="Cash remittances"
+            description="Cash collected by the rider that must be remitted back to Lunara."
+          >
+            {remittancesError ? (
+              <div className="alert-error mb-3" role="alert">
+                {remittancesError}
+              </div>
+            ) : null}
+            {remittancesLoading ? (
+              <p className="text-sm text-muted">Loading…</p>
+            ) : remittances.length === 0 ? (
+              <p className="text-sm text-muted">No pending remittances.</p>
+            ) : (
+              <div className="space-y-3">
+                <div className="overflow-x-auto rounded-lg border border-border/60">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-surface-muted text-xs uppercase text-muted">
+                      <tr>
+                        <th className="px-3 py-2 text-left">Order</th>
+                        <th className="px-3 py-2 text-left">Stage</th>
+                        <th className="px-3 py-2 text-right">Cash collected</th>
+                        <th className="px-3 py-2 text-right">Earning offset</th>
+                        <th className="px-3 py-2 text-right">Net to remit</th>
+                        <th className="px-3 py-2 text-left">Submitted</th>
+                        <th className="px-3 py-2 text-left">Status</th>
+                        <th className="px-3 py-2" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/40 bg-white">
+                      {remittances.map((r) => (
+                        <tr key={r._id}>
+                          <td className="px-3 py-2 font-mono text-xs text-muted">
+                            {r.orderId.slice(-6).toUpperCase()}
+                          </td>
+                          <td className="px-3 py-2 capitalize">{r.stage}</td>
+                          <td className="px-3 py-2 text-right">{formatPeso(r.cashAmount)}</td>
+                          <td className="px-3 py-2 text-right text-muted">
+                            {r.earningOffset > 0 ? `−${formatPeso(r.earningOffset)}` : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right font-semibold">
+                            {formatPeso(r.netRemittance)}
+                          </td>
+                          <td className="px-3 py-2 text-muted">
+                            {r.submittedAt
+                              ? new Date(r.submittedAt).toLocaleDateString()
+                              : '—'}
+                          </td>
+                          <td className="px-3 py-2">
+                            <span className="badge-primary capitalize">{r.status}</span>
+                          </td>
+                          <td className="px-3 py-2">
+                            <button
+                              type="button"
+                              className="btn-accent btn-sm"
+                              disabled={verifyBusy}
+                              onClick={() => verifyRemittances([r._id])}
+                            >
+                              Verify
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {remittances.length > 1 ? (
+                  <button
+                    type="button"
+                    className="btn-primary btn-sm"
+                    disabled={verifyBusy}
+                    onClick={() => verifyRemittances()}
+                  >
+                    {verifyBusy ? 'Processing…' : `Verify all ${remittances.length} remittances`}
+                  </button>
+                ) : null}
+              </div>
+            )}
           </OpsPanel>
 
           <OpsPanel title="Documents" description="Review uploaded KYC files">

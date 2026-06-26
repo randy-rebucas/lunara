@@ -53,12 +53,10 @@ export default function WalletScreen() {
   const load = useCallback(async () => {
     setError('');
     try {
-      const [wallet, txns] = await Promise.all([
-        apiFetch<{ balance: number }>('/wallets/me'),
-        apiFetch<WalletTransaction[]>('/wallets/me/transactions'),
-      ]);
-      setBalance(wallet.balance);
-      setTransactions(txns);
+      const wallet = await apiFetch<{ balance: number }>('/wallets/me');
+      setBalance(wallet.balance ?? 0);
+      const txns = await apiFetch<WalletTransaction[]>('/wallets/me/transactions');
+      setTransactions(Array.isArray(txns) ? txns : []);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load wallet');
       setTransactions([]);
@@ -120,7 +118,7 @@ export default function WalletScreen() {
         loadingMessage="Loading wallet…"
         onRetry={() => {
           setLoading(true);
-          load();
+          void load();
         }}
       />
 

@@ -463,10 +463,10 @@ export function DispatchBoard() {
                   <option
                     key={b.branchId}
                     value={b.branchId}
-                    disabled={!b.availability.acceptingOrders}
                   >
                     {b.name} — score {b.recommendationScore}
                     {b.isRecommended ? ' ★' : ''}
+                    {!b.availability.acceptingOrders ? ' ⚠ unavailable' : ''}
                   </option>
                 ))}
               </select>

@@ -18,6 +18,7 @@ export default function OnboardingProfileScreen() {
   const router = useRouter();
   const apiFetch = useAuthStore((s) => s.apiFetch);
   const tokens = useAuthStore((s) => s.tokens);
+  const [checking, setChecking] = useState(true);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [error, setError] = useState('');
@@ -33,6 +34,8 @@ export default function OnboardingProfileScreen() {
         router.replace('/onboarding/address');
       } else if (status.isComplete) {
         router.replace('/(tabs)');
+      } else {
+        setChecking(false);
       }
     });
   }, [apiFetch, router, tokens?.accessToken]);
@@ -60,6 +63,8 @@ export default function OnboardingProfileScreen() {
       setSubmitting(false);
     }
   }
+
+  if (checking) return null;
 
   return (
     <Screen scroll>

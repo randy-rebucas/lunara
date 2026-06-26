@@ -11,11 +11,12 @@ export class WalletsService {
   ) {}
 
   async findOrCreate(userId: string) {
-    let wallet = await this.walletModel.findOne({ userId: new Types.ObjectId(userId) });
-    if (!wallet) {
-      wallet = await this.walletModel.create({ userId: new Types.ObjectId(userId) });
-    }
-    return wallet;
+    const wallet = await this.walletModel.findOneAndUpdate(
+      { userId: new Types.ObjectId(userId) },
+      { $setOnInsert: { userId: new Types.ObjectId(userId), balance: 0, currency: 'PHP' } },
+      { upsert: true, new: true },
+    );
+    return wallet!;
   }
 
   async getWallet(userId: string) {

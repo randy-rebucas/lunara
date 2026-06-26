@@ -1,5 +1,5 @@
 import { Link, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { appConfig } from '@lunara/config';
 import { isValidPhilippineMobile } from '@lunara/utils';
@@ -29,6 +29,22 @@ export default function LoginScreen() {
   const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => { if (cooldownRef.current) clearInterval(cooldownRef.current); };
+  }, []);
+
+  function startResendCooldown() {
+    setResendCooldown(30);
+    cooldownRef.current = setInterval(() => {
+      setResendCooldown((prev) => {
+        if (prev <= 1) { clearInterval(cooldownRef.current!); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+  }
 
   async function handleSendOtp() {
     setError('');
@@ -42,6 +58,7 @@ export default function LoginScreen() {
       setVerifiedPhone(result.phone);
       setOtp('');
       setOtpStep('code');
+      startResendCooldown();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not send OTP');
     } finally {
@@ -81,6 +98,8 @@ export default function LoginScreen() {
     setOtpStep('phone');
     setOtp('');
     setVerifiedPhone('');
+    setResendCooldown(0);
+    if (cooldownRef.current) clearInterval(cooldownRef.current);
   }
 
   return (
@@ -167,14 +186,18 @@ export default function LoginScreen() {
               disabled={submitting || otp.length < 6}
               style={styles.submitBtn}
             />
-            <Pressable onPress={handleSendOtp} style={styles.linkBtn}>
-              <Text style={styles.linkText}>Resend code</Text>
+            <Pressable onPress={handleSendOtp} style={styles.linkBtn} disabled={submitting || resendCooldown > 0}>
+              <Text style={[styles.linkText, resendCooldown > 0 && styles.linkTextDisabled]}>
+                {resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : 'Resend code'}
+              </Text>
             </Pressable>
             <Pressable
               onPress={() => {
                 setOtpStep('phone');
                 setOtp('');
                 setError('');
+                setResendCooldown(0);
+                if (cooldownRef.current) clearInterval(cooldownRef.current);
               }}
               style={styles.linkBtn}
             >
@@ -227,6 +250,7 @@ const styles = StyleSheet.create({
   submitBtn: { marginTop: spacing.sm },
   linkBtn: { marginTop: spacing.md, alignItems: 'center' },
   linkText: { color: colors.primary, fontWeight: '600', fontSize: 14 },
+  linkTextDisabled: { color: colors.muted },
   mutedLinkText: { color: colors.muted, fontSize: 14 },
   footer: { ...typography.bodySm, textAlign: 'center', marginTop: spacing.xxl },
   footerLink: { color: colors.primary, fontWeight: '600' },

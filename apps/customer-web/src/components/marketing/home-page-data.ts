@@ -50,8 +50,8 @@ export const HOW_IT_WORKS: HowItWorksItem[] = [
     description:
       'Choose wash, dry clean, or express service. Pick a time slot and confirm your order with a clear price breakdown.',
     icon: CalendarCheck,
-    image: u('1512941937669-90a1b58e7e9c', 640, 360),
-    imageAlt: 'Person booking a laundry pickup on a smartphone',
+    image: u('1563013544-824ae1b704d3', 640, 360),
+    imageAlt: 'Person booking a laundry pickup online on a laptop',
   },
   {
     step: '2',
@@ -59,8 +59,8 @@ export const HOW_IT_WORKS: HowItWorksItem[] = [
     description:
       'A Lunara rider picks up from your home or office. Pin your address for accurate routing and handoff.',
     icon: Bike,
-    image: u('1558981403-c5f9899a28bc', 640, 360),
-    imageAlt: 'Delivery rider on a scooter collecting a laundry bag',
+    image: 'https://images.pexels.com/photos/7363090/pexels-photo-7363090.jpeg?auto=compress&cs=tinysrgb&w=640&h=360&fit=crop',
+    imageAlt: 'Lunara rider collecting a laundry bag from a home doorstep',
   },
   {
     step: '3',
@@ -68,8 +68,8 @@ export const HOW_IT_WORKS: HowItWorksItem[] = [
     description:
       'Trusted laundry partners wash, dry, and fold your clothes. Track every step from shop to dispatch.',
     icon: Layers,
-    image: u('1517677208171-0bc6132a26b5', 640, 360),
-    imageAlt: 'Professional laundry shop with washing machines',
+    image: u('1610557892470-55d9e80c0bce', 640, 360),
+    imageAlt: 'Clothes being washed inside a professional washing machine',
   },
   {
     step: '4',
@@ -77,8 +77,8 @@ export const HOW_IT_WORKS: HowItWorksItem[] = [
     description:
       'Get laundry returned to your door. Pay your way — GCash, card, wallet, or cash — and rate your experience.',
     icon: PackageCheck,
-    image: u('1558618666-fcd25c85cd64', 640, 360),
-    imageAlt: 'Clean freshly folded clothes ready for delivery',
+    image: 'https://images.pexels.com/photos/1884579/pexels-photo-1884579.jpeg?auto=compress&cs=tinysrgb&w=640&h=360&fit=crop',
+    imageAlt: 'Neatly folded fresh clothes on shelves ready for delivery',
   },
 ];
 
