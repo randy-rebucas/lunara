@@ -11,6 +11,7 @@ import {
   AVATAR_UPLOAD_DIR,
   CATALOG_ADDON_UPLOAD_DIR,
   PARTNER_BRAND_UPLOAD_DIR,
+  REMITTANCE_PROOF_UPLOAD_DIR,
 } from './common/uploads/upload-paths';
 
 async function bootstrap() {
@@ -26,6 +27,7 @@ async function bootstrap() {
   app.useStaticAssets(AVATAR_UPLOAD_DIR, { prefix: '/api/v1/uploads/avatars/' });
   app.useStaticAssets(CATALOG_ADDON_UPLOAD_DIR, { prefix: '/api/v1/uploads/catalog-addons/' });
   app.useStaticAssets(PARTNER_BRAND_UPLOAD_DIR, { prefix: '/api/v1/uploads/partner-brands/' });
+  app.useStaticAssets(REMITTANCE_PROOF_UPLOAD_DIR, { prefix: '/api/v1/uploads/remittance-proofs/' });
   app.enableCors({ origin: true, credentials: true });
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalPipes(

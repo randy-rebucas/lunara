@@ -21,6 +21,8 @@ interface CashRemittance {
   status: string;
   submittedAt?: string;
   remittedAt?: string;
+  transactionId?: string;
+  proofImageUrl?: string;
 }
 
 interface RiderDocument {
@@ -373,6 +375,8 @@ export default function RiderProfileReviewPage() {
                         <th className="px-3 py-2 text-right">Earning offset</th>
                         <th className="px-3 py-2 text-right">Net to remit</th>
                         <th className="px-3 py-2 text-left">Submitted</th>
+                        <th className="px-3 py-2 text-left">Ref no.</th>
+                        <th className="px-3 py-2 text-left">Proof</th>
                         <th className="px-3 py-2 text-left">Status</th>
                         <th className="px-3 py-2" />
                       </tr>
@@ -395,6 +399,22 @@ export default function RiderProfileReviewPage() {
                             {r.submittedAt
                               ? new Date(r.submittedAt).toLocaleDateString()
                               : '—'}
+                          </td>
+                          <td className="px-3 py-2 font-mono text-xs text-slate-700">
+                            {r.transactionId ?? '—'}
+                          </td>
+                          <td className="px-3 py-2">
+                            {r.proofImageUrl ? (
+                              <a href={r.proofImageUrl} target="_blank" rel="noopener noreferrer">
+                                <img
+                                  src={r.proofImageUrl}
+                                  alt="Proof"
+                                  className="h-10 w-10 rounded object-cover ring-1 ring-border hover:opacity-80"
+                                />
+                              </a>
+                            ) : (
+                              <span className="text-muted">—</span>
+                            )}
                           </td>
                           <td className="px-3 py-2">
                             <span className="badge-primary capitalize">{r.status}</span>

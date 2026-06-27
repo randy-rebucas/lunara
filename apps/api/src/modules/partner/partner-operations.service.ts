@@ -609,17 +609,36 @@ export class PartnerOperationsService {
     const weekStart = new Date(startOfDay);
     weekStart.setDate(weekStart.getDate() - 6);
 
-    const [today, week, month, allCompleted] = await Promise.all([
+    const [today, week, month, recentCompleted, allTimeSummary] = await Promise.all([
       this.orderModel.find({ ...baseFilter, updatedAt: { $gte: startOfDay } }),
       this.orderModel.find({ ...baseFilter, updatedAt: { $gte: weekStart } }),
       this.orderModel.find({ ...baseFilter, updatedAt: { $gte: startOfMonth } }),
       this.orderModel.find(baseFilter).sort({ updatedAt: -1 }).limit(200),
+      this.orderModel.aggregate<{ total: number; subtotalSum: number; count: number }>([
+        { $match: baseFilter },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: '$total' },
+            subtotalSum: { $sum: { $ifNull: ['$subtotal', '$total'] } },
+            count: { $sum: 1 },
+          },
+        },
+      ]),
     ]);
 
     const todayTotal = today.reduce((s, o) => s + o.total, 0);
     const weekTotal = week.reduce((s, o) => s + o.total, 0);
     const monthTotal = month.reduce((s, o) => s + o.total, 0);
-    const allTimeRevenue = allCompleted.reduce((s, o) => s + o.total, 0);
+    const allTimeRevenue = allTimeSummary[0]?.total ?? 0;
+    const allTimeCompletedOrders = allTimeSummary[0]?.count ?? 0;
+
+    // Commission breakdown helper — consistent with createSettlement rounding
+    const periodBreakdown = (orders: { total: number; subtotal?: number }[], rate: number) => {
+      const gross = orders.reduce((s, o) => s + o.total, 0);
+      const fee = Math.round(orders.reduce((s, o) => s + (o.subtotal ?? o.total) * rate, 0));
+      return { gross, fee, payout: gross - fee };
+    };
 
     const last7 = [];
     for (let i = 6; i >= 0; i--) {
@@ -640,7 +659,7 @@ export class PartnerOperationsService {
 
     // Fetch payment details and branch commission rate for per-order breakdown
     const [paymentsByOrderId, branch] = await Promise.all([
-      loadLatestOrderPaymentsByOrderId(this.paymentModel, allCompleted.map((o) => o._id)),
+      loadLatestOrderPaymentsByOrderId(this.paymentModel, recentCompleted.map((o) => o._id)),
       role !== UserRole.ADMIN
         ? this.resolvePartnerBranchId(userId, role)
             .then((id) => this.branchModel.findById(id).select('commissionRate'))
@@ -650,7 +669,14 @@ export class PartnerOperationsService {
 
     const commissionRate = branch?.commissionRate ?? 0.20;
 
-    const recentOrders = allCompleted.map((o) => {
+    const todayBreakdown = periodBreakdown(today, commissionRate);
+    const weekBreakdown = periodBreakdown(week, commissionRate);
+    const monthBreakdown = periodBreakdown(month, commissionRate);
+    const allTimeSubtotalSum = allTimeSummary[0]?.subtotalSum ?? 0;
+    const allTimeFee = Math.round(allTimeSubtotalSum * commissionRate);
+    const allTimePayout = allTimeRevenue - allTimeFee;
+
+    const recentOrders = recentCompleted.map((o) => {
       const payment = paymentsByOrderId.get(o._id.toString());
       const isCash = payment?.method === PaymentMethod.CASH;
       const cashCollected = isCash && payment?.status === PaymentStatus.PAID;
@@ -678,15 +704,23 @@ export class PartnerOperationsService {
       success: true,
       data: {
         today: todayTotal,
+        todayFee: todayBreakdown.fee,
+        todayPayout: todayBreakdown.payout,
         week: weekTotal,
+        weekFee: weekBreakdown.fee,
+        weekPayout: weekBreakdown.payout,
         month: monthTotal,
+        monthFee: monthBreakdown.fee,
+        monthPayout: monthBreakdown.payout,
         todayOrders: today.length,
         weekOrders: week.length,
         monthOrders: month.length,
         avgOrderToday: today.length ? Math.round(todayTotal / today.length) : 0,
         avgOrderMonth: month.length ? Math.round(monthTotal / month.length) : 0,
-        allTimeCompletedOrders: allCompleted.length,
+        allTimeCompletedOrders,
         allTimeRevenue,
+        allTimeFee,
+        allTimePayout,
         daily: last7,
         recentOrders,
       },
@@ -714,24 +748,124 @@ export class PartnerOperationsService {
     return { success: true, data: settlements.map((s) => this.formatSettlement(s)) };
   }
 
-  /** Net amount Lunara still owes this partner per the ledger — should track unpaid settlements. */
+  /** Net amount Lunara still owes this partner — sum of pending settlement payouts. */
   async getLedgerBalance(partnerId: string) {
-    const balance = await this.ledgerService.getAccountBalance('partner_payable', partnerId);
-    return { success: true, data: { partnerId, payableBalance: balance } };
+    const pendingSettlements = await this.settlementModel.find({
+      partnerId: new Types.ObjectId(partnerId),
+      status: 'pending',
+    });
+    const payableBalance = pendingSettlements.reduce((sum, s) => sum + (s.partnerPayout ?? s.totalAmount), 0);
+    return { success: true, data: { partnerId, payableBalance } };
+  }
+
+  async getUnsettledOrders(partnerId: string) {
+    const branch = await this.branchModel.findOne({
+      partnerUserId: new Types.ObjectId(partnerId),
+    });
+    if (!branch) throw new NotFoundException('Partner branch not found');
+
+    const orders = await this.orderModel
+      .find({
+        branchId: branch._id,
+        status: { $in: COMPLETED_STATUSES },
+        settlementId: { $exists: false },
+      })
+      .sort({ updatedAt: -1 });
+
+    const paymentsByOrderId = await loadLatestOrderPaymentsByOrderId(
+      this.paymentModel,
+      orders.map((o) => o._id),
+    );
+
+    const commissionRate = branch.commissionRate ?? 0.20;
+
+    const data = orders.map((o) => {
+      const payment = paymentsByOrderId.get(o._id.toString());
+      const isCash = payment?.method === PaymentMethod.CASH;
+      const cashCollected = isCash && payment?.status === PaymentStatus.PAID;
+      const subtotal = o.subtotal ?? o.total;
+      const lunaraFee = Math.round(subtotal * commissionRate);
+      const partnerPayout = o.total - lunaraFee;
+      return {
+        orderId: o._id.toString(),
+        completedAt: o.updatedAt?.toISOString() ?? o.createdAt?.toISOString(),
+        amount: o.total,
+        subtotal,
+        lunaraFee,
+        partnerPayout,
+        commissionRate,
+        bookingType: o.bookingType,
+        paymentMethod: payment?.method ?? null,
+        cashTiming: payment?.cashTiming ?? null,
+        cashCollected,
+      };
+    });
+
+    return { success: true, data };
+  }
+
+  async getSettlementOrders(userId: string, role: UserRole, settlementId: string) {
+    const settlement = await this.settlementModel.findById(settlementId);
+    if (!settlement) throw new NotFoundException('Settlement not found');
+
+    // For partners, scope to their own settlement only
+    if (role !== UserRole.ADMIN) {
+      if (settlement.partnerId.toString() !== userId) {
+        throw new NotFoundException('Settlement not found');
+      }
+    }
+
+    const branch = await this.branchModel.findOne({
+      partnerUserId: new Types.ObjectId(settlement.partnerId),
+    });
+    if (!branch) throw new NotFoundException('Partner branch not found');
+
+    const orders = await this.orderModel
+      .find({ settlementId: settlement._id })
+      .sort({ updatedAt: -1 });
+
+    const paymentsByOrderId = await loadLatestOrderPaymentsByOrderId(
+      this.paymentModel,
+      orders.map((o) => o._id),
+    );
+
+    // Use the commission rate snapshot from the settlement for exact reconciliation
+    const commissionRate = settlement.commissionRate ?? 0.20;
+
+    const data = orders.map((o) => {
+      const payment = paymentsByOrderId.get(o._id.toString());
+      const isCash = payment?.method === PaymentMethod.CASH;
+      const cashCollected = isCash && payment?.status === PaymentStatus.PAID;
+      const subtotal = o.subtotal ?? o.total;
+      const lunaraFee = Math.round(subtotal * commissionRate);
+      const partnerPayout = o.total - lunaraFee;
+      return {
+        orderId: o._id.toString(),
+        completedAt: o.updatedAt?.toISOString() ?? o.createdAt?.toISOString(),
+        amount: o.total,
+        subtotal,
+        lunaraFee,
+        partnerPayout,
+        commissionRate,
+        bookingType: o.bookingType,
+        paymentMethod: payment?.method ?? null,
+        cashTiming: payment?.cashTiming ?? null,
+        cashCollected,
+        cashCollectedAt: cashCollected ? payment?.paidAt?.toISOString() : null,
+        receiptCode: payment?.receiptCode ?? null,
+      };
+    });
+
+    return { success: true, data };
   }
 
   async createSettlement(
     adminUserId: string,
     partnerId: string,
-    dto: { periodStart: string; periodEnd: string; adminNote?: string },
+    dto: { orderIds: string[]; adminNote?: string },
   ) {
-    const start = new Date(dto.periodStart);
-    const end = new Date(dto.periodEnd);
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      throw new BadRequestException('Invalid period dates');
-    }
-    if (start >= end) {
-      throw new BadRequestException('periodStart must be before periodEnd');
+    if (!dto.orderIds || dto.orderIds.length === 0) {
+      throw new BadRequestException('At least one order must be selected');
     }
 
     // Find partner's branch
@@ -741,14 +875,20 @@ export class PartnerOperationsService {
     if (!branch) throw new NotFoundException('Partner branch not found');
 
     const completedOrders = await this.orderModel.find({
+      _id: { $in: dto.orderIds.map((id) => new Types.ObjectId(id)) },
       branchId: branch._id,
       status: { $in: COMPLETED_STATUSES },
-      updatedAt: { $gte: start, $lte: end },
+      settlementId: { $exists: false },
     });
 
     if (completedOrders.length === 0) {
-      throw new BadRequestException('No completed orders found in this period');
+      throw new BadRequestException('No valid unsettled orders found for the selected IDs');
     }
+
+    // Derive period from the selected orders' completion timestamps
+    const timestamps = completedOrders.map((o) => o.updatedAt?.getTime() ?? o.createdAt?.getTime() ?? Date.now());
+    const start = new Date(Math.min(...timestamps));
+    const end = new Date(Math.max(...timestamps));
 
     const paymentsByOrderId = await loadLatestOrderPaymentsByOrderId(
       this.paymentModel,
@@ -791,6 +931,11 @@ export class PartnerOperationsService {
       adminNote: dto.adminNote,
     });
 
+    await this.orderModel.updateMany(
+      { _id: { $in: completedOrders.map((o) => o._id) } },
+      { $set: { settlementId: settlement._id } },
+    );
+
     await this.ledgerService.post(
       `settlement:${settlement._id.toString()}`,
       'settlement',
@@ -803,11 +948,10 @@ export class PartnerOperationsService {
           description: `Orders settled for partner ${partnerId} (${start.toISOString().slice(0, 10)}..${end.toISOString().slice(0, 10)})`,
         },
         {
-          accountType: 'partner_payable',
-          accountSubject: partnerId,
+          accountType: 'cash_out',
           direction: 'credit',
           amount: partnerPayout,
-          description: `Payout owed to partner ${partnerId}`,
+          description: `Cash paid out to partner ${partnerId}`,
         },
         {
           accountType: 'platform_revenue',

@@ -123,4 +123,22 @@ export class OrdersController {
   ) {
     return this.ordersService.updateStatus(id, dto, req.user.sub);
   }
+
+  @Post(':id/customer-pickup')
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
+  markCustomerPickup(
+    @Param('id') id: string,
+    @Req() req: { user: { sub: string } },
+  ) {
+    return this.ordersService.markCustomerPickup(id, req.user.sub);
+  }
+
+  @Post(':id/customer-pickup/complete')
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
+  completeCustomerPickup(
+    @Param('id') id: string,
+    @Req() req: { user: { sub: string } },
+  ) {
+    return this.ordersService.completeCustomerPickup(id, req.user.sub);
+  }
 }

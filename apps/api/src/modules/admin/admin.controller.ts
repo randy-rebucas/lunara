@@ -297,6 +297,11 @@ export class AdminController {
     return this.partnerOperationsService.getPartnerSettlementsForAdmin(partnerId);
   }
 
+  @Get('partners/:partnerId/unsettled-orders')
+  getUnsettledOrders(@Param('partnerId') partnerId: string) {
+    return this.partnerOperationsService.getUnsettledOrders(partnerId);
+  }
+
   @Post('partners/:partnerId/settlements')
   createPartnerSettlement(
     @Param('partnerId') partnerId: string,

@@ -1,11 +1,9 @@
-import { IsDateString, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsOptional, IsString } from 'class-validator';
 
 export class CreateSettlementDto {
-  @IsDateString()
-  periodStart!: string;
-
-  @IsDateString()
-  periodEnd!: string;
+  @IsArray()
+  @IsString({ each: true })
+  orderIds!: string[];
 
   @IsOptional()
   @IsString()

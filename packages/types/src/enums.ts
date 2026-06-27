@@ -31,6 +31,8 @@ export enum OrderStatus {
   IRONING = 'ironing',
   QUALITY_CHECK = 'quality_check',
   READY_FOR_DELIVERY = 'ready_for_delivery',
+  /** Customer chose to collect laundry at the shop themselves */
+  CUSTOMER_PICKUP = 'customer_pickup',
   /** Delivery rider assigned by admin dispatcher */
   RIDER_ASSIGNED_DELIVERY = 'rider_assigned_delivery',
   OUT_FOR_DELIVERY = 'out_for_delivery',

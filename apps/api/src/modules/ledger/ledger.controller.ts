@@ -17,4 +17,11 @@ export class LedgerController {
     const rows = await this.ledgerService.getTrialBalance();
     return { success: true, data: rows };
   }
+
+  /** Full reconciliation: P&L summary, cash flow, settlement & withdrawal cross-checks, wallet drift. */
+  @Get('reconciliation')
+  async getReconciliation() {
+    const data = await this.ledgerService.getReconciliation();
+    return { success: true, data };
+  }
 }

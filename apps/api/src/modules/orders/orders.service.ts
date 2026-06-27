@@ -405,4 +405,54 @@ export class OrdersService {
     const updated = await this.orderModel.findById(id);
     return { success: true, data: updated };
   }
+
+  async markCustomerPickup(id: string, updatedBy: string) {
+    const order = await this.orderModel.findById(id);
+    if (!order) throw new NotFoundException('Order not found');
+
+    if (order.status !== OrderStatus.READY_FOR_DELIVERY) {
+      throw new BadRequestException(
+        `Order must be in READY_FOR_DELIVERY status to mark as customer pickup (current: ${order.status})`,
+      );
+    }
+
+    order.fulfillmentType = 'customer_pickup';
+    order.status = OrderStatus.CUSTOMER_PICKUP;
+    order.statusHistory.push({
+      status: OrderStatus.CUSTOMER_PICKUP,
+      timestamp: new Date(),
+      note: 'Customer will collect laundry at the shop',
+      updatedBy,
+    });
+    await order.save();
+
+    this.trackingGateway.emitOrderStatus(order._id.toString(), OrderStatus.CUSTOMER_PICKUP);
+
+    return { success: true, data: await this.orderModel.findById(id) };
+  }
+
+  async completeCustomerPickup(id: string, updatedBy: string) {
+    const order = await this.orderModel.findById(id);
+    if (!order) throw new NotFoundException('Order not found');
+
+    if (order.status !== OrderStatus.CUSTOMER_PICKUP) {
+      throw new BadRequestException(
+        `Order must be in CUSTOMER_PICKUP status to confirm collection (current: ${order.status})`,
+      );
+    }
+
+    order.customerPickupAt = new Date();
+    order.status = OrderStatus.COMPLETED;
+    order.statusHistory.push({
+      status: OrderStatus.COMPLETED,
+      timestamp: new Date(),
+      note: 'Customer collected laundry at the shop',
+      updatedBy,
+    });
+    await order.save();
+
+    this.trackingGateway.emitOrderStatus(order._id.toString(), OrderStatus.COMPLETED);
+
+    return { success: true, data: await this.orderModel.findById(id) };
+  }
 }

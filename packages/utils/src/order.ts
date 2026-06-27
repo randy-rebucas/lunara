@@ -32,6 +32,9 @@ export function getNextOrderStatus(current: OrderStatus): OrderStatus | null {
 
 const PARTNER_ALLOWED_SKIPS: [OrderStatus, OrderStatus][] = [
   [OrderStatus.FOLDING, OrderStatus.QUALITY_CHECK],
+  // Customer self-pickup path: skip the delivery rider flow entirely
+  [OrderStatus.READY_FOR_DELIVERY, OrderStatus.CUSTOMER_PICKUP],
+  [OrderStatus.CUSTOMER_PICKUP, OrderStatus.COMPLETED],
 ];
 
 export function canTransitionOrderStatus(from: OrderStatus, to: OrderStatus): boolean {

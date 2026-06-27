@@ -118,6 +118,14 @@ export class RiderCashRemittance {
   @Prop()
   submittedAt?: Date;
 
+  /** Public URL of the uploaded receipt/proof image (optional) */
+  @Prop()
+  proofImageUrl?: string;
+
+  /** GCash/Maya or bank transaction reference number (optional) */
+  @Prop()
+  transactionId?: string;
+
   @Prop()
   remittedAt?: Date;
 

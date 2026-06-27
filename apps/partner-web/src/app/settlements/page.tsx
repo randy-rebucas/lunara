@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback } from 'react';
-import type { PartnerSettlement } from '@lunara/types';
+import { Fragment, useCallback, useState } from 'react';
+import type { PartnerOrderDetail, PartnerSettlement } from '@lunara/types';
 import { AuthLoading } from '../../components/auth-loading';
 import { DataPageStatus } from '../../components/data-page-status';
 import { PageHeader } from '../../components/ui/page-header';
@@ -19,6 +19,29 @@ function formatDateRange(start: string, end: string) {
 
 export default function SettlementsPage() {
   const { ready } = useRequirePartner();
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [ordersCache, setOrdersCache] = useState<Record<string, PartnerOrderDetail[]>>({});
+  const [ordersLoading, setOrdersLoading] = useState<string | null>(null);
+  const [ordersError, setOrdersError] = useState<string | null>(null);
+
+  async function toggleOrders(s: PartnerSettlement) {
+    if (expandedId === s._id) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(s._id);
+    if (ordersCache[s._id]) return;
+    setOrdersLoading(s._id);
+    setOrdersError(null);
+    try {
+      const orders = await partnerFetch<PartnerOrderDetail[]>(`/partner/settlements/${s._id}/orders`);
+      setOrdersCache((c) => ({ ...c, [s._id]: orders }));
+    } catch (e) {
+      setOrdersError(e instanceof Error ? e.message : 'Failed to load orders');
+    } finally {
+      setOrdersLoading(null);
+    }
+  }
 
   const load = useCallback(async () => {
     return partnerFetch<PartnerSettlement[]>('/partner/settlements');
@@ -107,6 +130,7 @@ export default function SettlementsPage() {
               <table className="data-table">
                 <thead>
                   <tr>
+                    <th className="w-8" />
                     <th>Period</th>
                     <th>Orders</th>
                     <th>Status</th>
@@ -117,41 +141,113 @@ export default function SettlementsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.map((s) => (
-                    <tr key={s._id}>
-                      <td className="text-slate-900 text-sm">{formatDateRange(s.periodStart, s.periodEnd)}</td>
-                      <td className="text-muted">
-                        {s.totalOrders}
-                        <span className="ml-1 text-xs text-muted-foreground">
-                          ({s.cashOrders}C / {s.digitalOrders}D)
-                        </span>
-                      </td>
-                      <td>
-                        {s.status === 'paid' ? (
-                          <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
-                            Paid
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-                            Pending
-                          </span>
+                  {data.map((s) => {
+                    const isExpanded = expandedId === s._id;
+                    const isLoadingThis = ordersLoading === s._id;
+                    const orders = ordersCache[s._id];
+                    return (
+                      <Fragment key={s._id}>
+                        <tr className="cursor-pointer hover:bg-slate-50"
+                          onClick={() => void toggleOrders(s)}
+                        >
+                          <td className="text-center text-xs text-muted">
+                            <span
+                              className="inline-block transition-transform duration-150"
+                              style={{ transform: isExpanded ? 'rotate(90deg)' : 'none' }}
+                            >▶</span>
+                          </td>
+                          <td className="text-slate-900 text-sm">{formatDateRange(s.periodStart, s.periodEnd)}</td>
+                          <td className="text-muted">
+                            {s.totalOrders}
+                            <span className="ml-1 text-xs text-muted-foreground">
+                              ({s.cashOrders}C / {s.digitalOrders}D)
+                            </span>
+                          </td>
+                          <td>
+                            {s.status === 'paid' ? (
+                              <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">Paid</span>
+                            ) : (
+                              <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">Pending</span>
+                            )}
+                          </td>
+                          <td className="text-muted text-sm">
+                            {s.paidAt
+                              ? new Date(s.paidAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
+                              : '—'}
+                          </td>
+                          <td className="text-right text-muted">{formatPeso(s.totalAmount)}</td>
+                          <td className="text-right text-rose-600 text-sm">
+                            −{formatPeso(s.lunaraFee ?? 0)}
+                            {s.commissionRate != null && (
+                              <span className="ml-1 text-xs text-muted-foreground">({Math.round(s.commissionRate * 100)}%)</span>
+                            )}
+                          </td>
+                          <td className="text-right font-semibold text-slate-900">{formatPeso(s.partnerPayout ?? s.totalAmount)}</td>
+                        </tr>
+                        {isExpanded && (
+                          <tr>
+                            <td colSpan={8} className="bg-slate-50/70 p-0">
+                              <div className="border-t border-border/60 px-5 py-4">
+                                {isLoadingThis && <p className="text-sm text-muted">Loading orders…</p>}
+                                {!isLoadingThis && ordersError && <p className="text-sm text-destructive">{ordersError}</p>}
+                                {!isLoadingThis && orders?.length === 0 && (
+                                  <p className="text-sm text-muted">No orders found for this period.</p>
+                                )}
+                                {!isLoadingThis && orders && orders.length > 0 && (
+                                  <table className="w-full text-sm">
+                                    <thead>
+                                      <tr className="text-left text-xs text-muted">
+                                        <th className="pb-2 pr-4 font-medium">Completed</th>
+                                        <th className="pb-2 pr-4 font-medium">Order ID</th>
+                                        <th className="pb-2 pr-4 font-medium">Type</th>
+                                        <th className="pb-2 pr-4 font-medium">Payment</th>
+                                        <th className="pb-2 pr-4 text-right font-medium">Amount</th>
+                                        <th className="pb-2 pr-4 text-right font-medium">Lunara fee</th>
+                                        <th className="pb-2 text-right font-medium">Your payout</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-border/40">
+                                      {orders.map((o) => (
+                                        <tr key={o.orderId}>
+                                          <td className="py-1.5 pr-4 text-muted">
+                                            {o.completedAt
+                                              ? new Date(o.completedAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })
+                                              : '—'}
+                                          </td>
+                                          <td className="py-1.5 pr-4 font-mono text-xs text-muted">{o.orderId.slice(-8).toUpperCase()}</td>
+                                          <td className="py-1.5 pr-4 capitalize text-slate-700">{o.bookingType?.replace(/_/g, ' ') ?? '—'}</td>
+                                          <td className="py-1.5 pr-4">
+                                            {o.paymentMethod === 'CASH' ? (
+                                              o.cashCollected
+                                                ? <span className="text-xs font-medium text-green-700">Cash ✓</span>
+                                                : <span className="text-xs text-amber-600">Cash pending</span>
+                                            ) : (
+                                              <span className="text-xs text-blue-700">{o.paymentMethod ?? '—'}</span>
+                                            )}
+                                          </td>
+                                          <td className="py-1.5 pr-4 text-right text-slate-900">{formatPeso(o.amount)}</td>
+                                          <td className="py-1.5 pr-4 text-right text-rose-600">−{formatPeso(o.lunaraFee ?? 0)}</td>
+                                          <td className="py-1.5 text-right font-semibold text-slate-900">{formatPeso(o.partnerPayout ?? o.amount)}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                    <tfoot>
+                                      <tr className="border-t border-border/60 text-xs font-semibold">
+                                        <td colSpan={4} className="pt-2 text-muted">{orders.length} order{orders.length === 1 ? '' : 's'} total</td>
+                                        <td className="pt-2 pr-4 text-right text-slate-900">{formatPeso(orders.reduce((sum, o) => sum + o.amount, 0))}</td>
+                                        <td className="pt-2 pr-4 text-right text-rose-600">−{formatPeso(orders.reduce((sum, o) => sum + (o.lunaraFee ?? 0), 0))}</td>
+                                        <td className="pt-2 text-right text-slate-900">{formatPeso(orders.reduce((sum, o) => sum + (o.partnerPayout ?? o.amount), 0))}</td>
+                                      </tr>
+                                    </tfoot>
+                                  </table>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
                         )}
-                      </td>
-                      <td className="text-muted text-sm">
-                        {s.paidAt
-                          ? new Date(s.paidAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
-                          : '—'}
-                      </td>
-                      <td className="text-right text-muted">{formatPeso(s.totalAmount)}</td>
-                      <td className="text-right text-rose-600 text-sm">
-                        −{formatPeso(s.lunaraFee ?? 0)}
-                        {s.commissionRate != null && (
-                          <span className="ml-1 text-xs text-muted-foreground">({Math.round(s.commissionRate * 100)}%)</span>
-                        )}
-                      </td>
-                      <td className="text-right font-semibold text-slate-900">{formatPeso(s.partnerPayout ?? s.totalAmount)}</td>
-                    </tr>
-                  ))}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

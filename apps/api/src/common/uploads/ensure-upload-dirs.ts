@@ -3,6 +3,7 @@ import {
   AVATAR_UPLOAD_DIR,
   CATALOG_ADDON_UPLOAD_DIR,
   PARTNER_BRAND_UPLOAD_DIR,
+  REMITTANCE_PROOF_UPLOAD_DIR,
   RIDER_DOCUMENT_UPLOAD_DIR,
   TASK_PHOTO_UPLOAD_DIR,
   UPLOADS_ROOT,
@@ -26,5 +27,8 @@ export function ensureUploadDirectories() {
   }
   if (!existsSync(PARTNER_BRAND_UPLOAD_DIR)) {
     mkdirSync(PARTNER_BRAND_UPLOAD_DIR, { recursive: true });
+  }
+  if (!existsSync(REMITTANCE_PROOF_UPLOAD_DIR)) {
+    mkdirSync(REMITTANCE_PROOF_UPLOAD_DIR, { recursive: true });
   }
 }

@@ -138,8 +138,14 @@ export interface PartnerRevenueDailyPoint {
 
 export interface PartnerRevenueData {
   today: number;
+  todayFee: number;
+  todayPayout: number;
   week: number;
+  weekFee: number;
+  weekPayout: number;
   month: number;
+  monthFee: number;
+  monthPayout: number;
   todayOrders: number;
   weekOrders: number;
   monthOrders: number;
@@ -147,6 +153,8 @@ export interface PartnerRevenueData {
   avgOrderMonth: number;
   allTimeCompletedOrders: number;
   allTimeRevenue: number;
+  allTimeFee: number;
+  allTimePayout: number;
   daily: PartnerRevenueDailyPoint[];
   recentOrders: PartnerOrderDetail[];
 }
@@ -251,6 +259,8 @@ export interface PartnerProcessingView {
     bookingType: string;
     total: number;
     estimatedWeightKg?: number;
+    fulfillmentType?: 'delivery' | 'customer_pickup';
+    customerPickupAt?: string;
     pickup?: { actualWeightKg?: number; receiptCode?: string };
   };
   currentStep: { id: string; label: string; description?: string; orderStatus?: string };

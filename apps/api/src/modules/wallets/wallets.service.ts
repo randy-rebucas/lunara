@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { LedgerService } from '../ledger/ledger.service';
 import { Transaction, TransactionDocument, Wallet, WalletDocument } from './schemas/wallet.schema';
 
 @Injectable()
@@ -8,6 +9,7 @@ export class WalletsService {
   constructor(
     @InjectModel(Wallet.name) private walletModel: Model<WalletDocument>,
     @InjectModel(Transaction.name) private transactionModel: Model<TransactionDocument>,
+    private ledgerService: LedgerService,
   ) {}
 
   async findOrCreate(userId: string) {
@@ -44,6 +46,7 @@ export class WalletsService {
       );
     }
 
+    const ref = `topup-dev-${userId}-${Date.now()}`;
     const wallet = await this.findOrCreate(userId);
     wallet.balance += amount;
     await wallet.save();
@@ -51,9 +54,24 @@ export class WalletsService {
       walletId: wallet._id,
       type: 'credit',
       amount,
-      reference: `topup-dev-${Date.now()}`,
+      reference: ref,
       description: 'Wallet top-up (dev)',
     });
+    await this.ledgerService.post(ref, 'wallet_topup', userId, [
+      {
+        accountType: 'platform_cash',
+        direction: 'debit',
+        amount,
+        description: `Dev wallet top-up for user ${userId}`,
+      },
+      {
+        accountType: 'customer_wallet_liability',
+        accountSubject: userId,
+        direction: 'credit',
+        amount,
+        description: `Dev wallet top-up credited to user ${userId}`,
+      },
+    ]);
     return { success: true, data: wallet };
   }
 

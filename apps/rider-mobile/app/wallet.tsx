@@ -2,12 +2,15 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   FlatList,
+  Image,
   Pressable,
   RefreshControl,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import {
   formatCurrency,
   RIDER_MIN_WITHDRAWAL,
@@ -19,7 +22,7 @@ import { Card } from '../src/components/ui/card';
 import { Input } from '../src/components/ui/input';
 import { Screen } from '../src/components/ui/screen';
 import { SectionHeader } from '../src/components/ui/section-header';
-import { riderFetch } from '../src/api';
+import { riderFetch, riderUpload } from '../src/api';
 import type { CashSummaryData, PayoutMethodData, WalletData, WithdrawalRequest } from '../src/lib/rider-types';
 import { colors, radius, spacing, typography } from '../src/theme';
 
@@ -63,6 +66,8 @@ export default function WalletScreen() {
   const [savingPayout, setSavingPayout] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
   const [submittingRemittance, setSubmittingRemittance] = useState(false);
+  const [proofImageUri, setProofImageUri] = useState<string | null>(null);
+  const [remittanceTransactionId, setRemittanceTransactionId] = useState('');
 
   const [method, setMethod] = useState<RiderPayoutMethod>('gcash');
   const [gcashNumber, setGcashNumber] = useState('');
@@ -143,6 +148,36 @@ export default function WalletScreen() {
     }
   }
 
+  async function pickProofImage(source: 'camera' | 'library') {
+    let result: ImagePicker.ImagePickerResult;
+    if (source === 'camera') {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('Permission needed', 'Camera access is required to take a photo.');
+        return;
+      }
+      result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.85 });
+    } else {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('Permission needed', 'Photo library access is required.');
+        return;
+      }
+      result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.85 });
+    }
+    if (!result.canceled && result.assets[0]) {
+      setProofImageUri(result.assets[0].uri);
+    }
+  }
+
+  function showProofPicker() {
+    Alert.alert('Attach proof', 'Choose a source', [
+      { text: 'Take photo', onPress: () => void pickProofImage('camera') },
+      { text: 'Choose from library', onPress: () => void pickProofImage('library') },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+
   async function submitRemittance() {
     Alert.alert(
       'Confirm remittance',
@@ -150,14 +185,32 @@ export default function WalletScreen() {
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'I\'ve handed it over',
+          text: "I've handed it over",
           onPress: async () => {
+            if (!hasProof) {
+              Alert.alert('Proof required', 'Please attach a reference number or receipt photo before submitting.');
+              return;
+            }
             setSubmittingRemittance(true);
             try {
-              const res = await riderFetch<{ submittedCount: number; totalNetRemittance: number }>(
+              const formData = new FormData();
+              if (proofImageUri) {
+                const ext = proofImageUri.split('.').pop() ?? 'jpg';
+                formData.append('proof', {
+                  uri: proofImageUri,
+                  name: `remittance-proof.${ext}`,
+                  type: 'image/jpeg',
+                } as unknown as Blob);
+              }
+              if (remittanceTransactionId.trim()) {
+                formData.append('transactionId', remittanceTransactionId.trim());
+              }
+              const res = await riderUpload<{ submittedCount: number; totalNetRemittance: number }>(
                 '/riders/remit-cash',
-                { method: 'POST' },
+                formData,
               );
+              setProofImageUri(null);
+              setRemittanceTransactionId('');
               Alert.alert(
                 'Remittance submitted',
                 `${res.submittedCount} order${res.submittedCount !== 1 ? 's' : ''} · ${formatCurrency(res.totalNetRemittance)} — waiting for admin confirmation.`,
@@ -196,6 +249,8 @@ export default function WalletScreen() {
       setWithdrawing(false);
     }
   }
+
+  const hasProof = proofImageUri !== null || remittanceTransactionId.trim().length > 0;
 
   if (loading && !wallet) {
     return (
@@ -341,10 +396,37 @@ export default function WalletScreen() {
                   <Text style={[styles.hint, { marginTop: spacing.md }]}>
                     Hand the net amount to a Lunara admin in person, then tap below.
                   </Text>
+
+                  {/* Proof section */}
+                  <View style={styles.proofSection}>
+                    <Text style={styles.proofLabel}>Proof of remittance (required)</Text>
+                  <Text style={styles.hint}>Attach a GCash/Maya reference no. or a receipt photo — at least one is required.</Text>
+                    <TextInput
+                      style={styles.proofInput}
+                      placeholder="GCash / Maya reference no."
+                      placeholderTextColor={colors.textMuted}
+                      value={remittanceTransactionId}
+                      onChangeText={setRemittanceTransactionId}
+                      autoCapitalize="none"
+                    />
+                    {proofImageUri ? (
+                      <View style={styles.proofThumbRow}>
+                        <Image source={{ uri: proofImageUri }} style={styles.proofThumb} />
+                        <Pressable onPress={() => setProofImageUri(null)} style={styles.proofClear} hitSlop={8}>
+                          <Text style={styles.proofClearText}>✕ Remove</Text>
+                        </Pressable>
+                      </View>
+                    ) : (
+                      <Pressable onPress={showProofPicker} style={styles.proofPickerBtn}>
+                        <Text style={styles.proofPickerText}>📎 Attach receipt photo</Text>
+                      </Pressable>
+                    )}
+                  </View>
+
                   <Button
                     label={submittingRemittance ? 'Submitting…' : "I've handed over the cash"}
                     variant="accent"
-                    disabled={submittingRemittance}
+                    disabled={submittingRemittance || !hasProof}
                     onPress={submitRemittance}
                     style={styles.action}
                   />
@@ -545,4 +627,32 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
   },
   remitHistoryCard: { paddingVertical: spacing.md, marginBottom: spacing.sm },
+  proofSection: {
+    marginTop: spacing.md,
+    gap: spacing.sm,
+  },
+  proofLabel: { ...typography.label, color: colors.mutedForeground },
+  proofInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    ...typography.body,
+    color: colors.foreground,
+    backgroundColor: colors.surface,
+  },
+  proofPickerBtn: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    borderStyle: 'dashed' as const,
+    paddingVertical: spacing.md,
+    alignItems: 'center' as const,
+  },
+  proofPickerText: { ...typography.bodySm, color: colors.primary },
+  proofThumbRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.sm },
+  proofThumb: { width: 64, height: 64, borderRadius: radius.sm, backgroundColor: colors.muted },
+  proofClear: { flex: 1 },
+  proofClearText: { ...typography.bodySm, color: colors.destructive ?? '#dc2626' },
 });

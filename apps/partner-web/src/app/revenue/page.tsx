@@ -90,6 +90,18 @@ export default function RevenuePage() {
                 {data.todayOrders} order{data.todayOrders === 1 ? '' : 's'}
                 {data.todayOrders > 0 ? ` · avg ${formatPeso(data.avgOrderToday, true)}` : ''}
               </p>
+              {data.todayOrders > 0 && (
+                <div className="mt-2 space-y-0.5 border-t border-accent/20 pt-2 text-xs">
+                  <div className="flex justify-between text-muted">
+                    <span>Lunara fee</span>
+                    <span>−{formatPeso(data.todayFee ?? 0)}</span>
+                  </div>
+                  <div className="flex justify-between font-semibold text-accent">
+                    <span>Your payout</span>
+                    <span>{formatPeso(data.todayPayout ?? 0)}</span>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="stat-card">
               <p className="text-xs text-muted">Last 7 days</p>
@@ -97,6 +109,18 @@ export default function RevenuePage() {
               <p className="mt-1 text-xs text-muted-foreground">
                 {data.weekOrders} completed order{data.weekOrders === 1 ? '' : 's'}
               </p>
+              {data.weekOrders > 0 && (
+                <div className="mt-2 space-y-0.5 border-t border-border/60 pt-2 text-xs">
+                  <div className="flex justify-between text-muted">
+                    <span>Lunara fee</span>
+                    <span>−{formatPeso(data.weekFee ?? 0)}</span>
+                  </div>
+                  <div className="flex justify-between font-semibold text-slate-800">
+                    <span>Your payout</span>
+                    <span>{formatPeso(data.weekPayout ?? 0)}</span>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="stat-card">
               <p className="text-xs text-muted">Month to date</p>
@@ -105,6 +129,18 @@ export default function RevenuePage() {
                 {data.monthOrders} order{data.monthOrders === 1 ? '' : 's'}
                 {data.monthOrders > 0 ? ` · avg ${formatPeso(data.avgOrderMonth, true)}` : ''}
               </p>
+              {data.monthOrders > 0 && (
+                <div className="mt-2 space-y-0.5 border-t border-border/60 pt-2 text-xs">
+                  <div className="flex justify-between text-muted">
+                    <span>Lunara fee</span>
+                    <span>−{formatPeso(data.monthFee ?? 0)}</span>
+                  </div>
+                  <div className="flex justify-between font-semibold text-slate-800">
+                    <span>Your payout</span>
+                    <span>{formatPeso(data.monthPayout ?? 0)}</span>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="stat-card">
               <p className="text-xs text-muted">All time</p>
@@ -113,6 +149,18 @@ export default function RevenuePage() {
                 {data.allTimeCompletedOrders} completed order
                 {data.allTimeCompletedOrders === 1 ? '' : 's'}
               </p>
+              {data.allTimeCompletedOrders > 0 && (
+                <div className="mt-2 space-y-0.5 border-t border-border/60 pt-2 text-xs">
+                  <div className="flex justify-between text-muted">
+                    <span>Lunara fee</span>
+                    <span>−{formatPeso(data.allTimeFee ?? 0)}</span>
+                  </div>
+                  <div className="flex justify-between font-semibold text-slate-800">
+                    <span>Your payout</span>
+                    <span>{formatPeso(data.allTimePayout ?? 0)}</span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

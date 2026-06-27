@@ -24,6 +24,8 @@ interface OpsOrder {
   deliveryRequestedAt?: string;
   operationsConflict?: boolean;
   operationsConflictNote?: string;
+  fulfillmentType?: 'delivery' | 'customer_pickup';
+  customerPickupAt?: string;
   total?: number;
   paymentMethod?: string;
   paymentStatus?: string;
@@ -171,7 +173,12 @@ export default function AdminOrderOpsPage() {
     (o.status === 'shop_assigned' || o.status === 'confirmed') &&
     !o.pickupRiderId;
   const canAssignDelivery =
-    partnerAccepted && o.status === 'ready_for_delivery' && !o.deliveryRiderId;
+    partnerAccepted &&
+    o.status === 'ready_for_delivery' &&
+    !o.deliveryRiderId &&
+    o.fulfillmentType !== 'customer_pickup';
+  const canMarkCustomerPickup = o.status === 'ready_for_delivery' && o.fulfillmentType !== 'customer_pickup';
+  const canCompleteCustomerPickup = o.status === 'customer_pickup';
   const awaitingPartnerAccept =
     !!o.branchName &&
     o.dispatchStatus === 'dispatched' &&
@@ -204,6 +211,9 @@ export default function AdminOrderOpsPage() {
             </h1>
             <p className="mt-2 text-sm text-muted sm:text-base">
               <span className="badge-neutral capitalize">{formatSlugLabel(o.status)}</span>
+              {o.fulfillmentType === 'customer_pickup' ? (
+                <span className="ml-2 badge-warning capitalize">Customer pickup</span>
+              ) : null}
               {' · '}
               {o.branchName ?? 'No shop assigned'}
               {' · '}
@@ -517,6 +527,55 @@ export default function AdminOrderOpsPage() {
             )}
           </OpsPanel>
         </div>
+
+        <OpsPanel
+          title="Customer self-pickup"
+          description="Customer collects laundry at the shop — bypasses delivery rider."
+        >
+          {o.customerPickupAt ? (
+            <p className="text-sm text-muted">
+              Collected at {new Date(o.customerPickupAt).toLocaleString()}
+            </p>
+          ) : o.fulfillmentType === 'customer_pickup' ? (
+            <p className="text-sm text-amber-800">Waiting for customer to collect at the shop.</p>
+          ) : (
+            <p className="text-sm text-muted">
+              {o.status === 'ready_for_delivery'
+                ? 'Mark this order as customer pickup to skip delivery rider assignment.'
+                : 'Available when order is ready_for_delivery.'}
+            </p>
+          )}
+          <div className="dc-form-actions mt-4 border-0 pt-0">
+            {canMarkCustomerPickup && (
+              <button
+                type="button"
+                disabled={busy}
+                className="btn-outline btn-sm"
+                onClick={() =>
+                  run(() =>
+                    adminFetch(`/orders/${id}/customer-pickup`, { method: 'POST' }),
+                  )
+                }
+              >
+                Mark as customer pickup
+              </button>
+            )}
+            {canCompleteCustomerPickup && (
+              <button
+                type="button"
+                disabled={busy}
+                className="btn-primary btn-sm"
+                onClick={() =>
+                  run(() =>
+                    adminFetch(`/orders/${id}/customer-pickup/complete`, { method: 'POST' }),
+                  )
+                }
+              >
+                Confirm customer collected
+              </button>
+            )}
+          </div>
+        </OpsPanel>
 
         <OpsPanel
           title="Manual assignment"

@@ -389,7 +389,37 @@ export default function StaffOrderProcessingPage() {
         </div>
       )}
 
-      {inProcessing && view.isComplete && canDispatchDelivery && (
+      {view.order.status === 'customer_pickup' && (
+        <div className="mt-8 rounded-xl border border-amber-300 bg-amber-50 p-6 text-center">
+          <p className="text-lg font-semibold text-amber-900">Awaiting customer self-collection</p>
+          <p className="mt-2 text-sm text-amber-800">
+            The customer will come to the shop to collect their laundry. Confirm once they have collected it.
+          </p>
+          <button
+            type="button"
+            disabled={loading}
+            className="mt-4 min-h-[3rem] w-full touch-manipulation rounded-lg bg-accent px-5 py-3 text-base font-medium text-white active:bg-accent/90 disabled:opacity-50 sm:w-auto"
+            onClick={async () => {
+              if (!id) return;
+              setLoading(true);
+              setError('');
+              try {
+                await partnerFetch(`/orders/${id}/customer-pickup/complete`, { method: 'POST' });
+                await reload();
+              } catch (e) {
+                setError(e instanceof Error ? e.message : 'Failed to confirm collection');
+              } finally {
+                setLoading(false);
+              }
+            }}
+          >
+            Confirm customer collected
+          </button>
+          {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+        </div>
+      )}
+
+      {inProcessing && view.isComplete && view.order.fulfillmentType !== 'customer_pickup' && canDispatchDelivery && (
         <div className="mt-8 rounded-xl border border-accent bg-green-50 p-6 text-center">
           <p className="text-lg font-semibold text-accent">Ready for delivery</p>
           <p className="mt-2 text-sm text-slate-600">
@@ -421,7 +451,7 @@ export default function StaffOrderProcessingPage() {
         </div>
       )}
 
-      {inProcessing && view.isComplete && !canDispatchDelivery && (
+      {inProcessing && view.isComplete && view.order.fulfillmentType !== 'customer_pickup' && !canDispatchDelivery && (
         <div className="mt-8 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center">
           <p className="text-lg font-semibold text-slate-900">Ready for delivery</p>
           <p className="mt-2 text-sm text-slate-600">

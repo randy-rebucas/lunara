@@ -346,6 +346,15 @@ export class Order {
   @Prop({ type: [OrderStatusEvent], default: [] })
   statusHistory!: OrderStatusEvent[];
 
+  @Prop({ enum: ['delivery', 'customer_pickup'], default: 'delivery' })
+  fulfillmentType!: 'delivery' | 'customer_pickup';
+
+  @Prop()
+  customerPickupAt?: Date;
+
+  @Prop({ type: Types.ObjectId, ref: 'PartnerSettlement' })
+  settlementId?: Types.ObjectId;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

@@ -22,7 +22,9 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import {
   TASK_PHOTO_UPLOAD_DIR,
   RIDER_DOCUMENT_UPLOAD_DIR,
+  REMITTANCE_PROOF_UPLOAD_DIR,
   taskPhotoPublicPath,
+  remittanceProofPublicPath,
 } from '../../common/uploads/upload-paths';
 import { DeliveryPhotoDto } from './dto/delivery.dto';
 import { CapturePhotoDto, CollectLaundryDto, DropAtShopDto, VerifyCustomerDto, VerifyQrDto } from './dto/pickup.dto';
@@ -48,6 +50,26 @@ const taskPhotoUploadOptions = {
       const orderId = req.params?.orderId ?? 'task';
       const ext = extname(file.originalname).toLowerCase() || '.jpg';
       cb(null, `${userId}-${orderId}-${Date.now()}${ext}`);
+    },
+  }),
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter: (_req: unknown, file: Express.Multer.File, cb: (error: Error | null, ok: boolean) => void) => {
+    if (!ALLOWED_IMAGE_TYPES.has(file.mimetype)) {
+      cb(new BadRequestException('Only JPEG, PNG, and WebP images are allowed'), false);
+      return;
+    }
+    cb(null, true);
+  },
+};
+
+const remittanceProofUploadOptions = {
+  storage: diskStorage({
+    destination: REMITTANCE_PROOF_UPLOAD_DIR,
+    filename: (_req, file, cb) => {
+      const req = _req as { user?: { sub: string } };
+      const userId = req.user?.sub ?? 'rider';
+      const ext = extname(file.originalname).toLowerCase() || '.jpg';
+      cb(null, `${userId}-remittance-${Date.now()}${ext}`);
     },
   }),
   limits: { fileSize: 8 * 1024 * 1024 },
@@ -484,8 +506,14 @@ export class RidersController {
 
   @Post('remit-cash')
   @Roles(UserRole.RIDER)
-  submitRemittance(@Req() req: { user: { sub: string } }) {
-    return this.riderWalletService.submitRemittance(req.user.sub);
+  @UseInterceptors(FileInterceptor('proof', remittanceProofUploadOptions))
+  submitRemittance(
+    @Req() req: { user: { sub: string } },
+    @Body('transactionId') transactionId?: string,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    const proofImageUrl = file ? remittanceProofPublicPath(file.filename) : undefined;
+    return this.riderWalletService.submitRemittance(req.user.sub, proofImageUrl, transactionId);
   }
 
   @Post('wallet/withdraw')

@@ -217,6 +217,15 @@ export class PartnerController {
     return this.operationsService.getSettlements(req.user.sub, req.user.role);
   }
 
+  @Get('settlements/:settlementId/orders')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  getSettlementOrders(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('settlementId') settlementId: string,
+  ) {
+    return this.operationsService.getSettlementOrders(req.user.sub, req.user.role, settlementId);
+  }
+
   @Get('ledger-balance')
   @Roles(UserRole.PARTNER)
   getLedgerBalance(@Req() req: { user: { sub: string } }) {

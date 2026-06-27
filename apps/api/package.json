@@ -14,6 +14,7 @@
     "seed:promotions": "npx ts-node src/scripts/seed-promotions.ts",
     "seed:services": "npx ts-node src/scripts/seed-services.ts",
     "seed:addons": "npx ts-node src/scripts/seed-addons.ts",
+    "migrate:settlement-ledger": "npx ts-node src/scripts/migrate-settlement-ledger.ts",
     "clean": "rimraf dist tsconfig.tsbuildinfo"
   },
   "dependencies": {

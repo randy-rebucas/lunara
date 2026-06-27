@@ -104,7 +104,10 @@ export class RiderWalletService {
     if (rider.walletBackfilled || rider.walletBalance > 0) return;
     if (rider.totalEarnings <= 0) return;
 
-    rider.walletBalance = rider.totalEarnings;
+    const amount = rider.totalEarnings;
+    const ref = `backfill:${rider.userId.toString()}`;
+
+    rider.walletBalance = amount;
     rider.walletBackfilled = true;
     await rider.save();
 
@@ -112,10 +115,28 @@ export class RiderWalletService {
       .create({
         riderUserId: rider.userId,
         type: 'credit',
-        amount: rider.totalEarnings,
-        reference: `backfill:${rider.userId.toString()}`,
+        amount,
+        reference: ref,
         description: 'Wallet balance synced from lifetime earnings',
       })
+      .catch(() => {});
+
+    await this.ledgerService
+      .post(ref, 'rider_earning', rider.userId.toString(), [
+        {
+          accountType: 'rider_payout_expense',
+          direction: 'debit',
+          amount,
+          description: `Backfill: lifetime earnings synced to wallet for rider ${rider.userId.toString()}`,
+        },
+        {
+          accountType: 'rider_payable',
+          accountSubject: rider.userId.toString(),
+          direction: 'credit',
+          amount,
+          description: `Backfill: payable balance synced for rider ${rider.userId.toString()}`,
+        },
+      ])
       .catch(() => {});
   }
 
@@ -548,7 +569,7 @@ export class RiderWalletService {
     return { alreadyNetted: false, remittance: this.serializeRemittance(remittance) };
   }
 
-  async submitRemittance(riderUserId: string) {
+  async submitRemittance(riderUserId: string, proofImageUrl?: string, transactionId?: string) {
     const items = await this.remittanceModel.find({
       riderUserId: new Types.ObjectId(riderUserId),
       status: 'pending',
@@ -557,7 +578,12 @@ export class RiderWalletService {
 
     await this.remittanceModel.updateMany(
       { _id: { $in: items.map((i) => i._id) } },
-      { status: 'submitted', submittedAt: new Date() },
+      {
+        status: 'submitted',
+        submittedAt: new Date(),
+        ...(proofImageUrl && { proofImageUrl }),
+        ...(transactionId && { transactionId }),
+      },
     );
 
     return {

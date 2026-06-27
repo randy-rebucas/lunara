@@ -1,6 +1,9 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { PartnerSettlement, PartnerSettlementDocument } from '../partner/schemas/partner-settlement.schema';
+import { RiderWithdrawal, RiderWithdrawalDocument } from '../riders/schemas/rider-wallet.schema';
+import { Wallet, WalletDocument } from '../wallets/schemas/wallet.schema';
 import {
   LedgerAccountType,
   LedgerEntry,
@@ -19,6 +22,9 @@ export interface LedgerLine {
 export class LedgerService {
   constructor(
     @InjectModel(LedgerEntry.name) private entryModel: Model<LedgerEntryDocument>,
+    @InjectModel(PartnerSettlement.name) private settlementModel: Model<PartnerSettlementDocument>,
+    @InjectModel(RiderWithdrawal.name) private withdrawalModel: Model<RiderWithdrawalDocument>,
+    @InjectModel(Wallet.name) private walletModel: Model<WalletDocument>,
   ) {}
 
   /**
@@ -72,6 +78,135 @@ export class LedgerService {
       },
     ]);
     return result?.balance ?? 0;
+  }
+
+  /** Full revenue reconciliation snapshot: ledger vs DB cross-checks and P&L summary. */
+  async getReconciliation() {
+    // ── Ledger aggregate per account type (platform-level, no subject split) ──
+    const ledgerTotals = await this.entryModel.aggregate<{ _id: LedgerAccountType; balance: number }>([
+      {
+        $group: {
+          _id: '$accountType',
+          balance: {
+            $sum: {
+              $cond: [{ $eq: ['$direction', 'credit'] }, '$amount', { $multiply: ['$amount', -1] }],
+            },
+          },
+        },
+      },
+    ]);
+    const ledger = Object.fromEntries(ledgerTotals.map((r) => [r._id, r.balance])) as Record<string, number>;
+    const get = (key: string) => ledger[key] ?? 0;
+
+    // ── DB aggregates ──
+    const [settlementAgg] = await this.settlementModel.aggregate<{
+      totalRevenue: number;
+      totalLunaraFee: number;
+      totalPartnerPayout: number;
+      paidCount: number;
+      pendingCount: number;
+    }>([
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: '$totalAmount' },
+          totalLunaraFee: { $sum: '$lunaraFee' },
+          totalPartnerPayout: { $sum: '$partnerPayout' },
+          paidCount: { $sum: { $cond: [{ $eq: ['$status', 'paid'] }, 1, 0] } },
+          pendingCount: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } },
+        },
+      },
+    ]);
+
+    const [withdrawalAgg] = await this.withdrawalModel.aggregate<{
+      totalPaid: number;
+      paidCount: number;
+      pendingTotal: number;
+      pendingCount: number;
+    }>([
+      {
+        $group: {
+          _id: null,
+          totalPaid: { $sum: { $cond: [{ $eq: ['$status', 'paid'] }, '$amount', 0] } },
+          paidCount: { $sum: { $cond: [{ $eq: ['$status', 'paid'] }, 1, 0] } },
+          pendingTotal: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, '$amount', 0] } },
+          pendingCount: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } },
+        },
+      },
+    ]);
+
+    const [walletAgg] = await this.walletModel.aggregate<{ totalBalance: number; walletCount: number }>([
+      { $group: { _id: null, totalBalance: { $sum: '$balance' }, walletCount: { $sum: 1 } } },
+    ]);
+
+    const db = {
+      settlements: settlementAgg ?? { totalRevenue: 0, totalLunaraFee: 0, totalPartnerPayout: 0, paidCount: 0, pendingCount: 0 },
+      withdrawals: withdrawalAgg ?? { totalPaid: 0, paidCount: 0, pendingTotal: 0, pendingCount: 0 },
+      wallets: walletAgg ?? { totalBalance: 0, walletCount: 0 },
+    };
+
+    // ── P&L summary ──
+    const platformRevenue = get('platform_revenue');         // commission earned
+    const riderCost = get('rider_payout_expense');           // task fees paid out (debit sum = positive here)
+    const refundCost = get('refund_expense');                // goodwill/compensation
+    const netMargin = platformRevenue - riderCost - refundCost;
+
+    // ── Cash flow ──
+    const cashIn = get('platform_cash');                     // PayMongo + verified remittances + wallet topups
+    const cashOut = get('cash_out');                         // partner payouts + rider withdrawals
+
+    // ── Spot checks ──
+    const clearingDrift = get('order_revenue_clearing');     // should be near 0
+    // Ledger platform_revenue vs DB lunaraFee sum
+    const commissionDrift = platformRevenue - db.settlements.totalLunaraFee;
+    // Ledger cash_out vs DB (partnerPayout + riderWithdrawalsPaid)
+    const cashOutDrift = cashOut - (db.settlements.totalPartnerPayout + db.withdrawals.totalPaid);
+    // Ledger customer_wallet_liability sum vs actual wallet balances
+    const walletLedgerTotal = get('customer_wallet_liability');
+    const walletDbTotal = db.wallets.totalBalance;
+    const walletDrift = walletLedgerTotal - walletDbTotal;
+
+    return {
+      pnl: {
+        platformRevenue,
+        riderCost,
+        refundCost,
+        netMargin,
+      },
+      cashFlow: {
+        cashIn,
+        cashOut,
+        net: cashIn - cashOut,
+      },
+      settlements: {
+        count: db.settlements.paidCount + db.settlements.pendingCount,
+        paidCount: db.settlements.paidCount,
+        pendingCount: db.settlements.pendingCount,
+        totalRevenue: db.settlements.totalRevenue,
+        totalLunaraFee: db.settlements.totalLunaraFee,
+        totalPartnerPayout: db.settlements.totalPartnerPayout,
+      },
+      riderWithdrawals: {
+        paidCount: db.withdrawals.paidCount,
+        totalPaid: db.withdrawals.totalPaid,
+        pendingCount: db.withdrawals.pendingCount,
+        pendingTotal: db.withdrawals.pendingTotal,
+        riderPayableBalance: get('rider_payable'),
+        riderRemittanceReceivable: get('rider_remittance_receivable'),
+      },
+      wallets: {
+        count: db.wallets.walletCount,
+        ledgerLiability: walletLedgerTotal,
+        actualBalance: walletDbTotal,
+        drift: walletDrift,
+      },
+      spotChecks: {
+        clearingDrift,
+        commissionDrift,
+        cashOutDrift,
+        walletDrift,
+      },
+    };
   }
 
   /** Sum of credits minus debits per account, for reconciliation against PartnerSettlement/RiderWithdrawal totals. */

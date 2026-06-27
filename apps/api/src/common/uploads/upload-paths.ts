@@ -43,3 +43,10 @@ export function catalogAddonPublicPath(filename: string) {
 export function partnerBrandPublicPath(filename: string) {
   return `${PARTNER_BRAND_PUBLIC_PREFIX}/${filename}`;
 }
+
+export const REMITTANCE_PROOF_UPLOAD_DIR = join(UPLOADS_ROOT, 'remittance-proofs');
+export const REMITTANCE_PROOF_PUBLIC_PREFIX = '/api/v1/uploads/remittance-proofs';
+
+export function remittanceProofPublicPath(filename: string) {
+  return `${REMITTANCE_PROOF_PUBLIC_PREFIX}/${filename}`;
+}
