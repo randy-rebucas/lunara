@@ -1,10 +1,10 @@
 {
-  "partnerId": "3dbc3c9c-2582-4cab-a4be-d22883749648",
+  "partnerId": "6a3d1bf6758b1c766a955849",
   "appName": "Jelave",
   "slug": "jelave-customer",
   "iosBundleId": "com.jelave.customer",
   "androidPackage": "com.jelave.customer",
-  "easProjectId": "3dbc3c9c-2582-4cab-a4be-d22883749648",
+  "easProjectId": "fc74f707-99b0-483a-ae64-6157a2946569",
   "splashBackgroundColor": "#ffffff",
   "theme": {
     "appDisplayName": "Je Lave Laundromat",
