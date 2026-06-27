@@ -311,7 +311,7 @@ function ScriptsTab() {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ScriptResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const outputRef = useRef<HTMLPreElement>(null);
+  const outputRef = useRef<HTMLDivElement>(null);
 
   async function handleRun() {
     setBusy(true);
