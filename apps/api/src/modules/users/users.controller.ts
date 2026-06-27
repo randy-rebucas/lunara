@@ -1,4 +1,4 @@
-import { Controller, Get, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Req, UseGuards } from '@nestjs/common';
 import { UserRole } from '@lunara/types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -19,5 +19,11 @@ export class UsersController {
   @Roles(UserRole.ADMIN)
   findAll() {
     return this.usersService.findAll();
+  }
+
+  @Patch(':id/active')
+  @Roles(UserRole.ADMIN)
+  setActive(@Param('id') id: string, @Body('isActive') isActive: boolean) {
+    return this.usersService.setActive(id, isActive);
   }
 }

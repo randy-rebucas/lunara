@@ -6,26 +6,53 @@ import { useState } from 'react';
 import { adminLogout, getAdminUser } from '../lib/admin-api';
 import { AdminHeaderActions } from './admin-header-actions';
 import { BrandMark } from './ui/brand-mark';
+import { DailyRoutine } from './daily-routine';
+import { AdminReminders } from './admin-reminders';
 
-const nav = [
+type NavItem = { href: string; label: string } | { section: string };
+
+const nav: NavItem[] = [
+  // Operations
+  { section: 'Operations' },
   { href: '/', label: 'Overview' },
   { href: '/control-tower', label: 'Control tower' },
   { href: '/orders', label: 'Orders' },
   { href: '/dispatch', label: 'Dispatch' },
+
+  // People
+  { section: 'People' },
+  { href: '/users', label: 'Users' },
   { href: '/riders', label: 'Riders' },
+
+  // Network
+  { section: 'Network' },
   { href: '/branches', label: 'Branches' },
   { href: '/shops', label: 'Shops' },
+  { href: '/categories', label: 'Categories' },
+  { href: '/services', label: 'Services' },
+  { href: '/addons', label: 'Add-ons' },
+
+  // Partners
+  { section: 'Partners' },
   { href: '/partners/branding', label: 'Branding' },
   { href: '/partners/settlements', label: 'Settlements' },
+
+  // Finance
+  { section: 'Finance' },
   { href: '/revenue', label: 'Revenue' },
   { href: '/reconciliation', label: 'Reconciliation' },
   { href: '/accounting', label: 'Accounting' },
-  { href: '/support', label: 'Support' },
   { href: '/refunds', label: 'Refunds' },
-  { href: '/reports', label: 'Reports' },
+
+  // Growth
+  { section: 'Growth' },
   { href: '/promotions', label: 'Promotions' },
-  { href: '/services', label: 'Services' },
-  { href: '/addons', label: 'Add-ons' },
+  { href: '/notifications', label: 'Notifications' },
+  { href: '/reports', label: 'Reports' },
+
+  // Support & System
+  { section: 'System' },
+  { href: '/support', label: 'Support' },
   { href: '/setup', label: 'Setup' },
   { href: '/maintenance', label: 'Maintenance' },
 ];
@@ -39,16 +66,25 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <nav className="space-y-0.5">
-      {nav.map((item) => (
-        <Link
-          key={item.href}
-          href={item.href}
-          onClick={onNavigate}
-          className={isActive(pathname, item.href) ? 'nav-link-active' : 'nav-link'}
-        >
-          {item.label}
-        </Link>
-      ))}
+      {nav.map((item) => {
+        if ('section' in item) {
+          return (
+            <p key={item.section} className="mb-1 mt-4 px-3 text-[10px] font-semibold uppercase tracking-widest text-muted/60 first:mt-0">
+              {item.section}
+            </p>
+          );
+        }
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            onClick={onNavigate}
+            className={isActive(pathname, item.href) ? 'nav-link-active' : 'nav-link'}
+          >
+            {item.label}
+          </Link>
+        );
+      })}
     </nav>
   );
 }
@@ -129,6 +165,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
+
+      <DailyRoutine />
+      <AdminReminders />
     </div>
   );
 }

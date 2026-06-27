@@ -14,7 +14,17 @@ export class UsersService {
   }
 
   async findAll() {
-    const users = await this.userModel.find().select('-passwordHash').limit(100);
+    const users = await this.userModel.find().select('-passwordHash').sort({ createdAt: -1 }).limit(2000);
     return { success: true, data: users };
+  }
+
+  async setActive(userId: string, isActive: boolean) {
+    const user = await this.userModel.findByIdAndUpdate(
+      userId,
+      { isActive },
+      { new: true },
+    ).select('-passwordHash');
+    if (!user) throw new NotFoundException('User not found');
+    return { success: true, data: user };
   }
 }
