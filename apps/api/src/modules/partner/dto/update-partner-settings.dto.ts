@@ -1,4 +1,4 @@
-import { IsBoolean, IsOptional } from 'class-validator';
+import { IsBoolean, IsOptional, IsString } from 'class-validator';
 
 export class UpdatePartnerSettingsDto {
   @IsOptional()
@@ -32,4 +32,28 @@ export class UpdatePartnerSettingsDto {
   @IsOptional()
   @IsBoolean()
   requireWeightVerificationOnReceive?: boolean;
+
+  @IsOptional()
+  @IsString()
+  payoutMethod?: string;
+
+  @IsOptional()
+  @IsString()
+  gcashNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  mayaNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  bankName?: string;
+
+  @IsOptional()
+  @IsString()
+  bankAccountName?: string;
+
+  @IsOptional()
+  @IsString()
+  bankAccountNumber?: string;
 }

@@ -17,6 +17,12 @@ export interface PartnerPortalSettings {
   notifyReadyForDelivery: boolean;
   allowStaffToRequestDelivery: boolean;
   requireWeightVerificationOnReceive: boolean;
+  payoutMethod?: 'gcash' | 'maya' | 'bank' | 'counter' | null;
+  gcashNumber?: string | null;
+  mayaNumber?: string | null;
+  bankName?: string | null;
+  bankAccountName?: string | null;
+  bankAccountNumber?: string | null;
 }
 
 export interface PartnerShopBranchSummary {

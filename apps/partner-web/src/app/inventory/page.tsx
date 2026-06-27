@@ -71,6 +71,7 @@ export default function InventoryPage() {
   async function patchItem(
     id: string,
     patch: { quantity?: number; lowStockThreshold?: number },
+    closeEdit = false,
   ) {
     setSaving(id);
     setActionError('');
@@ -80,17 +81,19 @@ export default function InventoryPage() {
         body: JSON.stringify(patch),
       });
       setData((prev) => (prev ?? []).map((i) => (i._id === id ? updated : i)));
-      setEditingId(null);
-      setDraftQty((d) => {
-        const next = { ...d };
-        delete next[id];
-        return next;
-      });
-      setDraftThreshold((d) => {
-        const next = { ...d };
-        delete next[id];
-        return next;
-      });
+      if (closeEdit) {
+        setEditingId(null);
+        setDraftQty((d) => {
+          const next = { ...d };
+          delete next[id];
+          return next;
+        });
+        setDraftThreshold((d) => {
+          const next = { ...d };
+          delete next[id];
+          return next;
+        });
+      }
     } catch (e) {
       setActionError(e instanceof Error ? e.message : 'Failed to update');
     } finally {
@@ -109,7 +112,7 @@ export default function InventoryPage() {
       setActionError('Enter a valid quantity (0 or higher).');
       return;
     }
-    void patchItem(item._id, { quantity: qty });
+    void patchItem(item._id, { quantity: qty }, true);
   }
 
   function applyDraftThreshold(item: PartnerInventoryItem) {
@@ -119,7 +122,7 @@ export default function InventoryPage() {
       setActionError('Enter a valid alert threshold (0 or higher).');
       return;
     }
-    void patchItem(item._id, { lowStockThreshold: threshold });
+    void patchItem(item._id, { lowStockThreshold: threshold }, true);
   }
 
   if (!ready) return <AuthLoading message="Loading inventory…" />;
@@ -204,7 +207,7 @@ export default function InventoryPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="font-medium text-slate-900">{item.name}</p>
-                        {level === 'out' && <span className="badge-warning">Out of stock</span>}
+                        {level === 'out' && <span className="badge-danger">Out of stock</span>}
                         {level === 'low' && <span className="badge-warning">Low stock</span>}
                         {level === 'ok' && <span className="badge-neutral">In stock</span>}
                       </div>
@@ -221,7 +224,7 @@ export default function InventoryPage() {
                                 : 'bg-emerald-500'
                           }`}
                           style={{
-                            width: `${Math.min(100, item.lowStockThreshold > 0 ? (item.quantity / (item.lowStockThreshold * 2)) * 100 : 100)}%`,
+                            width: `${item.lowStockThreshold > 0 ? Math.min(100, (item.quantity / (item.lowStockThreshold * 2)) * 100) : item.quantity > 0 ? 100 : 0}%`,
                           }}
                         />
                       </div>
@@ -254,6 +257,7 @@ export default function InventoryPage() {
                         className="btn-outline btn-sm"
                         disabled={busy}
                         onClick={() => adjustQty(item, 10)}
+                        aria-label={`Add 10 to ${item.name}`}
                       >
                         +10
                       </button>

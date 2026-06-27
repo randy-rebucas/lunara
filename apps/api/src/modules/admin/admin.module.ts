@@ -14,6 +14,8 @@ import { SosModule } from '../sos/sos.module';
 import { AdminController } from './admin.controller';
 import { AdminOperationsService } from './admin-operations.service';
 import { AdminDispatchService } from './admin-dispatch.service';
+import { MaintenanceController } from './maintenance.controller';
+import { MaintenanceService } from './maintenance.service';
 import { CatalogModule } from '../catalog/catalog.module';
 import { PromotionsModule } from '../promotions/promotions.module';
 import { AdminService } from './admin.service';
@@ -42,8 +44,8 @@ import { PartnerModule } from '../partner/partner.module';
     CatalogModule,
     PartnerModule,
   ],
-  controllers: [AdminController],
-  providers: [AdminService, AdminOperationsService, AdminDispatchService],
+  controllers: [AdminController, MaintenanceController],
+  providers: [AdminService, AdminOperationsService, AdminDispatchService, MaintenanceService],
   exports: [AdminService],
 })
 export class AdminModule {}

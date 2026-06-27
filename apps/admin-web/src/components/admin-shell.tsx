@@ -27,6 +27,7 @@ const nav = [
   { href: '/services', label: 'Services' },
   { href: '/addons', label: 'Add-ons' },
   { href: '/setup', label: 'Setup' },
+  { href: '/maintenance', label: 'Maintenance' },
 ];
 
 function isActive(pathname: string, href: string) {

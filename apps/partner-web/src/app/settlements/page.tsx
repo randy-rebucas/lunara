@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { Fragment, useCallback, useState } from 'react';
-import type { PartnerOrderDetail, PartnerSettlement } from '@lunara/types';
+import type { PartnerOrderDetail, PartnerSettlement, PartnerSettingsData } from '@lunara/types';
 import { AuthLoading } from '../../components/auth-loading';
 import { DataPageStatus } from '../../components/data-page-status';
 import { PageHeader } from '../../components/ui/page-header';
@@ -10,6 +10,22 @@ import { useRequirePartner } from '../../hooks/use-protected-page';
 import { formatPeso } from '../../lib/format-peso';
 import { partnerFetch } from '../../lib/partner-api';
 import { usePartnerQuery } from '../../lib/use-partner-query';
+
+const PAYOUT_METHOD_LABELS: Record<string, string> = {
+  gcash: 'GCash',
+  maya: 'Maya',
+  bank: 'Bank transfer',
+  counter: 'Personal / Over the counter',
+};
+
+function payoutMethodSub(settings: PartnerSettingsData['settings'] | undefined): string {
+  if (!settings?.payoutMethod) return '';
+  if (settings.payoutMethod === 'gcash') return settings.gcashNumber ?? '';
+  if (settings.payoutMethod === 'maya') return settings.mayaNumber ?? '';
+  if (settings.payoutMethod === 'bank')
+    return [settings.bankName, settings.bankAccountNumber].filter(Boolean).join(' · ');
+  return '';
+}
 
 function formatDateRange(start: string, end: string) {
   const fmt = (d: string) =>
@@ -51,8 +67,13 @@ export default function SettlementsPage() {
     return partnerFetch<{ partnerId: string; payableBalance: number }>('/partner/ledger-balance');
   }, []);
 
+  const loadSettings = useCallback(async () => {
+    return partnerFetch<PartnerSettingsData>('/partner/settings');
+  }, []);
+
   const { data, loading, error, reload } = usePartnerQuery(load, []);
   const { data: ledger } = usePartnerQuery(loadLedgerBalance, []);
+  const { data: settingsData } = usePartnerQuery(loadSettings, []);
 
   if (!ready) return <AuthLoading message="Loading settlements…" />;
 
@@ -71,13 +92,24 @@ export default function SettlementsPage() {
         }
       />
 
+      <div className="alert-info mt-4 flex items-start gap-3">
+        <span className="text-base">📅</span>
+        <div>
+          <p className="font-medium">Settlements process every Saturday</p>
+          <p className="mt-0.5 text-xs opacity-80">
+            Earnings from completed orders are tallied weekly and sent out on Saturdays.
+            Pending settlements will appear here once processed by Lunara admin.
+          </p>
+        </div>
+      </div>
+
       <div className="mt-4">
         <DataPageStatus loading={loading} error={error} loadingMessage="Loading settlements…" />
       </div>
 
       {data && (
         <>
-          <div className="mt-6 grid gap-3 sm:grid-cols-4">
+          <div className="mt-6 grid gap-3 sm:grid-cols-5">
             <div className="stat-card">
               <p className="text-xs text-muted">Outstanding balance</p>
               <p className="text-2xl font-semibold text-slate-900">
@@ -115,6 +147,26 @@ export default function SettlementsPage() {
                 </Link>
               </p>
               <p className="mt-1 text-xs text-muted-foreground">See per-order cash collection status</p>
+            </div>
+            <div className="stat-card">
+              <p className="text-xs text-muted">Payout method</p>
+              {settingsData?.settings.payoutMethod ? (
+                <>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">
+                    {PAYOUT_METHOD_LABELS[settingsData.settings.payoutMethod] ?? settingsData.settings.payoutMethod}
+                  </p>
+                  {payoutMethodSub(settingsData.settings) && (
+                    <p className="mt-0.5 text-xs text-muted-foreground">{payoutMethodSub(settingsData.settings)}</p>
+                  )}
+                </>
+              ) : (
+                <p className="mt-1 text-sm text-amber-600">Not set</p>
+              )}
+              <p className="mt-2 text-xs">
+                <Link href="/settings" className="text-primary underline hover:opacity-80">
+                  Change in Settings →
+                </Link>
+              </p>
             </div>
           </div>
 
