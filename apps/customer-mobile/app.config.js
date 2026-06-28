@@ -38,6 +38,18 @@ const adaptiveIcon = fs.existsSync(path.join(brandDir, 'adaptive-icon.png'))
   ? path.join(brandDir, 'adaptive-icon.png')
   : icon;
 
+// Resolves the in-app logo URI. Priority: manifest.theme.logoUrl (remote) →
+// partner icon.png encoded as a data URI → null (BrandMark falls back to default asset).
+function resolveBrandLogoUrl(partnerManifest, brandDirectory) {
+  if (partnerManifest?.theme?.logoUrl) return partnerManifest.theme.logoUrl;
+  const iconPath = path.join(brandDirectory, 'icon.png');
+  if (partnerManifest && fs.existsSync(iconPath)) {
+    const b64 = fs.readFileSync(iconPath).toString('base64');
+    return `data:image/png;base64,${b64}`;
+  }
+  return null;
+}
+
 /** @type {import('expo/config').ExpoConfig} */
 module.exports = {
   ...appJson,
@@ -53,6 +65,9 @@ module.exports = {
     termsUrl: `${websiteUrl}/terms`,
     partnerSlug: partnerSlug ?? null,
     partnerId: manifest?.partnerId ?? null,
+    brandColors: manifest?.theme?.colors ?? null,
+    brandLogoUrl: resolveBrandLogoUrl(manifest, brandDir),
+    brandDisplayName: manifest?.theme?.appDisplayName ?? null,
   },
   icon,
   splash: {

@@ -1,7 +1,8 @@
-# Deploying to Google Play Store
+# Deploying a Partner App to Google Play Store
 
-This guide covers building and submitting the **Je Lave** (or any partner-branded) customer mobile
-app to the Play Store using EAS Build + EAS Submit.
+This guide covers building and submitting any partner-branded customer mobile app to the Play
+Store using EAS Build + EAS Submit. Examples use **Je Lave** (`jelave`) — substitute your
+partner's slug where applicable.
 
 ---
 
@@ -24,149 +25,150 @@ app to the Play Store using EAS Build + EAS Submit.
 eas login
 ```
 
-### 1b. Create the EAS project (first time only)
+### 1b. Create the partner folder and assets
 
-For **Je Lave** you need a dedicated EAS project — it gets its own build history, signing keys, and
-bundle ID (`com.jelave.customer`).
-
-```bash
-# From the monorepo root
-cd apps/customer-mobile
-LUNARA_PARTNER_SLUG=jelave eas project:init
+```
+partner-brands/<slug>/
+  manifest.json
+  icon.png              # 1024×1024 px, PNG, no transparency — also used as the in-app logo
+  adaptive-icon.png     # 1024×1024 px, PNG (Android foreground layer) — optional
+  splash.png            # 1284×2778 px recommended, PNG — optional, falls back to icon.png
 ```
 
-Copy the project ID printed and paste it into
-`partner-brands/jelave/manifest.json` → `easProjectId`.
+See `README.md` in this directory for the full `manifest.json` schema.
 
-### 1c. Add the EAS build profile for Je Lave
+### 1c. Create the EAS project (first time only)
+
+Each partner needs its own EAS project for separate build history, signing keys, and bundle ID.
+
+```bash
+cd apps/customer-mobile
+LUNARA_PARTNER_SLUG=<slug> eas project:init
+```
+
+Copy the printed project ID into `partner-brands/<slug>/manifest.json` → `easProjectId`.
+
+### 1d. Add the EAS build profile
 
 In `apps/customer-mobile/eas.json` add:
 
 ```json
-"production-jelave": {
+"production-<slug>": {
   "extends": "production",
   "env": {
-    "LUNARA_PARTNER_SLUG": "jelave"
+    "LUNARA_PARTNER_SLUG": "<slug>"
   }
 }
 ```
 
-### 1d. Set required environment variables in EAS
-
-These are read at build time by the API and Expo config. Set them once per EAS project:
+### 1e. Set environment variables in EAS
 
 ```bash
 # From apps/customer-mobile
-eas env:create --name EXPO_PUBLIC_API_URL      --value https://api.yourdomain.com  --visibility public
-eas env:create --name EXPO_PUBLIC_WEBSITE_URL  --value https://jelave.yourdomain.com --visibility public
+eas env:create --name EXPO_PUBLIC_API_URL      --value https://api.yourdomain.com        --visibility public
+eas env:create --name EXPO_PUBLIC_WEBSITE_URL  --value https://<slug>.yourdomain.com     --visibility public
 ```
 
-> Any variable prefixed `EXPO_PUBLIC_` is bundled into the app binary.
-> Keep secrets (API keys, JWT secrets) **off** the mobile build — they belong server-side only.
+> Variables prefixed `EXPO_PUBLIC_` are bundled into the binary. Keep secrets server-side only.
 
 ---
 
-## 2. Add Je Lave brand assets
-
-Place these files in `partner-brands/jelave/` before building:
-
-| File | Spec |
-|------|------|
-| `icon.png` | 1024 × 1024 px, PNG, no transparency |
-| `adaptive-icon.png` | 1024 × 1024 px, PNG (Android foreground layer) |
-| `splash.png` | 1284 × 2778 px recommended, PNG |
-
-The splash background colour is already set to `#ffffff` in `manifest.json`.
-
----
-
-## 3. Fill in `manifest.json`
-
-Open `partner-brands/jelave/manifest.json` and fill in the two blank fields:
+## 2. Fill in `manifest.json`
 
 ```json
 {
-  "partnerId": "<ObjectId from admin API after creating Je Lave partner record>",
-  "easProjectId": "<project ID from step 1b>"
+  "partnerId":   "<ObjectId from admin panel after creating the partner record>",
+  "easProjectId": "<project ID from step 1c>",
+  "appName": "Partner App Name",
+  "slug": "<slug>-customer",
+  "iosBundleId": "com.<slug>.customer",
+  "androidPackage": "com.<slug>.customer",
+  "splashBackgroundColor": "#ffffff",
+  "theme": {
+    "appDisplayName": "Partner Display Name",
+    "colors": {
+      "primary":     "#4F46E5",
+      "secondary":   "#06B6D4",
+      "accent":      "#22C55E",
+      "background":  "#F8FAFC",
+      "foreground":  "#0F172A",
+      "muted":       "#64748B",
+      "border":      "#E2E8F0",
+      "destructive": "#EF4444"
+    }
+  }
 }
 ```
 
+**Logo note:** `icon.png` is automatically used as the in-app logo (base64-encoded at build time).
+To use a different hosted image instead, add `"logoUrl": "<url>"` inside `theme`.
+
 ---
 
-## 4. Build the Android bundle
-
-Run from the **monorepo root** or from `apps/customer-mobile`:
+## 3. Build the Android bundle
 
 ```bash
 # From apps/customer-mobile
-eas build --platform android --profile production-jelave
+eas build --platform android --profile production-<slug>
 ```
 
-This produces a signed **AAB** (`app-bundle`) — the format Play Store requires.
+This produces a signed **AAB** ready for the Play Store. EAS handles the Android keystore
+(created on first build, reused on subsequent builds). Build time is ~10–20 minutes.
 
-EAS handles:
-- Downloading the correct Node 20 environment
-- Running `eas-build-post-install` (builds `@lunara/types`, `@lunara/utils`, `@lunara/config`)
-- Generating and storing the Android keystore (first build creates it; subsequent builds reuse it)
-
-Wait ~10–20 minutes for the build to finish. You can monitor it at https://expo.dev or in your
-terminal.
+Monitor at https://expo.dev or in your terminal.
 
 ---
 
-## 5. First submission — manual upload
+## 4. First submission — manual upload
 
-The very first release must be uploaded manually through the Play Console because EAS Submit needs
-an existing app listing to attach to.
+The first release must be uploaded manually because EAS Submit needs an existing Play Console
+listing to attach to.
 
-1. Go to [Google Play Console](https://play.google.com/console) → **Create app**
-2. Fill in: App name `Je Lave`, default language, app/game, free/paid
+1. [Google Play Console](https://play.google.com/console) → **Create app**
+2. Fill in: app name, default language, app/game, free/paid
 3. Complete the store listing (description, screenshots, icon, feature graphic)
-4. Go to **Testing → Internal testing** → **Create new release**
+4. **Testing → Internal testing → Create new release**
 5. Upload the `.aab` downloaded from the EAS build page
-6. Roll out to internal testing, fix any policy warnings, then promote to **Production**
+6. Roll out to internal testing, resolve any policy warnings, then promote to **Production**
 
 ---
 
-## 6. Subsequent releases — automated submit
+## 5. Subsequent releases — automated submit
 
-After the first release, EAS Submit can push directly:
+After the first release EAS Submit can push directly:
 
 ```bash
-# Submits the latest production-jelave build
 eas submit --platform android --profile production --latest
 ```
 
-For this to work, create a Google Play service account and link it to EAS:
-
+**Service account setup (one-time):**
 1. Play Console → **Setup → API access** → link to a Google Cloud project
 2. Create a **Service account** with the **Release manager** role
 3. Download the JSON key file
-4. In EAS: `eas credentials` → Android → add the service account JSON
+4. `eas credentials` → Android → add the service account JSON
 
 ---
 
-## 7. Version management
+## 6. Version management
 
-`eas.json` already has `"autoIncrement": true` in the `production` profile — EAS automatically
-increments `versionCode` on every build so you never have to manage it manually.
+`eas.json` has `"autoIncrement": true` in the `production` profile — EAS increments
+`versionCode` automatically on every build.
 
-To bump the user-visible version (`1.0.4` → `1.1.0`), update `version` in
+To bump the user-visible version (e.g. `1.0.4` → `1.1.0`), update `version` in
 `apps/customer-mobile/package.json` before building.
 
 ---
 
-## 8. Full build + submit in one step (CI/CD)
+## 7. Build + submit in one step (CI/CD)
 
 ```bash
-# Build and immediately queue for Play Store submission
-eas build --platform android --profile production-jelave --auto-submit
+eas build --platform android --profile production-<slug> --auto-submit
 ```
 
-Or chain them explicitly:
+Or chain explicitly:
 
 ```bash
-eas build --platform android --profile production-jelave \
+eas build --platform android --profile production-<slug> \
   && eas submit --platform android --profile production --latest
 ```
 
@@ -175,19 +177,19 @@ eas build --platform android --profile production-jelave \
 ## Quick-reference cheat sheet
 
 ```bash
-# 1. Build Je Lave for Android
-eas build --platform android --profile production-jelave
+# Build for a partner
+eas build --platform android --profile production-<slug>
 
-# 2. Submit latest build to Play Store
+# Submit latest build to Play Store
 eas submit --platform android --profile production --latest
 
-# 3. Build + submit in one command
-eas build --platform android --profile production-jelave --auto-submit
+# Build + submit in one command
+eas build --platform android --profile production-<slug> --auto-submit
 
-# 4. Check build status
+# Check build status
 eas build:list
 
-# 5. Download the AAB manually
+# View / download the latest AAB
 eas build:view --latest
 ```
 
@@ -197,9 +199,10 @@ eas build:view --latest
 
 | Error | Fix |
 |-------|-----|
-| `manifest.json not found` | Confirm `LUNARA_PARTNER_SLUG=jelave` is set and `partner-brands/jelave/manifest.json` exists |
-| `icon.png not found` | Add `partner-brands/jelave/icon.png` (1024×1024) |
-| `partnerId is empty` | Create the Je Lave partner record via admin API and paste the ObjectId into `manifest.json` |
-| Play rejects AAB — wrong package | Ensure `manifest.json → androidPackage` is `com.jelave.customer` and matches Play Console |
-| `versionCode` conflict | EAS `autoIncrement` handles this automatically; do not set `versionCode` manually |
-| Build fails on monorepo packages | The `eas-build-post-install` script rebuilds shared packages — check that `@lunara/types`, `@lunara/utils`, `@lunara/config` compile cleanly locally first |
+| `manifest.json not found` | Confirm `LUNARA_PARTNER_SLUG=<slug>` is set and `partner-brands/<slug>/manifest.json` exists |
+| `icon.png not found` | Add `partner-brands/<slug>/icon.png` (1024×1024) |
+| `partnerId is empty` | Create the partner record via the admin panel and paste the ObjectId into `manifest.json` |
+| Play rejects AAB — wrong package | Ensure `manifest.json → androidPackage` matches the bundle ID registered in Play Console |
+| `versionCode` conflict | EAS `autoIncrement` handles this — do not set `versionCode` manually |
+| Build fails on monorepo packages | `eas-build-post-install` rebuilds shared packages — verify `@lunara/types`, `@lunara/config`, `@lunara/utils` compile locally first |
+| In-app logo not showing | Ensure `icon.png` exists in the partner folder; check `expoConfig.extra.brandLogoUrl` in Expo DevTools |

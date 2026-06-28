@@ -1,5 +1,12 @@
 import { theme as baseTheme } from '@lunara/config';
 
+export type BaseColors = typeof baseTheme.colors;
+
+/** Merges partner color overrides onto the default color set. */
+export function resolveColors(override?: Partial<BaseColors>): typeof colors {
+  return { ...colors, ...override } as typeof colors;
+}
+
 /** Mobile design tokens — aligned with customer-web laundry theme */
 export const colors = {
   ...baseTheme.colors,

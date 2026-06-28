@@ -8,6 +8,8 @@ import { Pressable } from 'react-native';
 
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { BrandProvider } from '../src/brand/BrandContext';
+
 import { AuthLoadingScreen } from '../src/components/auth-loading';
 
 import { CustomerTrackingSync } from '../src/components/customer-tracking-sync';
@@ -191,6 +193,8 @@ export default function RootLayout() {
 
 
   return (
+
+    <BrandProvider>
 
     <SafeAreaProvider>
 
@@ -483,6 +487,8 @@ export default function RootLayout() {
       </Stack>
 
     </SafeAreaProvider>
+
+    </BrandProvider>
 
   );
 
