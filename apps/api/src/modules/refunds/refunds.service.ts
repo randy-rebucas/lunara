@@ -10,10 +10,12 @@ import { OrderStatus, PaymentMethod, PaymentStatus } from '@lunara/types';
 import { REFUND_FLOW, isRefundablePaymentMethod } from '@lunara/utils';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
+import { User, UserDocument } from '../users/schemas/user.schema';
 import { NotificationDispatchService } from '../push/notification-dispatch.service';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { WalletsService } from '../wallets/wallets.service';
 import { LedgerService } from '../ledger/ledger.service';
+import { EmailService } from '../../common/email/email.service';
 import { CreateRefundDto } from './dto/create-refund.dto';
 import { RefundReviewAction, ReviewRefundDto } from './dto/review-refund.dto';
 import {
@@ -52,10 +54,12 @@ export class RefundsService {
     @InjectModel(RefundRequest.name) private refundModel: Model<RefundRequestDocument>,
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
     private walletsService: WalletsService,
     private trackingGateway: TrackingGateway,
     private notificationDispatch: NotificationDispatchService,
     private ledgerService: LedgerService,
+    private emailService: EmailService,
   ) {}
 
   async createRequest(customerId: string, dto: CreateRefundDto) {
@@ -422,6 +426,21 @@ export class RefundsService {
       notificationId: notification._id.toString(),
       refundId: refund._id.toString(),
     });
+
+    if (isApproved || isProcessed) {
+      void this.sendRefundEmail(refund);
+    }
+  }
+
+  private async sendRefundEmail(refund: RefundRequestDocument) {
+    try {
+      const user = await this.userModel.findById(refund.customerId).select('email').lean();
+      if (!user?.email) return;
+      const amount = refund.approvedAmount ?? refund.requestedAmount;
+      await this.emailService.sendRefundApproved(user.email, refund.orderId.toString(), amount);
+    } catch {
+      // email is best-effort; silently skip
+    }
   }
 
   private serializeOrderForReview(order: OrderDocument) {

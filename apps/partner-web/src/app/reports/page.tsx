@@ -100,7 +100,7 @@ export default function ReportsPage() {
 
       {report && (
         <>
-          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-6 grid gap-3 grid-cols-2 lg:grid-cols-4">
             <div className="stat-card">
               <p className="text-xs text-muted">Total orders (updated)</p>
               <p className="text-2xl font-semibold text-slate-900">{report.totalOrders}</p>
@@ -111,8 +111,8 @@ export default function ReportsPage() {
               <p className="mt-1 text-xs text-muted-foreground">{completionRate}% completion rate</p>
             </div>
             <div className="stat-card">
-              <p className="text-xs text-muted">Revenue (completed)</p>
-              <p className="text-2xl font-semibold text-slate-900">{formatPeso(report.revenue)}</p>
+              <p className="text-xs text-muted">Earnings (completed)</p>
+              <p className="text-2xl font-semibold text-slate-900">{formatPeso(report.payout ?? report.revenue)}</p>
             </div>
             <div className="stat-card">
               <p className="text-xs text-muted">Avg order value</p>
@@ -122,7 +122,7 @@ export default function ReportsPage() {
             </div>
           </div>
 
-          <div className="mt-8 grid gap-6 lg:grid-cols-2">
+          <div className="mt-8 grid gap-6 sm:grid-cols-2">
             <ReportList
               title="Orders by status"
               description="All orders touched in this period, grouped by current status."

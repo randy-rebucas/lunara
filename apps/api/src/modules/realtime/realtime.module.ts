@@ -3,12 +3,16 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from '../auth/auth.module';
 import { SosModule } from '../sos/sos.module';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
+import { Conversation, ConversationSchema } from '../messaging/schemas/conversation.schema';
 import { TrackingGateway } from './tracking.gateway';
 
 @Module({
   imports: [
     AuthModule,
-    MongooseModule.forFeature([{ name: Order.name, schema: OrderSchema }]),
+    MongooseModule.forFeature([
+      { name: Order.name, schema: OrderSchema },
+      { name: Conversation.name, schema: ConversationSchema },
+    ]),
     forwardRef(() => SosModule),
   ],
   providers: [TrackingGateway],

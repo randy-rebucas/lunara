@@ -109,8 +109,8 @@ export default function SettlementsPage() {
 
       {data && (
         <>
-          <div className="mt-6 grid gap-3 sm:grid-cols-5">
-            <div className="stat-card">
+          <div className="mt-6 grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+            <div className="stat-card col-span-2 sm:col-span-1">
               <p className="text-xs text-muted">Outstanding balance</p>
               <p className="text-2xl font-semibold text-slate-900">
                 {ledger ? formatPeso(ledger.payableBalance) : '—'}
@@ -179,6 +179,7 @@ export default function SettlementsPage() {
             </div>
           ) : (
             <div className="section-panel mt-8 overflow-hidden">
+              <div className="overflow-x-auto">
               <table className="data-table">
                 <thead>
                   <tr>
@@ -187,9 +188,7 @@ export default function SettlementsPage() {
                     <th>Orders</th>
                     <th>Status</th>
                     <th>Paid on</th>
-                    <th className="text-right">Gross revenue</th>
-                    <th className="text-right">Lunara fee</th>
-                    <th className="text-right font-semibold">Your payout</th>
+                    <th className="text-right font-semibold">Earnings</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -208,54 +207,46 @@ export default function SettlementsPage() {
                               style={{ transform: isExpanded ? 'rotate(90deg)' : 'none' }}
                             >▶</span>
                           </td>
-                          <td className="text-slate-900 text-sm">{formatDateRange(s.periodStart, s.periodEnd)}</td>
-                          <td className="text-muted">
+                          <td className="text-slate-900 text-sm whitespace-nowrap">{formatDateRange(s.periodStart, s.periodEnd)}</td>
+                          <td className="text-muted whitespace-nowrap">
                             {s.totalOrders}
                             <span className="ml-1 text-xs text-muted-foreground">
                               ({s.cashOrders}C / {s.digitalOrders}D)
                             </span>
                           </td>
-                          <td>
+                          <td className="whitespace-nowrap">
                             {s.status === 'paid' ? (
                               <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">Paid</span>
                             ) : (
                               <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">Pending</span>
                             )}
                           </td>
-                          <td className="text-muted text-sm">
+                          <td className="text-muted text-sm whitespace-nowrap">
                             {s.paidAt
                               ? new Date(s.paidAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
                               : '—'}
-                          </td>
-                          <td className="text-right text-muted">{formatPeso(s.totalAmount)}</td>
-                          <td className="text-right text-rose-600 text-sm">
-                            −{formatPeso(s.lunaraFee ?? 0)}
-                            {s.commissionRate != null && (
-                              <span className="ml-1 text-xs text-muted-foreground">({Math.round(s.commissionRate * 100)}%)</span>
-                            )}
                           </td>
                           <td className="text-right font-semibold text-slate-900">{formatPeso(s.partnerPayout ?? s.totalAmount)}</td>
                         </tr>
                         {isExpanded && (
                           <tr>
-                            <td colSpan={8} className="bg-slate-50/70 p-0">
-                              <div className="border-t border-border/60 px-5 py-4">
+                            <td colSpan={6} className="bg-slate-50/70 p-0">
+                              <div className="border-t border-border/60 px-3 py-4 sm:px-5">
                                 {isLoadingThis && <p className="text-sm text-muted">Loading orders…</p>}
                                 {!isLoadingThis && ordersError && <p className="text-sm text-destructive">{ordersError}</p>}
                                 {!isLoadingThis && orders?.length === 0 && (
                                   <p className="text-sm text-muted">No orders found for this period.</p>
                                 )}
                                 {!isLoadingThis && orders && orders.length > 0 && (
-                                  <table className="w-full text-sm">
+                                  <div className="overflow-x-auto">
+                                  <table className="w-full text-sm" style={{ minWidth: '480px' }}>
                                     <thead>
                                       <tr className="text-left text-xs text-muted">
                                         <th className="pb-2 pr-4 font-medium">Completed</th>
                                         <th className="pb-2 pr-4 font-medium">Order ID</th>
                                         <th className="pb-2 pr-4 font-medium">Type</th>
                                         <th className="pb-2 pr-4 font-medium">Payment</th>
-                                        <th className="pb-2 pr-4 text-right font-medium">Amount</th>
-                                        <th className="pb-2 pr-4 text-right font-medium">Lunara fee</th>
-                                        <th className="pb-2 text-right font-medium">Your payout</th>
+                                        <th className="pb-2 text-right font-medium">Earnings</th>
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-border/40">
@@ -277,8 +268,6 @@ export default function SettlementsPage() {
                                               <span className="text-xs text-blue-700">{o.paymentMethod ?? '—'}</span>
                                             )}
                                           </td>
-                                          <td className="py-1.5 pr-4 text-right text-slate-900">{formatPeso(o.amount)}</td>
-                                          <td className="py-1.5 pr-4 text-right text-rose-600">−{formatPeso(o.lunaraFee ?? 0)}</td>
                                           <td className="py-1.5 text-right font-semibold text-slate-900">{formatPeso(o.partnerPayout ?? o.amount)}</td>
                                         </tr>
                                       ))}
@@ -286,12 +275,11 @@ export default function SettlementsPage() {
                                     <tfoot>
                                       <tr className="border-t border-border/60 text-xs font-semibold">
                                         <td colSpan={4} className="pt-2 text-muted">{orders.length} order{orders.length === 1 ? '' : 's'} total</td>
-                                        <td className="pt-2 pr-4 text-right text-slate-900">{formatPeso(orders.reduce((sum, o) => sum + o.amount, 0))}</td>
-                                        <td className="pt-2 pr-4 text-right text-rose-600">−{formatPeso(orders.reduce((sum, o) => sum + (o.lunaraFee ?? 0), 0))}</td>
                                         <td className="pt-2 text-right text-slate-900">{formatPeso(orders.reduce((sum, o) => sum + (o.partnerPayout ?? o.amount), 0))}</td>
                                       </tr>
                                     </tfoot>
                                   </table>
+                                  </div>
                                 )}
                               </div>
                             </td>
@@ -302,6 +290,7 @@ export default function SettlementsPage() {
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
 

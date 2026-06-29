@@ -115,7 +115,7 @@ export default function IncomingOrdersPage() {
                   <p className="mt-1 text-xs text-amber-700">Awaiting shop acceptance</p>
                 )}
               </Link>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex w-full flex-wrap gap-2 sm:w-auto">
                 {partner && o.canAccept && (
                   <button
                     type="button"

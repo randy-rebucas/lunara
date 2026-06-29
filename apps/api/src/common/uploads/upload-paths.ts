@@ -50,3 +50,10 @@ export const REMITTANCE_PROOF_PUBLIC_PREFIX = '/api/v1/uploads/remittance-proofs
 export function remittanceProofPublicPath(filename: string) {
   return `${REMITTANCE_PROOF_PUBLIC_PREFIX}/${filename}`;
 }
+
+export const MESSAGE_ATTACHMENT_UPLOAD_DIR = join(UPLOADS_ROOT, 'message-attachments');
+export const MESSAGE_ATTACHMENT_PUBLIC_PREFIX = '/api/v1/uploads/message-attachments';
+
+export function messageAttachmentPublicPath(filename: string) {
+  return `${MESSAGE_ATTACHMENT_PUBLIC_PREFIX}/${filename}`;
+}

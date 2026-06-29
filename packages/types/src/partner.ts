@@ -17,6 +17,7 @@ export interface PartnerPortalSettings {
   notifyReadyForDelivery: boolean;
   allowStaffToRequestDelivery: boolean;
   requireWeightVerificationOnReceive: boolean;
+  inventoryEnabled: boolean;
   payoutMethod?: 'gcash' | 'maya' | 'bank' | 'counter' | null;
   gcashNumber?: string | null;
   mayaNumber?: string | null;
@@ -131,6 +132,7 @@ export interface PartnerReportData {
   totalOrders: number;
   completedOrders: number;
   revenue: number;
+  payout: number;
   averageOrderValue: number;
   ordersByStatus: Record<string, number>;
   completedByService: Record<string, number>;
@@ -139,6 +141,7 @@ export interface PartnerReportData {
 export interface PartnerRevenueDailyPoint {
   date: string;
   revenue: number;
+  payout: number;
   orders: number;
 }
 
@@ -254,6 +257,53 @@ export interface PartnerBrandConfig {
   faviconUrl?: string;
   mobileBundleId?: { ios?: string; android?: string };
   status: 'draft' | 'pending_review' | 'live';
+}
+
+export interface RecipientInfo {
+  email: string | null;
+  phone: string | null;
+  branchName: string | null;
+  branchCode: string | null;
+  city: string | null;
+  province: string | null;
+  line1: string | null;
+}
+
+export interface ConversationDetail {
+  _id: string;
+  partnerId: string;
+  unreadCount: number;
+  recipient: RecipientInfo;
+  createdAt: string;
+}
+
+export interface MessageAttachment {
+  filename: string;
+  url: string;
+  mimeType: string;
+  size: number;
+}
+
+export interface ChatMessage {
+  _id: string;
+  conversationId: string;
+  senderId: string;
+  senderRole: string;
+  senderName: string;
+  content: string;
+  attachments: MessageAttachment[];
+  createdAt: string;
+  readAt?: string;
+}
+
+export interface PartnerConversation {
+  _id: string;
+  partnerId: string;
+  subject?: string;
+  lastMessage?: ChatMessage;
+  unreadCount: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface PartnerProcessingView {

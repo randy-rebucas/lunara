@@ -2,6 +2,7 @@ import { existsSync, mkdirSync } from 'fs';
 import {
   AVATAR_UPLOAD_DIR,
   CATALOG_ADDON_UPLOAD_DIR,
+  MESSAGE_ATTACHMENT_UPLOAD_DIR,
   PARTNER_BRAND_UPLOAD_DIR,
   REMITTANCE_PROOF_UPLOAD_DIR,
   RIDER_DOCUMENT_UPLOAD_DIR,
@@ -30,5 +31,8 @@ export function ensureUploadDirectories() {
   }
   if (!existsSync(REMITTANCE_PROOF_UPLOAD_DIR)) {
     mkdirSync(REMITTANCE_PROOF_UPLOAD_DIR, { recursive: true });
+  }
+  if (!existsSync(MESSAGE_ATTACHMENT_UPLOAD_DIR)) {
+    mkdirSync(MESSAGE_ATTACHMENT_UPLOAD_DIR, { recursive: true });
   }
 }

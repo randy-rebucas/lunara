@@ -64,6 +64,11 @@ export class PushNotificationService {
     return this.sendToTokens(tokens, payload);
   }
 
+  async broadcastToAll(payload: PushPayload): Promise<number> {
+    const tokens = await this.pushTokenModel.find({});
+    return this.sendToTokens(tokens, payload);
+  }
+
   private async sendToTokens(
     tokenDocs: PushTokenDocument[],
     payload: PushPayload,

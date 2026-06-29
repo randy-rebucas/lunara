@@ -33,6 +33,10 @@ export class PartnerPortalSettings {
   @Prop({ default: true })
   requireWeightVerificationOnReceive!: boolean;
 
+  /** Whether this shop tracks supply inventory; shops that don't sell products can disable this */
+  @Prop({ default: true })
+  inventoryEnabled!: boolean;
+
   /** Preferred payout channel: gcash | maya | bank | counter */
   @Prop({ type: String, default: null })
   payoutMethod?: string | null;
@@ -62,6 +66,7 @@ export const DEFAULT_PARTNER_PORTAL_SETTINGS: PartnerPortalSettings = {
   notifyReadyForDelivery: true,
   allowStaffToRequestDelivery: true,
   requireWeightVerificationOnReceive: true,
+  inventoryEnabled: true,
 };
 
 @Schema({ _id: false })

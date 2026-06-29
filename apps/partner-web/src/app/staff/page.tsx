@@ -219,6 +219,7 @@ export default function StaffTeamPage() {
       </div>
 
       <div className="section-panel mt-6 overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="data-table">
           <thead>
             <tr>
@@ -243,6 +244,7 @@ export default function StaffTeamPage() {
             ))}
           </tbody>
         </table>
+        </div>
         {!loading && !error && (staff ?? []).length === 0 && (
           <p className="p-6 text-sm text-muted">
             No staff yet. Use <strong>Add staff</strong> to create an account for your shop.

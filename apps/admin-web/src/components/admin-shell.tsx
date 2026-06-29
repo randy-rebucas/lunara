@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { adminLogout, getAdminUser } from '../lib/admin-api';
+import { useAdminMessageBadge } from '../hooks/use-admin-message-badge';
 import { AdminHeaderActions } from './admin-header-actions';
 import { BrandMark } from './ui/brand-mark';
 import { DailyRoutine } from './daily-routine';
@@ -52,6 +53,7 @@ const nav: NavItem[] = [
 
   // Support & System
   { section: 'System' },
+  { href: '/messages', label: 'Messages' },
   { href: '/support', label: 'Support' },
   { href: '/setup', label: 'Setup' },
   { href: '/maintenance', label: 'Maintenance' },
@@ -61,7 +63,7 @@ function isActive(pathname: string, href: string) {
   return pathname === href || (href !== '/' && pathname.startsWith(`${href}/`));
 }
 
-function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
+function SidebarNav({ onNavigate, messageBadge }: { onNavigate?: () => void; messageBadge?: number }) {
   const pathname = usePathname();
 
   return (
@@ -74,14 +76,20 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
             </p>
           );
         }
+        const showBadge = item.href === '/messages' && messageBadge && messageBadge > 0;
         return (
           <Link
             key={item.href}
             href={item.href}
             onClick={onNavigate}
-            className={isActive(pathname, item.href) ? 'nav-link-active' : 'nav-link'}
+            className={`flex items-center justify-between ${isActive(pathname, item.href) ? 'nav-link-active' : 'nav-link'}`}
           >
             {item.label}
+            {showBadge && (
+              <span className="ml-auto inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-white">
+                {messageBadge > 99 ? '99+' : messageBadge}
+              </span>
+            )}
           </Link>
         );
       })}
@@ -94,6 +102,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const user = getAdminUser();
+  const { unreadTotal } = useAdminMessageBadge();
 
   if (pathname === '/login') return <>{children}</>;
 
@@ -130,7 +139,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           )}
 
           <div className="flex-1 overflow-y-auto overscroll-contain">
-            <SidebarNav onNavigate={() => setSidebarOpen(false)} />
+            <SidebarNav onNavigate={() => setSidebarOpen(false)} messageBadge={unreadTotal} />
           </div>
 
           <button type="button" onClick={logout} className="btn-ghost mt-4 w-full justify-start text-left">

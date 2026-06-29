@@ -16,6 +16,7 @@ const partnerNav = [
   { href: '/reports', label: 'Reports' },
   { href: '/revenue', label: 'Revenue' },
   { href: '/settlements', label: 'Settlements' },
+  { href: '/messages', label: 'Messages' },
 ];
 
 const staffNav = [

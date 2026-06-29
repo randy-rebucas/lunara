@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
+import { User, UserSchema } from '../users/schemas/user.schema';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { WalletsModule } from '../wallets/wallets.module';
 import { RefundRequest, RefundRequestSchema } from './schemas/refund-request.schema';
@@ -15,6 +16,7 @@ import { LedgerModule } from '../ledger/ledger.module';
       { name: RefundRequest.name, schema: RefundRequestSchema },
       { name: Order.name, schema: OrderSchema },
       { name: Payment.name, schema: PaymentSchema },
+      { name: User.name, schema: UserSchema },
     ]),
     WalletsModule,
     RealtimeModule,

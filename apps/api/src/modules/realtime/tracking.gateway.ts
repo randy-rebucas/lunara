@@ -11,11 +11,12 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Server, Socket } from 'socket.io';
-import type { JwtPayload } from '@lunara/types';
+import type { ChatMessage, JwtPayload } from '@lunara/types';
 import { UserRole } from '@lunara/types';
 import { normalizeRiderLocationPayload, riderLocationWirePayload } from '@lunara/utils';
 import { getJwtSecret } from '../../common/config/jwt-config';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
+import { Conversation, ConversationDocument } from '../messaging/schemas/conversation.schema';
 import { RiderSosService } from '../sos/rider-sos.service';
 import { CustomerOrderNotificationService } from '../push/customer-order-notification.service';
 import { PartnerOrderNotificationService } from '../push/partner-order-notification.service';
@@ -32,6 +33,7 @@ export class TrackingGateway implements OnGatewayConnection {
   constructor(
     private readonly jwtService: JwtService,
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
+    @InjectModel(Conversation.name) private readonly conversationModel: Model<ConversationDocument>,
     @Inject(forwardRef(() => RiderSosService))
     private readonly riderSosService: RiderSosService,
     private readonly customerOrderNotifications: CustomerOrderNotificationService,
@@ -393,5 +395,44 @@ export class TrackingGateway implements OnGatewayConnection {
     }
     client.leave('riders:online');
     return { success: true };
+  }
+
+  @SubscribeMessage('joinConversation')
+  async handleJoinConversation(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { conversationId: string },
+  ) {
+    const user = this.getUser(client);
+    if (!user) return { success: false, error: 'Unauthorized' };
+    if (!data?.conversationId) return { success: false, error: 'conversationId required' };
+
+    // Admins may join any conversation room; partners must own it
+    if (user.role !== UserRole.ADMIN) {
+      const convo = await this.conversationModel
+        .findById(data.conversationId)
+        .select('partnerId')
+        .lean()
+        .catch(() => null);
+      if (!convo || convo.partnerId.toString() !== user.sub) {
+        return { success: false, error: 'Forbidden' };
+      }
+    }
+
+    client.join(`conversation:${data.conversationId}`);
+    return { success: true, room: `conversation:${data.conversationId}` };
+  }
+
+  @SubscribeMessage('leaveConversation')
+  handleLeaveConversation(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { conversationId: string },
+  ) {
+    if (!data?.conversationId) return { success: false, error: 'conversationId required' };
+    client.leave(`conversation:${data.conversationId}`);
+    return { success: true };
+  }
+
+  emitNewMessage(conversationId: string, message: ChatMessage) {
+    this.server.to(`conversation:${conversationId}`).emit('newMessage', message);
   }
 }

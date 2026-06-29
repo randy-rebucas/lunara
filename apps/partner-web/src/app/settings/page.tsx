@@ -2,6 +2,7 @@
 
 import { UserRole } from '@lunara/types';
 import { useCallback, useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { AuthLoading } from '../../components/auth-loading';
 import { DataPageStatus } from '../../components/data-page-status';
 import { Card, CardBody, SectionPanel } from '../../components/ui/card';
@@ -80,8 +81,6 @@ export default function PartnerSettingsPage() {
   });
   const [activeTab, setActiveTab] = useState<Tab>('shop');
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState('');
-  const [saved, setSaved] = useState(false);
   const [payoutDraft, setPayoutDraft] = useState<{
     method: PayoutMethod | '';
     gcashNumber: string;
@@ -94,9 +93,8 @@ export default function PartnerSettingsPage() {
   const load = useCallback(() => partnerFetch<PartnerSettingsData>('/partner/settings'), []);
   const { data, loading, error, reload } = usePartnerQuery(load, [ready]);
 
-  async function saveSettings(patch: Partial<PartnerPortalSettings>) {
+  async function saveSettings(patch: Partial<PartnerPortalSettings>, successMessage = 'Settings saved') {
     if (!data?.canEdit) return;
-    setSaveError('');
     setSaving(true);
     try {
       await partnerFetch<PartnerSettingsData>('/partner/settings', {
@@ -104,10 +102,9 @@ export default function PartnerSettingsPage() {
         body: JSON.stringify(patch),
       });
       await reload();
-      setSaved(true);
-      window.setTimeout(() => setSaved(false), 2000);
+      toast.success(successMessage);
     } catch (e) {
-      setSaveError(e instanceof Error ? e.message : 'Could not save settings');
+      toast.error(e instanceof Error ? e.message : 'Could not save settings');
     } finally {
       setSaving(false);
     }
@@ -141,7 +138,8 @@ export default function PartnerSettingsPage() {
       patch.bankAccountName = payoutDraft.bankAccountName;
       patch.bankAccountNumber = payoutDraft.bankAccountNumber;
     }
-    await saveSettings(patch);
+    await saveSettings(patch, 'Payout method saved');
+    setPayoutDraft(null);
   }
 
   if (!ready) return <AuthLoading message="Loading shop settings…" />;
@@ -160,17 +158,10 @@ export default function PartnerSettingsPage() {
             ? 'Configure how your laundry shop accepts orders, notifies staff, and runs receiving.'
             : 'View your branch configuration. Contact your shop partner to make changes.'
         }
-        actions={
-          saved ? (
-            <span className="text-sm font-medium text-emerald-600">Saved</span>
-          ) : saving ? (
-            <span className="text-sm text-muted">Saving…</span>
-          ) : undefined
-        }
+        actions={saving ? <span className="text-sm text-muted">Saving…</span> : undefined}
       />
 
       <DataPageStatus loading={loading} error={error} loadingMessage="Loading shop settings…" />
-      {saveError ? <p className="mt-2 text-sm text-red-600">{saveError}</p> : null}
 
       {branch && settings ? (
         <div className="mt-6 max-w-2xl">
@@ -311,6 +302,14 @@ export default function PartnerSettingsPage() {
                     checked={settings.requireWeightVerificationOnReceive}
                     disabled={!canEdit || saving}
                     onChange={(v) => updateSetting('requireWeightVerificationOnReceive', v)}
+                  />
+                  <SettingToggle
+                    id="inventory-enabled"
+                    label="Inventory tracking"
+                    description="Enable supply inventory tracking (detergent, bags, etc.). Turn off if your shop does not manage stock."
+                    checked={settings.inventoryEnabled}
+                    disabled={!canEdit || saving}
+                    onChange={(v) => updateSetting('inventoryEnabled', v)}
                   />
                 </SectionPanel>
 

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
+import { Toaster } from 'sonner';
 import brandIcon from '@lunara/brand/icon';
 import { AuthGuard } from '../components/auth-guard';
 import { PortalShell } from '../components/portal-shell';
@@ -27,6 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AuthGuard>
           <PortalShell>{children}</PortalShell>
         </AuthGuard>
+        <Toaster position="bottom-right" richColors />
       </body>
     </html>
   );

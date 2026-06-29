@@ -1,12 +1,14 @@
 import { io, type Socket } from 'socket.io-client';
 import { resolveApiOrigin } from '@lunara/utils';
 import { getAdminToken } from './admin-api';
+import type { ChatMessage } from '@lunara/types';
 import type { DispatcherAlert, SosLocationUpdate } from './use-admin-operations-socket';
 
 type VoidListener = () => void;
 type AlertListener = (alert: DispatcherAlert) => void;
 type LocationListener = (update: SosLocationUpdate) => void;
 type ConnectedListener = (connected: boolean) => void;
+type NewMessageListener = (msg: ChatMessage) => void;
 
 let socket: Socket | null = null;
 let subscriberCount = 0;
@@ -16,6 +18,8 @@ const dispatchQueueListeners = new Set<VoidListener>();
 const dispatcherAlertListeners = new Set<AlertListener>();
 const sosLocationListeners = new Set<LocationListener>();
 const connectedListeners = new Set<ConnectedListener>();
+const newMessageListeners = new Set<NewMessageListener>();
+const joinedConversations = new Set<string>();
 
 function setConnected(next: boolean) {
   if (connected === next) return;
@@ -35,6 +39,10 @@ function emitSosLocationUpdate(update: SosLocationUpdate) {
   for (const listener of sosLocationListeners) listener(update);
 }
 
+function emitNewMessage(msg: ChatMessage) {
+  for (const listener of newMessageListeners) listener(msg);
+}
+
 function ensureSocket() {
   const token = getAdminToken();
   if (!token) return;
@@ -49,6 +57,9 @@ function ensureSocket() {
 
   socket.on('connect', () => {
     socket?.emit('joinAdminOperations');
+    for (const id of joinedConversations) {
+      socket?.emit('joinConversation', { conversationId: id });
+    }
     setConnected(true);
   });
   socket.on('disconnect', () => setConnected(false));
@@ -56,11 +67,24 @@ function ensureSocket() {
   socket.on('dispatchQueueUpdated', emitDispatchQueueUpdated);
   socket.on('dispatcherAlert', emitDispatcherAlert);
   socket.on('sosLocationUpdate', emitSosLocationUpdate);
+  socket.on('newMessage', emitNewMessage);
+}
+
+export function joinAdminConversation(conversationId: string) {
+  if (joinedConversations.has(conversationId)) return;
+  joinedConversations.add(conversationId);
+  socket?.emit('joinConversation', { conversationId });
+}
+
+export function leaveAdminConversation(conversationId: string) {
+  joinedConversations.delete(conversationId);
+  socket?.emit('leaveConversation', { conversationId });
 }
 
 function teardownSocket() {
   socket?.disconnect();
   socket = null;
+  joinedConversations.clear();
   setConnected(false);
 }
 
@@ -70,6 +94,7 @@ export function subscribeAdminRealtime(handlers: {
   onDispatcherAlert?: AlertListener;
   onSosLocationUpdate?: LocationListener;
   onConnected?: ConnectedListener;
+  onNewMessage?: NewMessageListener;
 }): () => void {
   subscriberCount += 1;
   ensureSocket();
@@ -87,6 +112,9 @@ export function subscribeAdminRealtime(handlers: {
   if (handlers.onConnected) {
     connectedListeners.add(handlers.onConnected);
   }
+  if (handlers.onNewMessage) {
+    newMessageListeners.add(handlers.onNewMessage);
+  }
 
   return () => {
     if (handlers.onDispatchQueueUpdated) {
@@ -100,6 +128,9 @@ export function subscribeAdminRealtime(handlers: {
     }
     if (handlers.onConnected) {
       connectedListeners.delete(handlers.onConnected);
+    }
+    if (handlers.onNewMessage) {
+      newMessageListeners.delete(handlers.onNewMessage);
     }
 
     subscriberCount = Math.max(0, subscriberCount - 1);

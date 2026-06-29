@@ -10,6 +10,7 @@ import { ensureUploadDirectories } from './common/uploads/ensure-upload-dirs';
 import {
   AVATAR_UPLOAD_DIR,
   CATALOG_ADDON_UPLOAD_DIR,
+  MESSAGE_ATTACHMENT_UPLOAD_DIR,
   PARTNER_BRAND_UPLOAD_DIR,
   REMITTANCE_PROOF_UPLOAD_DIR,
 } from './common/uploads/upload-paths';
@@ -28,6 +29,7 @@ async function bootstrap() {
   app.useStaticAssets(CATALOG_ADDON_UPLOAD_DIR, { prefix: '/api/v1/uploads/catalog-addons/' });
   app.useStaticAssets(PARTNER_BRAND_UPLOAD_DIR, { prefix: '/api/v1/uploads/partner-brands/' });
   app.useStaticAssets(REMITTANCE_PROOF_UPLOAD_DIR, { prefix: '/api/v1/uploads/remittance-proofs/' });
+  app.useStaticAssets(MESSAGE_ATTACHMENT_UPLOAD_DIR, { prefix: '/api/v1/uploads/message-attachments/' });
   app.enableCors({ origin: true, credentials: true });
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalPipes(

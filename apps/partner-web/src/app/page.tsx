@@ -115,22 +115,22 @@ export default function PartnerDashboardPage() {
             </div>
           )}
 
-          <div className="mt-6 flex flex-wrap gap-2">
-            <Link href="/orders/incoming" className="btn-primary btn-sm">
+          <div className="mt-6 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+            <Link href="/orders/incoming" className="btn-primary btn-sm text-center">
               Incoming orders
             </Link>
-            <Link href="/orders" className="btn-outline btn-sm">
+            <Link href="/orders" className="btn-outline btn-sm text-center">
               Processing queue
             </Link>
-            <Link href="/staff" className="btn-outline btn-sm">
+            <Link href="/staff" className="btn-outline btn-sm text-center">
               Staff team
             </Link>
-            <Link href="/inventory" className="btn-outline btn-sm">
+            <Link href="/inventory" className="btn-outline btn-sm text-center">
               Inventory
             </Link>
           </div>
 
-          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-3">
             <StatCard
               label="Incoming pipeline"
               value={data.counts.incoming}
@@ -167,7 +167,7 @@ export default function PartnerDashboardPage() {
             />
           </div>
 
-          <div className="mt-8 grid gap-4 lg:grid-cols-2">
+          <div className="mt-8 grid gap-4 sm:grid-cols-2">
             <Card className="!border-accent/25 !bg-accent/5">
               <CardBody>
                 <p className="text-sm font-medium text-muted">Revenue today</p>
@@ -242,7 +242,7 @@ export default function PartnerDashboardPage() {
                         <p className="mt-0.5 text-xs text-muted-foreground">{o.slaLabel}</p>
                       )}
                     </div>
-                    <p className="shrink-0 font-semibold text-slate-900">{formatPeso(o.total)}</p>
+                    <p className="w-full font-semibold text-slate-900 sm:w-auto sm:text-right">{formatPeso(o.total)}</p>
                   </Link>
                 );
               })}

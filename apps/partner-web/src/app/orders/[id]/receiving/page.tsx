@@ -132,7 +132,7 @@ export default function ShopReceivingPage() {
           <button
             type="button"
             disabled={loading}
-            className="btn-primary mt-4"
+            className="btn-primary mt-4 w-full sm:w-auto"
             onClick={() => run('receive', { note: note || undefined })}
           >
             Receive laundry
@@ -158,7 +158,7 @@ export default function ShopReceivingPage() {
           <button
             type="button"
             disabled={loading || !weight}
-            className="btn-primary mt-4"
+            className="btn-primary mt-4 w-full sm:w-auto"
             onClick={() =>
               run('verify-weight', { verifiedWeightKg: Number(weight), note: note || undefined })
             }
@@ -184,7 +184,7 @@ export default function ShopReceivingPage() {
           <button
             type="button"
             disabled={loading}
-            className="btn-primary mt-4"
+            className="btn-primary mt-4 w-full sm:w-auto"
             onClick={() =>
               run('confirm-items', {
                 itemCount: Number(itemCount),

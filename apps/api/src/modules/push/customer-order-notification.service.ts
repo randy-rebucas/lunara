@@ -3,7 +3,11 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { orderEventTitle, resolveOrderEventMessage } from '@lunara/utils';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
+import { User, UserDocument } from '../users/schemas/user.schema';
 import { NotificationDispatchService } from './notification-dispatch.service';
+import { EmailService } from '../../common/email/email.service';
+
+const EMAIL_EVENTS = new Set(['paymentConfirmed', 'dispatched', 'delivered']);
 
 const DEDUPE_MS = 45_000;
 
@@ -15,7 +19,9 @@ export class CustomerOrderNotificationService {
 
   constructor(
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
+    @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     private readonly notificationDispatch: NotificationDispatchService,
+    private readonly emailService: EmailService,
   ) {}
 
   async notifyOrderEvent(
@@ -53,6 +59,22 @@ export class CustomerOrderNotificationService {
       });
     } catch (err) {
       this.logger.warn(`Customer notification failed for ${orderId}/${event}: ${err}`);
+    }
+
+    if (EMAIL_EVENTS.has(event)) {
+      void this.sendOrderEmail(customerId, orderId, event);
+    }
+  }
+
+  private async sendOrderEmail(userId: string, orderId: string, event: string) {
+    try {
+      const user = await this.userModel.findById(userId).select('email').lean();
+      if (!user?.email) return;
+      if (event === 'paymentConfirmed') await this.emailService.sendOrderConfirmed(user.email, orderId);
+      if (event === 'dispatched') await this.emailService.sendOrderDispatched(user.email, orderId);
+      if (event === 'delivered') await this.emailService.sendOrderDelivered(user.email, orderId);
+    } catch (err) {
+      this.logger.warn(`Email notification failed for order ${orderId}/${event}: ${err}`);
     }
   }
 

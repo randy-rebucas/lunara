@@ -561,6 +561,16 @@ export class PartnerOperationsService {
     const orders = await this.orderModel.find({ updatedAt: { $gte: from }, ...scopeFilter });
     const completed = orders.filter((o) => COMPLETED_STATUSES.includes(o.status));
     const revenue = completed.reduce((sum, o) => sum + o.total, 0);
+
+    const branch = role !== UserRole.ADMIN
+      ? await this.resolvePartnerBranchId(userId, role)
+          .then((id) => this.branchModel.findById(id).select('commissionRate'))
+          .catch(() => null)
+      : null;
+    const commissionRate = (branch as { commissionRate?: number } | null)?.commissionRate ?? 0.20;
+    const subtotalSum = completed.reduce((sum, o) => sum + (o.subtotal ?? o.total), 0);
+    const payout = revenue - Math.round(subtotalSum * commissionRate);
+
     const byStatus = orders.reduce(
       (acc, o) => {
         acc[o.status] = (acc[o.status] ?? 0) + 1;
@@ -584,6 +594,7 @@ export class PartnerOperationsService {
         totalOrders: orders.length,
         completedOrders: completed.length,
         revenue,
+        payout,
         averageOrderValue: completed.length ? Math.round(revenue / completed.length) : 0,
         ordersByStatus: byStatus,
         completedByService: byBooking,
@@ -640,7 +651,7 @@ export class PartnerOperationsService {
       return { gross, fee, payout: gross - fee };
     };
 
-    const last7 = [];
+    const last7: { date: string; revenue: number; payout: number; orders: number; _subtotalSum: number }[] = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(startOfDay);
       d.setDate(d.getDate() - i);
@@ -650,10 +661,14 @@ export class PartnerOperationsService {
         ...baseFilter,
         updatedAt: { $gte: d, $lt: next },
       });
+      const dayRevenue = dayOrders.reduce((s, o) => s + o.total, 0);
+      const daySubtotalSum = dayOrders.reduce((s, o) => s + (o.subtotal ?? o.total), 0);
       last7.push({
         date: d.toISOString().slice(0, 10),
-        revenue: dayOrders.reduce((s, o) => s + o.total, 0),
+        revenue: dayRevenue,
+        payout: 0, // filled in after commissionRate is resolved below
         orders: dayOrders.length,
+        _subtotalSum: daySubtotalSum,
       });
     }
 
@@ -668,6 +683,13 @@ export class PartnerOperationsService {
     ]);
 
     const commissionRate = branch?.commissionRate ?? 0.20;
+
+    // Backfill daily payout now that commissionRate is known (fee applied to subtotal, not total)
+    for (const point of last7) {
+      const dayFee = Math.round(point._subtotalSum * commissionRate);
+      point.payout = point.revenue - dayFee;
+      delete (point as Partial<typeof point>)._subtotalSum;
+    }
 
     const todayBreakdown = periodBreakdown(today, commissionRate);
     const weekBreakdown = periodBreakdown(week, commissionRate);

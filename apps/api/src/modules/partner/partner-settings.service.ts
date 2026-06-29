@@ -64,7 +64,7 @@ export class PartnerSettingsService {
       success: true,
       data: {
         branch: this.formatBranch(branch),
-        settings: normalizePortalSettings(branch.portalSettings),
+        settings: normalizePortalSettings(branch.toObject().portalSettings),
         canEdit,
       },
     };
@@ -77,20 +77,26 @@ export class PartnerSettingsService {
 
     const branch = await this.resolveBranch(userId, role);
     if (role === UserRole.PARTNER && branch.partnerUserId.toString() !== userId) {
-      throw new ForbiddenException('Cannot update another shop’s settings');
+      throw new ForbiddenException("Cannot update another shop's settings");
     }
 
+    // Strip undefined values from dto so unset optional fields don't overwrite existing settings
+    const patch = Object.fromEntries(
+      Object.entries(dto).filter(([, v]) => v !== undefined),
+    ) as Partial<PartnerPortalSettings>;
+
     branch.portalSettings = normalizePortalSettings({
-      ...branch.portalSettings,
-      ...dto,
+      ...branch.toObject().portalSettings,
+      ...patch,
     });
+    branch.markModified('portalSettings');
     await branch.save();
 
     return {
       success: true,
       data: {
         branch: this.formatBranch(branch),
-        settings: branch.portalSettings,
+        settings: normalizePortalSettings(branch.toObject().portalSettings),
         canEdit: true,
       },
     };

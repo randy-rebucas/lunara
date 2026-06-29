@@ -152,7 +152,7 @@ export function ProcessingKanbanBoard({ orders, onAcceptJob, onReload }: Process
     <div>
       {moveError ? <div className="alert-error mb-3">{moveError}</div> : null}
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-        <div className="flex gap-3 overflow-x-auto pb-2">
+        <div className="flex gap-3 overflow-x-auto overscroll-x-contain pb-2 pb-safe">
           {LAUNDRY_PROCESSING_STEPS.map((step) => (
             <KanbanColumn
               key={step.id}

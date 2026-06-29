@@ -54,6 +54,7 @@ import { CatalogService } from '../catalog/catalog.service';
 import { CloudinaryService } from '../../common/cloudinary/cloudinary.service';
 import { PartnerOperationsService } from '../partner/partner-operations.service';
 import { CreateSettlementDto } from '../partner/dto/create-settlement.dto';
+import { PushNotificationService } from '../push/push-notification.service';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -74,6 +75,7 @@ export class AdminController {
     private readonly riderWalletService: RiderWalletService,
     private readonly partnerOperationsService: PartnerOperationsService,
     private readonly cloudinaryService: CloudinaryService,
+    private readonly pushService: PushNotificationService,
   ) {}
 
   @Get('sos/active')
@@ -473,6 +475,12 @@ export class AdminController {
   @Patch('addons/:id')
   updateAddon(@Param('id') id: string, @Body() dto: UpdateLaundryAddonDto) {
     return this.catalogService.updateAddon(id, dto);
+  }
+
+  @Post('broadcast')
+  async broadcast(@Body() dto: { title: string; body: string; audience?: 'all' }) {
+    const sent = await this.pushService.broadcastToAll({ title: dto.title, body: dto.body });
+    return { success: true, sent };
   }
 
   @Post('addons/:id/image')

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
-import type { PartnerInventoryItem } from '@lunara/types';
+import type { PartnerInventoryItem, PartnerSettingsData } from '@lunara/types';
 import { AuthLoading } from '../../components/auth-loading';
 import { DataPageStatus } from '../../components/data-page-status';
 import { PageHeader } from '../../components/ui/page-header';
@@ -33,6 +33,12 @@ export default function InventoryPage() {
   const [draftQty, setDraftQty] = useState<Record<string, string>>({});
   const [draftThreshold, setDraftThreshold] = useState<Record<string, string>>({});
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  const loadSettings = useCallback(async () => {
+    return partnerFetch<PartnerSettingsData>('/partner/settings');
+  }, []);
+  const { data: settingsData } = usePartnerQuery(loadSettings, []);
+  const inventoryEnabled = settingsData?.settings.inventoryEnabled ?? true;
 
   const load = useCallback(async () => {
     return partnerFetch<PartnerInventoryItem[]>('/partner/inventory');
@@ -127,6 +133,28 @@ export default function InventoryPage() {
 
   if (!ready) return <AuthLoading message="Loading inventory…" />;
 
+  if (!inventoryEnabled) {
+    return (
+      <div>
+        <PageHeader
+          title="Shop inventory"
+          description="Inventory tracking is currently disabled for your shop."
+        />
+        <div className="mt-8 rounded-xl border border-border bg-surface p-8 text-center">
+          <p className="text-lg font-semibold text-slate-800">Inventory tracking is off</p>
+          <p className="mt-2 text-sm text-muted">
+            Your shop has inventory tracking disabled. If you stock and manage supplies like detergent
+            or bags, you can turn it on under{' '}
+            <a href="/settings" className="text-primary underline hover:opacity-80">
+              Settings → Preferences → Operations
+            </a>
+            .
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageHeader
@@ -139,7 +167,7 @@ export default function InventoryPage() {
         }
       />
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-3">
+      <div className="mt-6 grid gap-3 grid-cols-2 sm:grid-cols-3">
         <div className="stat-card">
           <p className="text-xs text-muted">SKU count</p>
           <p className="text-2xl font-semibold text-slate-900">{stats.total}</p>
@@ -196,7 +224,7 @@ export default function InventoryPage() {
                 return (
                   <div
                     key={item._id}
-                    className={`list-row flex-wrap gap-4 ${
+                    className={`list-row flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4 ${
                       level === 'out'
                         ? 'ring-red-200/80 bg-red-50/50'
                         : level === 'low'
@@ -204,7 +232,7 @@ export default function InventoryPage() {
                           : ''
                     }`}
                   >
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 w-full">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="font-medium text-slate-900">{item.name}</p>
                         {level === 'out' && <span className="badge-danger">Out of stock</span>}
@@ -230,7 +258,7 @@ export default function InventoryPage() {
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
                       <button
                         type="button"
                         className="btn-outline btn-sm min-w-[2.5rem]"
@@ -280,7 +308,7 @@ export default function InventoryPage() {
 
                     {isEditing && (
                       <div className="w-full border-t border-border/60 pt-4">
-                        <div className="flex flex-wrap items-end gap-4">
+                        <div className="grid gap-4 sm:flex sm:flex-wrap sm:items-end">
                           <div>
                             <label className="text-xs font-medium text-slate-600">Set quantity</label>
                             <div className="mt-1 flex gap-2">

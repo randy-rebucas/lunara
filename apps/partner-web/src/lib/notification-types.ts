@@ -6,6 +6,7 @@ export const PARTNER_NOTIFICATION_CATEGORY = {
   DELIVERY: 'delivery',
   STAFF: 'staff',
   SYSTEM: 'system',
+  MESSAGE: 'message',
 } as const;
 
 export type PartnerNotificationCategory =
@@ -19,6 +20,7 @@ export const PARTNER_NOTIFICATION_CATEGORY_LABELS: Record<PartnerNotificationCat
   delivery: 'Delivery',
   staff: 'Staff',
   system: 'System',
+  message: 'Message',
 };
 
 export interface PortalNotification {
@@ -43,7 +45,8 @@ export type PortalNotificationRoute =
   | { kind: 'queue' }
   | { kind: 'progress' }
   | { kind: 'order'; orderId: string }
-  | { kind: 'receiving'; orderId: string };
+  | { kind: 'receiving'; orderId: string }
+  | { kind: 'messages' };
 
 export function resolveNotificationCategory(
   notification: PortalNotification,
@@ -110,6 +113,10 @@ export function resolvePortalNotificationRoute(
     return orderId ? { kind: 'order', orderId } : { kind: 'progress' };
   }
 
+  if (type === 'new_message') {
+    return { kind: 'messages' };
+  }
+
   if (orderId) {
     return { kind: 'order', orderId };
   }
@@ -129,6 +136,8 @@ export function notificationRouteToPath(route: PortalNotificationRoute): string 
       return `/orders/${route.orderId}/receiving`;
     case 'order':
       return `/orders/${route.orderId}`;
+    case 'messages':
+      return '/messages';
   }
 }
 
@@ -144,6 +153,8 @@ export function notificationActionLabel(route: PortalNotificationRoute): string 
       return 'Shop receiving →';
     case 'order':
       return 'Open order →';
+    case 'messages':
+      return 'Open messages →';
   }
 }
 

@@ -44,9 +44,9 @@ export default function RevenuePage() {
 
   const chart = useMemo(() => {
     if (!data?.daily.length) return { maxRevenue: 1, totalWeek: 0, bestDay: null as string | null };
-    const maxRevenue = Math.max(...data.daily.map((d) => d.revenue), 1);
-    const totalWeek = data.daily.reduce((s, d) => s + d.revenue, 0);
-    const best = [...data.daily].sort((a, b) => b.revenue - a.revenue)[0];
+    const maxRevenue = Math.max(...data.daily.map((d) => d.payout ?? d.revenue), 1);
+    const totalWeek = data.daily.reduce((s, d) => s + (d.payout ?? d.revenue), 0);
+    const best = [...data.daily].sort((a, b) => (b.payout ?? b.revenue) - (a.payout ?? a.revenue))[0];
     return { maxRevenue, totalWeek, bestDay: best?.date ?? null };
   }, [data]);
 
@@ -63,7 +63,7 @@ export default function RevenuePage() {
     <div>
       <PageHeader
         title="Revenue"
-        description="Completed order totals for your shop. Amounts reflect orders marked delivered or completed."
+        description="Your earnings from completed orders. Amounts reflect your payout after Lunara processing."
         actions={
           <>
             <button type="button" className="btn-outline btn-sm" onClick={() => reload()}>
@@ -85,82 +85,34 @@ export default function RevenuePage() {
           <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="stat-card !border-accent/30 !bg-accent/5">
               <p className="text-xs text-muted">Today</p>
-              <p className="text-2xl font-semibold text-accent">{formatPeso(data.today)}</p>
+              <p className="text-2xl font-semibold text-accent">{formatPeso(data.todayPayout ?? data.today)}</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {data.todayOrders} order{data.todayOrders === 1 ? '' : 's'}
                 {data.todayOrders > 0 ? ` · avg ${formatPeso(data.avgOrderToday, true)}` : ''}
               </p>
-              {data.todayOrders > 0 && (
-                <div className="mt-2 space-y-0.5 border-t border-accent/20 pt-2 text-xs">
-                  <div className="flex justify-between text-muted">
-                    <span>Lunara fee</span>
-                    <span>−{formatPeso(data.todayFee ?? 0)}</span>
-                  </div>
-                  <div className="flex justify-between font-semibold text-accent">
-                    <span>Your payout</span>
-                    <span>{formatPeso(data.todayPayout ?? 0)}</span>
-                  </div>
-                </div>
-              )}
             </div>
             <div className="stat-card">
               <p className="text-xs text-muted">Last 7 days</p>
-              <p className="text-2xl font-semibold text-slate-900">{formatPeso(data.week)}</p>
+              <p className="text-2xl font-semibold text-slate-900">{formatPeso(data.weekPayout ?? data.week)}</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {data.weekOrders} completed order{data.weekOrders === 1 ? '' : 's'}
               </p>
-              {data.weekOrders > 0 && (
-                <div className="mt-2 space-y-0.5 border-t border-border/60 pt-2 text-xs">
-                  <div className="flex justify-between text-muted">
-                    <span>Lunara fee</span>
-                    <span>−{formatPeso(data.weekFee ?? 0)}</span>
-                  </div>
-                  <div className="flex justify-between font-semibold text-slate-800">
-                    <span>Your payout</span>
-                    <span>{formatPeso(data.weekPayout ?? 0)}</span>
-                  </div>
-                </div>
-              )}
             </div>
             <div className="stat-card">
               <p className="text-xs text-muted">Month to date</p>
-              <p className="text-2xl font-semibold text-slate-900">{formatPeso(data.month)}</p>
+              <p className="text-2xl font-semibold text-slate-900">{formatPeso(data.monthPayout ?? data.month)}</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {data.monthOrders} order{data.monthOrders === 1 ? '' : 's'}
                 {data.monthOrders > 0 ? ` · avg ${formatPeso(data.avgOrderMonth, true)}` : ''}
               </p>
-              {data.monthOrders > 0 && (
-                <div className="mt-2 space-y-0.5 border-t border-border/60 pt-2 text-xs">
-                  <div className="flex justify-between text-muted">
-                    <span>Lunara fee</span>
-                    <span>−{formatPeso(data.monthFee ?? 0)}</span>
-                  </div>
-                  <div className="flex justify-between font-semibold text-slate-800">
-                    <span>Your payout</span>
-                    <span>{formatPeso(data.monthPayout ?? 0)}</span>
-                  </div>
-                </div>
-              )}
             </div>
             <div className="stat-card">
               <p className="text-xs text-muted">All time</p>
-              <p className="text-2xl font-semibold text-slate-900">{formatPeso(data.allTimeRevenue)}</p>
+              <p className="text-2xl font-semibold text-slate-900">{formatPeso(data.allTimePayout ?? data.allTimeRevenue)}</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {data.allTimeCompletedOrders} completed order
                 {data.allTimeCompletedOrders === 1 ? '' : 's'}
               </p>
-              {data.allTimeCompletedOrders > 0 && (
-                <div className="mt-2 space-y-0.5 border-t border-border/60 pt-2 text-xs">
-                  <div className="flex justify-between text-muted">
-                    <span>Lunara fee</span>
-                    <span>−{formatPeso(data.allTimeFee ?? 0)}</span>
-                  </div>
-                  <div className="flex justify-between font-semibold text-slate-800">
-                    <span>Your payout</span>
-                    <span>{formatPeso(data.allTimePayout ?? 0)}</span>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
 
@@ -182,16 +134,17 @@ export default function RevenuePage() {
 
               <div className="mt-8 flex items-end gap-2 sm:gap-3" style={{ minHeight: 180 }}>
                 {data.daily.map((d) => {
-                  const height = Math.max(6, (d.revenue / chart.maxRevenue) * 140);
+                  const earnings = d.payout ?? d.revenue;
+                  const height = Math.max(6, (earnings / chart.maxRevenue) * 140);
                   const hasOrders = d.orders > 0;
                   return (
                     <div
                       key={d.date}
                       className="flex min-w-0 flex-1 flex-col items-center gap-1.5"
-                      title={`${formatChartDate(d.date)}: ${formatPeso(d.revenue)} · ${d.orders} orders`}
+                      title={`${formatChartDate(d.date)}: ${formatPeso(earnings)} · ${d.orders} orders`}
                     >
-                      <span className="text-[10px] font-medium text-slate-700 sm:text-xs">
-                        {d.revenue > 0 ? formatPeso(d.revenue, true) : '—'}
+                      <span className="hidden text-[10px] font-medium text-slate-700 sm:block sm:text-xs">
+                        {earnings > 0 ? formatPeso(earnings, true) : '—'}
                       </span>
                       <div
                         className={`w-full rounded-t transition-all ${
@@ -200,7 +153,7 @@ export default function RevenuePage() {
                         style={{ height: `${height}px` }}
                       />
                       <span className="text-[10px] font-medium text-slate-600">{formatChartDay(d.date)}</span>
-                      <span className="text-[10px] text-muted-foreground">{d.orders} ord.</span>
+                      <span className="hidden text-[10px] text-muted-foreground sm:inline">{d.orders} ord.</span>
                     </div>
                   );
                 })}
@@ -209,12 +162,13 @@ export default function RevenuePage() {
           </Card>
 
           <div className="section-panel mt-8 overflow-hidden">
-            <table className="data-table">
+            <div className="overflow-x-auto">
+            <table className="data-table" style={{ minWidth: 'unset' }}>
               <thead>
                 <tr>
                   <th>Date</th>
                   <th>Orders</th>
-                  <th className="text-right">Revenue</th>
+                  <th className="text-right">Earnings</th>
                 </tr>
               </thead>
               <tbody>
@@ -222,7 +176,7 @@ export default function RevenuePage() {
                   <tr key={d.date}>
                     <td className="text-slate-900">{formatChartDate(d.date)}</td>
                     <td className="text-muted">{d.orders}</td>
-                    <td className="text-right font-medium text-slate-900">{formatPeso(d.revenue)}</td>
+                    <td className="text-right font-medium text-slate-900">{formatPeso(d.payout ?? d.revenue)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -230,10 +184,11 @@ export default function RevenuePage() {
                 <tr className="border-t border-border/60 bg-slate-50/80 font-medium">
                   <td className="text-slate-900">7-day total</td>
                   <td className="text-muted">{data.weekOrders}</td>
-                  <td className="text-right text-accent">{formatPeso(data.week)}</td>
+                  <td className="text-right text-accent">{formatPeso(chart.totalWeek)}</td>
                 </tr>
               </tfoot>
             </table>
+            </div>
           </div>
 
           {/* Per-order payment breakdown */}
@@ -244,7 +199,7 @@ export default function RevenuePage() {
                   <h3 className="font-semibold text-slate-900">Completed orders</h3>
                   <p className="mt-0.5 text-sm text-muted">Payment method and cash collection status per order</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   {(['all', 'CASH', 'digital'] as const).map((f) => (
                     <button
                       key={f}
@@ -259,6 +214,7 @@ export default function RevenuePage() {
               </div>
 
               <div className="section-panel overflow-hidden">
+                <div className="overflow-x-auto">
                 <table className="data-table">
                   <thead>
                     <tr>
@@ -266,15 +222,13 @@ export default function RevenuePage() {
                       <th>Order ID</th>
                       <th>Payment</th>
                       <th>Cash status</th>
-                      <th className="text-right">Amount</th>
-                      <th className="text-right">Lunara fee</th>
-                      <th className="text-right">Your payout</th>
+                      <th className="text-right">Earnings</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredOrders.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="py-6 text-center text-sm text-muted">
+                        <td colSpan={5} className="py-6 text-center text-sm text-muted">
                           No orders match this filter
                         </td>
                       </tr>
@@ -314,17 +268,6 @@ export default function RevenuePage() {
                               <span className="text-muted">N/A</span>
                             )}
                           </td>
-                          <td className="text-right font-medium text-slate-900">
-                            {formatPeso(o.amount)}
-                          </td>
-                          <td className="text-right text-rose-600 text-sm">
-                            −{formatPeso(o.lunaraFee ?? 0)}
-                            {o.commissionRate != null && (
-                              <span className="ml-1 text-xs text-muted-foreground">
-                                ({Math.round(o.commissionRate * 100)}%)
-                              </span>
-                            )}
-                          </td>
                           <td className="text-right font-semibold text-slate-900">
                             {formatPeso(o.partnerPayout ?? o.amount)}
                           </td>
@@ -333,6 +276,7 @@ export default function RevenuePage() {
                     )}
                   </tbody>
                 </table>
+                </div>
               </div>
 
               <p className="mt-2 text-xs text-muted-foreground">
