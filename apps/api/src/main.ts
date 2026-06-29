@@ -4,6 +4,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { assertProductionJwtSecrets } from './common/config/jwt-config';
 import { ensureUploadDirectories } from './common/uploads/ensure-upload-dirs';
@@ -30,6 +31,7 @@ async function bootstrap() {
   app.useStaticAssets(PARTNER_BRAND_UPLOAD_DIR, { prefix: '/api/v1/uploads/partner-brands/' });
   app.useStaticAssets(REMITTANCE_PROOF_UPLOAD_DIR, { prefix: '/api/v1/uploads/remittance-proofs/' });
   app.useStaticAssets(MESSAGE_ATTACHMENT_UPLOAD_DIR, { prefix: '/api/v1/uploads/message-attachments/' });
+  app.use(cookieParser());
   app.enableCors({ origin: true, credentials: true });
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalPipes(

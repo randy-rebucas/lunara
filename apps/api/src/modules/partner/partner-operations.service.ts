@@ -167,6 +167,7 @@ export class PartnerOperationsService {
       staffCount,
       lowStock,
       recent,
+      branch,
     ] = await Promise.all([
       this.orderModel.countDocuments(incomingBase),
       this.orderModel.countDocuments({
@@ -190,10 +191,20 @@ export class PartnerOperationsService {
         $expr: { $lte: ['$quantity', '$lowStockThreshold'] },
       }),
       this.orderModel.find(incomingBase).sort({ updatedAt: -1 }).limit(8),
+      staffBranchId
+        ? this.branchModel.findById(staffBranchId).select('commissionRate').catch(() => null)
+        : Promise.resolve(null),
     ]);
 
-    const todayRevenue = completedToday.reduce((sum, o) => sum + o.total, 0);
-    const weekRevenue = weekOrders.reduce((sum, o) => sum + o.total, 0);
+    const commissionRate = branch?.commissionRate ?? 0.20;
+    const periodPayout = (orders: { total: number; subtotal?: number }[]) => {
+      const gross = orders.reduce((s, o) => s + o.total, 0);
+      const fee = Math.round(orders.reduce((s, o) => s + (o.subtotal ?? o.total) * commissionRate, 0));
+      return { gross, payout: gross - fee };
+    };
+
+    const todayBreakdown = periodPayout(completedToday);
+    const weekBreakdown = periodPayout(weekOrders);
 
     return {
       success: true,
@@ -209,10 +220,12 @@ export class PartnerOperationsService {
           lowStockItems: lowStock,
         },
         revenue: {
-          today: todayRevenue,
-          week: weekRevenue,
+          today: todayBreakdown.gross,
+          week: weekBreakdown.gross,
           todayOrders: completedToday.length,
           weekOrders: weekOrders.length,
+          todayPayout: todayBreakdown.payout,
+          weekPayout: weekBreakdown.payout,
         },
         recentOrders: await this.summarizeIncomingBatch(recent),
       },
@@ -367,6 +380,49 @@ export class PartnerOperationsService {
           viewerRole: role,
         }),
       },
+    };
+  }
+
+  async getOrderHistory(userId: string, role: UserRole, status?: string) {
+    const HISTORY_STATUSES = [
+      OrderStatus.DELIVERED,
+      OrderStatus.COMPLETED,
+      OrderStatus.CUSTOMER_PICKUP,
+      OrderStatus.CANCELLED,
+    ];
+    const filter: Record<string, unknown> = {
+      status: status && HISTORY_STATUSES.includes(status as OrderStatus)
+        ? status
+        : { $in: HISTORY_STATUSES },
+    };
+    if (role === UserRole.PARTNER) {
+      filter.partnerId = new Types.ObjectId(userId);
+    } else if (role === UserRole.STAFF) {
+      const branchId = await resolvePortalBranchId(this.userModel, userId, role);
+      applyStaffBranchFilter(filter, role, branchId);
+    }
+    const orders = await this.orderModel
+      .find(filter)
+      .sort({ updatedAt: -1 })
+      .limit(200)
+      .lean();
+    const paymentsByOrderId = await loadLatestOrderPaymentsByOrderId(
+      this.paymentModel,
+      orders.map((o) => o._id),
+    );
+    return {
+      success: true,
+      data: orders.map((o) => {
+        const payment = paymentsByOrderId.get(o._id.toString());
+        return {
+          _id: o._id,
+          status: o.status,
+          totalAmount: o.total,
+          paymentMethod: payment?.method ?? null,
+          createdAt: o.createdAt,
+          completedAt: o.updatedAt,
+        };
+      }),
     };
   }
 

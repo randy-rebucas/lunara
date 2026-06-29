@@ -146,20 +146,20 @@ export class LedgerService {
     };
 
     // ── P&L summary ──
-    const platformRevenue = get('platform_revenue');         // commission earned
-    const riderCost = get('rider_payout_expense');           // task fees paid out (debit sum = positive here)
-    const refundCost = get('refund_expense');                // goodwill/compensation
+    // Revenue/liability accounts: get() = credits − debits = natural positive balance ✓
+    // Asset/expense accounts: get() = credits − debits = NEGATIVE of natural balance → negate
+    const platformRevenue = get('platform_revenue');
+    const riderCost      = -get('rider_payout_expense');  // expense account: debits increase it
+    const refundCost     = -get('refund_expense');         // expense account: debits increase it
     const netMargin = platformRevenue - riderCost - refundCost;
 
     // ── Cash flow ──
-    const cashIn = get('platform_cash');                     // PayMongo + verified remittances + wallet topups
-    const cashOut = get('cash_out');                         // partner payouts + rider withdrawals
+    const cashIn  = -get('platform_cash');  // asset account: debits = cash received → negate
+    const cashOut =  get('cash_out');       // liability-like: credits = cash paid out ✓
 
     // ── Spot checks ──
-    const clearingDrift = get('order_revenue_clearing');     // should be near 0
-    // Ledger platform_revenue vs DB lunaraFee sum
+    const clearingDrift = get('order_revenue_clearing'); // liability-like, should converge to 0
     const commissionDrift = platformRevenue - db.settlements.totalLunaraFee;
-    // Ledger cash_out vs DB (partnerPayout + riderWithdrawalsPaid)
     const cashOutDrift = cashOut - (db.settlements.totalPartnerPayout + db.withdrawals.totalPaid);
     // Ledger customer_wallet_liability sum vs actual wallet balances
     const walletLedgerTotal = get('customer_wallet_liability');
@@ -192,7 +192,7 @@ export class LedgerService {
         pendingCount: db.withdrawals.pendingCount,
         pendingTotal: db.withdrawals.pendingTotal,
         riderPayableBalance: get('rider_payable'),
-        riderRemittanceReceivable: get('rider_remittance_receivable'),
+        riderRemittanceReceivable: -get('rider_remittance_receivable'), // asset: negate
       },
       wallets: {
         count: db.wallets.walletCount,

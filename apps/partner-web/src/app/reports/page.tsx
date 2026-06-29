@@ -9,6 +9,7 @@ import { Card, CardBody } from '../../components/ui/card';
 import { PageHeader } from '../../components/ui/page-header';
 import { useRequirePartner } from '../../hooks/use-protected-page';
 import { formatPeso } from '../../lib/format-peso';
+import { exportCsv } from '../../lib/export-csv';
 import { partnerFetch } from '../../lib/partner-api';
 import { usePartnerQuery } from '../../lib/use-partner-query';
 
@@ -73,6 +74,29 @@ export default function ReportsPage() {
           <>
             <button type="button" className="btn-outline btn-sm" onClick={() => reload()}>
               Refresh
+            </button>
+            <button
+              type="button"
+              className="btn-outline btn-sm"
+              disabled={!report}
+              onClick={() => {
+                if (!report) return;
+                exportCsv(
+                  `report-${days}d.csv`,
+                  ['Metric', 'Value'],
+                  [
+                    ['Total orders', report.totalOrders],
+                    ['Completed orders', report.completedOrders],
+                    ['Total revenue (₱)', report.revenue],
+                    ['Total payout (₱)', report.payout],
+                    ['Avg order value (₱)', report.averageOrderValue],
+                    ...Object.entries(report.ordersByStatus ?? {}).map(([k, v]) => [`Status: ${k}`, v]),
+                    ...Object.entries(report.completedByService ?? {}).map(([k, v]) => [`Service: ${k}`, v]),
+                  ],
+                );
+              }}
+            >
+              Export CSV
             </button>
             <Link href="/revenue" className="btn-outline btn-sm">
               Revenue →

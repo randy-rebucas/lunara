@@ -172,7 +172,7 @@ export default function PartnerDashboardPage() {
               <CardBody>
                 <p className="text-sm font-medium text-muted">Revenue today</p>
                 <p className="mt-1 text-3xl font-semibold tracking-tight text-accent">
-                  {formatPeso(data.revenue.today)}
+                  {formatPeso(data.revenue.todayPayout ?? data.revenue.today)}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {data.revenue.todayOrders} completed order
@@ -187,7 +187,7 @@ export default function PartnerDashboardPage() {
               <CardBody>
                 <p className="text-sm font-medium text-muted">Revenue (7 days)</p>
                 <p className="mt-1 text-3xl font-semibold tracking-tight text-primary">
-                  {formatPeso(data.revenue.week)}
+                  {formatPeso(data.revenue.weekPayout ?? data.revenue.week)}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {data.revenue.weekOrders} completed order

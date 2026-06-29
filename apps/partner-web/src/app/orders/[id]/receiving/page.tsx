@@ -143,15 +143,23 @@ export default function ShopReceivingPage() {
       {view.canVerifyWeight && (
         <div className="card card-body mt-6 !py-5">
           <h3 className="font-semibold text-slate-900">Verify weight</h3>
-          <p className="mt-1 text-sm text-muted">
-            {est != null && `Customer estimate: ${est} kg`}
-            {riderWt != null && ` · Rider weighed: ${riderWt} kg`}
-          </p>
+          <div className="mt-2 flex flex-wrap gap-4 text-sm text-muted">
+            {est != null && (
+              <span><span className="font-medium text-slate-700">Customer declared:</span> {est} kg</span>
+            )}
+            {riderWt != null && (
+              <span><span className="font-medium text-slate-700">Rider weighed:</span> {riderWt} kg</span>
+            )}
+            {est != null && riderWt != null && (
+              <span><span className="font-medium text-slate-700">Variance:</span> {Math.abs(riderWt - est).toFixed(2)} kg</span>
+            )}
+          </div>
+          <p className="mt-2 text-xs text-muted">Enter the weight measured at your shop — this is the authoritative value used for billing.</p>
           <input
             className="input-field mt-3"
             type="number"
             step="0.1"
-            placeholder="Verified weight (kg)"
+            placeholder="Shop-measured weight (kg)"
             value={weight}
             onChange={(e) => setWeight(e.target.value)}
           />

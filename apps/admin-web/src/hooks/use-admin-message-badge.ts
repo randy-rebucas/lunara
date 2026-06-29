@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { adminFetch } from '../lib/admin-api';
 import { subscribeAdminRealtime } from '../lib/admin-realtime';
@@ -30,16 +30,10 @@ export function useAdminMessageBadge() {
 
     return subscribeAdminRealtime({
       onNewMessage: () => {
-        // Only increment if admin is not currently on the messages page
-        setUnreadTotal((prev) => (isOnMessagesRef.current ? 0 : prev + 1));
+        if (!isOnMessages) setUnreadTotal((prev) => prev + 1);
       },
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Keep a ref so the socket callback always reads the current value
-  const isOnMessagesRef = useRef(isOnMessages);
-  isOnMessagesRef.current = isOnMessages;
+  }, [isOnMessages]);
 
   return { unreadTotal: isOnMessages ? 0 : unreadTotal };
 }

@@ -49,6 +49,7 @@ export function hasPortalRole(roles: PortalRole[], user = getPortalUser()) {
 export async function staffLogin(email: string, password: string) {
   const res = await fetch(`${API_URL}/auth/login`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
   });
@@ -69,24 +70,26 @@ export async function staffLogin(email: string, password: string) {
 }
 
 export async function staffLogout() {
-  const token = getPartnerToken();
-  if (token) {
-    await fetch(`${API_URL}/auth/logout`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-    }).catch(() => {});
-  }
+  await fetch(`${API_URL}/auth/logout`, {
+    method: 'POST',
+    credentials: 'include',
+    // Bearer token as fallback for environments where cookie is absent
+    headers: { Authorization: `Bearer ${getPartnerToken()}` },
+  }).catch(() => {});
   clearPartnerToken();
 }
 
 export async function partnerFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  // Cookie (HttpOnly) is the primary auth mechanism; token in localStorage is kept for socket auth only.
   const token = getPartnerToken();
   let res: Response;
   try {
     res = await fetch(`${API_URL}${path}`, {
       ...init,
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
+        // Bearer header as fallback (e.g. dev without cookie, or direct API calls)
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(init?.headers ?? {}),
       },
@@ -117,6 +120,7 @@ export async function uploadProcessingPhoto(orderId: string, file: File): Promis
   try {
     res = await fetch(`${API_URL}/partner/orders/${orderId}/processing/photo-upload`, {
       method: 'POST',
+      credentials: 'include',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
     });
@@ -148,6 +152,7 @@ export async function fetchAuthenticatedMediaUrl(publicPath: string): Promise<st
   const url = resolveMediaUrl(publicPath);
 
   const res = await fetch(url, {
+    credentials: 'include',
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
 

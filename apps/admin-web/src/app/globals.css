@@ -261,11 +261,11 @@
   }
 
   .dc-panel-header {
-    @apply border-b border-border/60 bg-slate-50/90 px-3.5 py-2.5;
+    @apply border-b border-border/60 bg-slate-50/90 px-3.5 py-2;
   }
 
   .dc-panel-body {
-    @apply p-3.5;
+    @apply p-3;
   }
 
   .dc-panel-empty {

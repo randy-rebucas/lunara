@@ -282,51 +282,6 @@ export function OrdersBoard() {
             ))}
           </div>
 
-          <section className="dc-panel">
-            <div className="dc-panel-header flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-900">Status filter</h2>
-                <p className="text-xs text-muted">
-                  {filter
-                    ? `Showing ${formatSlugLabel(filter)} · ${statusCounts[filter] ?? 0} platform-wide`
-                    : `All statuses · ${summary.total.toLocaleString()} orders`}
-                </p>
-              </div>
-              {filter ? (
-                <button
-                  type="button"
-                  className="link-primary text-xs font-medium"
-                  onClick={() => setFilter('')}
-                >
-                  Clear filter
-                </button>
-              ) : null}
-            </div>
-            <div className="dc-panel-body pt-1">
-              <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by status">
-                <button
-                  type="button"
-                  onClick={() => setFilter('')}
-                  className={!filter ? 'filter-chip-active' : 'filter-chip'}
-                  aria-pressed={!filter}
-                >
-                  All ({summary.total.toLocaleString()})
-                </button>
-                {statuses.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setFilter(s)}
-                    className={filter === s ? 'filter-chip-active' : 'filter-chip'}
-                    aria-pressed={filter === s}
-                  >
-                    {formatSlugLabel(s)} ({statusCounts[s]})
-                  </button>
-                ))}
-              </div>
-            </div>
-          </section>
-
           {attentionOrders.length > 0 ? (
             <section className="dc-panel" id="order-attention">
               <div className="dc-panel-header flex flex-wrap items-center justify-between gap-2">
@@ -413,6 +368,12 @@ export function OrdersBoard() {
             onLimitChange={setLimit}
             total={items.length}
             filtered={filteredItems.length}
+            filterValue={filter}
+            onFilterChange={setFilter}
+            filterOptions={[
+              { value: '', label: 'All statuses', count: summary.total },
+              ...statuses.map((s) => ({ value: s, label: formatSlugLabel(s), count: statusCounts[s] })),
+            ]}
           />
 
           <section className="dc-panel" id="order-ledger">
@@ -421,7 +382,7 @@ export function OrdersBoard() {
                 <h2 className="text-sm font-semibold text-slate-900">Order ledger</h2>
                 <p className="text-xs text-muted">
                   Showing {filteredItems.length} of {items.length} loaded
-                  {filter ? ` · filter: ${formatSlugLabel(filter)}` : ''}
+                  {filter ? ` · ${formatSlugLabel(filter)}` : ''}
                   {conflictsInView > 0
                     ? ` · ${conflictsInView} conflict${conflictsInView === 1 ? '' : 's'}`
                     : ''}

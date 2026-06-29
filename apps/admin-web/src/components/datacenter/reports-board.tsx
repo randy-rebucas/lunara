@@ -156,6 +156,19 @@ export function ReportsBoard() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center rounded-md border border-border/80 bg-surface p-0.5" role="group" aria-label="Report period">
+              {PERIOD_OPTIONS.map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => setDays(d)}
+                  className={`rounded px-3 py-1 text-xs font-medium transition-colors ${days === d ? 'bg-primary text-white shadow-sm' : 'text-muted hover:text-slate-900'}`}
+                  aria-pressed={days === d}
+                >
+                  {d}d
+                </button>
+              ))}
+            </div>
             <span className="badge-neutral">Polling</span>
             <span className="dc-sublabel tabular-nums" title="Last data refresh">
               Updated {updatedLabel}
@@ -193,38 +206,13 @@ export function ReportsBoard() {
 
       {report ? (
         <div className="space-y-3">
-          <section className="dc-panel">
-            <div className="dc-panel-header flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-900">Report period</h2>
-                <p className="text-xs text-muted">
-                  Last {report.periodDays} days
-                  {periodFrom ? ` · from ${periodFrom}` : ''}
-                </p>
-              </div>
-            </div>
-            <div className="dc-panel-body pt-1">
-              <div className="flex flex-wrap gap-2" role="group" aria-label="Report period">
-                {PERIOD_OPTIONS.map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => setDays(d)}
-                    className={days === d ? 'filter-chip-active' : 'filter-chip'}
-                    aria-pressed={days === d}
-                  >
-                    {d} days
-                  </button>
-                ))}
-              </div>
-            </div>
-          </section>
-
           <div className={`flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 ${copy.bar}`}>
             <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${copy.dot}`} aria-hidden />
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-slate-900">{copy.label}</p>
-              <p className="text-xs text-muted">{copy.detail}</p>
+              <p className="text-xs text-muted">
+                Last {report.periodDays} days{periodFrom ? ` · from ${periodFrom}` : ''} · {copy.detail}
+              </p>
             </div>
             {report.totalOrders > 0 ? (
               <span className="badge-accent px-3 py-1 text-xs font-semibold">
@@ -282,7 +270,7 @@ export function ReportsBoard() {
               <Link
                 key={a.href}
                 href={a.href}
-                className="rounded-md border border-border/80 bg-surface px-3 py-1.5 dc-chip transition-colors hover:border-primary/40 hover:text-primary"
+                className="dc-chip rounded-md border border-border/80 bg-surface px-3 py-1.5 transition-colors hover:border-primary/40 hover:text-primary"
               >
                 {a.label}
               </Link>
@@ -381,35 +369,6 @@ export function ReportsBoard() {
             </section>
           </div>
 
-          <section className="dc-panel">
-            <div className="dc-panel-header">
-              <h2 className="text-sm font-semibold text-slate-900">Period summary</h2>
-              <p className="text-xs text-muted">Key ratios for the selected window</p>
-            </div>
-            <div className="dc-panel-body">
-              <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="rounded-lg border border-border/60 bg-surface px-4 py-3">
-                  <dt className="dc-label">Completion rate</dt>
-                  <dd className="dc-value mt-2">{completionRate}%</dd>
-                </div>
-                <div className="rounded-lg border border-border/60 bg-surface px-4 py-3">
-                  <dt className="dc-label">Cancellation rate</dt>
-                  <dd className="dc-value mt-2">{cancelRate}%</dd>
-                </div>
-                <div className="rounded-lg border border-border/60 bg-surface px-4 py-3">
-                  <dt className="dc-label">Revenue per order</dt>
-                  <dd className="dc-value mt-2">
-                    {report.completedOrders > 0 ? formatPeso(report.averageOrderValue) : '—'}
-                  </dd>
-                </div>
-                <div className="rounded-lg border border-border/60 bg-surface px-4 py-3">
-                  <dt className="dc-label">Fleet growth</dt>
-                  <dd className="dc-value mt-2">{report.ridersJoined}</dd>
-                  <dd className="dc-sublabel mt-1">riders joined</dd>
-                </div>
-              </dl>
-            </div>
-          </section>
         </div>
       ) : null}
     </div>

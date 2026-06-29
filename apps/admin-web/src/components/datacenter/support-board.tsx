@@ -263,7 +263,7 @@ export function SupportBoard() {
               <Link
                 key={a.href}
                 href={a.href}
-                className="rounded-md border border-border/80 bg-surface px-3 py-1.5 dc-chip transition-colors hover:border-primary/40 hover:text-primary"
+                className="dc-chip rounded-md border border-border/80 bg-surface px-3 py-1.5 transition-colors hover:border-primary/40 hover:text-primary"
               >
                 {a.label}
               </Link>
@@ -275,10 +275,9 @@ export function SupportBoard() {
               <div className="dc-panel-header flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h2 className="text-sm font-semibold text-slate-900">Priority queue</h2>
-                  <p className="text-xs text-muted">
-                    High priority and lost-item tickets needing response
-                  </p>
+                  <p className="text-xs text-muted">High priority and lost-item tickets needing response</p>
                 </div>
+                <Link href="/refunds" className="link-primary text-xs font-medium">Refund queue →</Link>
               </div>
               <div className="overflow-x-auto">
                 <table className="data-table min-w-[640px]">
@@ -334,72 +333,6 @@ export function SupportBoard() {
             </section>
           ) : null}
 
-          <section className="dc-panel">
-            <div className="dc-panel-header flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-900">Queue filters</h2>
-                <p className="text-xs text-muted">
-                  {filter || typeFilter
-                    ? 'Filtered ticket feed'
-                    : `${items.length} tickets in current load`}
-                </p>
-              </div>
-              {filter || typeFilter ? (
-                <button
-                  type="button"
-                  className="link-primary text-xs font-medium"
-                  onClick={() => {
-                    setFilter('');
-                    setTypeFilter('');
-                  }}
-                >
-                  Clear filters
-                </button>
-              ) : null}
-            </div>
-            <div className="dc-panel-body pt-1">
-              <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by type">
-                <button
-                  type="button"
-                  onClick={() => setTypeFilter('')}
-                  className={!typeFilter ? 'filter-chip-active' : 'filter-chip'}
-                  aria-pressed={!typeFilter}
-                >
-                  All types
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTypeFilter(typeFilter === 'lost_item' ? '' : 'lost_item')}
-                  className={
-                    typeFilter === 'lost_item'
-                      ? 'filter-chip-active bg-amber-600 hover:bg-amber-600'
-                      : 'filter-chip'
-                  }
-                  aria-pressed={typeFilter === 'lost_item'}
-                >
-                  Lost items ({counts.lostItem ?? 0})
-                </button>
-              </div>
-              <div
-                className="mt-3 flex flex-wrap gap-2"
-                role="group"
-                aria-label="Filter by status"
-              >
-                {['', 'open', 'in_progress', 'resolved', 'closed'].map((s) => (
-                  <button
-                    key={s || 'all'}
-                    type="button"
-                    onClick={() => setFilter(s)}
-                    className={`capitalize ${filter === s ? 'filter-chip-active' : 'filter-chip'}`}
-                    aria-pressed={filter === s}
-                  >
-                    {s ? formatSlugLabel(s) : 'All statuses'}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </section>
-
           <ListControls
             search={search}
             onSearchChange={setSearch}
@@ -408,6 +341,23 @@ export function SupportBoard() {
             onLimitChange={setLimit}
             total={items.length}
             filtered={filteredItems.length}
+            filterValue={filter}
+            onFilterChange={setFilter}
+            filterOptions={[
+              { value: '',            label: 'All statuses' },
+              { value: 'open',        label: 'Open' },
+              { value: 'in_progress', label: 'In progress' },
+              { value: 'resolved',    label: 'Resolved' },
+              { value: 'closed',      label: 'Closed' },
+            ]}
+            filterLabel="Status"
+            filter2Value={typeFilter}
+            onFilter2Change={setTypeFilter}
+            filter2Options={[
+              { value: '',          label: 'All types' },
+              { value: 'lost_item', label: 'Lost items' },
+            ]}
+            filter2Label="Type"
           />
 
           <section className="dc-panel" id="ticket-ledger">
@@ -416,6 +366,8 @@ export function SupportBoard() {
                 <h2 className="text-sm font-semibold text-slate-900">Ticket ledger</h2>
                 <p className="text-xs text-muted">
                   Showing {filteredItems.length} of {items.length} tickets
+                  {filter ? ` · ${formatSlugLabel(filter)}` : ''}
+                  {typeFilter ? ` · ${formatSlugLabel(typeFilter)}` : ''}
                 </p>
               </div>
             </div>

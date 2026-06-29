@@ -9,6 +9,7 @@ import { Card, CardBody } from '../../components/ui/card';
 import { PageHeader } from '../../components/ui/page-header';
 import { useRequirePartner } from '../../hooks/use-protected-page';
 import { formatChartDate, formatChartDay, formatPeso } from '../../lib/format-peso';
+import { exportCsv } from '../../lib/export-csv';
 import { partnerFetch } from '../../lib/partner-api';
 import { usePartnerQuery } from '../../lib/use-partner-query';
 
@@ -68,6 +69,21 @@ export default function RevenuePage() {
           <>
             <button type="button" className="btn-outline btn-sm" onClick={() => reload()}>
               Refresh
+            </button>
+            <button
+              type="button"
+              className="btn-outline btn-sm"
+              disabled={!data}
+              onClick={() => {
+                if (!data) return;
+                exportCsv(
+                  'revenue-daily.csv',
+                  ['Date', 'Revenue (₱)', 'Payout (₱)', 'Orders'],
+                  data.daily.map((d) => [d.date, d.revenue, d.payout ?? d.revenue, d.orders]),
+                );
+              }}
+            >
+              Export CSV
             </button>
             <Link href="/reports" className="btn-outline btn-sm">
               Full reports →

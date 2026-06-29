@@ -29,7 +29,7 @@ export function OpsPanel({
 
 export function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex justify-between gap-4 border-b border-border/40 py-2.5 text-sm last:border-0">
+    <div className="flex justify-between gap-4 border-b border-border/40 py-1.5 text-sm last:border-0">
       <dt className="text-muted">{label}</dt>
       <dd className="text-right font-medium text-slate-900">{value}</dd>
     </div>

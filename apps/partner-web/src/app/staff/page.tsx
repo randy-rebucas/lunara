@@ -224,6 +224,7 @@ export default function StaffTeamPage() {
           <thead>
             <tr>
               <th>Staff</th>
+              <th>Role</th>
               <th>Phone</th>
               <th>Member since</th>
               <th>Active jobs</th>
@@ -233,6 +234,9 @@ export default function StaffTeamPage() {
             {(staff ?? []).map((s) => (
               <tr key={s._id}>
                 <td className="font-medium text-slate-900">{s.email ?? s._id}</td>
+                <td>
+                  <span className="badge-neutral capitalize">{s.role ?? 'staff'}</span>
+                </td>
                 <td className="text-muted">{s.phone ?? '—'}</td>
                 <td className="text-muted">{formatMemberSince(s.createdAt)}</td>
                 <td>

@@ -63,7 +63,7 @@ export interface PartnerDashboardData {
     staffMembers: number;
     lowStockItems: number;
   };
-  revenue: { today: number; week: number; todayOrders: number; weekOrders: number };
+  revenue: { today: number; week: number; todayOrders: number; weekOrders: number; todayPayout: number; weekPayout: number };
   recentOrders: PartnerOrderSummary[];
 }
 
@@ -111,6 +111,7 @@ export interface PartnerStaffMember {
   _id: string;
   email?: string;
   phone?: string;
+  role?: string;
   createdAt?: string;
   activeJobs: number;
 }

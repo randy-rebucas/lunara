@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { PartnerInventoryItem, PartnerSettingsData } from '@lunara/types';
 import { AuthLoading } from '../../components/auth-loading';
 import { DataPageStatus } from '../../components/data-page-status';
@@ -107,8 +107,20 @@ export default function InventoryPage() {
     }
   }
 
+  const adjustTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const pendingQty = useRef<Record<string, number>>({});
+
   function adjustQty(item: PartnerInventoryItem, delta: number) {
-    void patchItem(item._id, { quantity: Math.max(0, item.quantity + delta) });
+    const next = Math.max(0, (pendingQty.current[item._id] ?? item.quantity) + delta);
+    pendingQty.current[item._id] = next;
+    // Optimistic UI update
+    setData((prev) => (prev ?? []).map((i) => (i._id === item._id ? { ...i, quantity: next } : i)));
+    // Debounce the API call — only fires 400ms after the last click
+    clearTimeout(adjustTimers.current[item._id]);
+    adjustTimers.current[item._id] = setTimeout(() => {
+      void patchItem(item._id, { quantity: next });
+      delete pendingQty.current[item._id];
+    }, 400);
   }
 
   function applyDraftQty(item: PartnerInventoryItem) {

@@ -8,6 +8,7 @@ import { DataPageStatus } from '../../components/data-page-status';
 import { PageHeader } from '../../components/ui/page-header';
 import { useRequirePartner } from '../../hooks/use-protected-page';
 import { formatPeso } from '../../lib/format-peso';
+import { exportCsv } from '../../lib/export-csv';
 import { partnerFetch } from '../../lib/partner-api';
 import { usePartnerQuery } from '../../lib/use-partner-query';
 
@@ -86,9 +87,33 @@ export default function SettlementsPage() {
         title="Settlements"
         description="Payout records from Lunara for your completed orders. Cash collected by riders is remitted to Lunara and settled to you per period."
         actions={
+          <>
+          <button
+            type="button"
+            className="btn-outline btn-sm"
+            disabled={!data?.length}
+            onClick={() => {
+              if (!data) return;
+              exportCsv(
+                'settlements.csv',
+                ['Period', 'Orders', 'Revenue (₱)', 'Lunara Fee (₱)', 'Payout (₱)', 'Status'],
+                data.map((s) => [
+                  formatDateRange(s.periodStart, s.periodEnd),
+                  s.totalOrders,
+                  s.totalAmount,
+                  s.lunaraFee ?? '',
+                  s.partnerPayout ?? s.totalAmount,
+                  s.status,
+                ]),
+              );
+            }}
+          >
+            Export CSV
+          </button>
           <button type="button" className="btn-outline btn-sm" onClick={() => reload()}>
             Refresh
           </button>
+          </>
         }
       />
 

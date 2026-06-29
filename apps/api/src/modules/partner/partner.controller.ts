@@ -12,6 +12,8 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
@@ -23,7 +25,10 @@ import {
   TASK_PHOTO_UPLOAD_DIR,
   taskPhotoPublicPath,
 } from '../../common/uploads/upload-paths';
+import { Types } from 'mongoose';
 import { PickupService } from '../riders/pickup.service';
+import { LaundryService, LaundryServiceDocument } from '../catalog/schemas/laundry-service.schema';
+import { User, UserDocument } from '../users/schemas/user.schema';
 import { AssignStaffDto } from './dto/assign-staff.dto';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { AdvanceProcessingDto, MoveProcessingStepDto } from './dto/processing.dto';
@@ -73,6 +78,12 @@ export class PartnerController {
     private readonly notificationsService: PartnerNotificationsService,
     private readonly settingsService: PartnerSettingsService,
     private readonly pickupService: PickupService,
+    @InjectModel(LaundryService.name)
+    private readonly laundryServiceModel: Model<LaundryServiceDocument>,
+    @InjectModel(User.name)
+    private readonly userModel: Model<UserDocument>,
+    @InjectModel('Order')
+    private readonly orderModel: Model<Record<string, unknown>>,
   ) {}
 
   @Get('settings')
@@ -277,6 +288,15 @@ export class PartnerController {
     return this.processingService.getConfig();
   }
 
+  @Get('orders/history')
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
+  getOrderHistory(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Query('status') status?: string,
+  ) {
+    return this.operationsService.getOrderHistory(req.user.sub, req.user.role, status);
+  }
+
   @Get('orders/queue')
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
   getQueue(
@@ -352,5 +372,52 @@ export class PartnerController {
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
   dispatchDelivery(@Param('orderId') orderId: string) {
     return this.operationsService.notifyDeliveryDispatch(orderId);
+  }
+
+  @Get('services')
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
+  async getServices() {
+    const services = await this.laundryServiceModel
+      .find({ isActive: true })
+      .sort({ sortOrder: 1 })
+      .lean();
+    return { success: true, data: services };
+  }
+
+  @Get('customers')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  async getCustomers(@Req() req: { user: { sub: string; role: UserRole } }) {
+    const { sub, role } = req.user;
+    const matchStage: Record<string, unknown> = {
+      status: { $in: ['completed', 'delivered', 'customer_pickup_complete'] },
+    };
+    if (role === UserRole.PARTNER) {
+      matchStage.partnerId = new Types.ObjectId(sub);
+    } else if (role === UserRole.STAFF) {
+      const staffUser = await this.userModel.findById(sub).select('branchId').lean();
+      if (staffUser?.branchId) matchStage.branchId = staffUser.branchId;
+    }
+    const rows = await this.orderModel.aggregate([
+      { $match: matchStage },
+      { $group: {
+        _id: '$customerId',
+        totalOrders: { $sum: 1 },
+        totalSpent: { $sum: '$totalAmount' },
+        lastOrderAt: { $max: '$createdAt' },
+      }},
+      { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'customer' } },
+      { $unwind: { path: '$customer', preserveNullAndEmptyArrays: false } },
+      { $project: {
+        customerId: '$_id',
+        name: { $concat: [{ $ifNull: ['$customer.firstName', ''] }, ' ', { $ifNull: ['$customer.lastName', ''] }] },
+        phone: '$customer.phone',
+        totalOrders: 1,
+        totalSpent: 1,
+        lastOrderAt: 1,
+      }},
+      { $sort: { lastOrderAt: -1 } },
+      { $limit: 200 },
+    ]);
+    return { success: true, data: rows };
   }
 }

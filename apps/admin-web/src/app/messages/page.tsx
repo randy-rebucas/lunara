@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ChatMessage, RecipientInfo } from '@lunara/types';
 import { ConversationPane } from '../../components/conversation-pane';
 import { adminFetch } from '../../lib/admin-api';
@@ -20,22 +20,22 @@ export default function AdminMessagesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const selectedIdRef = useRef<string | null>(null);
-  selectedIdRef.current = selectedId;
 
   useEffect(() => {
     adminFetch<ConversationListItem[]>('/admin/messages')
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'))
       .then((data) => { if (data) setConversations(data); })
       .finally(() => setLoading(false));
+  }, []);
 
+  useEffect(() => {
     // Update conversation list in real-time when a new message arrives
     return subscribeAdminRealtime({
       onNewMessage: (msg) => {
         setConversations((prev) =>
           prev.map((c) => {
             if (c._id !== msg.conversationId) return c;
-            const isSelected = selectedIdRef.current === c._id;
+            const isSelected = selectedId === c._id;
             return {
               ...c,
               lastMessage: msg,
@@ -45,7 +45,7 @@ export default function AdminMessagesPage() {
         );
       },
     });
-  }, []);
+  }, [selectedId]);
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col">

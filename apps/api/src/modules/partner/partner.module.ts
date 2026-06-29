@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
+import { LaundryService, LaundryServiceSchema } from '../catalog/schemas/laundry-service.schema';
 import { RidersModule } from '../riders/riders.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { PartnerController } from './partner.controller';
@@ -27,6 +28,7 @@ import { LedgerModule } from '../ledger/ledger.module';
       { name: Branch.name, schema: BranchSchema },
       { name: Payment.name, schema: PaymentSchema },
       { name: PartnerSettlement.name, schema: PartnerSettlementSchema },
+      { name: LaundryService.name, schema: LaundryServiceSchema },
     ]),
     RealtimeModule,
     RidersModule,
