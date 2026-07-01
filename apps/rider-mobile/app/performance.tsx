@@ -1,30 +1,124 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
 import { RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { DataLoadState } from '../src/components/data-load-state';
-import { Card } from '../src/components/ui/card';
 import { Screen } from '../src/components/ui/screen';
-import { SectionHeader } from '../src/components/ui/section-header';
 import { riderFetch } from '../src/api';
 import type { RiderPerformanceData } from '../src/lib/rider-types';
-import { colors, spacing, typography } from '../src/theme';
+import { colors, radius, shadow, spacing, typography } from '../src/theme';
 
-function MetricCard({
-  label,
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+
+// ── Ring meter ────────────────────────────────────────────────────────────────
+
+function RingMeter({
   value,
+  label,
+  icon,
+  iconBg,
+  iconColor,
+  valueColor,
   hint,
 }: {
-  label: string;
   value: string;
+  label: string;
+  icon: IoniconName;
+  iconBg: string;
+  iconColor: string;
+  valueColor: string;
   hint?: string;
 }) {
   return (
-    <Card style={styles.metricCard}>
-      <Text style={styles.metricLabel}>{label}</Text>
-      <Text style={styles.metricValue}>{value}</Text>
-      {hint ? <Text style={styles.metricHint}>{hint}</Text> : null}
-    </Card>
+    <View style={ringStyles.card}>
+      <View style={[ringStyles.iconWrap, { backgroundColor: iconBg }]}>
+        <Ionicons name={icon} size={20} color={iconColor} />
+      </View>
+      <Text style={[ringStyles.value, { color: valueColor }]}>{value}</Text>
+      <Text style={ringStyles.label}>{label}</Text>
+      {hint ? <Text style={ringStyles.hint}>{hint}</Text> : null}
+    </View>
   );
 }
+
+const ringStyles = StyleSheet.create({
+  card: {
+    width: '48%',
+    flexGrow: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    alignItems: 'flex-start',
+    gap: spacing.xs,
+    ...shadow.card,
+  },
+  iconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xs,
+  },
+  value: {
+    fontSize: 26,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  label: { ...typography.label },
+  hint: { ...typography.caption },
+});
+
+// ── Stat row ──────────────────────────────────────────────────────────────────
+
+function StatRow({
+  icon,
+  label,
+  value,
+  valueColor,
+}: {
+  icon: IoniconName;
+  label: string;
+  value: string | number;
+  valueColor?: string;
+}) {
+  return (
+    <View style={statStyles.row}>
+      <Ionicons name={icon} size={16} color={colors.mutedForeground} style={statStyles.icon} />
+      <Text style={statStyles.label}>{label}</Text>
+      <Text style={[statStyles.value, valueColor ? { color: valueColor } : null]}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+const statStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+  },
+  icon: { marginRight: spacing.md },
+  label: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.foreground,
+  },
+  value: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+});
+
+function StatDivider() {
+  return <View style={{ height: 1, backgroundColor: colors.border, marginLeft: 36 }} />;
+}
+
+// ── Performance screen ────────────────────────────────────────────────────────
 
 export default function PerformanceScreen() {
   const [data, setData] = useState<RiderPerformanceData | null>(null);
@@ -74,6 +168,10 @@ export default function PerformanceScreen() {
     );
   }
 
+  const rating = data?.customerRating;
+  const ratingDisplay = rating != null ? `${rating.toFixed(1)} / 5` : '—';
+  const ratedCount = data?.ratedDeliveries ?? 0;
+
   return (
     <Screen
       inStack
@@ -82,63 +180,115 @@ export default function PerformanceScreen() {
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
       }
     >
-      <SectionHeader
-        title="Performance"
-        hint="Track completion, acceptance, on-time delivery, and customer ratings."
-      />
+      {/* ── Page header ── */}
+      <View style={styles.pageHeader}>
+        <Text style={styles.pageTitle}>Performance</Text>
+        <Text style={styles.pageSubtitle}>
+          Track your completion, acceptance, and on-time delivery rates.
+        </Text>
+      </View>
 
+      {/* ── Key metrics grid ── */}
       <View style={styles.grid}>
-        <MetricCard label="Completion rate" value={`${data?.completionRate ?? 0}%`} />
-        <MetricCard label="Acceptance rate" value={`${data?.acceptanceRate ?? 0}%`} />
-        <MetricCard label="On-time delivery" value={`${data?.onTimeDeliveryRate ?? 0}%`} />
-        <MetricCard
+        <RingMeter
+          icon="checkmark-circle-outline"
+          iconBg={colors.accentLight}
+          iconColor={colors.accentDark}
+          value={`${data?.completionRate ?? 0}%`}
+          valueColor={colors.accentDark}
+          label="Completion rate"
+        />
+        <RingMeter
+          icon="hand-right-outline"
+          iconBg={colors.primaryLight}
+          iconColor={colors.primary}
+          value={`${data?.acceptanceRate ?? 0}%`}
+          valueColor={colors.primary}
+          label="Acceptance rate"
+        />
+        <RingMeter
+          icon="timer-outline"
+          iconBg={colors.secondaryLight}
+          iconColor={colors.secondaryDark}
+          value={`${data?.onTimeDeliveryRate ?? 0}%`}
+          valueColor={colors.secondaryDark}
+          label="On-time delivery"
+        />
+        <RingMeter
+          icon="star-outline"
+          iconBg={colors.warningBg}
+          iconColor={colors.warning}
+          value={ratingDisplay}
+          valueColor={colors.warning}
           label="Customer rating"
-          value={data?.customerRating != null ? `${data.customerRating} / 5.0` : '—'}
-          hint={
-            data?.ratedDeliveries
-              ? `${data.ratedDeliveries} rated deliveries`
-              : 'No ratings yet'
-          }
+          hint={ratedCount > 0 ? `${ratedCount} rated deliveries` : 'No ratings yet'}
         />
       </View>
 
-      <Card style={styles.summary}>
-        <Text style={styles.summaryTitle}>Activity summary</Text>
-        <Text style={styles.summaryLine}>
-          Completed tasks: {data?.completedTasks ?? 0} · Cancelled: {data?.cancelledTasks ?? 0}
-        </Text>
-        <Text style={styles.summaryLine}>
-          Accepted assignments: {data?.acceptedAssignments ?? 0} of{' '}
-          {data?.totalAssignments ?? 0}
-        </Text>
-        <Text style={styles.summaryLine}>
-          On-time deliveries: {data?.onTimeDeliveries ?? 0}
-        </Text>
-      </Card>
+      {/* ── Activity summary ── */}
+      <Text style={styles.sectionLabel}>ACTIVITY SUMMARY</Text>
+      <View style={styles.summaryCard}>
+        <StatRow
+          icon="bicycle-outline"
+          label="Completed tasks"
+          value={data?.completedTasks ?? 0}
+          valueColor={colors.accentDark}
+        />
+        <StatDivider />
+        <StatRow
+          icon="close-circle-outline"
+          label="Cancelled tasks"
+          value={data?.cancelledTasks ?? 0}
+          valueColor={data?.cancelledTasks ? colors.destructive : colors.mutedForeground}
+        />
+        <StatDivider />
+        <StatRow
+          icon="checkmark-done-outline"
+          label="Accepted assignments"
+          value={`${data?.acceptedAssignments ?? 0} of ${data?.totalAssignments ?? 0}`}
+        />
+        <StatDivider />
+        <StatRow
+          icon="time-outline"
+          label="On-time deliveries"
+          value={data?.onTimeDeliveries ?? 0}
+          valueColor={colors.secondaryDark}
+        />
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  pageHeader: {
+    marginBottom: spacing.xl,
+  },
+  pageTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: colors.foreground,
+    letterSpacing: -0.3,
+  },
+  pageSubtitle: {
+    ...typography.bodySm,
+    marginTop: spacing.xs,
+  },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm + 2,
-    marginTop: spacing.md,
+    marginBottom: spacing.xl,
   },
-  metricCard: {
-    width: '48%',
-    flexGrow: 1,
-    gap: spacing.xs,
+  sectionLabel: {
+    ...typography.label,
+    marginBottom: spacing.sm,
   },
-  metricLabel: { ...typography.label },
-  metricValue: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: colors.primary,
+  summaryCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    ...shadow.card,
   },
-  metricHint: { ...typography.caption },
-  summary: { marginTop: spacing.lg, gap: spacing.sm },
-  summaryTitle: { ...typography.subheading, fontSize: 16 },
-  summaryLine: { ...typography.bodySm },
 });

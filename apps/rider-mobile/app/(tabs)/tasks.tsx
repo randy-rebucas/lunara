@@ -1,24 +1,446 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useRiderOperations } from '../../src/context/rider-operations';
-import { FilterChips } from '../../src/components/ui/filter-chips';
-import { Card } from '../../src/components/ui/card';
 import { EmptyState } from '../../src/components/ui/empty-state';
 import { Screen } from '../../src/components/ui/screen';
-import { TaskTypeBadge } from '../../src/components/ui/task-type-badge';
 import { riderFetch } from '../../src/api';
 import { useTabScreenPadding } from '../../src/hooks/use-tab-bar-height';
 import {
   buildTaskListRows,
+  classifyTask,
   TASK_LIST_FILTERS,
   taskListEmptyMessage,
   type TaskListFilter,
   type TaskListRow,
 } from '../../src/lib/task-list-filters';
-import type { CancelledTaskItem, TaskHistoryItem } from '../../src/lib/rider-types';
+import type {
+  CancelledTaskItem,
+  DeliveryOffer,
+  PickupOffer,
+  Task,
+  TaskHistoryItem,
+} from '../../src/lib/rider-types';
 import { riderTaskStatusLabel } from '../../src/rider-labels';
-import { colors, spacing, typography } from '../../src/theme';
+import { colors, radius, spacing, typography } from '../../src/theme';
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function formatOfferTime(iso?: string): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+}
+
+function formatCardDate(iso: string): string {
+  return new Date(iso).toLocaleString('en-PH', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function formatBookingType(raw: string): string {
+  return raw.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// ── Route visualization ───────────────────────────────────────────────────────
+
+interface RouteRowProps {
+  fromLabel: string;
+  fromCity?: string;
+  fromSub?: string;
+  toLabel: string;
+  toCity?: string;
+  toSub?: string;
+}
+
+function RouteRow({ fromLabel, fromCity, fromSub, toLabel, toCity, toSub }: RouteRowProps) {
+  return (
+    <View style={routeStyles.wrap}>
+      <View style={routeStyles.left}>
+        <View style={routeStyles.dotOrigin} />
+        <View style={routeStyles.line} />
+        <Ionicons name="location" size={16} color={colors.accent} />
+      </View>
+      <View style={routeStyles.addresses}>
+        <View style={routeStyles.address}>
+          <Text style={routeStyles.addrMain}>{fromLabel}</Text>
+          {fromCity ? <Text style={routeStyles.addrSub}>{fromCity}</Text> : null}
+          {fromSub ? <Text style={routeStyles.addrSub}>{fromSub}</Text> : null}
+        </View>
+        <View style={routeStyles.address}>
+          <Text style={routeStyles.addrMain}>{toLabel}</Text>
+          {toCity ? <Text style={routeStyles.addrSub}>{toCity}</Text> : null}
+          {toSub ? <Text style={routeStyles.addrSub}>{toSub}</Text> : null}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const routeStyles = StyleSheet.create({
+  wrap: { flexDirection: 'row', gap: spacing.md, marginVertical: spacing.sm },
+  left: { alignItems: 'center', paddingTop: 3 },
+  dotOrigin: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
+  },
+  line: {
+    width: 2,
+    flex: 1,
+    backgroundColor: colors.border,
+    marginVertical: 3,
+  },
+  addresses: { flex: 1, gap: spacing.md + 4 },
+  address: {},
+  addrMain: { fontSize: 14, fontWeight: '700', color: colors.foreground },
+  addrSub: { ...typography.caption, marginTop: 1 },
+});
+
+// ── Time chip ─────────────────────────────────────────────────────────────────
+
+function TimeChip({ label }: { label: string }) {
+  return (
+    <View style={chipStyles.wrap}>
+      <Ionicons name="time-outline" size={13} color={colors.primary} />
+      <Text style={chipStyles.text}>{label}</Text>
+    </View>
+  );
+}
+
+const chipStyles = StyleSheet.create({
+  wrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primaryLight,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 4,
+    marginBottom: spacing.sm,
+  },
+  text: { fontSize: 12, fontWeight: '600', color: colors.primary },
+});
+
+// ── Offer card (shared shell) ─────────────────────────────────────────────────
+
+interface OfferCardShellProps {
+  typeLabel: string;
+  typeColor: string;
+  typeBg: string;
+  onAccept: () => void;
+  onDecline: () => void;
+  children: React.ReactNode;
+}
+
+function OfferCardShell({
+  typeLabel,
+  typeColor,
+  typeBg,
+  onAccept,
+  onDecline,
+  children,
+}: OfferCardShellProps) {
+  return (
+    <View style={cardStyles.card}>
+      <View style={cardStyles.topRow}>
+        <View style={[cardStyles.typePill, { backgroundColor: typeBg }]}>
+          <Text style={[cardStyles.typePillText, { color: typeColor }]}>{typeLabel}</Text>
+        </View>
+        <View style={cardStyles.newBadge}>
+          <Ionicons name="radio-outline" size={11} color={colors.warning} />
+          <Text style={cardStyles.newBadgeText}>New offer</Text>
+        </View>
+      </View>
+      {children}
+      <View style={cardStyles.actions}>
+        <Pressable
+          style={({ pressed }) => [cardStyles.declineBtn, pressed && cardStyles.btnPressed]}
+          onPress={onDecline}
+          accessibilityRole="button"
+          accessibilityLabel="Decline"
+        >
+          <Ionicons name="close-outline" size={16} color={colors.destructive} />
+          <Text style={cardStyles.declineBtnText}>Decline</Text>
+        </Pressable>
+        <Pressable
+          style={({ pressed }) => [cardStyles.acceptBtn, pressed && cardStyles.btnPressed]}
+          onPress={onAccept}
+          accessibilityRole="button"
+          accessibilityLabel="Accept"
+        >
+          <Ionicons name="checkmark-outline" size={16} color="#fff" />
+          <Text style={cardStyles.acceptBtnText}>Accept</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+// ── Pickup offer card ─────────────────────────────────────────────────────────
+
+const PickupOfferCard = React.memo(function PickupOfferCard({
+  item,
+  shopName,
+  onAccept,
+  onDecline,
+}: {
+  item: PickupOffer;
+  shopName: string;
+  onAccept: () => void;
+  onDecline: () => void;
+}) {
+  const pickupTime = formatOfferTime(item.scheduledPickupAt);
+  return (
+    <OfferCardShell
+      typeLabel="PICKUP"
+      typeColor={colors.primary}
+      typeBg={colors.primaryLight}
+      onAccept={onAccept}
+      onDecline={onDecline}
+    >
+      <RouteRow
+        fromLabel={item.pickupAddress?.label ?? 'Customer address'}
+        fromCity={item.pickupAddress?.city}
+        toLabel={shopName}
+        toSub="Drop-off at shop"
+      />
+      {pickupTime ? <TimeChip label={`Pick up by ${pickupTime}`} /> : null}
+    </OfferCardShell>
+  );
+});
+
+// ── Delivery offer card ───────────────────────────────────────────────────────
+
+const DeliveryOfferCard = React.memo(function DeliveryOfferCard({
+  item,
+  shopName,
+  onAccept,
+  onDecline,
+}: {
+  item: DeliveryOffer;
+  shopName: string;
+  onAccept: () => void;
+  onDecline: () => void;
+}) {
+  return (
+    <OfferCardShell
+      typeLabel="DELIVERY"
+      typeColor={colors.accentDark}
+      typeBg={colors.accentLight}
+      onAccept={onAccept}
+      onDecline={onDecline}
+    >
+      <RouteRow
+        fromLabel={shopName}
+        fromSub="Pick up from shop"
+        toLabel={item.deliveryAddress?.label ?? 'Customer address'}
+        toCity={item.deliveryAddress?.city}
+      />
+    </OfferCardShell>
+  );
+});
+
+// ── Active task card ──────────────────────────────────────────────────────────
+
+const TaskCard = React.memo(function TaskCard({ item, onPress }: { item: Task; onPress: () => void }) {
+  const isDelivery = item.leg === 'delivery';
+  const typeLabel = isDelivery ? 'DELIVERY' : 'PICKUP';
+  const typeBg = isDelivery ? colors.accentLight : colors.primaryLight;
+  const typeColor = isDelivery ? colors.accentDark : colors.primary;
+
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => pressed && cardStyles.cardPressed}>
+      <View style={cardStyles.card}>
+        <View style={cardStyles.topRow}>
+          <View style={[cardStyles.typePill, { backgroundColor: typeBg }]}>
+            <Text style={[cardStyles.typePillText, { color: typeColor }]}>{typeLabel}</Text>
+          </View>
+        </View>
+        <RouteRow
+          fromLabel={item.pickupAddress?.label ?? 'Pickup address'}
+          fromCity={item.pickupAddress?.city}
+          toLabel={item.deliveryAddress?.label ?? item.branchName ?? 'Drop-off'}
+          toCity={item.deliveryAddress?.city}
+        />
+        <View style={cardStyles.statusRow}>
+          <Text style={cardStyles.statusText}>{riderTaskStatusLabel(item.status)}</Text>
+          <View style={cardStyles.viewTaskBtn}>
+            <Text style={cardStyles.viewTaskBtnText}>View task</Text>
+            <Ionicons name="chevron-forward" size={13} color={colors.primary} />
+          </View>
+        </View>
+      </View>
+    </Pressable>
+  );
+});
+
+// ── History / cancelled card ──────────────────────────────────────────────────
+
+const ArchiveCard = React.memo(function ArchiveCard({
+  typePill,
+  typeColor,
+  typeBg,
+  dateLabel,
+  bookingType,
+  statusLabel,
+  branchName,
+  onPress,
+}: {
+  typePill: string;
+  typeColor: string;
+  typeBg: string;
+  dateLabel: string;
+  bookingType: string;
+  statusLabel: string;
+  branchName?: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => pressed && cardStyles.cardPressed}>
+      <View style={cardStyles.card}>
+        <View style={cardStyles.topRow}>
+          <View style={[cardStyles.typePill, { backgroundColor: typeBg }]}>
+            <Text style={[cardStyles.typePillText, { color: typeColor }]}>{typePill}</Text>
+          </View>
+          <Text style={cardStyles.dateText}>{dateLabel}</Text>
+        </View>
+        <Text style={cardStyles.bookingType}>{bookingType}</Text>
+        <Text style={cardStyles.statusMuted}>{statusLabel}</Text>
+        {branchName ? <Text style={cardStyles.branchText}>{branchName}</Text> : null}
+      </View>
+    </Pressable>
+  );
+});
+
+const cardStyles = StyleSheet.create({
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.xs,
+  },
+  typePill: {
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 3,
+  },
+  typePillText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  dateText: { ...typography.caption },
+  bookingType: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.foreground,
+    marginTop: spacing.xs,
+    textTransform: 'capitalize',
+  },
+  statusMuted: { ...typography.bodySm, marginTop: spacing.xs, textTransform: 'capitalize' },
+  branchText: { ...typography.caption, color: colors.primary, marginTop: spacing.xs },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.xs,
+  },
+  statusText: {
+    ...typography.bodySm,
+    color: colors.accentDark,
+    fontWeight: '600',
+    textTransform: 'capitalize',
+  },
+  viewTaskBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  viewTaskBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  actions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  declineBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    backgroundColor: '#FEF2F2',
+  },
+  declineBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.destructive,
+  },
+  acceptBtn: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.primary,
+  },
+  acceptBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  newBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: colors.warningBg,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+  },
+  newBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.warning,
+    letterSpacing: 0.2,
+  },
+  btnPressed: { opacity: 0.8 },
+  cardPressed: { opacity: 0.9 },
+});
+
+// ── Tasks screen ──────────────────────────────────────────────────────────────
 
 export default function TasksScreen() {
   const tabPadding = useTabScreenPadding();
@@ -27,10 +449,15 @@ export default function TasksScreen() {
     filterParam && TASK_LIST_FILTERS.some((f) => f.id === filterParam)
       ? (filterParam as TaskListFilter)
       : 'assigned';
+
   const [filter, setFilter] = useState<TaskListFilter>(initialFilter);
   const [history, setHistory] = useState<TaskHistoryItem[]>([]);
   const [cancelled, setCancelled] = useState<CancelledTaskItem[]>([]);
+  const [dismissedPickup, setDismissedPickup] = useState<Set<string>>(new Set());
+  const [dismissedDelivery, setDismissedDelivery] = useState<Set<string>>(new Set());
+
   const {
+    me,
     offers,
     deliveryOffers,
     tasks,
@@ -41,6 +468,8 @@ export default function TasksScreen() {
     previewDeliveryQueue,
     openTask,
   } = useRiderOperations();
+
+  const shopName = me?.shopLocation?.name ?? 'Lunara Hub';
 
   useEffect(() => {
     if (
@@ -62,7 +491,6 @@ export default function TasksScreen() {
       }
       return;
     }
-
     if (filter === 'cancelled') {
       try {
         const data = await riderFetch<CancelledTaskItem[]>('/riders/tasks/cancelled?limit=30');
@@ -86,138 +514,96 @@ export default function TasksScreen() {
     }
   }
 
+  // Active counts per filter for chip badges
+  const filterCounts = useMemo(() => {
+    const assignedCount =
+      offers.filter((o) => !dismissedPickup.has(o._id)).length +
+      deliveryOffers.filter((o) => !dismissedDelivery.has(o._id)).length +
+      tasks.filter((t) => classifyTask(t) === 'assigned').length;
+    const acceptedCount = tasks.filter((t) => classifyTask(t) === 'accepted').length;
+    const inProgressCount = tasks.filter((t) => classifyTask(t) === 'in_progress').length;
+    return { assigned: assignedCount, accepted: acceptedCount, in_progress: inProgressCount };
+  }, [offers, deliveryOffers, tasks, dismissedPickup, dismissedDelivery]);
+
   const rows = useMemo(
-    () => buildTaskListRows(filter, offers, deliveryOffers, tasks, history, cancelled),
-    [filter, offers, deliveryOffers, tasks, history, cancelled],
+    () =>
+      buildTaskListRows(
+        filter,
+        offers.filter((o) => !dismissedPickup.has(o._id)),
+        deliveryOffers.filter((o) => !dismissedDelivery.has(o._id)),
+        tasks,
+        history,
+        cancelled,
+      ),
+    [filter, offers, deliveryOffers, tasks, history, cancelled, dismissedPickup, dismissedDelivery],
   );
 
-  function handleRowPress(row: TaskListRow) {
-    switch (row.kind) {
-      case 'pickup_offer':
-        void acceptPickupOffer(row.item._id);
-        break;
-      case 'delivery_offer':
-        previewDeliveryQueue(row.item._id);
-        break;
-      case 'task':
-        openTask(row.item._id, row.item.status);
-        break;
-      case 'history':
-        openTask(row.item._id, row.item.status);
-        break;
-      case 'cancelled':
-        openTask(row.item._id, row.item.status);
-        break;
-    }
-  }
-
-  function renderRow({ item: row }: { item: TaskListRow }) {
+  const renderRow = useCallback(function renderRow({ item: row }: { item: TaskListRow }) {
     if (row.kind === 'pickup_offer') {
-      const item = row.item;
       return (
-        <Pressable onPress={() => handleRowPress(row)}>
-          <Card primary style={styles.card}>
-            <TaskTypeBadge type="pickup" />
-            <Text style={styles.type}>{item.bookingType.replace(/_/g, ' ')}</Text>
-            <Text style={styles.meta}>
-              {item.pickupAddress?.label ?? 'Address'} · {item.pickupAddress?.city ?? ''}
-            </Text>
-            {item.scheduledPickupAt ? (
-              <Text style={styles.meta}>
-                Scheduled:{' '}
-                {new Date(item.scheduledPickupAt).toLocaleString('en-PH', {
-                  month: 'short',
-                  day: 'numeric',
-                  hour: 'numeric',
-                  minute: '2-digit',
-                })}
-              </Text>
-            ) : null}
-            <Text style={styles.action}>Accept pickup →</Text>
-          </Card>
-        </Pressable>
+        <PickupOfferCard
+          item={row.item}
+          shopName={shopName}
+          onAccept={() => void acceptPickupOffer(row.item._id)}
+          onDecline={() => setDismissedPickup((s) => new Set([...s, row.item._id]))}
+        />
       );
     }
 
     if (row.kind === 'delivery_offer') {
-      const item = row.item;
       return (
-        <Pressable onPress={() => handleRowPress(row)}>
-          <Card accent style={styles.card}>
-            <TaskTypeBadge type="delivery" />
-            <Text style={styles.type}>{item.bookingType.replace(/_/g, ' ')}</Text>
-            <Text style={styles.meta}>
-              {item.deliveryAddress?.label ?? 'Address'} · {item.deliveryAddress?.city ?? ''}
-            </Text>
-            <Text style={[styles.action, styles.actionAccent]}>View in queue →</Text>
-          </Card>
-        </Pressable>
+        <DeliveryOfferCard
+          item={row.item}
+          shopName={shopName}
+          onAccept={() => previewDeliveryQueue(row.item._id)}
+          onDecline={() => setDismissedDelivery((s) => new Set([...s, row.item._id]))}
+        />
+      );
+    }
+
+    if (row.kind === 'task') {
+      return (
+        <TaskCard
+          item={row.item}
+          onPress={() => openTask(row.item._id, row.item.status)}
+        />
       );
     }
 
     if (row.kind === 'history') {
       const item = row.item;
       return (
-        <Pressable onPress={() => handleRowPress(row)}>
-          <Card style={styles.card}>
-            <View style={styles.rowTop}>
-              <TaskTypeBadge type={item.leg === 'delivery' ? 'delivery' : 'pickup'} />
-              <Text style={styles.date}>
-                {new Date(item.completedAt).toLocaleString('en-PH', {
-                  month: 'short',
-                  day: 'numeric',
-                  hour: 'numeric',
-                  minute: '2-digit',
-                })}
-              </Text>
-            </View>
-            <Text style={styles.type}>{item.bookingType.replace(/_/g, ' ')}</Text>
-            <Text style={styles.meta}>{riderTaskStatusLabel(item.status)}</Text>
-            {item.branchName ? <Text style={styles.branch}>{item.branchName}</Text> : null}
-          </Card>
-        </Pressable>
+        <ArchiveCard
+          typePill={item.leg === 'delivery' ? 'DELIVERY' : 'PICKUP'}
+          typeColor={item.leg === 'delivery' ? colors.accentDark : colors.primary}
+          typeBg={item.leg === 'delivery' ? colors.accentLight : colors.primaryLight}
+          dateLabel={formatCardDate(item.completedAt)}
+          bookingType={formatBookingType(item.bookingType)}
+          statusLabel={riderTaskStatusLabel(item.status)}
+          branchName={item.branchName}
+          onPress={() => openTask(item._id, item.status)}
+        />
       );
     }
 
     if (row.kind === 'cancelled') {
       const item = row.item;
       return (
-        <Pressable onPress={() => handleRowPress(row)}>
-          <Card style={styles.card}>
-            <View style={styles.rowTop}>
-              <TaskTypeBadge type={item.leg === 'delivery' ? 'delivery' : 'pickup'} />
-              <Text style={styles.date}>
-                {new Date(item.cancelledAt).toLocaleString('en-PH', {
-                  month: 'short',
-                  day: 'numeric',
-                  hour: 'numeric',
-                  minute: '2-digit',
-                })}
-              </Text>
-            </View>
-            <Text style={styles.type}>{item.bookingType.replace(/_/g, ' ')}</Text>
-            <Text style={styles.meta}>Cancelled</Text>
-            {item.branchName ? <Text style={styles.branch}>{item.branchName}</Text> : null}
-          </Card>
-        </Pressable>
+        <ArchiveCard
+          typePill={item.leg === 'delivery' ? 'DELIVERY' : 'PICKUP'}
+          typeColor={colors.destructive}
+          typeBg="#FEF2F2"
+          dateLabel={formatCardDate(item.cancelledAt)}
+          bookingType={formatBookingType(item.bookingType)}
+          statusLabel="Cancelled"
+          branchName={item.branchName}
+          onPress={() => openTask(item._id, item.status)}
+        />
       );
     }
 
-    const item = row.item;
-    return (
-      <Pressable onPress={() => handleRowPress(row)}>
-        <Card elevated style={styles.taskCard}>
-          <View style={styles.taskAccent} />
-          <View style={styles.taskContent}>
-            <TaskTypeBadge type={item.leg === 'delivery' ? 'delivery' : 'active'} />
-            <Text style={styles.type}>{item.bookingType.replace(/_/g, ' ')}</Text>
-            <Text style={styles.meta}>{riderTaskStatusLabel(item.status)}</Text>
-            {item.branchName ? <Text style={styles.branch}>{item.branchName}</Text> : null}
-          </View>
-        </Card>
-      </Pressable>
-    );
-  }
+    return null;
+  }, [shopName, acceptPickupOffer, previewDeliveryQueue, openTask, dismissedPickup, dismissedDelivery]);
 
   const showOfflineGate = !online && filter !== 'completed' && filter !== 'cancelled';
 
@@ -228,21 +614,61 @@ export default function TasksScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
       contentStyle={{ paddingBottom: tabPadding }}
     >
-      <Text style={styles.title}>Tasks</Text>
-      <Text style={styles.subtitle}>Filter by assignment stage.</Text>
+      {/* ── Title row ── */}
+      <View style={styles.titleRow}>
+        <View>
+          <Text style={styles.title}>Tasks</Text>
+          <Text style={styles.subtitle}>Filter by assignment stage.</Text>
+        </View>
+        <Pressable style={styles.sortBtn} accessibilityRole="button" accessibilityLabel="Sort tasks">
+          <Ionicons name="funnel-outline" size={15} color={colors.primary} />
+          <Text style={styles.sortBtnText}>Sort</Text>
+        </Pressable>
+      </View>
 
-      <FilterChips options={TASK_LIST_FILTERS} value={filter} onChange={setFilter} />
+      {/* ── Filter chips with counts ── */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
+        {TASK_LIST_FILTERS.map((opt) => {
+          const active = opt.id === filter;
+          const count =
+            opt.id === 'assigned'
+              ? filterCounts.assigned
+              : opt.id === 'accepted'
+                ? filterCounts.accepted
+                : opt.id === 'in_progress'
+                  ? filterCounts.in_progress
+                  : 0;
+          return (
+            <Pressable
+              key={opt.id}
+              style={({ pressed }) => [styles.chip, active && styles.chipActive, pressed && styles.chipPressed]}
+              onPress={() => setFilter(opt.id)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              android_ripple={{ color: 'transparent' }}
+            >
+              <Text style={[styles.chipText, active && styles.chipTextActive]}>{opt.label}</Text>
+              {count > 0 ? (
+                <View style={[styles.chipBadge, active && styles.chipBadgeActive]}>
+                  <Text style={[styles.chipBadgeText, active && styles.chipBadgeTextActive]}>{count}</Text>
+                </View>
+              ) : null}
+            </Pressable>
+          );
+        })}
+      </ScrollView>
 
+      {/* ── Content ── */}
       {showOfflineGate ? (
+        <EmptyState title="Start your shift" message={taskListEmptyMessage(filter, online)} />
+      ) : rows.length === 0 ? (
         <EmptyState
-          title="Start your shift"
+          title={`No ${TASK_LIST_FILTERS.find((f) => f.id === filter)?.label ?? ''} tasks`}
           message={taskListEmptyMessage(filter, online)}
         />
       ) : (
-        <FlatList
-          data={rows}
-          scrollEnabled={false}
-          keyExtractor={(row, index) => {
+        <View>
+          {rows.map((row, index) => {
             const id =
               row.kind === 'pickup_offer' ||
               row.kind === 'delivery_offer' ||
@@ -251,47 +677,105 @@ export default function TasksScreen() {
               row.kind === 'cancelled'
                 ? row.item._id
                 : String(index);
-            return `${row.kind}-${id}`;
-          }}
-          renderItem={renderRow}
-          ListEmptyComponent={
-            <EmptyState
-              title={`No ${TASK_LIST_FILTERS.find((f) => f.id === filter)?.label ?? ''} tasks`}
-              message={taskListEmptyMessage(filter, online)}
-            />
-          }
-        />
+            return (
+              <View key={`${row.kind}-${id}`}>
+                {renderRow({ item: row })}
+              </View>
+            );
+          })}
+        </View>
       )}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  title: { ...typography.title, fontSize: 22 },
-  subtitle: { ...typography.bodySm, marginTop: spacing.xs, marginBottom: spacing.md },
-  card: { marginBottom: spacing.sm + 2, gap: spacing.xs },
-  taskCard: {
-    marginBottom: spacing.sm + 2,
+  // ── Title ──
+  titleRow: {
     flexDirection: 'row',
-    padding: 0,
-    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
   },
-  taskAccent: {
-    width: 4,
-    backgroundColor: colors.secondary,
-  },
-  taskContent: { flex: 1, padding: spacing.lg, gap: spacing.xs },
-  rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  type: {
-    fontWeight: '700',
-    fontSize: 16,
-    textTransform: 'capitalize',
+  title: {
+    fontSize: 24,
+    fontWeight: '800',
     color: colors.foreground,
-    marginTop: spacing.xs,
+    letterSpacing: -0.3,
   },
-  meta: { ...typography.bodySm, textTransform: 'capitalize' },
-  date: { ...typography.caption },
-  branch: { ...typography.caption, color: colors.primary },
-  action: { marginTop: spacing.sm, fontSize: 13, color: colors.primary, fontWeight: '600' },
-  actionAccent: { color: colors.accentDark },
+  subtitle: {
+    ...typography.caption,
+    color: colors.mutedForeground,
+    marginTop: 2,
+  },
+  sortBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+    backgroundColor: colors.primaryLight,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+  },
+  sortBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+
+  // ── Filter chips ──
+  chipsRow: {
+    paddingBottom: spacing.lg,
+    paddingRight: spacing.xl,
+  },
+  chip: {
+    height: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md + 2,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+    marginRight: spacing.sm,
+  },
+  chipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  chipText: {
+    ...typography.bodySm,
+    fontWeight: '600',
+    color: colors.slate700,
+    lineHeight: 18,
+  },
+  chipTextActive: {
+    color: colors.onPrimary,
+  },
+  chipPressed: {
+    opacity: 0.75,
+  },
+  chipBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    marginLeft: spacing.xs,
+  },
+  chipBadgeActive: {
+    backgroundColor: '#fff',
+  },
+  chipBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#fff',
+  },
+  chipBadgeTextActive: {
+    color: colors.primary,
+  },
 });

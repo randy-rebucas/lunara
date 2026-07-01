@@ -45,7 +45,14 @@
         }
       ]
     ],
-    "experiments": { "typedRoutes": true },
-    "owner": "randyreb"
+    "experiments": {
+      "typedRoutes": true
+    },
+    "owner": "randyreb",
+    "extra": {
+      "eas": {
+        "projectId": "08355e56-d5dc-4fe0-b11c-8b6a27691dc5"
+      }
+    }
   }
 }

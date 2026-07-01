@@ -66,7 +66,7 @@ export default function RootLayout() {
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="forgot-password" options={{ title: 'Reset password' }} />
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false, headerBackTitle: '' }} />
           <Stack.Screen name="pickup/[id]" options={{ title: 'Pickup task' }} />
           <Stack.Screen name="delivery/[id]" options={{ title: 'Delivery task' }} />
           <Stack.Screen name="earnings" options={{ title: 'My earnings' }} />

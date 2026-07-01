@@ -119,7 +119,7 @@ export function RouteGuideCarousel({ progressIndex }: RouteGuideCarouselProps) {
     pauseUntilRef.current = Date.now() + AUTO_ADVANCE_MS;
   }
 
-  const renderItem: ListRenderItem<RouteGuideStep> = ({ item, index }) => {
+  const renderItem: ListRenderItem<RouteGuideStep> = useCallback(({ item, index }) => {
     const realIndex = toRealIndex(index);
     const done = realIndex < progressIndex;
     const current = realIndex === progressIndex;
@@ -166,7 +166,7 @@ export function RouteGuideCarousel({ progressIndex }: RouteGuideCarouselProps) {
         </View>
       </View>
     );
-  };
+  }, [progressIndex, activeIndex, slideWidth]);
 
   const progressPercent = ((progressIndex + 1) / STEP_COUNT) * 100;
 

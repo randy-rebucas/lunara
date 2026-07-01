@@ -1,21 +1,206 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import { formatCurrency, RIDER_DELIVERY_PAYOUT, RIDER_PICKUP_PAYOUT, type RiderEarningType } from '@lunara/utils';
+import {
+  formatCurrency,
+  RIDER_DELIVERY_PAYOUT,
+  RIDER_PICKUP_PAYOUT,
+  type RiderEarningType,
+} from '@lunara/utils';
 import { DataLoadState } from '../src/components/data-load-state';
 import { EarningTypeBadge } from '../src/components/earning-type-badge';
-import { Card } from '../src/components/ui/card';
 import { Screen } from '../src/components/ui/screen';
-import { SectionHeader } from '../src/components/ui/section-header';
 import { riderFetch } from '../src/api';
 import type { EarningsData } from '../src/lib/rider-types';
-import { colors, spacing, typography } from '../src/theme';
+import { colors, radius, shadow, spacing, typography } from '../src/theme';
 
-const PERIOD_KEYS = [
-  { key: 'todayEarnings' as const, label: 'Today' },
-  { key: 'weekEarnings' as const, label: 'This Week' },
-  { key: 'monthEarnings' as const, label: 'This Month' },
-  { key: 'lifetimeEarnings' as const, label: 'Lifetime' },
-];
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+
+// ── Period card ───────────────────────────────────────────────────────────────
+
+function PeriodCard({
+  label,
+  value,
+  icon,
+  iconBg,
+  iconColor,
+  valueColor,
+}: {
+  label: string;
+  value: number;
+  icon: IoniconName;
+  iconBg: string;
+  iconColor: string;
+  valueColor: string;
+}) {
+  return (
+    <View style={periodStyles.card}>
+      <View style={[periodStyles.iconWrap, { backgroundColor: iconBg }]}>
+        <Ionicons name={icon} size={18} color={iconColor} />
+      </View>
+      <Text style={periodStyles.label}>{label}</Text>
+      <Text style={[periodStyles.value, { color: valueColor }]}>{formatCurrency(value)}</Text>
+    </View>
+  );
+}
+
+const periodStyles = StyleSheet.create({
+  card: {
+    width: '48%',
+    flexGrow: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.xs,
+    ...shadow.card,
+  },
+  iconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xs,
+  },
+  label: { ...typography.label },
+  value: {
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+});
+
+// ── Activity stat ─────────────────────────────────────────────────────────────
+
+function ActivityStat({
+  count,
+  label,
+  rate,
+  icon,
+  iconBg,
+  iconColor,
+}: {
+  count: number;
+  label: string;
+  rate: number;
+  icon: IoniconName;
+  iconBg: string;
+  iconColor: string;
+}) {
+  return (
+    <View style={actStyles.card}>
+      <View style={actStyles.top}>
+        <View style={[actStyles.iconWrap, { backgroundColor: iconBg }]}>
+          <Ionicons name={icon} size={16} color={iconColor} />
+        </View>
+        <Text style={actStyles.count}>{count}</Text>
+      </View>
+      <Text style={actStyles.label}>{label}</Text>
+      <Text style={actStyles.rate}>₱{rate} per task</Text>
+    </View>
+  );
+}
+
+const actStyles = StyleSheet.create({
+  card: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    ...shadow.card,
+  },
+  top: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.xs,
+  },
+  iconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  count: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: colors.foreground,
+    letterSpacing: -0.5,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.foreground,
+  },
+  rate: {
+    ...typography.caption,
+    color: colors.primary,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+});
+
+// ── Earning row ───────────────────────────────────────────────────────────────
+
+function EarningRow({
+  item,
+}: {
+  item: EarningsData['recentEarnings'][number];
+}) {
+  const ref = item.orderId
+    ? `Order #${item.orderId.slice(-6).toUpperCase()}`
+    : (item.note ?? 'Manual credit');
+  const date = new Date(item.earnedAt).toLocaleString('en-PH', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+
+  return (
+    <View style={rowStyles.row}>
+      <View style={rowStyles.left}>
+        <EarningTypeBadge type={item.type as RiderEarningType} />
+        <Text style={rowStyles.ref}>{ref}</Text>
+        <Text style={rowStyles.date}>{date}</Text>
+      </View>
+      <Text style={rowStyles.amount}>+{formatCurrency(item.amount)}</Text>
+    </View>
+  );
+}
+
+const rowStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+  },
+  left: {
+    flex: 1,
+    gap: spacing.xs,
+    paddingRight: spacing.md,
+  },
+  ref: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.foreground,
+  },
+  date: { ...typography.caption },
+  amount: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.accentDark,
+    letterSpacing: -0.3,
+  },
+});
+
+// ── Earnings screen ───────────────────────────────────────────────────────────
 
 export default function EarningsScreen() {
   const [data, setData] = useState<EarningsData>({
@@ -73,65 +258,116 @@ export default function EarningsScreen() {
     );
   }
 
+  const lastIndex = data.recentEarnings.length - 1;
+  const renderEarningItem = useCallback(({ item, index }: { item: typeof data.recentEarnings[number]; index: number }) => (
+    <View style={styles.breakdownCard}>
+      <EarningRow item={item} />
+      {index < lastIndex ? <View style={styles.rowDivider} /> : null}
+    </View>
+  ), [lastIndex]);
+
   return (
     <Screen inStack>
       <FlatList
         style={styles.list}
         data={data.recentEarnings}
-        keyExtractor={(item, i) => `${item.type}-${item.orderId ?? item.note ?? i}-${i}`}
+        keyExtractor={(item, i) =>
+          `${item.type}-${item.orderId ?? item.note ?? i}-${i}`
+        }
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
         }
         ListHeaderComponent={
           <>
-            <SectionHeader title="Dashboard" hint="Earnings by period" />
+            {/* ── Page header ── */}
+            <View style={styles.pageHeader}>
+              <Text style={styles.pageTitle}>My earnings</Text>
+              <Text style={styles.pageSubtitle}>Track your payouts and task breakdown.</Text>
+            </View>
+
+            {/* ── Period grid ── */}
             <View style={styles.periodGrid}>
-              {PERIOD_KEYS.map((period) => (
-                <Card key={period.key} elevated style={styles.periodCard}>
-                  <Text style={styles.periodLabel}>{period.label}</Text>
-                  <Text style={styles.periodValue}>{formatCurrency(data[period.key])}</Text>
-                </Card>
-              ))}
+              <PeriodCard
+                label="TODAY"
+                value={data.todayEarnings}
+                icon="wallet-outline"
+                iconBg={colors.accentLight}
+                iconColor={colors.accentDark}
+                valueColor={colors.accentDark}
+              />
+              <PeriodCard
+                label="THIS WEEK"
+                value={data.weekEarnings}
+                icon="calendar-outline"
+                iconBg={colors.primaryLight}
+                iconColor={colors.primary}
+                valueColor={colors.primary}
+              />
+              <PeriodCard
+                label="THIS MONTH"
+                value={data.monthEarnings}
+                icon="bar-chart-outline"
+                iconBg="#EFF6FF"
+                iconColor="#3B82F6"
+                valueColor="#3B82F6"
+              />
+              <PeriodCard
+                label="LIFETIME"
+                value={data.lifetimeEarnings}
+                icon="star-outline"
+                iconBg={colors.warningBg}
+                iconColor={colors.warning}
+                valueColor={colors.warning}
+              />
             </View>
 
-            <View style={styles.stats}>
-              <Card elevated style={styles.stat}>
-                <Text style={styles.statValue}>{data.todayPickups}</Text>
-                <Text style={styles.statLabel}>Pickups today</Text>
-                <Text style={styles.rate}>₱{RIDER_PICKUP_PAYOUT} each</Text>
-              </Card>
-              <Card elevated style={styles.stat}>
-                <Text style={styles.statValue}>{data.todayDeliveries}</Text>
-                <Text style={styles.statLabel}>Deliveries today</Text>
-                <Text style={styles.rate}>₱{RIDER_DELIVERY_PAYOUT} each</Text>
-              </Card>
+            {/* ── Today's activity ── */}
+            <Text style={styles.sectionLabel}>TODAY'S ACTIVITY</Text>
+            <View style={styles.activityRow}>
+              <ActivityStat
+                count={data.todayPickups}
+                label="Pickups"
+                rate={RIDER_PICKUP_PAYOUT}
+                icon="arrow-up-circle-outline"
+                iconBg={colors.primaryLight}
+                iconColor={colors.primary}
+              />
+              <ActivityStat
+                count={data.todayDeliveries}
+                label="Deliveries"
+                rate={RIDER_DELIVERY_PAYOUT}
+                icon="arrow-down-circle-outline"
+                iconBg={colors.accentLight}
+                iconColor={colors.accentDark}
+              />
             </View>
 
-            <SectionHeader title="Earnings breakdown" hint="Per task and adjustments" />
-            {error ? <Text style={styles.inlineError}>{error}</Text> : null}
+            {/* ── Breakdown header ── */}
+            <Text style={styles.sectionLabel}>EARNINGS BREAKDOWN</Text>
+            {error ? (
+              <View style={styles.errorBanner}>
+                <Ionicons name="alert-circle-outline" size={14} color={colors.destructive} />
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            ) : null}
+            {data.recentEarnings.length > 0 ? (
+              <View style={styles.breakdownCard} />
+            ) : null}
           </>
         }
-        renderItem={({ item }) => (
-          <Card style={styles.row}>
-            <View style={styles.rowLeft}>
-              <EarningTypeBadge type={item.type as RiderEarningType} />
-              <Text style={styles.rowMeta}>
-                {item.orderId ? `Order ${item.orderId.slice(-6).toUpperCase()}` : item.note ?? 'Manual credit'}
-              </Text>
-              <Text style={styles.rowDate}>
-                {new Date(item.earnedAt).toLocaleString('en-PH', {
-                  month: 'short',
-                  day: 'numeric',
-                  hour: 'numeric',
-                  minute: '2-digit',
-                })}
-              </Text>
-            </View>
-            <Text style={styles.rowAmount}>+{formatCurrency(item.amount)}</Text>
-          </Card>
-        )}
+        renderItem={renderEarningItem}
         ListEmptyComponent={
-          <Text style={styles.empty}>Complete tasks to see earnings here</Text>
+          <View style={styles.emptyWrap}>
+            <View style={styles.emptyIcon}>
+              <Ionicons name="wallet-outline" size={28} color={colors.mutedForeground} />
+            </View>
+            <Text style={styles.emptyTitle}>No earnings yet</Text>
+            <Text style={styles.emptyHint}>Complete tasks to see your earnings here.</Text>
+          </View>
         }
       />
     </Screen>
@@ -140,41 +376,85 @@ export default function EarningsScreen() {
 
 const styles = StyleSheet.create({
   list: { flex: 1 },
+
+  pageHeader: { marginBottom: spacing.xl },
+  pageTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: colors.foreground,
+    letterSpacing: -0.3,
+  },
+  pageSubtitle: { ...typography.bodySm, marginTop: spacing.xs },
+
   periodGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.md,
-    marginBottom: spacing.lg,
+    gap: spacing.sm + 2,
+    marginBottom: spacing.xl,
   },
-  periodCard: {
-    width: '47%',
-    flexGrow: 1,
-    alignItems: 'center',
-    paddingVertical: spacing.lg,
+
+  sectionLabel: {
+    ...typography.label,
+    marginBottom: spacing.sm,
   },
-  periodLabel: { ...typography.caption, textAlign: 'center' },
-  periodValue: {
-    marginTop: spacing.sm,
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.primary,
-    textAlign: 'center',
-  },
-  stats: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.lg },
-  stat: { flex: 1, alignItems: 'center' },
-  statValue: { fontSize: 24, fontWeight: '700', color: colors.foreground },
-  statLabel: { marginTop: spacing.xs, ...typography.caption, textAlign: 'center' },
-  rate: { marginTop: spacing.xs, fontSize: 11, color: colors.primary, fontWeight: '500' },
-  row: {
+
+  activityRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: spacing.sm,
+    gap: spacing.sm + 2,
+    marginBottom: spacing.xl,
   },
-  rowLeft: { flex: 1, gap: spacing.xs, paddingRight: spacing.md },
-  rowMeta: { ...typography.bodySm, color: colors.foreground },
-  rowDate: { ...typography.caption },
-  rowAmount: { fontWeight: '700', color: colors.accent, fontSize: 16 },
-  empty: { ...typography.caption, textAlign: 'center', marginTop: spacing.xxl },
-  inlineError: { color: colors.destructive, marginBottom: spacing.sm, fontSize: 13 },
+
+  breakdownCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    ...shadow.card,
+    marginBottom: spacing.xs,
+  },
+  rowDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+  },
+
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    marginBottom: spacing.md,
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.destructive,
+  },
+
+  emptyWrap: {
+    alignItems: 'center',
+    paddingVertical: spacing.xxxl,
+    gap: spacing.sm,
+  },
+  emptyIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.surfaceMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.foreground,
+  },
+  emptyHint: { ...typography.bodySm, textAlign: 'center' },
 });

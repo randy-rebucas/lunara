@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
@@ -17,21 +18,20 @@ import {
   type RiderPayoutMethod,
 } from '@lunara/utils';
 import { DataLoadState } from '../src/components/data-load-state';
-import { Button } from '../src/components/ui/button';
-import { Card } from '../src/components/ui/card';
 import { Input } from '../src/components/ui/input';
 import { Screen } from '../src/components/ui/screen';
-import { SectionHeader } from '../src/components/ui/section-header';
 import { riderFetch, riderUpload } from '../src/api';
 import type { CashSummaryData, PayoutMethodData, WalletData, WithdrawalRequest } from '../src/lib/rider-types';
-import { colors, radius, spacing, typography } from '../src/theme';
+import { colors, radius, shadow, spacing, typography } from '../src/theme';
+
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
 const MIN_WITHDRAWAL = typeof RIDER_MIN_WITHDRAWAL === 'number' ? RIDER_MIN_WITHDRAWAL : 100;
 
-const PAYOUT_OPTIONS: { id: RiderPayoutMethod; label: string }[] = [
-  { id: 'gcash', label: 'GCash' },
-  { id: 'maya', label: 'Maya' },
-  { id: 'bank', label: 'Bank Transfer' },
+const PAYOUT_OPTIONS: { id: RiderPayoutMethod; label: string; icon: IoniconName }[] = [
+  { id: 'gcash', label: 'GCash', icon: 'phone-portrait-outline' },
+  { id: 'maya', label: 'Maya', icon: 'wallet-outline' },
+  { id: 'bank', label: 'Bank Transfer', icon: 'business-outline' },
 ];
 
 function formatDate(iso: string) {
@@ -43,18 +43,150 @@ function formatDate(iso: string) {
   });
 }
 
-function statusColor(status: WithdrawalRequest['status']) {
-  switch (status) {
-    case 'paid':
-      return colors.accent;
-    case 'pending':
-      return colors.warning;
-    case 'rejected':
-      return colors.destructive;
-    default:
-      return colors.primary;
-  }
+// ── Balance card ──────────────────────────────────────────────────────────────
+
+function BalanceCard({
+  label,
+  value,
+  icon,
+  iconBg,
+  iconColor,
+  valueColor,
+}: {
+  label: string;
+  value: number;
+  icon: IoniconName;
+  iconBg: string;
+  iconColor: string;
+  valueColor: string;
+}) {
+  return (
+    <View style={balStyles.card}>
+      <View style={[balStyles.iconWrap, { backgroundColor: iconBg }]}>
+        <Ionicons name={icon} size={18} color={iconColor} />
+      </View>
+      <Text style={balStyles.label}>{label}</Text>
+      <Text style={[balStyles.value, { color: valueColor }]}>{formatCurrency(value)}</Text>
+    </View>
+  );
 }
+
+const balStyles = StyleSheet.create({
+  card: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.xs,
+    ...shadow.card,
+  },
+  iconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xs,
+  },
+  label: { ...typography.label },
+  value: {
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+});
+
+// ── Section block ─────────────────────────────────────────────────────────────
+
+function SectionBlock({
+  icon,
+  iconBg,
+  iconColor,
+  title,
+  children,
+}: {
+  icon: IoniconName;
+  iconBg: string;
+  iconColor: string;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={sectionStyles.wrap}>
+      <View style={sectionStyles.header}>
+        <View style={[sectionStyles.iconWrap, { backgroundColor: iconBg }]}>
+          <Ionicons name={icon} size={15} color={iconColor} />
+        </View>
+        <Text style={sectionStyles.title}>{title}</Text>
+      </View>
+      <View style={sectionStyles.card}>{children}</View>
+    </View>
+  );
+}
+
+const sectionStyles = StyleSheet.create({
+  wrap: { marginBottom: spacing.xl },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  iconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  title: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.foreground,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.sm,
+    ...shadow.card,
+  },
+});
+
+// ── Status pill ───────────────────────────────────────────────────────────────
+
+function StatusPill({ status, label }: { status: WithdrawalRequest['status']; label: string }) {
+  const cfg: Record<string, { bg: string; text: string }> = {
+    paid: { bg: colors.accentLight, text: colors.accentDark },
+    pending: { bg: colors.warningBg, text: colors.warning },
+    rejected: { bg: '#FEF2F2', text: colors.destructive },
+    processing: { bg: colors.primaryLight, text: colors.primary },
+  };
+  const { bg, text } = cfg[status] ?? { bg: colors.surfaceMuted, text: colors.mutedForeground };
+  return (
+    <View style={[pillStyles.pill, { backgroundColor: bg }]}>
+      <Text style={[pillStyles.text, { color: text }]}>{label}</Text>
+    </View>
+  );
+}
+
+const pillStyles = StyleSheet.create({
+  pill: {
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 3,
+    alignSelf: 'flex-start',
+  },
+  text: { fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
+});
+
+// ── Wallet screen ─────────────────────────────────────────────────────────────
 
 export default function WalletScreen() {
   const [wallet, setWallet] = useState<WalletData | null>(null);
@@ -134,7 +266,6 @@ export default function WalletScreen() {
         body.bankAccountName = bankAccountName;
         body.bankAccountNumber = bankAccountNumber;
       }
-
       await riderFetch<PayoutMethodData>('/riders/payout-method', {
         method: 'PATCH',
         body: JSON.stringify(body),
@@ -233,7 +364,6 @@ export default function WalletScreen() {
       Alert.alert('Invalid amount', `Minimum withdrawal is ${formatCurrency(MIN_WITHDRAWAL)}`);
       return;
     }
-
     setWithdrawing(true);
     try {
       await riderFetch('/riders/wallet/withdraw', {
@@ -252,6 +382,25 @@ export default function WalletScreen() {
 
   const hasProof = proofImageUri !== null || remittanceTransactionId.trim().length > 0;
 
+  const renderWithdrawalItem = useCallback(({ item, index }: { item: WithdrawalRequest; index: number }) => (
+    <View style={[styles.withdrawalCard, index === 0 && styles.withdrawalCardFirst]}>
+      {index > 0 ? <View style={styles.rowDivider} /> : null}
+      <View style={styles.withdrawalRow}>
+        <View style={styles.withdrawalLeft}>
+          <Text style={styles.withdrawalAmount}>{formatCurrency(item.amount)}</Text>
+          <Text style={styles.withdrawalMeta}>
+            {item.methodLabel} · {formatDate(item.createdAt)}
+          </Text>
+          {item.adminNote ? (
+            <Text style={styles.withdrawalNote}>{item.adminNote}</Text>
+          ) : null}
+        </View>
+        <StatusPill status={item.status} label={item.statusLabel} />
+      </View>
+    </View>
+  ), []);
+  const pendingItems = cashSummary?.pendingRemittance.items.filter((i) => i.status === 'pending') ?? [];
+
   if (loading && !wallet) {
     return (
       <Screen inStack>
@@ -262,44 +411,72 @@ export default function WalletScreen() {
 
   const listHeader = (
     <>
-      {error ? (
-        <Text style={styles.error}>{error}</Text>
-      ) : null}
-
-      <View style={styles.balanceGrid}>
-        <Card elevated style={styles.balanceCard}>
-          <Text style={styles.balanceLabel}>Current Balance</Text>
-          <Text style={styles.balanceValue}>
-            {formatCurrency(wallet?.currentBalance ?? 0)}
-          </Text>
-        </Card>
-        <Card elevated style={styles.balanceCard}>
-          <Text style={styles.balanceLabel}>Pending Earnings</Text>
-          <Text style={[styles.balanceValue, styles.pendingValue]}>
-            {formatCurrency(wallet?.pendingEarnings ?? 0)}
-          </Text>
-        </Card>
-        <Card accent style={[styles.balanceCard, styles.withdrawableCard]}>
-          <Text style={styles.balanceLabel}>Withdrawable</Text>
-          <Text style={styles.balanceValue}>
-            {formatCurrency(wallet?.withdrawableBalance ?? 0)}
-          </Text>
-        </Card>
+      {/* ── Page header ── */}
+      <View style={styles.pageHeader}>
+        <Text style={styles.pageTitle}>Wallet</Text>
+        <Text style={styles.pageSubtitle}>Manage your balance, payouts, and cash remittance.</Text>
       </View>
 
-      <SectionHeader title="Payout method" />
-      <Card elevated style={styles.sectionCard}>
+      {/* ── Error banner ── */}
+      {error ? (
+        <View style={styles.errorBanner}>
+          <Ionicons name="alert-circle-outline" size={14} color={colors.destructive} />
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      ) : null}
+
+      {/* ── Balance row ── */}
+      <Text style={styles.sectionLabel}>BALANCE</Text>
+      <View style={styles.balanceRow}>
+        <BalanceCard
+          label="CURRENT"
+          value={wallet?.currentBalance ?? 0}
+          icon="wallet-outline"
+          iconBg={colors.primaryLight}
+          iconColor={colors.primary}
+          valueColor={colors.primary}
+        />
+        <BalanceCard
+          label="PENDING"
+          value={wallet?.pendingEarnings ?? 0}
+          icon="time-outline"
+          iconBg={colors.warningBg}
+          iconColor={colors.warning}
+          valueColor={colors.warning}
+        />
+        <BalanceCard
+          label="WITHDRAWABLE"
+          value={wallet?.withdrawableBalance ?? 0}
+          icon="arrow-up-circle-outline"
+          iconBg={colors.accentLight}
+          iconColor={colors.accentDark}
+          valueColor={colors.accentDark}
+        />
+      </View>
+
+      {/* ── Payout method ── */}
+      <SectionBlock
+        icon="card-outline"
+        iconBg={colors.primaryLight}
+        iconColor={colors.primary}
+        title="Payout method"
+      >
         <View style={styles.methodRow}>
-          {PAYOUT_OPTIONS.map((option) => {
-            const active = method === option.id;
+          {PAYOUT_OPTIONS.map((opt) => {
+            const active = method === opt.id;
             return (
               <Pressable
-                key={option.id}
-                onPress={() => setMethod(option.id)}
+                key={opt.id}
+                onPress={() => setMethod(opt.id)}
                 style={[styles.methodChip, active && styles.methodChipActive]}
               >
+                <Ionicons
+                  name={opt.icon}
+                  size={14}
+                  color={active ? colors.primary : colors.mutedForeground}
+                />
                 <Text style={[styles.methodChipText, active && styles.methodChipTextActive]}>
-                  {option.label}
+                  {opt.label}
                 </Text>
               </Pressable>
             );
@@ -308,7 +485,6 @@ export default function WalletScreen() {
 
         {method === 'gcash' ? (
           <Input
-            style={styles.field}
             placeholder="GCash mobile (09XXXXXXXXX)"
             keyboardType="phone-pad"
             maxLength={11}
@@ -316,10 +492,8 @@ export default function WalletScreen() {
             onChangeText={setGcashNumber}
           />
         ) : null}
-
         {method === 'maya' ? (
           <Input
-            style={styles.field}
             placeholder="Maya mobile (09XXXXXXXXX)"
             keyboardType="phone-pad"
             maxLength={11}
@@ -327,170 +501,217 @@ export default function WalletScreen() {
             onChangeText={setMayaNumber}
           />
         ) : null}
-
         {method === 'bank' ? (
           <>
-            <Input
-              style={styles.field}
-              placeholder="Bank name"
-              value={bankName}
-              onChangeText={setBankName}
-            />
-            <Input
-              style={styles.field}
-              placeholder="Account name"
-              value={bankAccountName}
-              onChangeText={setBankAccountName}
-            />
-            <Input
-              style={styles.field}
-              placeholder="Account number"
-              keyboardType="number-pad"
-              value={bankAccountNumber}
-              onChangeText={setBankAccountNumber}
-            />
+            <Input placeholder="Bank name" value={bankName} onChangeText={setBankName} />
+            <Input placeholder="Account name" value={bankAccountName} onChangeText={setBankAccountName} />
+            <Input placeholder="Account number" keyboardType="number-pad" value={bankAccountNumber} onChangeText={setBankAccountNumber} />
           </>
         ) : null}
 
-        <Button
-          label={savingPayout ? 'Saving…' : 'Save payout method'}
-          disabled={savingPayout}
+        <Pressable
+          style={({ pressed }) => [
+            styles.saveBtn,
+            savingPayout && styles.btnDisabled,
+            pressed && !savingPayout && styles.btnPressed,
+          ]}
           onPress={savePayoutMethod}
-          style={styles.action}
-        />
-      </Card>
+          disabled={savingPayout}
+        >
+          <Ionicons name="checkmark" size={16} color="#fff" />
+          <Text style={styles.saveBtnText}>{savingPayout ? 'Saving…' : 'Save payout method'}</Text>
+        </Pressable>
+      </SectionBlock>
 
-      <SectionHeader title="Cash to remit" />
-      <Card elevated style={styles.sectionCard}>
-        {cashSummary ? (
-          cashSummary.pendingRemittance.count > 0 ? (
-            <>
-              <View style={styles.remitSummaryRow}>
-                <View style={styles.remitSummaryCol}>
-                  <Text style={styles.remitLabel}>Cash collected</Text>
-                  <Text style={styles.remitValue}>{formatCurrency(cashSummary.pendingRemittance.totalCashCollected)}</Text>
-                </View>
-                <View style={styles.remitSummaryCol}>
-                  <Text style={styles.remitLabel}>Your fee (offset)</Text>
-                  <Text style={[styles.remitValue, styles.remitOffset]}>− {formatCurrency(cashSummary.pendingRemittance.totalEarningOffset)}</Text>
-                </View>
-                <View style={styles.remitSummaryCol}>
-                  <Text style={styles.remitLabel}>Hand to admin</Text>
-                  <Text style={[styles.remitValue, styles.remitTotal]}>{formatCurrency(cashSummary.pendingRemittance.totalNetRemittance)}</Text>
-                </View>
+      {/* ── Cash to remit ── */}
+      <SectionBlock
+        icon="cash-outline"
+        iconBg={colors.accentLight}
+        iconColor={colors.accentDark}
+        title="Cash to remit"
+      >
+        {!cashSummary ? (
+          <Text style={styles.hint}>Loading…</Text>
+        ) : cashSummary.pendingRemittance.count === 0 ? (
+          <View style={styles.emptyRow}>
+            <Ionicons name="checkmark-circle-outline" size={18} color={colors.accentDark} />
+            <Text style={styles.hint}>No pending cash to remit.</Text>
+          </View>
+        ) : (
+          <>
+            {/* Summary row */}
+            <View style={styles.remitSummaryRow}>
+              <View style={styles.remitSummaryCol}>
+                <Text style={styles.remitLabel}>COLLECTED</Text>
+                <Text style={styles.remitValue}>{formatCurrency(cashSummary.pendingRemittance.totalCashCollected)}</Text>
               </View>
-              {cashSummary.pendingRemittance.items.map((item) => (
-                <View key={item._id} style={styles.remitItemRow}>
+              <View style={styles.remitDivider} />
+              <View style={styles.remitSummaryCol}>
+                <Text style={styles.remitLabel}>YOUR FEE</Text>
+                <Text style={[styles.remitValue, { color: colors.warning }]}>− {formatCurrency(cashSummary.pendingRemittance.totalEarningOffset)}</Text>
+              </View>
+              <View style={styles.remitDivider} />
+              <View style={styles.remitSummaryCol}>
+                <Text style={styles.remitLabel}>HAND OVER</Text>
+                <Text style={[styles.remitValue, { color: colors.accentDark }]}>{formatCurrency(cashSummary.pendingRemittance.totalNetRemittance)}</Text>
+              </View>
+            </View>
+
+            {/* Item rows */}
+            {cashSummary.pendingRemittance.items.map((item) => (
+              <View key={item._id} style={styles.remitItemRow}>
+                <View style={styles.remitItemLeft}>
+                  <Ionicons
+                    name={item.stage === 'pickup' ? 'arrow-up-circle-outline' : 'arrow-down-circle-outline'}
+                    size={14}
+                    color={item.stage === 'pickup' ? colors.primary : colors.accentDark}
+                  />
                   <Text style={styles.remitItemStage}>{item.stage === 'pickup' ? 'Pickup' : 'Delivery'}</Text>
-                  <Text style={styles.remitItemOrder}>…{item.orderId.slice(-6)}</Text>
-                  <Text style={[styles.remitItemAmount, item.status === 'submitted' && styles.remitItemSubmitted]}>
-                    {formatCurrency(item.netRemittance)}
-                  </Text>
+                  <Text style={styles.remitItemOrder}>#{item.orderId.slice(-6).toUpperCase()}</Text>
+                </View>
+                <View style={styles.remitItemRight}>
+                  <Text style={styles.remitItemAmount}>{formatCurrency(item.netRemittance)}</Text>
                   {item.status === 'submitted' ? (
-                    <Text style={styles.remitItemTag}>Submitted</Text>
+                    <View style={styles.submittedPill}>
+                      <Text style={styles.submittedText}>Submitted</Text>
+                    </View>
                   ) : null}
                 </View>
-              ))}
-              {cashSummary.pendingRemittance.items.some((i) => i.status === 'pending') ? (
-                <>
-                  <Text style={[styles.hint, { marginTop: spacing.md }]}>
-                    Hand the net amount to a Lunara admin in person, then tap below.
-                  </Text>
+              </View>
+            ))}
 
-                  {/* Proof section */}
-                  <View style={styles.proofSection}>
-                    <Text style={styles.proofLabel}>Proof of remittance (required)</Text>
-                  <Text style={styles.hint}>Attach a GCash/Maya reference no. or a receipt photo — at least one is required.</Text>
-                    <TextInput
-                      style={styles.proofInput}
-                      placeholder="GCash / Maya reference no."
-                      placeholderTextColor={colors.textMuted}
-                      value={remittanceTransactionId}
-                      onChangeText={setRemittanceTransactionId}
-                      autoCapitalize="none"
-                    />
-                    {proofImageUri ? (
-                      <View style={styles.proofThumbRow}>
-                        <Image source={{ uri: proofImageUri }} style={styles.proofThumb} />
-                        <Pressable onPress={() => setProofImageUri(null)} style={styles.proofClear} hitSlop={8}>
-                          <Text style={styles.proofClearText}>✕ Remove</Text>
-                        </Pressable>
-                      </View>
-                    ) : (
-                      <Pressable onPress={showProofPicker} style={styles.proofPickerBtn}>
-                        <Text style={styles.proofPickerText}>📎 Attach receipt photo</Text>
-                      </Pressable>
-                    )}
+            {/* Proof + submit */}
+            {pendingItems.length > 0 ? (
+              <>
+                <View style={styles.infoBox}>
+                  <Ionicons name="information-circle-outline" size={14} color={colors.primary} />
+                  <Text style={styles.infoText}>Hand the net amount to a Lunara admin in person, then submit below.</Text>
+                </View>
+
+                <Text style={styles.proofLabel}>PROOF OF REMITTANCE</Text>
+                <Text style={styles.hint}>Attach a GCash/Maya reference no. or a receipt photo — at least one is required.</Text>
+
+                <TextInput
+                  style={styles.proofInput}
+                  placeholder="GCash / Maya reference no."
+                  placeholderTextColor={colors.mutedForeground}
+                  value={remittanceTransactionId}
+                  onChangeText={setRemittanceTransactionId}
+                  autoCapitalize="none"
+                />
+
+                {proofImageUri ? (
+                  <View style={styles.proofThumbRow}>
+                    <Image source={{ uri: proofImageUri }} style={styles.proofThumb} />
+                    <Pressable onPress={() => setProofImageUri(null)} hitSlop={8}>
+                      <Text style={styles.proofClearText}>Remove photo</Text>
+                    </Pressable>
                   </View>
+                ) : (
+                  <Pressable onPress={showProofPicker} style={styles.proofPickerBtn}>
+                    <Ionicons name="attach-outline" size={16} color={colors.primary} />
+                    <Text style={styles.proofPickerText}>Attach receipt photo</Text>
+                  </Pressable>
+                )}
 
-                  <Button
-                    label={submittingRemittance ? 'Submitting…' : "I've handed over the cash"}
-                    variant="accent"
-                    disabled={submittingRemittance || !hasProof}
-                    onPress={submitRemittance}
-                    style={styles.action}
-                  />
-                </>
-              ) : (
-                <Text style={[styles.hint, { marginTop: spacing.sm }]}>
-                  All submitted — waiting for admin confirmation.
-                </Text>
-              )}
-            </>
-          ) : (
-            <Text style={styles.hint}>No pending cash to remit.</Text>
-          )
-        ) : (
-          <Text style={styles.hint}>Loading…</Text>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.remitBtn,
+                    (!hasProof || submittingRemittance) && styles.btnDisabled,
+                    pressed && hasProof && !submittingRemittance && styles.btnPressed,
+                  ]}
+                  onPress={submitRemittance}
+                  disabled={submittingRemittance || !hasProof}
+                >
+                  <Ionicons name="checkmark-done-outline" size={16} color="#fff" />
+                  <Text style={styles.remitBtnText}>
+                    {submittingRemittance ? 'Submitting…' : "I've handed over the cash"}
+                  </Text>
+                </Pressable>
+              </>
+            ) : (
+              <View style={styles.infoBox}>
+                <Ionicons name="hourglass-outline" size={14} color={colors.warning} />
+                <Text style={[styles.infoText, { color: colors.warning }]}>All submitted — waiting for admin confirmation.</Text>
+              </View>
+            )}
+          </>
         )}
-      </Card>
+      </SectionBlock>
+
+      {/* ── Recent remitted ── */}
       {cashSummary && cashSummary.recentRemitted.length > 0 ? (
-        <>
-          <Text style={styles.remitHistoryLabel}>Recent remitted</Text>
-          {cashSummary.recentRemitted.slice(0, 5).map((item) => (
-            <Card key={item._id} style={styles.remitHistoryCard}>
+        <SectionBlock
+          icon="receipt-outline"
+          iconBg={colors.secondaryLight}
+          iconColor={colors.secondaryDark}
+          title="Recent remitted"
+        >
+          {cashSummary.recentRemitted.slice(0, 5).map((item, i) => (
+            <View key={item._id}>
+              {i > 0 ? <View style={styles.rowDivider} /> : null}
               <View style={styles.withdrawalRow}>
-                <View style={styles.withdrawalMain}>
+                <View style={styles.withdrawalLeft}>
                   <Text style={styles.withdrawalAmount}>{formatCurrency(item.netRemittance)}</Text>
                   <Text style={styles.withdrawalMeta}>
-                    {item.stage === 'pickup' ? 'Pickup' : 'Delivery'} · order …{item.orderId.slice(-6)} · {item.remittedAt ? formatDate(item.remittedAt) : '—'}
+                    {item.stage === 'pickup' ? 'Pickup' : 'Delivery'} · #{item.orderId.slice(-6).toUpperCase()} · {item.remittedAt ? formatDate(item.remittedAt) : '—'}
                   </Text>
                 </View>
-                <Text style={[styles.withdrawalStatus, { color: colors.accent }]}>Remitted</Text>
+                <View style={[pillStyles.pill, { backgroundColor: colors.accentLight }]}>
+                  <Text style={[pillStyles.text, { color: colors.accentDark }]}>Remitted</Text>
+                </View>
               </View>
-            </Card>
+            </View>
           ))}
-        </>
+        </SectionBlock>
       ) : null}
 
-      <SectionHeader title="Withdraw" />
-      <Card elevated style={styles.sectionCard}>
-        <Text style={styles.hint}>
-          Minimum {formatCurrency(wallet?.minWithdrawal ?? MIN_WITHDRAWAL)} · Admin approval
-          required
-        </Text>
+      {/* ── Withdraw ── */}
+      <SectionBlock
+        icon="arrow-up-circle-outline"
+        iconBg={colors.warningBg}
+        iconColor={colors.warning}
+        title="Request withdrawal"
+      >
+        <View style={styles.infoBox}>
+          <Ionicons name="information-circle-outline" size={14} color={colors.primary} />
+          <Text style={styles.infoText}>
+            Minimum {formatCurrency(wallet?.minWithdrawal ?? MIN_WITHDRAWAL)} · Admin approval required
+          </Text>
+        </View>
+        {!wallet?.payoutMethod.configured ? (
+          <View style={styles.warningBox}>
+            <Ionicons name="alert-circle-outline" size={14} color={colors.warning} />
+            <Text style={[styles.infoText, { color: colors.warning }]}>Set a payout method above before withdrawing.</Text>
+          </View>
+        ) : null}
         <Input
-          style={styles.field}
           placeholder="Amount to withdraw"
           keyboardType="decimal-pad"
           value={withdrawAmount}
           onChangeText={setWithdrawAmount}
         />
-        <Button
-          label={withdrawing ? 'Submitting…' : 'Request withdrawal'}
-          variant="accent"
-          disabled={withdrawing || !wallet?.payoutMethod.configured}
+        <Pressable
+          style={({ pressed }) => [
+            styles.withdrawBtn,
+            (withdrawing || !wallet?.payoutMethod.configured) && styles.btnDisabled,
+            pressed && wallet?.payoutMethod.configured && !withdrawing && styles.btnPressed,
+          ]}
           onPress={requestWithdrawal}
-          style={styles.action}
-        />
-      </Card>
+          disabled={withdrawing || !wallet?.payoutMethod.configured}
+        >
+          <Ionicons name="arrow-up-circle-outline" size={16} color="#fff" />
+          <Text style={styles.withdrawBtnText}>{withdrawing ? 'Submitting…' : 'Request withdrawal'}</Text>
+        </Pressable>
+      </SectionBlock>
 
-      <SectionHeader title="Withdrawal requests" />
+      {/* ── Withdrawal requests header ── */}
+      <Text style={styles.sectionLabel}>WITHDRAWAL REQUESTS</Text>
     </>
   );
 
   return (
-    <Screen inStack padded={false}>
+    <Screen inStack>
       <FlatList
         style={styles.list}
         data={withdrawals}
@@ -500,29 +721,16 @@ export default function WalletScreen() {
         }
         ListHeaderComponent={listHeader}
         ListEmptyComponent={
-          <Card muted style={styles.emptyCard}>
-            <Text style={styles.emptyText}>No withdrawal requests yet</Text>
-          </Card>
-        }
-        renderItem={({ item }) => (
-          <Card style={styles.withdrawalCard}>
-            <View style={styles.withdrawalRow}>
-              <View style={styles.withdrawalMain}>
-                <Text style={styles.withdrawalAmount}>{formatCurrency(item.amount)}</Text>
-                <Text style={styles.withdrawalMeta}>
-                  {item.methodLabel} · {formatDate(item.createdAt)}
-                </Text>
-                {item.adminNote ? (
-                  <Text style={styles.withdrawalNote}>{item.adminNote}</Text>
-                ) : null}
-              </View>
-              <Text style={[styles.withdrawalStatus, { color: statusColor(item.status) }]}>
-                {item.statusLabel}
-              </Text>
+          <View style={styles.emptyWrap}>
+            <View style={styles.emptyIcon}>
+              <Ionicons name="document-outline" size={24} color={colors.mutedForeground} />
             </View>
-          </Card>
-        )}
-        contentContainerStyle={styles.listContent}
+            <Text style={styles.emptyTitle}>No withdrawal requests yet</Text>
+            <Text style={styles.hint}>Requests you submit will appear here.</Text>
+          </View>
+        }
+        renderItem={renderWithdrawalItem}
+        ListFooterComponent={<View style={{ height: spacing.xxxl }} />}
       />
     </Screen>
   );
@@ -530,129 +738,267 @@ export default function WalletScreen() {
 
 const styles = StyleSheet.create({
   list: { flex: 1 },
-  listContent: {
-    paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.xxxl,
+
+  pageHeader: { marginBottom: spacing.xl },
+  pageTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: colors.foreground,
+    letterSpacing: -0.3,
+  },
+  pageSubtitle: { ...typography.bodySm, marginTop: spacing.xs },
+
+  sectionLabel: {
+    ...typography.label,
+    marginBottom: spacing.sm,
+  },
+
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: spacing.sm,
-  },
-  error: {
-    marginBottom: spacing.md,
-    color: colors.destructive,
-    fontWeight: '600',
-  },
-  balanceGrid: {
-    gap: spacing.md,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
     marginBottom: spacing.lg,
   },
-  balanceCard: {
-    alignItems: 'center',
-    paddingVertical: spacing.lg,
+  errorText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.destructive,
   },
-  withdrawableCard: {
-    borderWidth: 0,
+
+  balanceRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.xl,
   },
-  balanceLabel: { ...typography.label },
-  balanceValue: {
-    marginTop: spacing.sm,
-    fontSize: 28,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  pendingValue: { color: colors.warning },
-  sectionCard: { marginBottom: spacing.lg, gap: spacing.sm },
+
   methodRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
   methodChip: {
-    paddingVertical: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    height: 34,
     paddingHorizontal: spacing.md,
-    borderRadius: radius.lg,
+    borderRadius: radius.full,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceMuted,
   },
   methodChipActive: {
-    borderColor: colors.primary,
+    borderColor: colors.primaryBorder,
     backgroundColor: colors.primaryLight,
   },
-  methodChipText: { fontSize: 13, fontWeight: '600', color: colors.foreground },
-  methodChipTextActive: { color: colors.primaryDark },
-  field: { marginTop: spacing.sm },
-  action: { marginTop: spacing.md },
-  hint: { ...typography.bodySm, color: colors.mutedForeground },
-  withdrawalCard: { paddingVertical: spacing.md },
-  withdrawalRow: {
+  methodChipText: { fontSize: 13, fontWeight: '600', color: colors.mutedForeground },
+  methodChipTextActive: { color: colors.primary },
+
+  saveBtn: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.primary,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md + 2,
+    marginTop: spacing.xs,
+    ...shadow.card,
   },
-  withdrawalMain: { flex: 1 },
-  withdrawalAmount: { fontSize: 16, fontWeight: '700', color: colors.foreground },
-  withdrawalMeta: { ...typography.caption, marginTop: spacing.xs },
-  withdrawalNote: { ...typography.bodySm, marginTop: spacing.xs, color: colors.mutedForeground },
-  withdrawalStatus: { fontSize: 12, fontWeight: '700' },
-  emptyCard: { alignItems: 'center', paddingVertical: spacing.xl },
-  emptyText: { ...typography.bodySm },
+  saveBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+
   remitSummaryRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
   },
-  remitSummaryCol: { flex: 1, alignItems: 'center' },
-  remitLabel: { ...typography.caption, color: colors.mutedForeground, textAlign: 'center' },
-  remitValue: { marginTop: spacing.xs, fontSize: 16, fontWeight: '700', color: colors.foreground },
-  remitOffset: { color: colors.warning ?? '#d97706' },
-  remitTotal: { color: colors.accent ?? '#0ea5e9' },
+  remitSummaryCol: { flex: 1, alignItems: 'center', gap: spacing.xs },
+  remitDivider: { width: 1, backgroundColor: colors.border, marginVertical: spacing.xs },
+  remitLabel: { ...typography.label },
+  remitValue: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.foreground,
+    letterSpacing: -0.2,
+  },
+
   remitItemRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    marginTop: spacing.sm,
-    paddingTop: spacing.sm,
+    justifyContent: 'space-between',
+    paddingVertical: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: colors.border ?? '#e2e8f0',
+    borderTopColor: colors.border,
   },
-  remitItemStage: { fontSize: 12, fontWeight: '600', color: colors.foreground, width: 52 },
-  remitItemOrder: { flex: 1, ...typography.caption, color: colors.mutedForeground },
-  remitItemAmount: { fontSize: 14, fontWeight: '700', color: colors.foreground },
-  remitItemSubmitted: { color: colors.warning ?? '#d97706' },
-  remitItemTag: { fontSize: 10, fontWeight: '700', color: colors.warning ?? '#d97706', textTransform: 'uppercase' as const },
-  remitHistoryLabel: {
-    marginTop: spacing.md,
-    marginBottom: spacing.xs,
-    ...typography.label,
-    color: colors.mutedForeground,
+  remitItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    flex: 1,
   },
-  remitHistoryCard: { paddingVertical: spacing.md, marginBottom: spacing.sm },
-  proofSection: {
-    marginTop: spacing.md,
+  remitItemStage: { fontSize: 13, fontWeight: '600', color: colors.foreground },
+  remitItemOrder: { ...typography.caption, flex: 1 },
+  remitItemRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing.sm,
   },
-  proofLabel: { ...typography.label, color: colors.mutedForeground },
+  remitItemAmount: { fontSize: 14, fontWeight: '700', color: colors.foreground },
+  submittedPill: {
+    backgroundColor: colors.warningBg,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  submittedText: { fontSize: 10, fontWeight: '700', color: colors.warning, letterSpacing: 0.3 },
+
+  infoBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    backgroundColor: colors.primaryLight,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+  },
+  warningBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    backgroundColor: colors.warningBg,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.primary,
+    lineHeight: 18,
+  },
+
+  proofLabel: { ...typography.label },
+  hint: { ...typography.bodySm },
   proofInput: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    ...typography.body,
+    paddingVertical: spacing.sm + 4,
+    fontSize: 14,
     color: colors.foreground,
     backgroundColor: colors.surface,
   },
   proofPickerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+    borderRadius: radius.lg,
+    borderStyle: 'dashed',
+    paddingVertical: spacing.md,
+    backgroundColor: colors.primaryLight,
+  },
+  proofPickerText: { fontSize: 14, fontWeight: '600', color: colors.primary },
+  proofThumbRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  proofThumb: {
+    width: 64,
+    height: 64,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceMuted,
+  },
+  proofClearText: { fontSize: 13, fontWeight: '600', color: colors.destructive },
+
+  remitBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.accent,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md + 2,
+    marginTop: spacing.xs,
+    ...shadow.card,
+  },
+  remitBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+
+  withdrawBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.warning,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md + 2,
+    ...shadow.card,
+  },
+  withdrawBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+
+  btnDisabled: { opacity: 0.45 },
+  btnPressed: { opacity: 0.85, transform: [{ scale: 0.985 }] },
+
+  rowDivider: { height: 1, backgroundColor: colors.border },
+
+  withdrawalCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.md,
-    borderStyle: 'dashed' as const,
-    paddingVertical: spacing.md,
-    alignItems: 'center' as const,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    ...shadow.card,
   },
-  proofPickerText: { ...typography.bodySm, color: colors.primary },
-  proofThumbRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.sm },
-  proofThumb: { width: 64, height: 64, borderRadius: radius.sm, backgroundColor: colors.muted },
-  proofClear: { flex: 1 },
-  proofClearText: { ...typography.bodySm, color: colors.destructive ?? '#dc2626' },
+  withdrawalCardFirst: {},
+  withdrawalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  withdrawalLeft: { flex: 1, gap: spacing.xs },
+  withdrawalAmount: { fontSize: 16, fontWeight: '700', color: colors.foreground },
+  withdrawalMeta: { ...typography.caption },
+  withdrawalNote: { ...typography.bodySm, color: colors.mutedForeground },
+
+  emptyWrap: {
+    alignItems: 'center',
+    paddingVertical: spacing.xxxl,
+    gap: spacing.sm,
+  },
+  emptyIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: colors.surfaceMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xs,
+  },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.foreground,
+  },
+  emptyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
 });

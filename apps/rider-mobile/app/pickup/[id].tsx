@@ -1,7 +1,8 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   formatCurrency,
   getPickupWorkflowStepIndex,
@@ -12,8 +13,6 @@ import { OpsStepper } from '../../src/components/ops-stepper';
 import { CashPaymentCard } from '../../src/components/cash-payment-card';
 import { TaskDetailsCard } from '../../src/components/task-details-card';
 import { DataLoadState } from '../../src/components/data-load-state';
-import { Button } from '../../src/components/ui/button';
-import { Card } from '../../src/components/ui/card';
 import { Input } from '../../src/components/ui/input';
 import { Screen } from '../../src/components/ui/screen';
 import { riderFetch, riderUpload, loadTaskWithCache, isQueuedResponse } from '../../src/api';
@@ -27,7 +26,9 @@ import { captureTaskPhoto } from '../../src/lib/task-photo';
 import { AuthenticatedImage } from '../../src/components/authenticated-image';
 import { callPhone, promptNavigate } from '../../src/lib/task-contact';
 import type { RiderShopLocation, RiderTaskAddress } from '../../src/lib/rider-task-types';
-import { colors, spacing, typography } from '../../src/theme';
+import { colors, radius, shadow, spacing, typography } from '../../src/theme';
+
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
 interface PickupTask {
   _id: string;
@@ -61,6 +62,172 @@ interface PickupTask {
   shopLocation?: RiderShopLocation | null;
   cashPayment?: RiderCashPaymentInfo | null;
 }
+
+// ── Step card ─────────────────────────────────────────────────────────────────
+
+function StepCard({
+  icon,
+  iconBg,
+  iconColor,
+  title,
+  hint,
+  children,
+}: {
+  icon: IoniconName;
+  iconBg: string;
+  iconColor: string;
+  title: string;
+  hint?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <View style={stepStyles.card}>
+      <View style={stepStyles.header}>
+        <View style={[stepStyles.iconWrap, { backgroundColor: iconBg }]}>
+          <Ionicons name={icon} size={18} color={iconColor} />
+        </View>
+        <View style={stepStyles.headerText}>
+          <Text style={stepStyles.title}>{title}</Text>
+          {hint ? <Text style={stepStyles.hint}>{hint}</Text> : null}
+        </View>
+      </View>
+      {children ? (
+        <>
+          <View style={stepStyles.divider} />
+          <View style={stepStyles.body}>{children}</View>
+        </>
+      ) : null}
+    </View>
+  );
+}
+
+const stepStyles = StyleSheet.create({
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    marginTop: spacing.lg,
+    ...shadow.card,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+  },
+  iconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  headerText: { flex: 1, justifyContent: 'center' },
+  title: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.foreground,
+  },
+  hint: {
+    ...typography.caption,
+    marginTop: 2,
+  },
+  divider: { height: 1, backgroundColor: colors.border, marginTop: spacing.md },
+  body: { marginTop: spacing.md },
+});
+
+// ── Action button ─────────────────────────────────────────────────────────────
+
+function ActionBtn({
+  label,
+  icon,
+  onPress,
+  disabled,
+  variant = 'primary',
+  inRow = false,
+}: {
+  label: string;
+  icon?: IoniconName;
+  onPress: () => void;
+  disabled?: boolean;
+  variant?: 'primary' | 'accent' | 'outline' | 'danger';
+  inRow?: boolean;
+}) {
+  const bg =
+    variant === 'accent'
+      ? colors.accent
+      : variant === 'danger'
+        ? colors.destructive
+        : variant === 'outline'
+          ? 'transparent'
+          : colors.primary;
+  const textColor = variant === 'outline' ? colors.primary : '#fff';
+  const borderColor = variant === 'outline' ? colors.primaryBorder : 'transparent';
+
+  return (
+    <Pressable
+      style={({ pressed }) => [
+        btnStyles.btn,
+        inRow && btnStyles.btnInRow,
+        { backgroundColor: bg, borderColor },
+        variant === 'outline' && btnStyles.outline,
+        disabled && btnStyles.disabled,
+        pressed && !disabled && btnStyles.pressed,
+      ]}
+      onPress={onPress}
+      disabled={disabled}
+    >
+      {icon ? <Ionicons name={icon} size={16} color={textColor} /> : null}
+      <Text style={[btnStyles.text, { color: textColor }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+const btnStyles = StyleSheet.create({
+  btn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md + 2,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    marginTop: spacing.md,
+    ...shadow.card,
+  },
+  btnInRow: { marginTop: 0 },
+  outline: { shadowOpacity: 0, elevation: 0 },
+  disabled: { opacity: 0.45, shadowOpacity: 0, elevation: 0 },
+  pressed: { opacity: 0.85, transform: [{ scale: 0.985 }] },
+  text: { fontSize: 15, fontWeight: '700' },
+});
+
+// ── OR divider ────────────────────────────────────────────────────────────────
+
+function OrDivider() {
+  return (
+    <View style={orStyles.row}>
+      <View style={orStyles.line} />
+      <Text style={orStyles.text}>or enter manually</Text>
+      <View style={orStyles.line} />
+    </View>
+  );
+}
+
+const orStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginVertical: spacing.md,
+  },
+  line: { flex: 1, height: 1, backgroundColor: colors.border },
+  text: { ...typography.caption },
+});
+
+// ── Pickup screen ─────────────────────────────────────────────────────────────
 
 export default function PickupScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -96,16 +263,8 @@ export default function PickupScreen() {
     }
   }, [id]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  useFocusEffect(
-    useCallback(() => {
-      void load();
-    }, [load]),
-  );
-
+  useEffect(() => { load(); }, [load]);
+  useFocusEffect(useCallback(() => { void load(); }, [load]));
   useRiderOrderSocket(id, load);
 
   async function run<T>(fn: () => Promise<T>, successMsg?: string) {
@@ -114,13 +273,8 @@ export default function PickupScreen() {
       const res = await fn();
       if (isQueuedResponse(res)) {
         const cached = id ? await loadTaskCache<PickupTask>(id) : null;
-        if (cached) {
-          setTask(cached);
-          setFromCache(true);
-        }
-        if (successMsg) {
-          Alert.alert('Saved offline', `${successMsg} — will sync when you're back online.`);
-        }
+        if (cached) { setTask(cached); setFromCache(true); }
+        if (successMsg) Alert.alert('Saved offline', `${successMsg} — will sync when you're back online.`);
         return res;
       }
       await load();
@@ -135,12 +289,7 @@ export default function PickupScreen() {
 
   function applyLocalPhotoPreview(localUri: string) {
     setTask((prev) =>
-      prev
-        ? {
-            ...prev,
-            pickup: { ...prev.pickup, photoUrl: localUri },
-          }
-        : prev,
+      prev ? { ...prev, pickup: { ...prev.pickup, photoUrl: localUri } } : prev,
     );
   }
 
@@ -162,64 +311,74 @@ export default function PickupScreen() {
     ]);
   }
 
-  const steps =
-    task?.pickupWorkflowSteps ?? PICKUP_WORKFLOW_STEPS.map((s) => s.label);
+  const steps = task?.pickupWorkflowSteps ?? PICKUP_WORKFLOW_STEPS.map((s) => s.label);
   const stepIndex =
     task?.pickupWorkflowStep ??
-    (task
-      ? getPickupWorkflowStepIndex({ status: task.status, pickup: task.pickup })
-      : 0);
+    (task ? getPickupWorkflowStepIndex({ status: task.status, pickup: task.pickup }) : 0);
 
   const isActivePickup = useMemo(() => {
     if (!task) return false;
-    return [
-      'rider_assigned_pickup',
-      'rider_assigned',
-      'picked_up',
-      'in_transit_to_shop',
-    ].includes(task.status);
+    return ['rider_assigned_pickup', 'rider_assigned', 'picked_up', 'in_transit_to_shop'].includes(task.status);
   }, [task]);
 
   if (!task) {
     return (
       <Screen inStack>
-        <DataLoadState
-          loading={!loadError}
-          error={loadError}
-          loadingMessage="Loading pickup task…"
-          onRetry={load}
-        />
+        <DataLoadState loading={!loadError} error={loadError} loadingMessage="Loading pickup task…" onRetry={load} />
       </Screen>
     );
   }
 
   const p = task.pickup ?? {};
   const cash = task.cashPayment;
-  const pickupCashDue =
-    cash?.collectAt === 'pickup' && !cash.collected && !!p.customerVerifiedAt;
-  const canCollectLaundry =
-    !!p.customerVerifiedAt && !p.collectedAt && !pickupCashDue && !cashPendingSync;
-  const isOffer =
-    (task.status === 'shop_assigned' || task.status === 'confirmed') && !p.acceptedAt;
-  const done =
-    task.status === 'in_transit_to_shop' ||
-    task.status === 'received_at_shop' ||
-    task.status === 'received';
+  const pickupCashDue = cash?.collectAt === 'pickup' && !cash.collected && !!p.customerVerifiedAt;
+  const canCollectLaundry = !!p.customerVerifiedAt && !p.collectedAt && !pickupCashDue && !cashPendingSync;
+  const isOffer = (task.status === 'shop_assigned' || task.status === 'confirmed') && !p.acceptedAt;
+  const done = task.status === 'in_transit_to_shop' || task.status === 'received_at_shop' || task.status === 'received';
   const shop = task.shopLocation;
+  const bookingLabel = task.bookingType.replace(/_/g, ' ');
+  const statusLabel = task.status.replace(/_/g, ' ');
 
   return (
     <View style={styles.screenWrap}>
       <Screen scroll inStack contentStyle={styles.content}>
-        <Text style={styles.title}>Pickup route</Text>
-        <Text style={styles.subtitle}>
-          {task.bookingType.replace(/_/g, ' ')} · {task.status.replace(/_/g, ' ')}
-        </Text>
+
+        {/* ── Page header ── */}
+        <View style={styles.pageHeader}>
+          <View style={styles.headerLeft}>
+            <View style={styles.headerIcon}>
+              <Ionicons name="arrow-up-circle-outline" size={22} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.pageTitle}>Pickup route</Text>
+              {task.orderNumber ? (
+                <Text style={styles.orderNumber}>#{task.orderNumber}</Text>
+              ) : null}
+              <View style={styles.metaRow}>
+                <View style={styles.metaPill}>
+                  <Text style={styles.metaPillText}>{bookingLabel}</Text>
+                </View>
+                <View style={[styles.metaPill, styles.statusPill]}>
+                  <Text style={[styles.metaPillText, styles.statusPillText]}>{statusLabel}</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* ── Stepper ── */}
         <OpsStepper steps={steps} currentIndex={stepIndex} />
+
+        {/* ── Banners ── */}
         {pendingCount > 0 ? <PendingSyncChip /> : null}
         {fromCache ? (
-          <Text style={styles.cacheHint}>Showing cached task — changes sync when online</Text>
+          <View style={styles.cacheBanner}>
+            <Ionicons name="cloud-offline-outline" size={14} color={colors.warning} />
+            <Text style={styles.cacheBannerText}>Showing cached task — changes sync when online</Text>
+          </View>
         ) : null}
 
+        {/* ── Task details ── */}
         <TaskDetailsCard
           task={{
             orderNumber: task.orderNumber,
@@ -243,205 +402,280 @@ export default function PickupScreen() {
           loading={loading}
           onAccept={
             isOffer
-              ? () =>
-                  run(
-                    () => riderFetch(`/riders/pickup-offers/${id}/accept`, { method: 'POST' }),
-                    'Task accepted — navigate to customer',
-                  )
+              ? () => run(() => riderFetch(`/riders/pickup-offers/${id}/accept`, { method: 'POST' }), 'Task accepted — navigate to customer')
               : undefined
           }
           onReject={task.canReject ? confirmReject : undefined}
-          onNavigateCustomer={
-            task.pickupAddress
-              ? () => promptNavigate(task.pickupAddress!)
-              : undefined
-          }
-          onNavigateShop={shop ? () => promptNavigate(shop) : undefined}
-          onCallCustomer={() => callPhone(task.customerPhone)}
-          onCallShop={() => callPhone(task.shopPhone)}
         />
 
         {isActivePickup && !done && (
           <>
+            {/* ── Head to customer ── */}
             {!p.arrivedAt && p.acceptedAt && (
-              <Button
-                label="I've arrived"
-                disabled={loading}
-                onPress={() =>
-                  run(() => riderFetch(`/riders/pickup-tasks/${id}/arrive`, { method: 'POST' }))
+              <StepCard
+                icon="location-outline"
+                iconBg={colors.primaryLight}
+                iconColor={colors.primary}
+                title={task.customerName ?? 'Customer'}
+                hint={
+                  task.pickupAddress
+                    ? [task.pickupAddress.line1, task.pickupAddress.city].filter(Boolean).join(', ')
+                    : 'Navigate to the pickup address'
                 }
-                style={styles.action}
-              />
+              >
+                <View style={styles.contactRow}>
+                  {task.pickupAddress ? (
+                    <View style={styles.contactBtn}>
+                      <ActionBtn
+                        label="Navigate"
+                        icon="navigate-outline"
+                        variant="primary"
+                        inRow
+                        disabled={loading}
+                        onPress={() => promptNavigate(task.pickupAddress!)}
+                      />
+                    </View>
+                  ) : null}
+                  <View style={styles.contactBtn}>
+                    <ActionBtn
+                      label="Call"
+                      icon="call-outline"
+                      variant="outline"
+                      inRow
+                      disabled={loading}
+                      onPress={() => callPhone(task.customerPhone)}
+                    />
+                  </View>
+                </View>
+                <View style={styles.arrivedDivider} />
+                <ActionBtn
+                  label="I've arrived"
+                  icon="checkmark-circle-outline"
+                  variant="accent"
+                  disabled={loading}
+                  onPress={() => run(() => riderFetch(`/riders/pickup-tasks/${id}/arrive`, { method: 'POST' }))}
+                />
+              </StepCard>
             )}
 
+            {/* ── Verify customer ── */}
             {p.arrivedAt && !p.customerVerifiedAt && (
-              <Card elevated style={styles.card}>
-                <Text style={styles.cardTitle}>Verify customer</Text>
-                {task.customerPhoneMasked && (
-                  <Text style={styles.statusHint}>Phone ends in {task.customerPhoneMasked}</Text>
-                )}
-                <Button
+              <StepCard
+                icon="person-circle-outline"
+                iconBg={colors.primaryLight}
+                iconColor={colors.primary}
+                title="Verify customer"
+                hint="Confirm identity before collecting laundry."
+              >
+                {(task.customerName || task.customerPhoneMasked) ? (
+                  <View style={styles.identityBox}>
+                    {task.customerName ? (
+                      <Text style={styles.identityName}>{task.customerName}</Text>
+                    ) : null}
+                    {task.customerPhoneMasked ? (
+                      <Text style={styles.identityPhone}>
+                        <Ionicons name="call-outline" size={12} color={colors.mutedForeground} /> ···· {task.customerPhoneMasked}
+                      </Text>
+                    ) : null}
+                  </View>
+                ) : null}
+                <ActionBtn
                   label="Scan Customer QR"
+                  icon="qr-code-outline"
                   disabled={loading}
-                  onPress={() =>
-                    router.push({
-                      pathname: '/scan',
-                      params: { orderId: id!, mode: 'customer_pickup' },
-                    })
-                  }
-                  style={styles.action}
+                  onPress={() => router.push({ pathname: '/scan', params: { orderId: id!, mode: 'customer_pickup' } })}
                 />
-                <Text style={styles.orDivider}>or enter code manually</Text>
+                <OrDivider />
                 <Input
-                  style={styles.field}
                   placeholder="Last 4 digits of phone"
                   keyboardType="number-pad"
                   maxLength={4}
                   value={verifyCode}
                   onChangeText={setVerifyCode}
                 />
-                <Button
+                <ActionBtn
                   label="Verify"
+                  icon="shield-checkmark-outline"
                   disabled={loading || verifyCode.length !== 4}
                   onPress={() =>
-                    run(() =>
-                      riderFetch(`/riders/pickup-tasks/${id}/verify`, {
-                        method: 'POST',
-                        body: JSON.stringify({ code: verifyCode }),
-                      }),
-                    )
+                    run(() => riderFetch(`/riders/pickup-tasks/${id}/verify`, {
+                      method: 'POST',
+                      body: JSON.stringify({ code: verifyCode }),
+                    }))
                   }
                 />
-              </Card>
+              </StepCard>
             )}
 
+            {/* ── Cash payment ── */}
             {p.customerVerifiedAt && cash?.collectAt === 'pickup' && (
               <CashPaymentCard
                 cashPayment={cash}
                 loading={loading}
                 onCollect={
                   cash.canCollect
-                    ? () =>
-                        run(
-                          () =>
-                            riderFetch(`/riders/pickup-tasks/${id}/collect-cash`, {
-                              method: 'POST',
-                            }),
-                          'Cash payment recorded',
-                        )
+                    ? () => run(() => riderFetch(`/riders/pickup-tasks/${id}/collect-cash`, { method: 'POST' }), 'Cash payment recorded')
                     : undefined
                 }
               />
             )}
-
             {cashPendingSync && cash?.collectAt === 'pickup' ? (
-              <Text style={styles.cacheHint}>Cash collection pending sync — stay online before pickup</Text>
+              <View style={styles.cacheBanner}>
+                <Ionicons name="hourglass-outline" size={14} color={colors.warning} />
+                <Text style={styles.cacheBannerText}>Cash collection pending sync — stay online before pickup</Text>
+              </View>
             ) : null}
 
+            {/* ── Collect laundry ── */}
             {canCollectLaundry && (
-              <Card elevated style={styles.card}>
-                <Text style={styles.cardTitle}>Pickup laundry</Text>
-                <Text style={styles.statusHint}>Status will become picked_up</Text>
+              <StepCard
+                icon="cube-outline"
+                iconBg={colors.accentLight}
+                iconColor={colors.accentDark}
+                title="Collect laundry"
+                hint="Enter actual weight and confirm pickup."
+              >
                 <Input
-                  style={styles.field}
                   placeholder="Actual weight (kg)"
                   keyboardType="decimal-pad"
                   value={weight}
                   onChangeText={setWeight}
                 />
                 <Input
-                  style={styles.field}
                   placeholder="Notes (optional)"
                   value={notes}
                   onChangeText={setNotes}
+                  style={styles.fieldGap}
                 />
-                <Button
+                <ActionBtn
                   label="Confirm pickup"
-                  disabled={loading}
-                  onPress={() =>
-                    run(
-                      () =>
-                        riderFetch(`/riders/pickup-tasks/${id}/collect`, {
-                          method: 'POST',
-                          body: JSON.stringify({
-                            actualWeightKg: Number(weight),
-                            notes: notes || undefined,
-                          }),
-                        }),
-                      'Laundry picked up',
-                    )
-                  }
-                />
-              </Card>
-            )}
-
-            {p.collectedAt && !p.photoUrl && task.status === 'picked_up' && (
-              <Button
-                label="Take photo"
-                disabled={loading}
-                onPress={() =>
-                  run(async () => {
-                    const captured = await captureTaskPhoto();
-                    if (!captured) return;
-                    applyLocalPhotoPreview(captured.localUri);
-                    return riderUpload(
-                      `/riders/pickup-tasks/${id}/photo-upload`,
-                      captured.formData,
-                      id,
-                    );
-                  }, 'Photo proof saved')
-                }
-                style={styles.action}
-              />
-            )}
-
-            {p.photoUrl && !p.receiptCode && task.status === 'picked_up' && (
-              <Button
-                label="Generate pickup receipt"
-                disabled={loading}
-                onPress={() =>
-                  run(async () => {
-                    const res = await riderFetch<{ receiptCode: string }>(
-                      `/riders/pickup-tasks/${id}/generate-receipt`,
-                      { method: 'POST' },
-                    );
-                    Alert.alert('Receipt', res.receiptCode);
-                  })
-                }
-                style={styles.action}
-              />
-            )}
-
-            {p.receiptCode && !p.droppedAtShop && task.status === 'picked_up' && shop && (
-              <>
-                <Card elevated style={styles.card}>
-                  <Text style={styles.cardTitle}>Deliver to assigned shop · {shop.name}</Text>
-                  <Text style={styles.cardBody}>
-                    {shop.line1}, {shop.city}
-                  </Text>
-                  <Text style={styles.statusHint}>Status will become in_transit_to_shop</Text>
-                </Card>
-                <Button
-                  label="Scan Order QR"
+                  icon="checkmark-done-outline"
                   variant="accent"
                   disabled={loading}
                   onPress={() =>
-                    router.push({
-                      pathname: '/scan',
-                      params: { orderId: id!, mode: 'order_handover' },
+                    run(() => riderFetch(`/riders/pickup-tasks/${id}/collect`, {
+                      method: 'POST',
+                      body: JSON.stringify({ actualWeightKg: Number(weight), notes: notes || undefined }),
+                    }), 'Laundry picked up')
+                  }
+                />
+              </StepCard>
+            )}
+
+            {/* ── Shop contact (visible from laundry collected onward) ── */}
+            {p.collectedAt && shop && (
+              <StepCard
+                icon="storefront-outline"
+                iconBg={colors.secondaryLight}
+                iconColor={colors.secondaryDark}
+                title={task.branchName ?? shop.name}
+                hint={`${shop.line1 ?? ''}, ${shop.city ?? ''}`.trim().replace(/^,\s*/, '')}
+              >
+                <View style={styles.contactRow}>
+                  <View style={styles.contactBtn}>
+                    <ActionBtn
+                      label="Navigate"
+                      icon="navigate-outline"
+                      variant="primary"
+                      inRow
+                      disabled={loading}
+                      onPress={() => promptNavigate(shop)}
+                    />
+                  </View>
+                  {task.shopPhone ? (
+                    <View style={styles.contactBtn}>
+                      <ActionBtn
+                        label="Call shop"
+                        icon="call-outline"
+                        variant="outline"
+                        inRow
+                        disabled={loading}
+                        onPress={() => callPhone(task.shopPhone)}
+                      />
+                    </View>
+                  ) : null}
+                </View>
+              </StepCard>
+            )}
+
+            {/* ── Take photo ── */}
+            {p.collectedAt && !p.photoUrl && task.status === 'picked_up' && (
+              <StepCard
+                icon="camera-outline"
+                iconBg={colors.primaryLight}
+                iconColor={colors.primary}
+                title="Take photo proof"
+                hint="Photograph the laundry bag as proof of pickup."
+              >
+                <ActionBtn
+                  label="Take photo"
+                  icon="camera-outline"
+                  disabled={loading}
+                  onPress={() =>
+                    run(async () => {
+                      const captured = await captureTaskPhoto();
+                      if (!captured) return;
+                      applyLocalPhotoPreview(captured.localUri);
+                      return riderUpload(`/riders/pickup-tasks/${id}/photo-upload`, captured.formData, id);
+                    }, 'Photo proof saved')
+                  }
+                />
+              </StepCard>
+            )}
+
+            {/* ── Generate receipt ── */}
+            {p.photoUrl && !p.receiptCode && task.status === 'picked_up' && (
+              <StepCard
+                icon="document-text-outline"
+                iconBg={colors.primaryLight}
+                iconColor={colors.primary}
+                title="Generate receipt"
+                hint="Create a pickup receipt code for shop handover."
+              >
+                <ActionBtn
+                  label="Generate pickup receipt"
+                  icon="receipt-outline"
+                  disabled={loading}
+                  onPress={() =>
+                    run(async () => {
+                      const res = await riderFetch<{ receiptCode: string }>(
+                        `/riders/pickup-tasks/${id}/generate-receipt`,
+                        { method: 'POST' },
+                      );
+                      Alert.alert('Receipt', res.receiptCode);
                     })
                   }
-                  style={styles.action}
                 />
-                <Button
+              </StepCard>
+            )}
+
+            {/* ── Deliver to shop ── */}
+            {p.receiptCode && !p.droppedAtShop && task.status === 'picked_up' && shop && (
+              <StepCard
+                icon="receipt-outline"
+                iconBg={colors.primaryLight}
+                iconColor={colors.primary}
+                title="Hand over at shop"
+                hint="Scan or confirm handover to complete this pickup."
+              >
+                <ActionBtn
+                  label="Scan Order QR"
+                  icon="qr-code-outline"
+                  variant="accent"
+                  disabled={loading}
+                  onPress={() => router.push({ pathname: '/scan', params: { orderId: id!, mode: 'order_handover' } })}
+                />
+                <ActionBtn
                   label="Deliver without scan"
+                  icon="arrow-forward-outline"
                   variant="outline"
                   disabled={loading}
                   onPress={() =>
                     run(async () => {
-                      const res = await riderFetch<{
-                        earnings?: { amount: number; todayEarnings: number };
-                      }>(`/riders/pickup-tasks/${id}/drop-at-shop`, { method: 'POST' });
+                      const res = await riderFetch<{ earnings?: { amount: number; todayEarnings: number } }>(
+                        `/riders/pickup-tasks/${id}/drop-at-shop`,
+                        { method: 'POST' },
+                      );
                       const earn = res.earnings;
                       Alert.alert(
                         'Delivered to shop',
@@ -452,37 +686,54 @@ export default function PickupScreen() {
                       router.back();
                     })
                   }
-                  style={styles.action}
                 />
-              </>
+              </StepCard>
             )}
           </>
         )}
 
+        {/* ── Photo proof ── */}
         {p.photoUrl ? (
-          <Card elevated style={styles.card}>
-            <Text style={styles.cardTitle}>Pickup photo proof</Text>
+          <StepCard
+            icon="image-outline"
+            iconBg={colors.surfaceMuted}
+            iconColor={colors.mutedForeground}
+            title="Pickup photo proof"
+          >
             <AuthenticatedImage
               path={p.photoUrl}
               style={styles.photoPreview}
               accessibilityLabel="Pickup photo proof"
             />
-          </Card>
+          </StepCard>
         ) : null}
 
-        {p.receiptCode && (
-          <Card accent style={styles.card}>
-            <Text style={styles.cardTitle}>Pickup receipt</Text>
-            <Text style={styles.receiptCode}>{p.receiptCode}</Text>
-          </Card>
+        {/* ── Receipt code ── */}
+        {p.receiptCode ? (
+          <StepCard
+            icon="receipt-outline"
+            iconBg={colors.primaryLight}
+            iconColor={colors.primary}
+            title="Pickup receipt"
+            hint="Present this code at the shop counter."
+          >
+            <View style={styles.receiptBox}>
+              <Text style={styles.receiptCode}>{p.receiptCode}</Text>
+            </View>
+          </StepCard>
+        ) : null}
+
+        {/* ── Done ── */}
+        {done && (
+          <View style={styles.doneBanner}>
+            <Ionicons name="checkmark-circle" size={20} color={colors.accentDark} />
+            <View style={styles.doneBannerText}>
+              <Text style={styles.doneBannerTitle}>Pickup leg complete</Text>
+              <Text style={styles.doneBannerHint}>Laundry is at the partner shop for processing.</Text>
+            </View>
+          </View>
         )}
 
-        {done && (
-          <Card accent style={styles.card}>
-            <Text style={styles.cardTitle}>Pickup leg complete</Text>
-            <Text style={styles.cardBody}>Laundry is at the partner shop for processing.</Text>
-          </Card>
-        )}
       </Screen>
       {id ? (
         <SosButton orderId={id} taskActive={isActivePickup && !isOffer && !done} />
@@ -494,42 +745,147 @@ export default function PickupScreen() {
 const styles = StyleSheet.create({
   screenWrap: { flex: 1 },
   content: { paddingBottom: spacing.xxxl + 72 },
-  title: { ...typography.title, fontSize: 22 },
-  subtitle: {
+
+  pageHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: spacing.lg,
+  },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flex: 1 },
+  headerIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.lg,
+    backgroundColor: colors.primaryLight,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pageTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: colors.foreground,
+    letterSpacing: -0.3,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
     marginTop: spacing.xs,
-    ...typography.bodySm,
+    flexWrap: 'wrap',
+  },
+  metaPill: {
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  metaPillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.mutedForeground,
     textTransform: 'capitalize',
   },
-  cacheHint: {
+  orderNumber: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.mutedForeground,
+    letterSpacing: 0.5,
+    marginTop: 1,
+  },
+  statusPill: { backgroundColor: colors.primaryLight },
+  statusPillText: { color: colors.primary },
+
+  cacheBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    backgroundColor: colors.warningBg,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
     marginTop: spacing.sm,
-    ...typography.caption,
+  },
+  cacheBannerText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '500',
     color: colors.warning,
+    lineHeight: 18,
   },
-  statusHint: { marginTop: spacing.xs, fontSize: 12, color: colors.accentDark, fontWeight: '500' },
-  card: { marginTop: spacing.lg },
-  cardTitle: { ...typography.subheading, fontSize: 16 },
-  cardBody: { marginTop: spacing.xs + 2, ...typography.bodySm },
-  field: { marginTop: spacing.md },
-  action: { marginTop: spacing.lg },
-  photoPreview: {
-    marginTop: spacing.sm,
-    width: '100%',
-    height: 180,
-    borderRadius: 12,
+
+  contactRow: { flexDirection: 'row', gap: spacing.sm },
+  contactBtn: { flex: 1 },
+  arrivedDivider: { height: 1, backgroundColor: colors.border, marginTop: spacing.lg },
+
+  identityBox: {
     backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    gap: spacing.xs,
   },
-  receiptCode: {
-    marginTop: spacing.sm,
-    fontSize: 20,
+  identityName: {
+    fontSize: 14,
     fontWeight: '700',
-    letterSpacing: 1,
     color: colors.foreground,
   },
-  orDivider: {
-    marginTop: spacing.md,
-    marginBottom: spacing.xs,
-    textAlign: 'center',
-    fontSize: 12,
+  identityPhone: {
+    fontSize: 13,
+    fontWeight: '500',
     color: colors.mutedForeground,
+  },
+  fieldGap: { marginTop: spacing.sm },
+
+  photoPreview: {
+    width: '100%',
+    height: 200,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceMuted,
+    marginTop: spacing.xs,
+  },
+
+  receiptBox: {
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+    marginTop: spacing.xs,
+  },
+  receiptCode: {
+    fontSize: 26,
+    fontWeight: '800',
+    letterSpacing: 4,
+    color: colors.foreground,
+  },
+
+  doneBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    backgroundColor: colors.accentLight,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    padding: spacing.lg,
+    marginTop: spacing.lg,
+  },
+  doneBannerText: { flex: 1 },
+  doneBannerTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.accentDark,
+  },
+  doneBannerHint: {
+    ...typography.bodySm,
+    color: colors.accentDark,
+    marginTop: spacing.xs,
+    opacity: 0.8,
   },
 });
