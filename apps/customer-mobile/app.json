@@ -2,7 +2,7 @@
   "expo": {
     "name": "Lunara",
     "slug": "lunara-customer",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "scheme": "lunara",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
