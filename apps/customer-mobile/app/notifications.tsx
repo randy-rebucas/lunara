@@ -1,10 +1,12 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback } from 'react';
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { Card } from '../src/components/ui/card';
 import { DataLoadState } from '../src/components/data-load-state';
 import { NotificationListItem } from '../src/components/notification-list-item';
 import { useNotifications } from '../src/hooks/use-notifications';
-import { colors, spacing, typography } from '../src/theme';
+import { colors, radius, spacing, typography } from '../src/theme';
 
 export default function NotificationsScreen() {
   const { items, loading, refreshing, error, refresh, markRead, load } = useNotifications(50);
@@ -41,12 +43,15 @@ export default function NotificationsScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.primary} />
         }
         ListEmptyComponent={
-          <View style={styles.emptyWrap}>
+          <Card style={styles.emptyWrap}>
+            <View style={styles.emptyIcon}>
+              <Ionicons name="notifications-outline" size={24} color={colors.primary} />
+            </View>
             <Text style={styles.emptyTitle}>No notifications yet</Text>
             <Text style={styles.emptyBody}>
               Order updates, review requests, and refund alerts will show up here.
             </Text>
-          </View>
+          </Card>
         }
         renderItem={({ item }) => (
           <NotificationListItem notification={item} onMarkRead={markRead} />
@@ -67,8 +72,19 @@ const styles = StyleSheet.create({
   separator: { height: spacing.sm },
   emptyWrap: {
     alignItems: 'center',
-    paddingTop: spacing.xxxl * 2,
+    marginTop: spacing.xxxl,
+    paddingVertical: spacing.xxxl,
     paddingHorizontal: spacing.xl,
+    borderWidth: 0,
+  },
+  emptyIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: radius.full,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
   },
   emptyTitle: { ...typography.subheading, marginBottom: spacing.sm },
   emptyBody: { ...typography.bodySm, textAlign: 'center' },

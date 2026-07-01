@@ -291,7 +291,13 @@ export default function ProfileScreen() {
 
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Saved addresses</Text>
-              <Pressable onPress={openAddAddress} style={styles.addLink}>
+              <Pressable
+                onPress={openAddAddress}
+                style={({ pressed }) => [styles.addLink, pressed && styles.linkPressed]}
+                accessibilityRole="button"
+                accessibilityLabel="Add address"
+                hitSlop={8}
+              >
                 <Ionicons name="add-circle-outline" size={18} color={colors.primary} />
                 <Text style={styles.addLinkText}>Add</Text>
               </Pressable>
@@ -350,7 +356,10 @@ export default function ProfileScreen() {
                               `https://www.google.com/maps/search/?api=1&query=${address.latitude},${address.longitude}`,
                             )
                           }
-                          style={styles.mapsLink}
+                          style={({ pressed }) => [styles.mapsLink, pressed && styles.linkPressed]}
+                          accessibilityRole="button"
+                          accessibilityLabel="Open address in Google Maps"
+                          hitSlop={4}
                         >
                           <Ionicons name="map-outline" size={12} color={colors.primary} />
                           <Text style={styles.mapsLinkText}>Open in Google Maps</Text>
@@ -362,16 +371,32 @@ export default function ProfileScreen() {
                   })()}
                   <View style={styles.addressActions}>
                     {!address.isDefault ? (
-                      <Pressable onPress={() => setDefaultAddress(address)} style={styles.actionChip}>
+                      <Pressable
+                        onPress={() => setDefaultAddress(address)}
+                        style={({ pressed }) => [styles.actionChip, pressed && styles.actionChipPressed]}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Set ${address.label} as default address`}
+                      >
                         <Text style={styles.actionChipText}>Set default</Text>
                       </Pressable>
                     ) : null}
-                    <Pressable onPress={() => openEditAddress(address)} style={styles.actionChip}>
+                    <Pressable
+                      onPress={() => openEditAddress(address)}
+                      style={({ pressed }) => [styles.actionChip, pressed && styles.actionChipPressed]}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Edit ${address.label}`}
+                    >
                       <Text style={styles.actionChipText}>Edit</Text>
                     </Pressable>
                     <Pressable
                       onPress={() => confirmDeleteAddress(address)}
-                      style={[styles.actionChip, styles.actionChipDanger]}
+                      style={({ pressed }) => [
+                        styles.actionChip,
+                        styles.actionChipDanger,
+                        pressed && styles.actionChipPressed,
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Delete ${address.label}`}
                     >
                       <Text style={[styles.actionChipText, styles.actionChipDangerText]}>Delete</Text>
                     </Pressable>
@@ -382,7 +407,12 @@ export default function ProfileScreen() {
 
             <Text style={[styles.sectionTitle, styles.sectionTitleSpaced]}>Help & account</Text>
             <Card muted style={styles.sectionCard}>
-              <Pressable style={styles.prefRow} onPress={() => router.push('/support' as Href)}>
+              <Pressable
+                style={({ pressed }) => [styles.prefRow, pressed && styles.prefRowPressed]}
+                onPress={() => router.push('/support' as Href)}
+                accessibilityRole="button"
+                accessibilityLabel="Support tickets"
+              >
                 <Ionicons name="help-circle-outline" size={20} color={colors.secondary} />
                 <View style={styles.prefCopy}>
                   <Text style={styles.prefTitle}>Support tickets</Text>
@@ -391,8 +421,10 @@ export default function ProfileScreen() {
                 <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
               </Pressable>
               <Pressable
-                style={[styles.prefRow, styles.prefRowBorder]}
+                style={({ pressed }) => [styles.prefRow, styles.prefRowBorder, pressed && styles.prefRowPressed]}
                 onPress={() => router.push('/refunds' as Href)}
+                accessibilityRole="button"
+                accessibilityLabel="Refund requests"
               >
                 <Ionicons name="cash-outline" size={20} color={colors.accent} />
                 <View style={styles.prefCopy}>
@@ -402,8 +434,10 @@ export default function ProfileScreen() {
                 <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
               </Pressable>
               <Pressable
-                style={[styles.prefRow, styles.prefRowBorder]}
+                style={({ pressed }) => [styles.prefRow, styles.prefRowBorder, pressed && styles.prefRowPressed]}
                 onPress={() => openUrl(privacyUrl)}
+                accessibilityRole="button"
+                accessibilityLabel="Privacy policy"
               >
                 <Ionicons name="document-text-outline" size={20} color={colors.primary} />
                 <View style={styles.prefCopy}>
@@ -413,8 +447,10 @@ export default function ProfileScreen() {
                 <Ionicons name="open-outline" size={16} color={colors.mutedForeground} />
               </Pressable>
               <Pressable
-                style={[styles.prefRow, styles.prefRowBorder]}
+                style={({ pressed }) => [styles.prefRow, styles.prefRowBorder, pressed && styles.prefRowPressed]}
                 onPress={() => openUrl(termsUrl)}
+                accessibilityRole="button"
+                accessibilityLabel="Terms of service"
               >
                 <Ionicons name="reader-outline" size={20} color={colors.primary} />
                 <View style={styles.prefCopy}>
@@ -424,8 +460,10 @@ export default function ProfileScreen() {
                 <Ionicons name="open-outline" size={16} color={colors.mutedForeground} />
               </Pressable>
               <Pressable
-                style={[styles.prefRow, styles.prefRowBorder]}
+                style={({ pressed }) => [styles.prefRow, styles.prefRowBorder, pressed && styles.prefRowPressed]}
                 onPress={confirmDeleteAccount}
+                accessibilityRole="button"
+                accessibilityLabel="Delete account"
               >
                 <Ionicons name="trash-outline" size={20} color={colors.destructive} />
                 <View style={styles.prefCopy}>
@@ -437,7 +475,12 @@ export default function ProfileScreen() {
 
             <Text style={[styles.sectionTitle, styles.sectionTitleSpaced]}>Preferences</Text>
             <Card muted style={styles.sectionCard}>
-              <Pressable style={styles.prefRow} onPress={() => router.push('/notifications')}>
+              <Pressable
+                style={({ pressed }) => [styles.prefRow, pressed && styles.prefRowPressed]}
+                onPress={() => router.push('/notifications')}
+                accessibilityRole="button"
+                accessibilityLabel="Notifications"
+              >
                 <Ionicons name="notifications-outline" size={20} color={colors.primary} />
                 <View style={styles.prefCopy}>
                   <Text style={styles.prefTitle}>Notifications</Text>
@@ -496,6 +539,7 @@ const styles = StyleSheet.create({
   },
   addLink: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   addLinkText: { color: colors.primary, fontWeight: '600', fontSize: 14 },
+  linkPressed: { opacity: 0.7 },
   sectionCard: { marginBottom: spacing.lg, gap: spacing.sm },
   fieldLabel: { ...typography.label, marginBottom: -spacing.xs },
   fieldLabelSpaced: { marginTop: spacing.sm },
@@ -542,7 +586,9 @@ const styles = StyleSheet.create({
   actionChipText: { fontSize: 12, fontWeight: '600', color: colors.primary },
   actionChipDanger: { borderColor: colors.destructive + '33' },
   actionChipDangerText: { color: colors.destructive },
+  actionChipPressed: { opacity: 0.85 },
   prefRow: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' },
+  prefRowPressed: { opacity: 0.85 },
   prefRowBorder: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.md, marginTop: spacing.md },
   prefCopy: { flex: 1 },
   prefTitle: { fontSize: 14, fontWeight: '600', color: colors.foreground },

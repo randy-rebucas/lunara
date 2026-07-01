@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -72,7 +73,10 @@ export default function RefundDetailScreen() {
       contentContainerStyle={styles.content}
       useTopSafeInset={false}
     >
-      <Text style={styles.status}>{formatRefundStatus(refund.status)}</Text>
+      <View style={styles.statusPill}>
+        <Ionicons name="cash-outline" size={13} color={colors.primary} />
+        <Text style={styles.statusPillText}>{formatRefundStatus(refund.status)}</Text>
+      </View>
 
       <View style={styles.flow}>
         {REFUND_FLOW.map((step, i) => {
@@ -87,17 +91,22 @@ export default function RefundDetailScreen() {
                 done && styles.flowStepDone,
               ]}
             >
-              <Text style={styles.flowText}>
-                {done ? '✓ ' : active ? '→ ' : '○ '}
-                {step.label}
-              </Text>
+              <Ionicons
+                name={done ? 'checkmark-circle' : active ? 'ellipse' : 'ellipse-outline'}
+                size={16}
+                color={done ? colors.accent : active ? colors.primary : colors.mutedForeground}
+              />
+              <Text style={styles.flowText}>{step.label}</Text>
             </View>
           );
         })}
       </View>
 
       <Card style={styles.detail}>
-        <Text style={styles.detailTitle}>Your request</Text>
+        <View style={styles.cardHeaderRow}>
+          <Ionicons name="document-text-outline" size={16} color={colors.primary} />
+          <Text style={styles.detailTitle}>Your request</Text>
+        </View>
         <Text style={styles.detailBody}>{refund.reason}</Text>
         <Text style={styles.detailMeta}>Requested: ₱{refund.requestedAmount}</Text>
         {refund.approvedAmount != null ? (
@@ -112,15 +121,21 @@ export default function RefundDetailScreen() {
       </Card>
 
       {refund.timeline && refund.timeline.length > 0 ? (
-        <View style={styles.timeline}>
-          <Text style={styles.timelineTitle}>Timeline</Text>
+        <Card style={styles.timeline}>
+          <View style={styles.cardHeaderRow}>
+            <Ionicons name="time-outline" size={16} color={colors.primary} />
+            <Text style={styles.timelineTitle}>Timeline</Text>
+          </View>
           {refund.timeline.map((e, i) => (
-            <Text key={i} style={styles.timelineItem}>
-              {new Date(e.at).toLocaleString()} — {e.label}
-              {e.note ? `: ${e.note}` : ''}
-            </Text>
+            <View key={i} style={styles.timelineRow}>
+              <Ionicons name="ellipse" size={6} color={colors.primary} style={styles.timelineDot} />
+              <Text style={styles.timelineItem}>
+                {new Date(e.at).toLocaleString()} — {e.label}
+                {e.note ? `: ${e.note}` : ''}
+              </Text>
+            </View>
           ))}
-        </View>
+        </Card>
       ) : null}
 
       <Button label="View order" variant="outline" onPress={() => router.push(`/orders/${refund.orderId}`)} />
@@ -133,9 +148,24 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surfaceMuted },
   content: { padding: spacing.xl, paddingBottom: spacing.xxxl },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  status: { ...typography.bodySm, textTransform: 'capitalize', marginBottom: spacing.lg },
+  statusPill: {
+    flexDirection: 'row',
+    alignSelf: 'flex-start',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.primaryLight,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    marginBottom: spacing.lg,
+  },
+  statusPillText: { fontSize: 12, fontWeight: '700', color: colors.primary, textTransform: 'capitalize' },
+  cardHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   flow: { gap: spacing.sm, marginBottom: spacing.lg },
   flowStep: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     padding: spacing.md,
     borderRadius: radius.md,
     borderWidth: 1,
@@ -152,8 +182,10 @@ const styles = StyleSheet.create({
   approved: { color: colors.accent, fontWeight: '600' },
   rejected: { color: colors.destructive, marginTop: spacing.xs },
   processed: { color: colors.accentDark, marginTop: spacing.xs },
-  timeline: { marginBottom: spacing.xl, gap: spacing.xs },
-  timelineTitle: { fontWeight: '600', marginBottom: spacing.sm },
-  timelineItem: { ...typography.caption, color: colors.slate700 },
+  timeline: { marginBottom: spacing.xl, gap: spacing.sm },
+  timelineTitle: { fontWeight: '600' },
+  timelineRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  timelineDot: { marginTop: 5 },
+  timelineItem: { ...typography.caption, color: colors.slate700, flex: 1 },
   btnSpaced: { marginTop: spacing.sm },
 });

@@ -64,7 +64,11 @@ export default function TabsLayout() {
       />
       <Tabs.Screen
         name="orders"
-        options={{ title: 'Orders', tabBarIcon: tabIcon('receipt-outline') }}
+        options={{
+          title: 'Orders',
+          tabBarIcon: tabIcon('receipt-outline'),
+          headerRight: () => <NotificationBell />,
+        }}
       />
       <Tabs.Screen
         name="wallet"

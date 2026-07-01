@@ -41,6 +41,8 @@ export function NotificationListItem({
   return (
     <Pressable
       onPress={handlePress}
+      accessibilityRole="button"
+      accessibilityLabel={`${notification.read ? '' : 'Unread. '}${notification.title}. ${notification.body}`}
       style={({ pressed }) => [
         styles.card,
         !notification.read && styles.unread,

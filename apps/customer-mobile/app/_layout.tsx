@@ -4,7 +4,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { Pressable } from 'react-native';
+import { Alert, Pressable, Text } from 'react-native';
 
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -434,6 +434,18 @@ export default function RootLayout() {
             headerLeft: () => (
               <Pressable onPress={handleHeaderBack} hitSlop={10}>
                 <Ionicons name="chevron-back" size={26} color={colors.primary} />
+              </Pressable>
+            ),
+            headerRight: () => (
+              <Pressable
+                onPress={() => Alert.alert('Rewards history', 'Coming soon.')}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="View rewards history"
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+              >
+                <Ionicons name="time-outline" size={18} color={colors.primary} />
+                <Text style={{ color: colors.primary, fontWeight: '600', fontSize: 14 }}>History</Text>
               </Pressable>
             ),
           }}

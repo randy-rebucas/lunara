@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -21,6 +22,7 @@ export default function OnboardingProfileScreen() {
   const [checking, setChecking] = useState(true);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -53,6 +55,7 @@ export default function OnboardingProfileScreen() {
         body: JSON.stringify({
           firstName: firstName.trim(),
           lastName: lastName.trim(),
+          ...(email.trim() ? { email: email.trim() } : {}),
         }),
       });
       const status = await fetchOnboardingStatus(apiFetch);
@@ -67,48 +70,92 @@ export default function OnboardingProfileScreen() {
   if (checking) return null;
 
   return (
-    <Screen scroll>
-      <View style={styles.header}>
-        <BrandMark size="sm" />
-      </View>
-
-      <Card elevated style={styles.card}>
-        <OnboardingProgress current="profile" />
-        <Text style={styles.title}>Complete your profile</Text>
-        <Text style={styles.sub}>Tell us your name so we can personalize your orders</Text>
-
-        <View style={styles.nameRow}>
-          <Input
-            style={styles.nameField}
-            placeholder="First name"
-            value={firstName}
-            onChangeText={setFirstName}
-          />
-          <Input
-            style={styles.nameField}
-            placeholder="Last name"
-            value={lastName}
-            onChangeText={setLastName}
-          />
+    <Screen scroll padded={false}>
+      <View style={styles.formSection}>
+        <View style={styles.header}>
+          <BrandMark size="sm" />
         </View>
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-        <Button
-          label={submitting ? 'Saving…' : 'Continue'}
-          onPress={handleSubmit}
-          disabled={submitting}
-        />
-      </Card>
+        <Card elevated style={styles.card}>
+          <OnboardingProgress current="profile" />
+
+          <Text style={styles.title}>Tell us about you</Text>
+          <Text style={styles.sub}>We'll use this to personalize your experience</Text>
+
+          <Text style={styles.inputLabel}>First name</Text>
+          <Input
+            style={styles.field}
+            placeholder="Juan"
+            value={firstName}
+            onChangeText={setFirstName}
+            autoCapitalize="words"
+          />
+
+          <Text style={styles.inputLabel}>Last name</Text>
+          <Input
+            style={styles.field}
+            placeholder="Dela Cruz"
+            value={lastName}
+            onChangeText={setLastName}
+            autoCapitalize="words"
+          />
+
+          <Text style={styles.inputLabel}>
+            Email address <Text style={styles.optional}>(optional)</Text>
+          </Text>
+          <Input
+            style={styles.field}
+            placeholder="juan@email.com"
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoComplete="email"
+          />
+          <View style={styles.emailHintRow}>
+            <Ionicons name="information-circle-outline" size={13} color={colors.muted} />
+            <Text style={styles.emailHint}>
+              We'll send updates about your orders and promotions.
+            </Text>
+          </View>
+
+          {error ? (
+            <View style={styles.errorRow}>
+              <Ionicons name="alert-circle-outline" size={14} color={colors.destructive} />
+              <Text style={styles.error}>{error}</Text>
+            </View>
+          ) : null}
+
+          <Button
+            label={submitting ? 'Saving…' : 'Continue'}
+            onPress={handleSubmit}
+            disabled={submitting}
+            style={styles.submitBtn}
+          />
+        </Card>
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  header: { marginBottom: spacing.xxl },
-  card: { borderWidth: 0, gap: spacing.md },
-  title: { ...typography.title, fontSize: 22, marginTop: spacing.lg },
-  sub: { ...typography.bodySm, marginBottom: spacing.lg },
-  nameRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md },
-  nameField: { flex: 1 },
-  error: { color: colors.destructive, marginBottom: spacing.sm, fontSize: 14 },
+  formSection: { padding: spacing.xl, paddingBottom: spacing.xxxl },
+  header: { marginBottom: spacing.xl },
+  card: { borderWidth: 0, gap: spacing.xs },
+  title: { ...typography.title, fontSize: 22, marginTop: spacing.md },
+  sub: { ...typography.bodySm, color: colors.slate700, marginBottom: spacing.md },
+  inputLabel: { fontSize: 12, fontWeight: '600', color: colors.muted, marginBottom: spacing.xs },
+  optional: { fontWeight: '400', color: colors.muted },
+  field: { marginBottom: spacing.md },
+  emailHintRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.xs,
+    marginTop: -spacing.xs,
+    marginBottom: spacing.md,
+  },
+  emailHint: { ...typography.caption, color: colors.muted, flex: 1 },
+  errorRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  error: { color: colors.destructive, fontSize: 13, flex: 1 },
+  submitBtn: { marginTop: spacing.sm },
 });

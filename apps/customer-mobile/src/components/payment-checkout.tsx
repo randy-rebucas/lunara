@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
 import { PaymentMethod } from '@lunara/types';
@@ -7,7 +8,7 @@ import { PaymentMethodPicker } from './payment-method-picker';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { DataLoadState } from './data-load-state';
-import { colors, spacing, typography } from '../theme';
+import { colors, radius, spacing, typography } from '../theme';
 import type { CashTiming } from '@lunara/utils';
 import { getCustomerClientOrigin } from '../lib/client-origin';
 
@@ -146,12 +147,23 @@ export function PaymentCheckout({ orderId, onPaid }: PaymentCheckoutProps) {
   return (
     <View style={styles.container}>
       <Card style={styles.summary}>
-        <Text style={styles.summaryTitle}>Order summary</Text>
+        <View style={styles.cardHeaderRow}>
+          <Ionicons name="cart-outline" size={16} color={colors.primary} />
+          <Text style={styles.summaryTitle}>Order summary</Text>
+        </View>
         <Text style={styles.summaryMeta}>{order.bookingType.replace(/_/g, ' ')}</Text>
         <Text style={styles.total}>{formatCurrency(order.total)}</Text>
-        <Text style={styles.statusHint}>Status: {order.status.replace(/_/g, ' ')}</Text>
+        <View style={styles.statusRow}>
+          <View style={styles.statusPill}>
+            <Ionicons name="ellipse" size={6} color={colors.primary} />
+            <Text style={styles.statusHint}>{order.status.replace(/_/g, ' ')}</Text>
+          </View>
+        </View>
         {existingPayment?.receiptCode && existingPayment.status === 'pending' ? (
-          <Text style={styles.pendingRef}>Pending · ref {existingPayment.receiptCode}</Text>
+          <View style={styles.pendingRow}>
+            <Ionicons name="time-outline" size={13} color={colors.warning} />
+            <Text style={styles.pendingRef}>Pending · ref {existingPayment.receiptCode}</Text>
+          </View>
         ) : null}
       </Card>
 
@@ -164,7 +176,12 @@ export function PaymentCheckout({ orderId, onPaid }: PaymentCheckoutProps) {
         orderTotal={order.total}
       />
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? (
+        <View style={styles.errorRow}>
+          <Ionicons name="alert-circle-outline" size={15} color={colors.destructive} />
+          <Text style={styles.error}>{error}</Text>
+        </View>
+      ) : null}
 
       <Button
         label={
@@ -186,12 +203,25 @@ export function PaymentCheckout({ orderId, onPaid }: PaymentCheckoutProps) {
 
 const styles = StyleSheet.create({
   container: { gap: spacing.lg },
-  summary: { gap: spacing.xs },
+  summary: { gap: spacing.sm },
+  cardHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   summaryTitle: { ...typography.subheading },
-  summaryMeta: { ...typography.bodySm, textTransform: 'capitalize' },
-  total: { fontSize: 28, fontWeight: '700', color: colors.primary, marginTop: spacing.sm },
-  statusHint: { ...typography.caption, textTransform: 'capitalize' },
-  pendingRef: { fontSize: 12, color: colors.warning, marginTop: spacing.xs },
-  error: { color: colors.destructive, fontSize: 14 },
+  summaryMeta: { ...typography.bodySm, textTransform: 'capitalize', color: colors.slate700 },
+  total: { fontSize: 28, fontWeight: '800', color: colors.primary },
+  statusRow: { flexDirection: 'row' },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.primaryLight,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  statusHint: { fontSize: 11, fontWeight: '600', color: colors.primary, textTransform: 'capitalize' },
+  pendingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  pendingRef: { fontSize: 12, color: colors.warning },
+  errorRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  error: { color: colors.destructive, fontSize: 14, flex: 1 },
   payBtn: { marginTop: spacing.sm },
 });

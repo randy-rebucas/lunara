@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -78,7 +79,10 @@ export default function SupportTicketScreen() {
       contentContainerStyle={styles.content}
       useTopSafeInset={false}
     >
-      <Text style={styles.status}>Status: {ticket.status.replace(/_/g, ' ')}</Text>
+      <View style={styles.statusPill}>
+        <Ionicons name="time-outline" size={13} color={colors.primary} />
+        <Text style={styles.statusPillText}>{ticket.status.replace(/_/g, ' ')}</Text>
+      </View>
 
       {ticket.type === 'lost_item' ? (
         <>
@@ -95,10 +99,12 @@ export default function SupportTicketScreen() {
                     done && styles.flowStepDone,
                   ]}
                 >
-                  <Text style={styles.flowText}>
-                    {done ? '✓ ' : active ? '→ ' : '○ '}
-                    {step.label}
-                  </Text>
+                  <Ionicons
+                    name={done ? 'checkmark-circle' : active ? 'ellipse' : 'ellipse-outline'}
+                    size={16}
+                    color={done ? colors.accent : active ? colors.primary : colors.mutedForeground}
+                  />
+                  <Text style={styles.flowText}>{step.label}</Text>
                 </View>
               );
             })}
@@ -106,9 +112,12 @@ export default function SupportTicketScreen() {
 
           {ticket.outcome && ticket.outcome !== 'pending' ? (
             <Card style={styles.outcome}>
-              <Text style={styles.outcomeTitle}>
-                Outcome: {formatLostItemOutcome(ticket.outcome)}
-              </Text>
+              <View style={styles.cardHeaderRow}>
+                <Ionicons name="checkmark-done-outline" size={16} color={colors.accentDark} />
+                <Text style={styles.outcomeTitle}>
+                  Outcome: {formatLostItemOutcome(ticket.outcome)}
+                </Text>
+              </View>
               {(ticket.compensationAmount ?? 0) > 0 ? (
                 <Text style={styles.outcomeMeta}>
                   Compensation: ₱{ticket.compensationAmount}
@@ -121,7 +130,10 @@ export default function SupportTicketScreen() {
       ) : null}
 
       <Card style={styles.detail}>
-        <Text style={styles.detailTitle}>Your report</Text>
+        <View style={styles.cardHeaderRow}>
+          <Ionicons name="document-text-outline" size={16} color={colors.primary} />
+          <Text style={styles.detailTitle}>Your report</Text>
+        </View>
         <Text style={styles.detailBody}>{ticket.description}</Text>
         {ticket.missingItems && ticket.missingItems.length > 0 ? (
           <Text style={styles.detailMeta}>Items: {ticket.missingItems.join(', ')}</Text>
@@ -129,15 +141,21 @@ export default function SupportTicketScreen() {
       </Card>
 
       {ticket.timeline && ticket.timeline.length > 0 ? (
-        <View style={styles.timeline}>
-          <Text style={styles.timelineTitle}>Updates</Text>
+        <Card style={styles.timeline}>
+          <View style={styles.cardHeaderRow}>
+            <Ionicons name="time-outline" size={16} color={colors.primary} />
+            <Text style={styles.timelineTitle}>Updates</Text>
+          </View>
           {ticket.timeline.map((e, i) => (
-            <Text key={i} style={styles.timelineItem}>
-              {new Date(e.at).toLocaleString()} — {e.label}
-              {e.note ? `: ${e.note}` : ''}
-            </Text>
+            <View key={i} style={styles.timelineRow}>
+              <Ionicons name="ellipse" size={6} color={colors.primary} style={styles.timelineDot} />
+              <Text style={styles.timelineItem}>
+                {new Date(e.at).toLocaleString()} — {e.label}
+                {e.note ? `: ${e.note}` : ''}
+              </Text>
+            </View>
           ))}
-        </View>
+        </Card>
       ) : null}
 
       <Button label="All tickets" variant="outline" onPress={() => router.push('/support' as Href)} />
@@ -157,9 +175,24 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surfaceMuted },
   content: { padding: spacing.xl, paddingBottom: spacing.xxxl },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  status: { ...typography.bodySm, textTransform: 'capitalize', marginBottom: spacing.lg },
+  statusPill: {
+    flexDirection: 'row',
+    alignSelf: 'flex-start',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.primaryLight,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    marginBottom: spacing.lg,
+  },
+  statusPillText: { fontSize: 12, fontWeight: '700', color: colors.primary, textTransform: 'capitalize' },
+  cardHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   flow: { gap: spacing.sm, marginBottom: spacing.lg },
   flowStep: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     padding: spacing.md,
     borderRadius: radius.md,
     borderWidth: 1,
@@ -169,15 +202,17 @@ const styles = StyleSheet.create({
   flowStepActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
   flowStepDone: { borderColor: colors.accent + '33', backgroundColor: colors.accent + '11' },
   flowText: { fontSize: 14, fontWeight: '500', color: colors.foreground },
-  outcome: { marginBottom: spacing.lg, backgroundColor: colors.accent + '11' },
+  outcome: { marginBottom: spacing.lg, backgroundColor: colors.accent + '11', gap: spacing.xs },
   outcomeTitle: { fontWeight: '600', color: colors.accentDark },
   outcomeMeta: { ...typography.bodySm, marginTop: spacing.xs },
   detail: { gap: spacing.sm, marginBottom: spacing.lg },
   detailTitle: { fontWeight: '600' },
   detailBody: { ...typography.bodySm, color: colors.slate700 },
   detailMeta: { ...typography.caption },
-  timeline: { marginBottom: spacing.xl, gap: spacing.xs },
-  timelineTitle: { fontWeight: '600', marginBottom: spacing.sm },
-  timelineItem: { ...typography.caption, color: colors.slate700 },
+  timeline: { marginBottom: spacing.xl, gap: spacing.sm },
+  timelineTitle: { fontWeight: '600' },
+  timelineRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  timelineDot: { marginTop: 5 },
+  timelineItem: { ...typography.caption, color: colors.slate700, flex: 1 },
   btnSpaced: { marginTop: spacing.sm },
 });

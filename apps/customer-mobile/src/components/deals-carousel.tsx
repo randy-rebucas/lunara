@@ -90,6 +90,8 @@ export function DealsCarousel({ onDealPress }: DealsCarouselProps) {
     return (
       <Pressable
         onPress={() => handleDealPress(item)}
+        accessibilityRole="button"
+        accessibilityLabel={`${item.title}. ${formatDealDiscount(item)}. Code ${item.code}`}
         style={({ pressed }) => [
           styles.card,
           shadow.elevated,
@@ -97,47 +99,57 @@ export function DealsCarousel({ onDealPress }: DealsCarouselProps) {
           pressed && styles.cardPressed,
         ]}
       >
-        <View style={styles.cardTop}>
-          <View style={styles.badge}>
-            <Ionicons
-              name={item.isPersonal ? 'gift-outline' : 'pricetag'}
-              size={14}
-              color={accent}
-            />
-            <Text style={[styles.badgeText, { color: accent }]}>
-              {item.isPersonal ? 'Just for you' : 'Deal'}
-            </Text>
-          </View>
-          <View style={styles.cardTopActions}>
-            <Pressable
-              style={styles.shareBtn}
-              onPress={() => handleShareDeal(item)}
-              hitSlop={8}
-              accessibilityLabel="Share deal"
-            >
-              <Ionicons name="share-social-outline" size={18} color={colors.onPrimary} />
-            </Pressable>
-            <Text style={styles.discount}>{formatDealDiscount(item)}</Text>
-          </View>
+        <Ionicons name="sparkles" size={18} color="rgba(255,255,255,0.55)" style={styles.sparkle} />
+
+        <View style={styles.cardTopActions}>
+          <Pressable
+            style={styles.shareBtn}
+            onPress={() => handleShareDeal(item)}
+            hitSlop={8}
+            accessibilityLabel="Share deal"
+          >
+            <Ionicons name="share-social-outline" size={16} color={colors.onPrimary} />
+          </Pressable>
         </View>
 
-        <Text style={styles.title}>{item.title}</Text>
-        {item.description ? <Text style={styles.description}>{item.description}</Text> : null}
+        <View style={styles.cardBody}>
+          <View style={styles.cardTextCol}>
+            <View style={styles.badge}>
+              <Ionicons
+                name={item.isPersonal ? 'gift' : 'flame'}
+                size={13}
+                color={accent}
+              />
+              <Text style={[styles.badgeText, { color: accent }]}>
+                {item.isPersonal ? 'JUST FOR YOU' : 'HOT DEAL'}
+              </Text>
+            </View>
 
-        <View style={styles.cardFooter}>
-          <View style={styles.codeChip}>
-            <Text style={styles.codeLabel}>Code</Text>
-            <Text style={styles.code}>{item.code}</Text>
+            <Text style={styles.title}>{item.title}</Text>
+            <Text style={styles.description} numberOfLines={2}>
+              {item.description || formatDealDiscount(item)}
+            </Text>
+
+            <View style={styles.codeChip}>
+              <Text style={styles.codeLabel}>CODE</Text>
+              <Text style={styles.code}>{item.code}</Text>
+              <Ionicons name="copy-outline" size={14} color="rgba(255,255,255,0.85)" />
+            </View>
+
+            <View style={styles.ctaRow}>
+              <Text style={[styles.cta, { color: accent }]}>Book now</Text>
+              <Ionicons name="arrow-forward" size={15} color={accent} />
+            </View>
           </View>
-          <View style={styles.footerMeta}>
+
+          <View style={styles.tagCol}>
+            <View style={styles.tag}>
+              <Text style={[styles.tagValue, { color: accent }]}>{formatDealDiscount(item).split(' ')[0]}</Text>
+              <Text style={[styles.tagUnit, { color: accent }]}>OFF</Text>
+            </View>
             {minimum ? <Text style={styles.minimum}>{minimum}</Text> : null}
             {expiry ? <Text style={styles.expiry}>{expiry}</Text> : null}
           </View>
-        </View>
-
-        <View style={styles.ctaRow}>
-          <Text style={styles.cta}>Book now</Text>
-          <Ionicons name="arrow-forward" size={16} color={colors.onPrimary} />
         </View>
       </Pressable>
     );
@@ -227,19 +239,16 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
     padding: spacing.lg,
     marginRight: CARD_GAP,
-    minHeight: 168,
+    minHeight: 188,
+    overflow: 'hidden',
   },
   cardPressed: { opacity: 0.92 },
-  cardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.sm,
-  },
+  sparkle: { position: 'absolute', top: spacing.lg, right: spacing.xl + 64 },
   cardTopActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
+    position: 'absolute',
+    top: spacing.md,
+    right: spacing.md,
+    zIndex: 1,
   },
   shareBtn: {
     width: 32,
@@ -249,25 +258,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  cardBody: { flexDirection: 'row', flex: 1 },
+  cardTextCol: { flex: 1, paddingRight: spacing.sm },
   badge: {
     flexDirection: 'row',
+    alignSelf: 'flex-start',
     alignItems: 'center',
     gap: spacing.xs,
     backgroundColor: colors.surface,
     paddingHorizontal: spacing.sm + 2,
     paddingVertical: spacing.xs + 2,
     borderRadius: radius.full,
+    marginBottom: spacing.md,
   },
   badgeText: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
-  discount: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: colors.onPrimary,
-    letterSpacing: -0.5,
-  },
   title: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 19,
+    fontWeight: '800',
     color: colors.onPrimary,
     marginBottom: spacing.xs,
   },
@@ -277,19 +284,19 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.88)',
     marginBottom: spacing.md,
   },
-  cardFooter: {
+  codeChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    alignSelf: 'flex-start',
     gap: spacing.sm,
-    marginTop: 'auto',
-    marginBottom: spacing.md,
-  },
-  codeChip: {
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+    borderStyle: 'dashed',
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm - 2,
+    marginBottom: spacing.md,
   },
   codeLabel: {
     fontSize: 10,
@@ -304,11 +311,21 @@ const styles = StyleSheet.create({
     color: colors.onPrimary,
     letterSpacing: 1,
   },
-  footerMeta: {
-    flex: 1,
+  tagCol: {
     alignItems: 'flex-end',
-    gap: 2,
+    justifyContent: 'flex-end',
+    gap: spacing.xs,
   },
+  tag: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    transform: [{ rotate: '6deg' }],
+  },
+  tagValue: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
+  tagUnit: { fontSize: 12, fontWeight: '700', letterSpacing: 1, marginTop: -2 },
   minimum: {
     fontSize: 11,
     color: 'rgba(255,255,255,0.82)',
@@ -324,9 +341,15 @@ const styles = StyleSheet.create({
   ctaRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
     gap: spacing.xs,
+    backgroundColor: colors.surface,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm - 2,
+    marginTop: 'auto',
   },
-  cta: { fontSize: 13, fontWeight: '600', color: colors.onPrimary },
+  cta: { fontSize: 13, fontWeight: '700', color: colors.foreground },
   dots: {
     flexDirection: 'row',
     justifyContent: 'center',

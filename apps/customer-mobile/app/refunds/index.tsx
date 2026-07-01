@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
@@ -6,7 +7,9 @@ import { Card } from '../../src/components/ui/card';
 import { DataLoadState } from '../../src/components/data-load-state';
 import { KeyboardSafeScrollView } from '../../src/components/ui/keyboard-safe-scroll-view';
 import { useAuthStore } from '../../src/store/auth';
-import { colors, spacing, typography } from '../../src/theme';
+import { colors, radius, spacing, typography } from '../../src/theme';
+
+const RESOLVED_STATUSES = new Set(['processed', 'closed', 'approved']);
 
 interface RefundRow {
   _id: string;
@@ -73,20 +76,54 @@ export default function RefundsListScreen() {
       {!loading && !error ? (
         items.length === 0 ? (
           <Card muted style={styles.empty}>
-            <Text style={styles.emptyText}>No refund requests yet.</Text>
+            <View style={styles.emptyIcon}>
+              <Ionicons name="receipt-outline" size={28} color={colors.primary} />
+            </View>
+            <Text style={styles.emptyTitle}>No refund requests yet</Text>
+            <Text style={styles.emptyText}>
+              If something goes wrong with an order, you can request a refund from the order
+              details screen.
+            </Text>
           </Card>
         ) : (
           <View style={styles.list}>
-            {items.map((r) => (
-              <Pressable key={r._id} onPress={() => router.push(`/refunds/${r._id}` as Href)}>
-                <Card style={styles.row}>
-                  <Text style={styles.rowTitle}>Order …{r.orderId.slice(-6)}</Text>
-                  <Text style={styles.rowMeta}>
-                    {formatRefundStatus(r.status)} · ₱{r.requestedAmount}
-                  </Text>
-                </Card>
-              </Pressable>
-            ))}
+            {items.map((r) => {
+              const resolved = RESOLVED_STATUSES.has(r.status);
+              return (
+                <Pressable
+                  key={r._id}
+                  onPress={() => router.push(`/refunds/${r._id}` as Href)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Order ${r.orderId.slice(-6)}, ${formatRefundStatus(r.status)}, ₱${r.requestedAmount}`}
+                  style={({ pressed }) => pressed && styles.rowPressed}
+                >
+                  <Card style={styles.row}>
+                    <View style={styles.rowIcon}>
+                      <Ionicons name="cash-outline" size={20} color={colors.primary} />
+                    </View>
+                    <View style={styles.rowCopy}>
+                      <Text style={styles.rowTitle}>Order …{r.orderId.slice(-6)}</Text>
+                      <Text style={styles.rowAmount}>₱{r.requestedAmount}</Text>
+                    </View>
+                    <View style={styles.rowRight}>
+                      <View
+                        style={[styles.statusPill, resolved ? styles.statusPillResolved : styles.statusPillOpen]}
+                      >
+                        <Text
+                          style={[
+                            styles.statusPillText,
+                            { color: resolved ? colors.accentDark : colors.primary },
+                          ]}
+                        >
+                          {formatRefundStatus(r.status)}
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
+                    </View>
+                  </Card>
+                </Pressable>
+              );
+            })}
           </View>
         )
       ) : null}
@@ -96,12 +133,47 @@ export default function RefundsListScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surfaceMuted },
-  content: { padding: spacing.xl, paddingBottom: spacing.xxxl },
+  content: { flexGrow: 1, padding: spacing.xl, paddingBottom: spacing.xxxl },
   sub: { ...typography.bodySm, marginBottom: spacing.lg },
   list: { gap: spacing.sm },
-  row: { gap: spacing.xs },
+  rowPressed: { opacity: 0.9 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  rowIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.full,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rowCopy: { flex: 1, gap: 2 },
   rowTitle: { fontSize: 16, fontWeight: '600', color: colors.foreground },
-  rowMeta: { ...typography.bodySm, textTransform: 'capitalize' },
-  empty: { padding: spacing.xl, alignItems: 'center' },
-  emptyText: { ...typography.bodySm, color: colors.muted },
+  rowAmount: { ...typography.caption },
+  rowRight: { alignItems: 'flex-end', gap: spacing.xs },
+  statusPill: {
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  statusPillOpen: { backgroundColor: colors.primaryLight },
+  statusPillResolved: { backgroundColor: colors.accentLight },
+  statusPillText: { fontSize: 11, fontWeight: '700', textTransform: 'capitalize' },
+  empty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+    borderWidth: 0,
+  },
+  emptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: radius.full,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
+  },
+  emptyTitle: { ...typography.subheading, marginBottom: spacing.xs },
+  emptyText: { ...typography.bodySm, color: colors.muted, textAlign: 'center' },
 });

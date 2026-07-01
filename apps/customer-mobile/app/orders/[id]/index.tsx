@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -7,7 +8,6 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { KeyboardSafeScrollView } from '../../../src/components/ui/keyboard-safe-scroll-view';
@@ -21,12 +21,15 @@ import {
   formatPaymentStatusLabel,
 } from '@lunara/utils';
 import { Button } from '../../../src/components/ui/button';
+import { Card } from '../../../src/components/ui/card';
+import { Input } from '../../../src/components/ui/input';
 import { colors, radius, spacing, typography } from '../../../src/theme';
 import { useOrderTrackingSocket } from '../../../src/hooks/use-order-tracking-socket';
 import { DataLoadState } from '../../../src/components/data-load-state';
 import { OrderTimeline } from '../../../src/components/order-timeline';
 import { HandoffQrCard } from '../../../src/components/handoff-qr-card';
 import { branchTypeLabel } from '../../../src/components/nearest-branches';
+import { formatOrderNumber } from '../../../src/lib/active-order';
 import { useAuthStore } from '../../../src/store/auth';
 
 interface OrderDetail {
@@ -248,23 +251,44 @@ export default function OrderTrackScreen() {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 44 : 0}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
-      <View style={styles.statusRow}>
-        <Text style={styles.status}>{timeline.currentStepLabel}</Text>
-        {socketLive ? <Text style={styles.live}>● Live</Text> : null}
-      </View>
-      <Text style={styles.meta}>
-        {order.bookingType.replace(/_/g, ' ')} · {formatCurrency(order.total)}
-        {order.estimatedWeightKg ? ` · ~${order.estimatedWeightKg} kg` : ''}
-      </Text>
+      <Card elevated style={styles.heroCard}>
+        <View style={styles.heroGlow} />
+        <View style={styles.statusRow}>
+          <View style={styles.statusIcon}>
+            <Ionicons name="shirt-outline" size={20} color={colors.onPrimary} />
+          </View>
+          <View style={styles.statusTextCol}>
+            <Text style={styles.orderNumber}>{formatOrderNumber(order._id)}</Text>
+            <Text style={styles.status}>{timeline.currentStepLabel}</Text>
+          </View>
+          {socketLive ? (
+            <View style={styles.livePill}>
+              <View style={styles.liveDot} />
+              <Text style={styles.live}>Live</Text>
+            </View>
+          ) : null}
+        </View>
 
-      <View style={styles.progressTrack}>
-        <View style={[styles.progressFill, { width: `${timeline.progressPercent}%` }]} />
-      </View>
-      <Text style={styles.progressLabel}>{timeline.progressPercent}% complete</Text>
+        <View style={styles.metaRow}>
+          <Ionicons name="pricetag-outline" size={13} color={colors.mutedForeground} />
+          <Text style={styles.meta}>
+            {order.bookingType.replace(/_/g, ' ')} · {formatCurrency(order.total)}
+            {order.estimatedWeightKg ? ` · ~${order.estimatedWeightKg} kg` : ''}
+          </Text>
+        </View>
+
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: `${timeline.progressPercent}%` }]} />
+        </View>
+        <Text style={styles.progressLabel}>{timeline.progressPercent}% complete</Text>
+      </Card>
 
       {order.status === OrderStatus.PENDING && (
-        <View style={styles.pendingCard}>
-          <Text style={styles.pendingTitle}>Payment required</Text>
+        <Card style={styles.pendingCard}>
+          <View style={styles.cardHeaderRow}>
+            <Ionicons name="card-outline" size={18} color={colors.warning} />
+            <Text style={styles.pendingTitle}>Payment required</Text>
+          </View>
           <Text style={styles.pendingText}>
             Complete payment to move your order to pending dispatch.
           </Text>
@@ -273,23 +297,29 @@ export default function OrderTrackScreen() {
             onPress={() => router.push(`/checkout/${id}` as Href)}
             style={styles.pendingBtn}
           />
-        </View>
+        </Card>
       )}
 
       {awaitingBranch && (
-        <View style={styles.banner}>
-          <Text style={styles.bannerTitle}>Assigning partner branch</Text>
+        <Card style={styles.banner}>
+          <View style={styles.cardHeaderRow}>
+            <Ionicons name="sync-outline" size={18} color={colors.warning} />
+            <Text style={styles.bannerTitle}>Assigning partner branch</Text>
+          </View>
           <Text style={styles.bannerText}>
             {isCashPending
               ? `Booking confirmed. Pay ${formatCurrency(order.total)} in cash on ${order.cashTiming === 'delivery' ? 'delivery' : 'pickup'}. Lunara is assigning your partner branch.`
               : 'Payment received. Lunara HQ is dispatching your order to the best partner laundry shop.'}
           </Text>
-        </View>
+        </Card>
       )}
 
       {order.paymentMethod ? (
-        <View style={styles.paymentCard}>
-          <Text style={styles.paymentTitle}>Payment</Text>
+        <Card style={styles.paymentCard}>
+          <View style={styles.cardHeaderRow}>
+            <Ionicons name="wallet-outline" size={16} color={colors.primary} />
+            <Text style={styles.paymentTitle}>Payment</Text>
+          </View>
           <Text style={styles.paymentLine}>
             {formatPaymentMethodLabel(order.paymentMethod)}
             {order.cashTiming ? ` · ${formatCashTimingLabel(order.cashTiming)}` : ''}
@@ -302,39 +332,52 @@ export default function OrderTrackScreen() {
           {order.paymentReceiptCode ? (
             <Text style={styles.paymentRef}>Ref {order.paymentReceiptCode}</Text>
           ) : null}
-        </View>
+        </Card>
       ) : null}
 
       {hasBranch && (
-        <View style={styles.branchCard}>
-          <Text style={styles.branchLabel}>Assigned partner branch</Text>
+        <Card style={styles.branchCard}>
+          <View style={styles.cardHeaderRow}>
+            <Ionicons name="storefront-outline" size={16} color={colors.primaryDark} />
+            <Text style={styles.branchLabel}>Assigned partner branch</Text>
+          </View>
           <Text style={styles.branchName}>{order.branchName}</Text>
           {order.branchCode ? <Text style={styles.branchCode}>{order.branchCode}</Text> : null}
           <Text style={styles.branchHint}>{branchTypeLabel('partner_shop')}</Text>
-        </View>
+        </Card>
       )}
 
       {notifications.length > 0 && (
-        <View style={styles.notifCard}>
+        <Card style={styles.notifCard}>
           <Text style={styles.sectionTitle}>Updates</Text>
           {notifications.slice(0, 5).map((n) => (
-            <Text key={n.id} style={styles.notifLine}>
-              · {n.message}
-            </Text>
+            <View key={n.id} style={styles.notifRow}>
+              <Ionicons name="ellipse" size={6} color={colors.primary} style={styles.notifDot} />
+              <Text style={styles.notifLine}>{n.message}</Text>
+            </View>
           ))}
-        </View>
+        </Card>
       )}
 
       {location && (
-        <View style={styles.locationCard}>
-          <Text style={styles.sectionTitle}>Rider location</Text>
+        <Card muted style={styles.locationCard}>
+          <View style={styles.cardHeaderRow}>
+            <Ionicons name="navigate-outline" size={16} color={colors.primary} />
+            <Text style={styles.sectionTitleInline}>Rider location</Text>
+          </View>
           <Text style={styles.locationText}>
             {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
           </Text>
-          <Pressable onPress={() => openMaps(location.lat, location.lng)} style={styles.mapsLink}>
-            <Text style={styles.mapsLinkText}>Open in maps →</Text>
+          <Pressable
+            onPress={() => openMaps(location.lat, location.lng)}
+            style={styles.mapsLink}
+            accessibilityRole="button"
+            accessibilityLabel="Open rider location in maps"
+          >
+            <Text style={styles.mapsLinkText}>Open in maps</Text>
+            <Ionicons name="open-outline" size={14} color={colors.primary} />
           </Pressable>
-        </View>
+        </Card>
       )}
 
       {showPickupQr && id ? (
@@ -346,10 +389,13 @@ export default function OrderTrackScreen() {
       ) : null}
 
       {showDeliveryActions && deliveryUi?.needsVerify && (
-        <View style={styles.actionCard}>
-          <Text style={styles.actionTitle}>Confirm you received laundry</Text>
+        <Card style={styles.actionCard}>
+          <View style={styles.cardHeaderRow}>
+            <Ionicons name="checkmark-circle-outline" size={18} color={colors.primary} />
+            <Text style={styles.actionTitle}>Confirm you received laundry</Text>
+          </View>
           <Text style={styles.actionHint}>Last 4 digits of your mobile number</Text>
-          <TextInput
+          <Input
             style={styles.input}
             placeholder="4-digit code"
             keyboardType="number-pad"
@@ -357,58 +403,67 @@ export default function OrderTrackScreen() {
             value={verifyCode}
             onChangeText={setVerifyCode}
           />
-          <Pressable style={styles.actionBtn} onPress={handleVerify}>
-            <Text style={styles.actionBtnText}>Verify</Text>
-          </Pressable>
-        </View>
+          <Button label="Verify" onPress={handleVerify} style={styles.actionBtn} />
+        </Card>
       )}
 
       {showDeliveryActions && deliveryUi?.needsSign && (
-        <View style={styles.actionCard}>
-          <Text style={styles.actionTitle}>Sign for delivery</Text>
-          <TextInput
+        <Card style={styles.actionCard}>
+          <View style={styles.cardHeaderRow}>
+            <Ionicons name="create-outline" size={18} color={colors.primary} />
+            <Text style={styles.actionTitle}>Sign for delivery</Text>
+          </View>
+          <Input
             style={styles.input}
             placeholder="Your name"
             value={signatureName}
             onChangeText={setSignatureName}
           />
-          <Pressable style={styles.actionBtn} onPress={handleSign}>
-            <Text style={styles.actionBtnText}>Sign</Text>
-          </Pressable>
-        </View>
+          <Button label="Sign" onPress={handleSign} style={styles.actionBtn} />
+        </Card>
       )}
 
-      {deliveryError ? <Text style={styles.error}>{deliveryError}</Text> : null}
+      {deliveryError ? (
+        <View style={styles.errorRow}>
+          <Ionicons name="alert-circle-outline" size={14} color={colors.destructive} />
+          <Text style={styles.error}>{deliveryError}</Text>
+        </View>
+      ) : null}
 
       {(order.pickup?.receiptCode || order.delivery?.receiptCode) && (
         <View style={styles.receiptRow}>
           {order.pickup?.receiptCode ? (
-            <View style={styles.receiptCard}>
+            <Card muted style={styles.receiptCard}>
+              <Ionicons name="receipt-outline" size={16} color={colors.accentDark} />
               <Text style={styles.receiptLabel}>Pickup receipt</Text>
               <Text style={styles.receiptCode}>{order.pickup.receiptCode}</Text>
-            </View>
+            </Card>
           ) : null}
           {order.delivery?.receiptCode ? (
-            <View style={styles.receiptCard}>
+            <Card muted style={styles.receiptCard}>
+              <Ionicons name="receipt-outline" size={16} color={colors.accentDark} />
               <Text style={styles.receiptLabel}>Delivery receipt</Text>
               <Text style={styles.receiptCode}>{order.delivery.receiptCode}</Text>
               {order.delivery.signatureName ? (
                 <Text style={styles.receiptSigned}>Signed: {order.delivery.signatureName}</Text>
               ) : null}
-            </View>
+            </Card>
           ) : null}
         </View>
       )}
 
       {isTerminalCompleted && (
-        <View style={styles.doneCard}>
+        <Card style={styles.doneCard}>
+          <View style={styles.doneIcon}>
+            <Ionicons name="checkmark" size={22} color={colors.onPrimary} />
+          </View>
           <Text style={styles.doneTitle}>All done!</Text>
           <Text style={styles.doneSub}>Thanks for using Lunara.</Text>
           {canReview ? (
-            <Button label="Rate your experience" onPress={() => router.push(`/review/${id}`)} />
+            <Button label="Rate your experience" onPress={() => router.push(`/review/${id}`)} style={styles.doneAction} />
           ) : null}
           {hasReview && !canReview ? (
-            <Pressable onPress={() => router.push(`/review/${id}`)}>
+            <Pressable onPress={() => router.push(`/review/${id}`)} accessibilityRole="button">
               <Text style={styles.viewReviewLink}>View your published review →</Text>
             </Pressable>
           ) : null}
@@ -424,19 +479,24 @@ export default function OrderTrackScreen() {
             onPress={() => router.push(`/orders/${id}/refund` as Href)}
             style={styles.doneAction}
           />
-        </View>
+        </Card>
       )}
 
       {showLostItemHint && !isTerminalCompleted ? (
-        <Pressable onPress={() => router.push(`/orders/${id}/lost-item` as Href)}>
-          <Text style={styles.lostItemHint}>
-            Something missing? File a lost-item complaint →
-          </Text>
+        <Pressable
+          onPress={() => router.push(`/orders/${id}/lost-item` as Href)}
+          style={styles.lostItemPill}
+          accessibilityRole="button"
+        >
+          <Ionicons name="help-buoy-outline" size={14} color={colors.primary} />
+          <Text style={styles.lostItemHint}>Something missing? File a lost-item complaint</Text>
         </Pressable>
       ) : null}
 
       <Text style={styles.sectionTitle}>Progress</Text>
-      <OrderTimeline status={order.status} statusHistory={order.statusHistory} />
+      <Card style={styles.timelineCard}>
+        <OrderTimeline status={order.status} statusHistory={order.statusHistory} />
+      </Card>
     </KeyboardSafeScrollView>
   );
 }
@@ -445,50 +505,69 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surfaceMuted },
   content: { padding: spacing.xl, paddingBottom: spacing.xxxl + spacing.sm },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  status: { ...typography.title, flex: 1, letterSpacing: -0.3, textTransform: 'capitalize' },
-  live: { fontSize: 12, fontWeight: '600', color: colors.accent },
-  meta: { marginTop: spacing.sm - 2, color: colors.muted, fontSize: 15, textTransform: 'capitalize' },
+  heroCard: { borderWidth: 0, backgroundColor: colors.primaryLight, overflow: 'hidden' },
+  heroGlow: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: 'rgba(79, 70, 229, 0.08)',
+    top: -80,
+    right: -50,
+  },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  statusIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.lg,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusTextCol: { flex: 1 },
+  orderNumber: { fontSize: 12, fontWeight: '700', color: colors.primary, letterSpacing: 0.5 },
+  status: { ...typography.title, fontSize: 20, letterSpacing: -0.3, textTransform: 'capitalize', marginTop: 2 },
+  livePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.surface,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.accent },
+  live: { fontSize: 11, fontWeight: '700', color: colors.accentDark },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.lg },
+  meta: { color: colors.muted, fontSize: 13, textTransform: 'capitalize' },
   progressTrack: {
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
     height: 8,
     borderRadius: 4,
-    backgroundColor: colors.border,
+    backgroundColor: colors.surface,
     overflow: 'hidden',
   },
   progressFill: { height: '100%', backgroundColor: colors.primary },
   progressLabel: { marginTop: spacing.sm - 2, fontSize: 12, color: colors.muted },
+  cardHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   pendingCard: {
     marginTop: spacing.lg,
-    padding: spacing.lg - 2,
-    borderRadius: radius.lg,
     backgroundColor: colors.warningBg,
-    borderWidth: 1,
     borderColor: colors.warningBorder,
   },
   pendingTitle: { fontWeight: '600', color: colors.warning },
-  pendingText: { marginTop: spacing.sm - 2, fontSize: 13, color: colors.warning, lineHeight: 20 },
+  pendingText: { marginTop: spacing.sm, fontSize: 13, color: colors.warning, lineHeight: 20 },
   pendingBtn: { marginTop: spacing.md },
   banner: {
     marginTop: spacing.lg,
-    padding: spacing.lg - 2,
-    borderRadius: radius.lg,
     backgroundColor: colors.warningBg,
-    borderWidth: 1,
     borderColor: colors.warningBorder,
   },
   bannerTitle: { fontWeight: '600', color: colors.warning },
-  bannerText: { marginTop: spacing.xs, fontSize: 13, color: colors.muted, lineHeight: 20 },
-  paymentCard: {
-    marginTop: spacing.lg,
-    padding: spacing.md,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
+  bannerText: { marginTop: spacing.sm, fontSize: 13, color: colors.muted, lineHeight: 20 },
+  paymentCard: { marginTop: spacing.lg },
   paymentTitle: { fontSize: 14, fontWeight: '700', color: colors.foreground },
-  paymentLine: { marginTop: spacing.xs, fontSize: 13, color: colors.muted },
+  paymentLine: { marginTop: spacing.sm, fontSize: 13, color: colors.muted },
   paymentRef: {
     marginTop: spacing.sm,
     fontFamily: 'monospace',
@@ -498,98 +577,70 @@ const styles = StyleSheet.create({
   },
   branchCard: {
     marginTop: spacing.lg,
-    padding: spacing.lg - 2,
-    borderRadius: radius.lg,
     backgroundColor: colors.primaryLight,
-    borderWidth: 1,
     borderColor: colors.primaryBorder,
   },
   branchLabel: { ...typography.label, color: colors.primaryDark },
-  branchName: { marginTop: spacing.xs, fontSize: 18, fontWeight: '700', color: colors.slate800 },
+  branchName: { marginTop: spacing.sm, fontSize: 18, fontWeight: '700', color: colors.slate800 },
   branchCode: { fontFamily: 'monospace', fontSize: 12, color: colors.primary, marginTop: 2 },
   branchHint: { marginTop: spacing.sm - 2, fontSize: 12, color: colors.muted },
-  notifCard: {
-    marginTop: spacing.lg,
-    padding: spacing.md,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  notifLine: { fontSize: 13, color: colors.slate700, marginTop: spacing.xs },
-  locationCard: {
-    marginTop: spacing.md,
-    padding: spacing.md,
-    borderRadius: radius.md,
-    backgroundColor: colors.surfaceMuted,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  locationText: { marginTop: spacing.xs, fontSize: 13, color: colors.slate700 },
-  mapsLink: { marginTop: spacing.sm },
+  notifCard: { marginTop: spacing.lg },
+  notifRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
+  notifDot: { marginTop: 1 },
+  notifLine: { flex: 1, fontSize: 13, color: colors.slate700 },
+  locationCard: { marginTop: spacing.lg, borderWidth: 0 },
+  sectionTitleInline: { ...typography.subheading, fontSize: 15 },
+  locationText: { marginTop: spacing.sm, fontSize: 13, color: colors.slate700 },
+  mapsLink: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: spacing.sm },
   mapsLinkText: { fontSize: 13, fontWeight: '600', color: colors.primary },
   actionCard: {
     marginTop: spacing.lg,
-    padding: spacing.lg - 2,
-    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: colors.primary,
-    backgroundColor: colors.surface,
+    borderColor: colors.primaryBorder,
   },
   actionTitle: { fontWeight: '600', fontSize: 16, color: colors.foreground },
   actionHint: { marginTop: spacing.xs, fontSize: 13, color: colors.muted },
-  input: {
-    marginTop: spacing.md - 2,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.sm,
-    padding: spacing.md,
-    backgroundColor: colors.surface,
-    fontSize: 16,
-    color: colors.foreground,
-  },
-  actionBtn: {
-    marginTop: spacing.md - 2,
-    backgroundColor: colors.primary,
-    padding: spacing.md,
-    borderRadius: radius.sm,
-    alignItems: 'center',
-  },
-  actionBtnText: { color: colors.onPrimary, fontWeight: '600' },
-  error: { marginTop: spacing.sm, color: colors.destructive, fontSize: 13 },
+  input: { marginTop: spacing.md },
+  actionBtn: { marginTop: spacing.md },
+  errorRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.sm },
+  error: { color: colors.destructive, fontSize: 13 },
   receiptRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg, flexWrap: 'wrap' },
-  receiptCard: {
-    flex: 1,
-    minWidth: 140,
-    padding: spacing.md,
-    borderRadius: radius.md,
-    backgroundColor: colors.accent + '11',
-    borderWidth: 1,
-    borderColor: colors.accent + '33',
-  },
-  receiptLabel: { fontSize: 11, fontWeight: '600', color: colors.muted },
-  receiptCode: { marginTop: spacing.xs, fontFamily: 'monospace', fontSize: 14, fontWeight: '600' },
-  receiptSigned: { marginTop: spacing.xs, fontSize: 11, color: colors.muted },
+  receiptCard: { flex: 1, minWidth: 140, gap: 2 },
+  receiptLabel: { fontSize: 11, fontWeight: '600', color: colors.muted, marginTop: spacing.xs },
+  receiptCode: { fontFamily: 'monospace', fontSize: 14, fontWeight: '600' },
+  receiptSigned: { fontSize: 11, color: colors.muted },
   doneCard: {
     marginTop: spacing.lg,
-    padding: spacing.lg,
-    borderRadius: radius.lg,
     backgroundColor: colors.primaryLight,
-    borderWidth: 1,
     borderColor: colors.primaryBorder,
     alignItems: 'center',
     gap: spacing.sm,
+  },
+  doneIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.full,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xs,
   },
   doneTitle: { fontSize: 18, fontWeight: '700', color: colors.primary },
   doneSub: { ...typography.bodySm, textAlign: 'center', marginBottom: spacing.sm },
   doneAction: { width: '100%' },
   viewReviewLink: { color: colors.primary, fontWeight: '600', fontSize: 14, marginVertical: spacing.sm },
-  lostItemHint: {
+  lostItemPill: {
+    flexDirection: 'row',
+    alignSelf: 'center',
+    alignItems: 'center',
+    gap: spacing.xs,
     marginTop: spacing.lg,
-    textAlign: 'center',
-    fontSize: 13,
-    color: colors.primary,
-    fontWeight: '600',
+    backgroundColor: colors.primaryLight,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
+  lostItemHint: { fontSize: 13, color: colors.primary, fontWeight: '600' },
   sectionTitle: { marginTop: spacing.xxl, ...typography.subheading, marginBottom: spacing.sm },
+  timelineCard: { borderWidth: 0 },
 });

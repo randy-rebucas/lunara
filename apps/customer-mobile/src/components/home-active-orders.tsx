@@ -9,7 +9,7 @@ import {
   formatOrderNumber,
 } from '../lib/active-order';
 import type { HomeOrderRow } from '../hooks/use-home-dashboard';
-import { colors, spacing, typography } from '../theme';
+import { colors, radius, spacing, typography } from '../theme';
 
 interface HomeActiveOrdersProps {
   orders: HomeOrderRow[];
@@ -54,15 +54,25 @@ export function HomeActiveOrders({ orders, loading }: HomeActiveOrdersProps) {
             const { currentStepLabel } = buildCustomerTimeline(order.status);
             return (
               <Card key={order._id} style={styles.orderCard}>
-                <View style={styles.orderTop}>
-                  <Text style={styles.orderNumber}>{formatOrderNumber(order._id)}</Text>
-                  <Text style={styles.orderType}>{order.bookingType.replace(/_/g, ' ')}</Text>
+                <View style={styles.orderRow}>
+                  <View style={styles.orderThumb}>
+                    <Ionicons name="shirt-outline" size={20} color={colors.primary} />
+                  </View>
+                  <View style={styles.orderMain}>
+                    <View style={styles.orderTop}>
+                      <Text style={styles.orderNumber}>{formatOrderNumber(order._id)}</Text>
+                      <Text style={styles.orderType}>{order.bookingType.replace(/_/g, ' ')}</Text>
+                    </View>
+                    <View style={styles.statusPill}>
+                      <Ionicons name="car-outline" size={11} color={colors.primary} />
+                      <Text style={styles.status}>{currentStepLabel}</Text>
+                    </View>
+                    <Text style={styles.meta}>
+                      {formatOrderStatusLabel(order.status)} ·{' '}
+                      {formatEstimatedDelivery(order.scheduledDeliveryAt)}
+                    </Text>
+                  </View>
                 </View>
-                <Text style={styles.status}>{currentStepLabel}</Text>
-                <Text style={styles.meta}>
-                  {formatOrderStatusLabel(order.status)} ·{' '}
-                  {formatEstimatedDelivery(order.scheduledDeliveryAt)}
-                </Text>
                 <Button
                   label="Track order"
                   variant="outline"
@@ -89,7 +99,17 @@ const styles = StyleSheet.create({
   title: { ...typography.subheading, fontSize: 17 },
   seeAll: { color: colors.primary, fontWeight: '600', fontSize: 14 },
   list: { gap: spacing.sm },
-  orderCard: { gap: spacing.xs },
+  orderCard: { gap: spacing.sm },
+  orderRow: { flexDirection: 'row', gap: spacing.md },
+  orderThumb: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.lg,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  orderMain: { flex: 1, gap: spacing.xs - 2 },
   orderTop: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -98,7 +118,17 @@ const styles = StyleSheet.create({
   },
   orderNumber: { fontFamily: 'monospace', fontWeight: '700', color: colors.primary },
   orderType: { ...typography.caption, textTransform: 'capitalize', flex: 1, textAlign: 'right' },
-  status: { ...typography.heading, fontSize: 16, marginTop: spacing.xs },
+  statusPill: {
+    flexDirection: 'row',
+    alignSelf: 'flex-start',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.primaryLight,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  status: { fontSize: 12, fontWeight: '700', color: colors.primary },
   meta: { ...typography.caption, textTransform: 'capitalize' },
   trackBtn: { marginTop: spacing.sm },
   emptyCard: { alignItems: 'center', paddingVertical: spacing.xxl, gap: spacing.sm },

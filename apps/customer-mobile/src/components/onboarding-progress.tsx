@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing, typography } from '../theme';
 
@@ -24,18 +25,18 @@ export function OnboardingProgress({ current }: OnboardingProgressProps) {
         return (
           <View key={step.key} style={styles.stepWrap}>
             <View style={styles.stepInner}>
-              <View
-                style={[
-                  styles.dot,
-                  done && styles.dotDone,
-                  active && styles.dotActive,
-                ]}
-              >
-                <Text style={[styles.dotText, (done || active) && styles.dotTextActive]}>
-                  {done ? '✓' : index + 1}
-                </Text>
+              <View style={[styles.dot, done && styles.dotDone, active && styles.dotActive]}>
+                {done ? (
+                  <Ionicons name="checkmark" size={14} color={colors.onPrimary} />
+                ) : (
+                  <Text style={[styles.dotText, active && styles.dotTextActive]}>
+                    {index + 1}
+                  </Text>
+                )}
               </View>
-              <Text style={[styles.label, active && styles.labelActive]}>{step.label}</Text>
+              <Text style={[styles.label, active && styles.labelActive, done && styles.labelDone]}>
+                {step.label}
+              </Text>
             </View>
             {index < steps.length - 1 ? (
               <View style={[styles.connector, done && styles.connectorDone]} />
@@ -50,32 +51,36 @@ export function OnboardingProgress({ current }: OnboardingProgressProps) {
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'center',
-    gap: spacing.xs,
+    marginBottom: spacing.sm,
   },
   stepWrap: { flexDirection: 'row', alignItems: 'center' },
-  stepInner: { alignItems: 'center', gap: spacing.xs },
+  stepInner: { alignItems: 'center', gap: 4, width: 56 },
   dot: {
-    width: 28,
-    height: 28,
+    width: 32,
+    height: 32,
     borderRadius: radius.full,
-    backgroundColor: colors.border,
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dotDone: { backgroundColor: colors.accent },
-  dotActive: { backgroundColor: colors.primary },
-  dotText: { fontSize: 12, fontWeight: '700', color: colors.mutedForeground },
+  dotDone: { backgroundColor: colors.accent, borderColor: colors.accent },
+  dotActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  dotText: { fontSize: 13, fontWeight: '700', color: colors.mutedForeground },
   dotTextActive: { color: colors.onPrimary },
-  label: { ...typography.caption, fontSize: 10 },
+  label: { ...typography.caption, fontSize: 10, color: colors.muted, textAlign: 'center' },
   labelActive: { fontWeight: '700', color: colors.foreground },
+  labelDone: { color: colors.accent, fontWeight: '600' },
   connector: {
-    width: spacing.lg,
-    height: 1,
+    width: 32,
+    height: 2,
+    borderRadius: 1,
     backgroundColor: colors.border,
-    marginHorizontal: spacing.xs,
-    marginBottom: spacing.lg,
+    marginBottom: 20,
+    marginHorizontal: 2,
   },
-  connectorDone: { backgroundColor: colors.accent + '66' },
+  connectorDone: { backgroundColor: colors.accent },
 });

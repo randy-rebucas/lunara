@@ -1,6 +1,6 @@
 import { Image, StyleSheet, View, type ViewStyle } from 'react-native';
 
-const brandIcon = require('../../../assets/logo.png');
+const brandIcon = require('../../../assets/icon.png');
 
 interface BrandMarkProps {
   size?: 'sm' | 'md' | 'lg';

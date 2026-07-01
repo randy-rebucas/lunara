@@ -1,9 +1,10 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useCallback } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { PaymentCheckout } from '../../../src/components/payment-checkout';
 import { KeyboardSafeScrollView } from '../../../src/components/ui/keyboard-safe-scroll-view';
-import { colors, spacing, typography } from '../../../src/theme';
+import { colors, radius, spacing, typography } from '../../../src/theme';
 
 export default function CheckoutScreen() {
   const router = useRouter();
@@ -19,6 +20,7 @@ export default function CheckoutScreen() {
   if (!orderId) {
     return (
       <View style={styles.centered}>
+        <Ionicons name="alert-circle-outline" size={32} color={colors.destructive} />
         <Text style={styles.error}>Order not found</Text>
       </View>
     );
@@ -30,6 +32,11 @@ export default function CheckoutScreen() {
       contentContainerStyle={styles.content}
       useTopSafeInset={false}
     >
+      <View style={styles.secureBadge}>
+        <Ionicons name="lock-closed" size={12} color={colors.accent} />
+        <Text style={styles.secureText}>Secure checkout</Text>
+      </View>
+
       <Text style={styles.sub}>Choose how you want to pay for this order</Text>
       <PaymentCheckout orderId={orderId} onPaid={handlePaid} />
     </KeyboardSafeScrollView>
@@ -39,7 +46,19 @@ export default function CheckoutScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surfaceMuted },
   content: { padding: spacing.xl, paddingBottom: spacing.xxxl },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  secureBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: spacing.xs,
+    backgroundColor: colors.accent + '15',
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 1,
+    marginBottom: spacing.md,
+  },
+  secureText: { fontSize: 11, fontWeight: '700', color: colors.accentDark },
   sub: { ...typography.bodySm, marginBottom: spacing.lg },
-  error: { color: colors.destructive },
+  error: { color: colors.destructive, fontSize: 14 },
 });

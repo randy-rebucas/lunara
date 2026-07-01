@@ -65,6 +65,17 @@ function addressHasCoords(address?: AddressOption | null) {
   return address?.latitude != null && address?.longitude != null;
 }
 
+function StepHeading({ step, title }: { step: BookingStep; title: string }) {
+  return (
+    <View style={styles.headingRow}>
+      <View style={styles.headingIcon}>
+        <Ionicons name={STEP_ICON[step]} size={16} color={colors.primary} />
+      </View>
+      <Text style={styles.heading}>{title}</Text>
+    </View>
+  );
+}
+
 interface BookingConfig {
   services: LaundryServiceOption[];
   addons: BookingAddonOption[];
@@ -72,6 +83,24 @@ interface BookingConfig {
   minWeightKg: number;
   maxWeightKg: number;
 }
+
+const STEP_ICON: Record<BookingStep, keyof typeof Ionicons.glyphMap> = {
+  service: 'shirt-outline',
+  address: 'location-outline',
+  schedule: 'calendar-outline',
+  weight: 'scale-outline',
+  addons: 'sparkles-outline',
+  review: 'receipt-outline',
+  confirm: 'checkmark-circle-outline',
+};
+
+const ADDON_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  fabric_softener: 'water-outline',
+  stain_treatment: 'color-wand-outline',
+  eco_wash: 'leaf-outline',
+  express_delivery: 'flash-outline',
+};
+const ADDON_ICON_FALLBACK: keyof typeof Ionicons.glyphMap = 'pricetag-outline';
 
 export default function BookScreen() {
   const insets = useSafeAreaInsets();
@@ -430,29 +459,40 @@ export default function BookScreen() {
 
           {step === 'service' && config && (
             <View>
-              <Text style={styles.heading}>Choose service</Text>
-              {config.services.map((s) => (
-                <Pressable
-                  key={s.type}
-                  style={[
-                    styles.option,
-                    form.bookingType === s.type && styles.optionSelected,
-                  ]}
-                  onPress={() => setForm((f) => ({ ...f, bookingType: s.type as BookingType }))}
-                >
-                  <Text style={styles.optionTitle}>{s.label}</Text>
-                  <Text style={styles.optionSub}>{s.description}</Text>
-                  <Text style={styles.optionPrice}>
-                    {formatCurrency(s.pricePerKg)} / kg · min {s.minWeightKg} kg
-                  </Text>
-                </Pressable>
-              ))}
+              <StepHeading step="service" title="Choose service" />
+              {config.services.map((s) => {
+                const selected = form.bookingType === s.type;
+                return (
+                  <Pressable
+                    key={s.type}
+                    style={({ pressed }) => [
+                      styles.option,
+                      selected && styles.optionSelected,
+                      pressed && styles.optionPressed,
+                    ]}
+                    onPress={() => setForm((f) => ({ ...f, bookingType: s.type as BookingType }))}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected }}
+                  >
+                    <View style={styles.optionTopRow}>
+                      <Text style={styles.optionTitle}>{s.label}</Text>
+                      {selected ? (
+                        <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                      ) : null}
+                    </View>
+                    <Text style={styles.optionSub}>{s.description}</Text>
+                    <Text style={styles.optionPrice}>
+                      {formatCurrency(s.pricePerKg)} / kg · min {s.minWeightKg} kg
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
           )}
 
           {step === 'address' && (
             <View>
-              <Text style={styles.heading}>Pickup address</Text>
+              <StepHeading step="address" title="Pickup address" />
               {addressesError ? <Text style={styles.error}>{addressesError}</Text> : null}
               {dispatchNote ? (
                 <View style={styles.infoBox}>
@@ -460,24 +500,34 @@ export default function BookScreen() {
                 </View>
               ) : null}
               {addresses.length === 0 ? (
-                <Pressable style={styles.option} onPress={() => router.push('/(tabs)/profile')}>
+                <Pressable
+                  style={({ pressed }) => [styles.option, pressed && styles.optionPressed]}
+                  onPress={() => router.push('/(tabs)/profile')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add address in Profile"
+                >
                   <Text style={styles.optionTitle}>Add address in Profile</Text>
                   <Text style={styles.optionSub}>
                     Save a pickup address with GPS so riders can navigate to you
                   </Text>
                 </Pressable>
               ) : (
-                addresses.map((a) => (
+                addresses.map((a) => {
+                  const selected = form.addressId === a._id;
+                  return (
                   <Pressable
                     key={a._id}
-                    style={[
+                    style={({ pressed }) => [
                       styles.option,
-                      form.addressId === a._id && styles.optionSelected,
+                      selected && styles.optionSelected,
                       !addressHasCoords(a) && styles.optionDisabled,
+                      pressed && styles.optionPressed,
                     ]}
                     onPress={() =>
                       setForm((f) => ({ ...f, addressId: a._id, scheduledPickupAt: '' }))
                     }
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected }}
                   >
                     <View style={styles.addressLabelRow}>
                       <Text style={styles.optionTitle}>{a.label}</Text>
@@ -485,6 +535,9 @@ export default function BookScreen() {
                         <View style={styles.defaultBadge}>
                           <Text style={styles.defaultBadgeText}>Default</Text>
                         </View>
+                      ) : null}
+                      {selected ? (
+                        <Ionicons name="checkmark-circle" size={18} color={colors.primary} style={styles.optionCheck} />
                       ) : null}
                     </View>
                     <Text style={styles.optionSub}>
@@ -498,7 +551,8 @@ export default function BookScreen() {
                       </Text>
                     )}
                   </Pressable>
-                ))
+                  );
+                })
               )}
               {form.addressId ? (
                 <NearestBranchesCard branches={nearestBranches} note={nearestNote} />
@@ -508,7 +562,7 @@ export default function BookScreen() {
 
           {step === 'schedule' && (
             <View>
-              <Text style={styles.heading}>Pickup time</Text>
+              <StepHeading step="schedule" title="Pickup time" />
               {availabilityError ? (
                 <View style={styles.errorBlock}>
                   <Text style={styles.error}>{availabilityError}</Text>
@@ -544,7 +598,7 @@ export default function BookScreen() {
 
           {step === 'weight' && (
             <View>
-              <Text style={styles.heading}>Estimate weight</Text>
+              <StepHeading step="weight" title="Estimate weight" />
               <Text style={styles.sub}>
                 We&apos;ll confirm actual weight at pickup. Min order{' '}
                 {formatCurrency(config?.minOrderAmount ?? BOOKING_MIN_ORDER_AMOUNT)}.
@@ -565,24 +619,32 @@ export default function BookScreen() {
               </View>
               <View style={styles.weightRow}>
                 <Pressable
+                  style={({ pressed }) => [styles.weightBtnCircle, pressed && styles.weightBtnPressed]}
                   onPress={() =>
                     setForm((f) => ({
                       ...f,
                       weightKg: Math.max(config?.minWeightKg ?? 1, f.weightKg - 1),
                     }))
                   }
+                  accessibilityRole="button"
+                  accessibilityLabel="Decrease weight by 1 kilogram"
+                  hitSlop={4}
                 >
-                  <Text style={styles.weightBtn}>−</Text>
+                  <Ionicons name="remove" size={22} color={colors.primary} />
                 </Pressable>
                 <Pressable
+                  style={({ pressed }) => [styles.weightBtnCircle, pressed && styles.weightBtnPressed]}
                   onPress={() =>
                     setForm((f) => ({
                       ...f,
                       weightKg: Math.min(config?.maxWeightKg ?? 50, f.weightKg + 1),
                     }))
                   }
+                  accessibilityRole="button"
+                  accessibilityLabel="Increase weight by 1 kilogram"
+                  hitSlop={4}
                 >
-                  <Text style={styles.weightBtn}>+</Text>
+                  <Ionicons name="add" size={22} color={colors.primary} />
                 </Pressable>
               </View>
               <Text style={styles.weightRange}>
@@ -593,7 +655,7 @@ export default function BookScreen() {
 
           {step === 'addons' && (
             <View>
-              <Text style={styles.heading}>Add-ons (optional)</Text>
+              <StepHeading step="addons" title="Add-ons (optional)" />
               {addons.length === 0 ? (
                 <Text style={styles.sub}>No add-ons available.</Text>
               ) : (
@@ -606,10 +668,11 @@ export default function BookScreen() {
                     <Pressable
                       key={a.id}
                       disabled={disabled}
-                      style={[
+                      style={({ pressed }) => [
                         styles.option,
                         selected && styles.optionSelected,
                         disabled && styles.optionDisabled,
+                        pressed && !disabled && styles.optionPressed,
                       ]}
                       onPress={() =>
                         setForm((f) => ({
@@ -619,15 +682,30 @@ export default function BookScreen() {
                             : [...f.addonIds, a.id],
                         }))
                       }
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: selected, disabled }}
                     >
                       <View style={styles.addonCardRow}>
                         {imageUri ? (
                           <Image source={{ uri: imageUri }} style={styles.addonImage} />
-                        ) : null}
+                        ) : (
+                          <View style={styles.addonImagePlaceholder}>
+                            <Ionicons
+                              name={ADDON_ICONS[a.id] ?? ADDON_ICON_FALLBACK}
+                              size={22}
+                              color={colors.primary}
+                            />
+                          </View>
+                        )}
                         <View style={styles.addonCardBody}>
                           <View style={styles.addonRow}>
                             <Text style={styles.optionTitle}>{a.label}</Text>
-                            <Text style={styles.addonPrice}>+{formatCurrency(a.price)}</Text>
+                            <View style={styles.addonRight}>
+                              <Text style={styles.addonPrice}>+{formatCurrency(a.price)}</Text>
+                              {selected ? (
+                                <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
+                              ) : null}
+                            </View>
                           </View>
                           <Text style={styles.optionSub}>{a.description}</Text>
                           {disabled ? (
@@ -646,7 +724,7 @@ export default function BookScreen() {
 
           {step === 'review' && activeQuote && (
             <View>
-              <Text style={styles.heading}>Price estimate</Text>
+              <StepHeading step="review" title="Price estimate" />
               <View style={styles.promoCard}>
                 <Text style={styles.promoTitle}>Promo code</Text>
                 {activeQuote.couponCode ? (
@@ -657,7 +735,14 @@ export default function BookScreen() {
                         <Text style={styles.promoAppliedSub}>{activeQuote.promotionTitle}</Text>
                       ) : null}
                     </View>
-                    <Pressable onPress={() => void removePromoCode()} disabled={promoLoading}>
+                    <Pressable
+                      onPress={() => void removePromoCode()}
+                      disabled={promoLoading}
+                      style={({ pressed }) => pressed && styles.linkPressed}
+                      accessibilityRole="button"
+                      accessibilityLabel="Remove promo code"
+                      hitSlop={6}
+                    >
                       <Text style={styles.promoRemove}>Remove</Text>
                     </Pressable>
                   </View>
@@ -720,7 +805,7 @@ export default function BookScreen() {
 
           {step === 'confirm' && activeQuote && (
             <View>
-              <Text style={styles.heading}>Confirm booking</Text>
+              <StepHeading step="confirm" title="Confirm booking" />
               <View style={styles.summaryCard}>
                 <Text style={styles.summaryLine}>
                   <Text style={styles.summaryMuted}>Service: </Text>
@@ -758,28 +843,21 @@ export default function BookScreen() {
           )}
 
           <View style={styles.actions}>
-            <Pressable style={styles.secondaryBtn} onPress={goBack}>
-              <Text style={styles.secondaryBtnText}>Back</Text>
-            </Pressable>
+            <Button label="Back" variant="outline" onPress={goBack} style={styles.secondaryBtn} />
             {step === 'confirm' ? (
-              <Pressable
-                style={[
-                  styles.primaryBtn,
-                  (loading || insufficientWallet) && styles.btnDisabled,
-                ]}
+              <Button
+                label={payButtonLabel()}
                 onPress={placeOrder}
                 disabled={loading || insufficientWallet}
-              >
-                <Text style={styles.primaryBtnText}>{payButtonLabel()}</Text>
-              </Pressable>
+                style={styles.primaryBtn}
+              />
             ) : (
-              <Pressable
-                style={[styles.primaryBtn, reviewBlocked && styles.btnDisabled]}
+              <Button
+                label="Continue"
                 onPress={goNext}
                 disabled={reviewBlocked}
-              >
-                <Text style={styles.primaryBtnText}>Continue</Text>
-              </Pressable>
+                style={styles.primaryBtn}
+              />
             )}
           </View>
         </ScrollView>
@@ -791,7 +869,16 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surfaceMuted },
   scroll: { flex: 1 },
   content: { padding: spacing.xl },
-  heading: { ...typography.heading, marginBottom: spacing.md },
+  headingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
+  headingIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: radius.md,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heading: { ...typography.heading },
   sub: { ...typography.bodySm, marginBottom: spacing.md },
   error: { color: colors.destructive, marginBottom: spacing.md },
   errorBlock: { marginBottom: spacing.md, gap: spacing.sm },
@@ -806,6 +893,9 @@ const styles = StyleSheet.create({
   },
   optionSelected: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
   optionDisabled: { opacity: 0.4 },
+  optionPressed: { opacity: 0.9 },
+  optionTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  optionCheck: { marginLeft: 'auto' },
   optionTitle: { fontWeight: '600', fontSize: 16, color: colors.foreground },
   optionSub: { marginTop: spacing.xs, fontSize: 13, color: colors.muted },
   optionPrice: { marginTop: spacing.sm - 2, fontSize: 13, color: colors.primary, fontWeight: '500' },
@@ -827,7 +917,16 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     backgroundColor: colors.muted,
   },
+  addonImagePlaceholder: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.md,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   addonRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  addonRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   addonPrice: { fontSize: 15, fontWeight: '600', color: colors.primary },
   loadInfo: {
     marginTop: spacing.md,
@@ -932,25 +1031,18 @@ const styles = StyleSheet.create({
   infoText: { fontSize: 13, color: colors.slate700, lineHeight: 20 },
   weightValue: { fontSize: 32, fontWeight: '700', color: colors.primary },
   weightRow: { flexDirection: 'row', justifyContent: 'center', gap: spacing.xxxl, marginBottom: spacing.lg },
-  weightBtn: { fontSize: 32, fontWeight: '600', color: colors.primary, padding: spacing.md },
+  weightBtnCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.full,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  weightBtnPressed: { opacity: 0.8 },
   actions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xxl },
-  secondaryBtn: {
-    flex: 1,
-    padding: spacing.lg - 2,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-  },
-  secondaryBtnText: { fontWeight: '600', color: colors.foreground },
-  primaryBtn: {
-    flex: 2,
-    backgroundColor: colors.primary,
-    padding: spacing.lg - 2,
-    borderRadius: radius.lg,
-    alignItems: 'center',
-  },
-  primaryBtnText: { color: colors.onPrimary, fontWeight: '600' },
+  secondaryBtn: { flex: 1 },
+  primaryBtn: { flex: 2 },
   btnDisabled: { opacity: 0.6 },
+  linkPressed: { opacity: 0.7 },
 });

@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { PaymentMethod } from '@lunara/types';
 import {
@@ -33,10 +34,16 @@ export function PaymentMethodPicker({
 
   return (
     <View style={styles.container}>
-      <Text style={styles.heading}>Choose payment method</Text>
+      <View style={styles.headingRow}>
+        <Ionicons name="card-outline" size={18} color={colors.primary} />
+        <Text style={styles.heading}>Choose payment method</Text>
+      </View>
       <Text style={styles.sub}>PayMongo, cash, or Lunara wallet</Text>
 
-      <Text style={styles.groupLabel}>PayMongo</Text>
+      <View style={styles.groupLabelRow}>
+        <Ionicons name="globe-outline" size={13} color={colors.muted} />
+        <Text style={styles.groupLabel}>PayMongo</Text>
+      </View>
       {paymongoOptions.map((opt) => (
         <SelectableOption
           key={opt.method}
@@ -47,7 +54,10 @@ export function PaymentMethodPicker({
         />
       ))}
 
-      <Text style={styles.groupLabel}>Cash</Text>
+      <View style={styles.groupLabelRow}>
+        <Ionicons name="cash-outline" size={13} color={colors.muted} />
+        <Text style={styles.groupLabel}>Cash</Text>
+      </View>
       <SelectableOption
         title="Cash"
         subtitle="Pay when we pick up or deliver your laundry"
@@ -61,10 +71,15 @@ export function PaymentMethodPicker({
               key={t}
               style={[styles.timingChip, cashTiming === t && styles.timingChipActive]}
               onPress={() => onCashTimingChange(t)}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: cashTiming === t }}
             >
-              <Text
-                style={[styles.timingChipText, cashTiming === t && styles.timingChipTextActive]}
-              >
+              <Ionicons
+                name={t === 'pickup' ? 'cube-outline' : 'bicycle-outline'}
+                size={13}
+                color={cashTiming === t ? colors.onPrimary : colors.muted}
+              />
+              <Text style={[styles.timingChipText, cashTiming === t && styles.timingChipTextActive]}>
                 {formatCashTimingLabel(t)}
               </Text>
             </Pressable>
@@ -72,7 +87,10 @@ export function PaymentMethodPicker({
         </View>
       )}
 
-      <Text style={styles.groupLabel}>Wallet</Text>
+      <View style={styles.groupLabelRow}>
+        <Ionicons name="wallet-outline" size={13} color={colors.muted} />
+        <Text style={styles.groupLabel}>Wallet</Text>
+      </View>
       <SelectableOption
         title="Lunara Wallet"
         subtitle={`Balance: ${formatCurrency(walletBalance)}`}
@@ -80,16 +98,17 @@ export function PaymentMethodPicker({
         onPress={() => onMethodChange(PaymentMethod.WALLET)}
       />
       {insufficientWallet && (
-        <Text style={styles.warning}>
-          Insufficient balance.{' '}
-          {onTopUpWallet ? (
-            <Text style={styles.link} onPress={onTopUpWallet}>
-              Top up wallet
-            </Text>
-          ) : (
-            'Top up your wallet first.'
-          )}
-        </Text>
+        <View style={styles.warningRow}>
+          <Ionicons name="alert-circle-outline" size={14} color={colors.warning} />
+          <Text style={styles.warning}>
+            Insufficient balance.{' '}
+            {onTopUpWallet ? (
+              <Text style={styles.link} onPress={onTopUpWallet}>Top up wallet</Text>
+            ) : (
+              'Top up your wallet first.'
+            )}
+          </Text>
+        </View>
       )}
     </View>
   );
@@ -97,19 +116,25 @@ export function PaymentMethodPicker({
 
 const styles = StyleSheet.create({
   container: { marginTop: spacing.sm },
-  heading: { ...typography.subheading, marginBottom: spacing.xs },
+  headingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs },
+  heading: { ...typography.subheading },
   sub: { ...typography.bodySm, marginBottom: spacing.md },
-  groupLabel: { ...typography.label, marginTop: spacing.sm, marginBottom: spacing.sm },
-  timingRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md - 2, paddingLeft: spacing.xs },
+  groupLabelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.md, marginBottom: spacing.sm },
+  groupLabel: { ...typography.label, color: colors.muted },
+  timingRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.xs, paddingLeft: spacing.xs },
   timingChip: {
-    paddingHorizontal: spacing.lg - 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radius.full,
     backgroundColor: colors.surfaceMuted,
   },
   timingChipActive: { backgroundColor: colors.primary },
   timingChipText: { fontSize: 13, fontWeight: '500', color: colors.muted },
-  timingChipTextActive: { color: colors.onPrimary },
-  warning: { fontSize: 13, color: colors.warning, marginBottom: spacing.sm },
+  timingChipTextActive: { color: colors.onPrimary, fontWeight: '600' },
+  warningRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs, marginTop: spacing.xs },
+  warning: { fontSize: 13, color: colors.warning, flex: 1 },
   link: { color: colors.primary, fontWeight: '600' },
 });
