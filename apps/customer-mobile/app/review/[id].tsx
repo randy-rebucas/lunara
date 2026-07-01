@@ -9,7 +9,7 @@ import { KeyboardSafeScrollView } from '../../src/components/ui/keyboard-safe-sc
 import { DataLoadState } from '../../src/components/data-load-state';
 import { useAuthStore } from '../../src/store/auth';
 import type { AppNotification } from '../../src/lib/notification-types';
-import { colors, spacing, typography } from '../../src/theme';
+import { colors, radius, spacing, typography } from '../../src/theme';
 
 interface ReviewData {
   _id: string;
@@ -23,6 +23,16 @@ interface ReviewStatus {
   review: ReviewData | null;
   orderStatus: string;
 }
+
+const STAR_COLOR = '#F59E0B';
+
+const RATING_LABELS: Record<number, string> = {
+  1: 'Poor',
+  2: 'Fair',
+  3: 'Good',
+  4: 'Great',
+  5: 'Excellent',
+};
 
 export default function OrderReviewScreen() {
   const router = useRouter();
@@ -101,10 +111,6 @@ export default function OrderReviewScreen() {
       useTopSafeInset={false}
       keyboardVerticalOffset={44}
     >
-      <Pressable onPress={() => router.back()} style={styles.backLink}>
-        <Text style={styles.backText}>← Back</Text>
-      </Pressable>
-
       <DataLoadState
         loading={loading}
         error={error && !status ? error : ''}
@@ -114,42 +120,76 @@ export default function OrderReviewScreen() {
 
       {!loading && status ? (
         <>
-          <Text style={styles.title}>Rate your laundry</Text>
-          <Text style={styles.sub}>
-            Your feedback helps Lunara improve service and partner quality.
-          </Text>
+          {/* Hero */}
+          <View style={styles.heroRow}>
+            <View style={styles.heroIcon}>
+              <Ionicons name="star-outline" size={28} color={colors.primary} />
+            </View>
+            <View style={styles.heroText}>
+              <Text style={styles.title}>Rate your laundry</Text>
+              <Text style={styles.sub}>
+                Your feedback helps Lunara improve service and partner quality.
+              </Text>
+            </View>
+          </View>
 
+          {/* Rating card */}
           <Card style={styles.card}>
-            <Text style={styles.label}>Your rating</Text>
-            <View style={styles.stars}>
-              {[1, 2, 3, 4, 5].map((value) => (
-                <Pressable
-                  key={value}
-                  onPress={() => showForm && setRating(value)}
-                  disabled={!showForm}
-                  hitSlop={8}
-                >
-                  <Ionicons
-                    name={value <= rating ? 'star' : 'star-outline'}
-                    size={36}
-                    color={value <= rating ? '#F59E0B' : colors.mutedForeground}
-                  />
-                </Pressable>
-              ))}
+            <View style={styles.cardHeaderRow}>
+              <Ionicons name="ribbon-outline" size={16} color={colors.primary} />
+              <Text style={styles.cardTitle}>Your rating</Text>
+            </View>
+
+            {/* Stars */}
+            <View style={styles.starsWrap}>
+              <View style={styles.stars}>
+                {[1, 2, 3, 4, 5].map((value) => (
+                  <Pressable
+                    key={value}
+                    onPress={() => showForm && setRating(value)}
+                    disabled={!showForm}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${value} star${value > 1 ? 's' : ''}`}
+                    accessibilityState={{ selected: value === rating }}
+                  >
+                    <Ionicons
+                      name={value <= rating ? 'star' : 'star-outline'}
+                      size={40}
+                      color={value <= rating ? STAR_COLOR : colors.border}
+                    />
+                  </Pressable>
+                ))}
+              </View>
+              {rating > 0 ? (
+                <Text style={styles.ratingLabel}>{RATING_LABELS[rating]}</Text>
+              ) : (
+                <Text style={styles.ratingPlaceholder}>Tap a star to rate</Text>
+              )}
             </View>
 
             {showForm ? (
               <>
-                <Input
-                  style={styles.comment}
-                  placeholder="Share more about your experience (optional)"
-                  value={comment}
-                  onChangeText={setComment}
-                  multiline
-                  numberOfLines={4}
-                  textAlignVertical="top"
-                />
-                {error ? <Text style={styles.inlineError}>{error}</Text> : null}
+                <View style={styles.commentWrap}>
+                  <Text style={styles.commentLabel}>Comments <Text style={styles.optional}>(optional)</Text></Text>
+                  <Input
+                    style={styles.comment}
+                    placeholder="Share more about your experience…"
+                    value={comment}
+                    onChangeText={setComment}
+                    multiline
+                    numberOfLines={4}
+                    textAlignVertical="top"
+                  />
+                </View>
+
+                {error ? (
+                  <View style={styles.errorRow}>
+                    <Ionicons name="alert-circle-outline" size={14} color={colors.destructive} />
+                    <Text style={styles.error}>{error}</Text>
+                  </View>
+                ) : null}
+
                 <Button
                   label={submitting ? 'Submitting…' : 'Submit review'}
                   onPress={handleSubmit}
@@ -158,16 +198,45 @@ export default function OrderReviewScreen() {
               </>
             ) : published ? (
               <>
-                <Text style={styles.thanks}>Thank you for your review!</Text>
+                {/* Published state */}
+                <View style={styles.thanksBadge}>
+                  <Ionicons name="checkmark-circle" size={20} color={colors.accent} />
+                  <Text style={styles.thanks}>Thank you for your review!</Text>
+                </View>
                 {published.comment ? (
-                  <Text style={styles.publishedComment}>{published.comment}</Text>
+                  <Card style={styles.publishedCard}>
+                    <View style={styles.cardHeaderRow}>
+                      <Ionicons name="chatbubble-outline" size={14} color={colors.muted} />
+                      <Text style={styles.publishedCommentLabel}>Your comment</Text>
+                    </View>
+                    <Text style={styles.publishedComment}>{published.comment}</Text>
+                  </Card>
                 ) : null}
-                <Button label="Back to order" variant="outline" onPress={() => router.replace(`/orders/${id}`)} />
+                <Button
+                  label="Back to order"
+                  variant="outline"
+                  onPress={() => router.replace(`/orders/${id}`)}
+                />
               </>
             ) : (
-              <Text style={styles.muted}>Reviews are available after your order is completed.</Text>
+              <View style={styles.lockedRow}>
+                <Ionicons name="lock-closed-outline" size={16} color={colors.muted} />
+                <Text style={styles.muted}>
+                  Reviews are available after your order is completed.
+                </Text>
+              </View>
             )}
           </Card>
+
+          {/* Footer note */}
+          {showForm ? (
+            <View style={styles.noteRow}>
+              <Ionicons name="shield-checkmark-outline" size={13} color={colors.muted} />
+              <Text style={styles.note}>
+                Reviews are public and help other customers choose the right service.
+              </Text>
+            </View>
+          ) : null}
         </>
       ) : null}
     </KeyboardSafeScrollView>
@@ -176,25 +245,64 @@ export default function OrderReviewScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surfaceMuted },
-  content: { padding: spacing.xl, paddingBottom: spacing.xxxl },
-  backLink: { marginBottom: spacing.lg },
-  backText: { color: colors.primary, fontWeight: '600', fontSize: 14 },
-  title: { ...typography.title, fontSize: 22 },
-  sub: { ...typography.bodySm, marginTop: spacing.xs, marginBottom: spacing.xl },
-  card: { gap: spacing.md },
-  label: { ...typography.label },
-  stars: {
+  content: { padding: spacing.xl, paddingBottom: spacing.xxxl, gap: spacing.md },
+
+  /* Hero */
+  heroRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  heroIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: radius.full,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  heroText: { flex: 1 },
+  title: { ...typography.title, fontSize: 20 },
+  sub: { ...typography.bodySm, color: colors.slate700, marginTop: spacing.xs },
+
+  /* Card */
+  card: { gap: spacing.lg },
+  cardHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  cardTitle: { fontWeight: '600', fontSize: 15, color: colors.foreground },
+
+  /* Stars */
+  starsWrap: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xs },
+  stars: { flexDirection: 'row', gap: spacing.sm },
+  ratingLabel: { fontSize: 15, fontWeight: '700', color: STAR_COLOR },
+  ratingPlaceholder: { ...typography.bodySm, color: colors.muted },
+
+  /* Comment */
+  commentWrap: { gap: spacing.xs },
+  commentLabel: { fontSize: 12, fontWeight: '600', color: colors.muted },
+  optional: { fontWeight: '400' },
+  comment: { minHeight: 100, paddingTop: spacing.md },
+
+  /* Error */
+  errorRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  error: { color: colors.destructive, fontSize: 13, flex: 1 },
+
+  /* Published state */
+  thanksBadge: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-    paddingVertical: spacing.sm,
+    backgroundColor: colors.accent + '15',
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
   },
-  comment: {
-    minHeight: 100,
-    paddingTop: spacing.md,
-  },
-  inlineError: { color: colors.destructive, fontSize: 14 },
-  thanks: { fontSize: 16, fontWeight: '600', color: colors.accentDark, textAlign: 'center' },
-  publishedComment: { ...typography.bodySm, textAlign: 'center' },
-  muted: { ...typography.bodySm, textAlign: 'center' },
+  thanks: { fontSize: 15, fontWeight: '700', color: colors.accentDark },
+  publishedCard: { gap: spacing.sm, backgroundColor: colors.surfaceMuted },
+  publishedCommentLabel: { ...typography.caption, fontWeight: '600', color: colors.muted },
+  publishedComment: { ...typography.bodySm, color: colors.slate700 },
+
+  /* Locked */
+  lockedRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  muted: { ...typography.bodySm, color: colors.muted, flex: 1 },
+
+  /* Footer */
+  noteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs },
+  note: { ...typography.caption, color: colors.muted, flex: 1 },
 });

@@ -1,13 +1,15 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { formatCurrency } from '@lunara/utils';
 import { Button } from '../../../src/components/ui/button';
 import { Card } from '../../../src/components/ui/card';
 import { Input } from '../../../src/components/ui/input';
 import { KeyboardSafeScrollView } from '../../../src/components/ui/keyboard-safe-scroll-view';
 import { DataLoadState } from '../../../src/components/data-load-state';
 import { useAuthStore } from '../../../src/store/auth';
-import { colors, spacing, typography } from '../../../src/theme';
+import { colors, radius, spacing, typography } from '../../../src/theme';
 
 export default function RequestRefundScreen() {
   const router = useRouter();
@@ -59,15 +61,40 @@ export default function RequestRefundScreen() {
 
       {!loading && !loadError ? (
         <>
-          <Text style={styles.title}>Request a refund</Text>
-          <Text style={styles.sub}>
-            Submit your request for admin review. Approved refunds are credited to your wallet.
-          </Text>
+          {/* Hero row */}
+          <View style={styles.heroRow}>
+            <View style={styles.heroIcon}>
+              <Ionicons name="cash-outline" size={28} color={colors.primary} />
+            </View>
+            <View style={styles.heroText}>
+              <Text style={styles.title}>Request a refund</Text>
+              <Text style={styles.sub}>
+                Submit your request for admin review. Approved refunds are credited to your wallet.
+              </Text>
+            </View>
+          </View>
+
+          {/* Order total pill */}
           {orderTotal != null ? (
-            <Text style={styles.total}>Order total: ₱{orderTotal}</Text>
+            <Card style={styles.totalCard}>
+              <View style={styles.cardHeaderRow}>
+                <Ionicons name="receipt-outline" size={16} color={colors.primary} />
+                <Text style={styles.totalLabel}>Order total</Text>
+              </View>
+              <Text style={styles.totalAmount}>{formatCurrency(orderTotal)}</Text>
+              <Text style={styles.totalHint}>
+                Approved refunds are credited to your Lunara Wallet.
+              </Text>
+            </Card>
           ) : null}
 
+          {/* Form card */}
           <Card style={styles.card}>
+            <View style={styles.cardHeaderRow}>
+              <Ionicons name="create-outline" size={16} color={colors.primary} />
+              <Text style={styles.cardTitle}>Your reason</Text>
+            </View>
+
             <Text style={styles.label}>Reason for refund</Text>
             <Input
               style={styles.textarea}
@@ -78,13 +105,29 @@ export default function RequestRefundScreen() {
               numberOfLines={5}
               textAlignVertical="top"
             />
-            {error ? <Text style={styles.error}>{error}</Text> : null}
-            <Button
-              label={submitting ? 'Submitting…' : 'Submit refund request'}
-              onPress={handleSubmit}
-              disabled={submitting}
-            />
+            <Text style={styles.charCount}>{reason.trim().length} / 10 min characters</Text>
+
+            {error ? (
+              <View style={styles.errorRow}>
+                <Ionicons name="alert-circle-outline" size={14} color={colors.destructive} />
+                <Text style={styles.error}>{error}</Text>
+              </View>
+            ) : null}
           </Card>
+
+          <Button
+            label={submitting ? 'Submitting…' : 'Submit refund request'}
+            onPress={handleSubmit}
+            disabled={submitting}
+          />
+
+          {/* Info note */}
+          <View style={styles.noteRow}>
+            <Ionicons name="time-outline" size={13} color={colors.muted} />
+            <Text style={styles.note}>
+              Our team reviews refund requests within 1–3 business days.
+            </Text>
+          </View>
         </>
       ) : null}
     </KeyboardSafeScrollView>
@@ -93,12 +136,42 @@ export default function RequestRefundScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surfaceMuted },
-  content: { padding: spacing.xl, paddingBottom: spacing.xxxl },
-  title: { ...typography.title, fontSize: 22 },
-  sub: { ...typography.bodySm, marginTop: spacing.sm, marginBottom: spacing.lg },
-  total: { fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
-  card: { gap: spacing.md },
-  label: { ...typography.label },
+  content: { padding: spacing.xl, paddingBottom: spacing.xxxl, gap: spacing.md },
+
+  /* Hero */
+  heroRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  heroIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: radius.full,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  heroText: { flex: 1 },
+  title: { ...typography.title, fontSize: 20 },
+  sub: { ...typography.bodySm, color: colors.slate700, marginTop: spacing.xs },
+
+  /* Total card */
+  totalCard: { gap: spacing.xs },
+  cardHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  totalLabel: { fontWeight: '600', fontSize: 14, color: colors.foreground },
+  totalAmount: { fontSize: 28, fontWeight: '800', color: colors.primary },
+  totalHint: { ...typography.caption, color: colors.muted },
+
+  /* Form card */
+  card: { gap: spacing.sm },
+  cardTitle: { fontWeight: '600', fontSize: 15, color: colors.foreground },
+  label: { fontSize: 12, fontWeight: '600', color: colors.muted },
   textarea: { minHeight: 120, paddingTop: spacing.md },
-  error: { color: colors.destructive, fontSize: 14 },
+  charCount: { ...typography.caption, color: colors.muted, textAlign: 'right', marginTop: -spacing.xs },
+
+  /* Error */
+  errorRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  error: { color: colors.destructive, fontSize: 13, flex: 1 },
+
+  /* Footer note */
+  noteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs },
+  note: { ...typography.caption, color: colors.muted, flex: 1 },
 });
