@@ -1,21 +1,12 @@
 import { BadRequestException } from '@nestjs/common';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
-import { PARTNER_BRAND_UPLOAD_DIR } from '../../common/uploads/upload-paths';
+import { memoryStorage } from 'multer';
 
-const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/jpg', 'image/svg+xml']);
+// SVG intentionally excluded: it can embed <script>/event-handler payloads and these
+// assets are served publicly, so accepting it would be a stored-XSS vector.
+const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/jpg']);
 
 export const partnerBrandAssetUploadOptions = {
-  storage: diskStorage({
-    destination: PARTNER_BRAND_UPLOAD_DIR,
-    filename: (req, file, cb) => {
-      const request = req as { params?: { id?: string; field?: string } };
-      const partnerId = request.params?.id ?? 'partner';
-      const field = request.params?.field ?? 'asset';
-      const ext = extname(file.originalname).toLowerCase() || '.png';
-      cb(null, `${partnerId}-${field}-${Date.now()}${ext}`);
-    },
-  }),
+  storage: memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (
     _req: unknown,
@@ -23,7 +14,7 @@ export const partnerBrandAssetUploadOptions = {
     cb: (error: Error | null, ok: boolean) => void,
   ) => {
     if (!ALLOWED_IMAGE_TYPES.has(file.mimetype)) {
-      cb(new BadRequestException('Only JPEG, PNG, WebP, or SVG images are allowed'), false);
+      cb(new BadRequestException('Only JPEG, PNG, or WebP images are allowed'), false);
       return;
     }
     cb(null, true);

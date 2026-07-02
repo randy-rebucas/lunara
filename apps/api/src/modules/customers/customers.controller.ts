@@ -11,10 +11,9 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { AVATAR_UPLOAD_DIR } from '../../common/uploads/upload-paths';
+import { CloudinaryService } from '../../common/cloudinary/cloudinary.service';
 import { UpdateCustomerDto } from './dto/customer.dto';
 import { CustomersService } from './customers.service';
 
@@ -23,7 +22,10 @@ const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'i
 @Controller('customers')
 @UseGuards(JwtAuthGuard)
 export class CustomersController {
-  constructor(private readonly customersService: CustomersService) {}
+  constructor(
+    private readonly customersService: CustomersService,
+    private readonly cloudinaryService: CloudinaryService,
+  ) {}
 
   @Get('me')
   getMe(@Req() req: { user: { sub: string } }) {
@@ -38,14 +40,7 @@ export class CustomersController {
   @Post('me/avatar')
   @UseInterceptors(
     FileInterceptor('avatar', {
-      storage: diskStorage({
-        destination: AVATAR_UPLOAD_DIR,
-        filename: (req, file, cb) => {
-          const userId = (req as { user?: { sub: string } }).user?.sub ?? 'user';
-          const ext = extname(file.originalname).toLowerCase() || '.jpg';
-          cb(null, `${userId}-${Date.now()}${ext}`);
-        },
-      }),
+      storage: memoryStorage(),
       limits: { fileSize: 5 * 1024 * 1024 },
       fileFilter: (_req, file, cb) => {
         if (!ALLOWED_IMAGE_TYPES.has(file.mimetype)) {
@@ -56,14 +51,19 @@ export class CustomersController {
       },
     }),
   )
-  uploadAvatar(
+  async uploadAvatar(
     @Req() req: { user: { sub: string } },
     @UploadedFile() file?: Express.Multer.File,
   ) {
     if (!file) {
       throw new BadRequestException('Avatar image is required');
     }
-    return this.customersService.updateAvatar(req.user.sub, file.filename);
+    const result = await this.cloudinaryService.uploadBuffer(
+      file.buffer,
+      'lunara/avatars',
+      `${req.user.sub}-${Date.now()}`,
+    );
+    return this.customersService.updateAvatar(req.user.sub, result.secure_url);
   }
 
   @Get('me/onboarding')

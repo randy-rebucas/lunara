@@ -492,9 +492,10 @@ export class AdminController {
       file: Express.Multer.File,
       cb: (error: Error | null, ok: boolean) => void,
     ) => {
-      const allowed = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/svg+xml']);
+      // SVG intentionally excluded: it can embed <script>/event-handler payloads.
+      const allowed = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
       if (!allowed.has(file.mimetype)) {
-        cb(new BadRequestException('Only JPEG, PNG, WebP, or SVG images are allowed'), false);
+        cb(new BadRequestException('Only JPEG, PNG, or WebP images are allowed'), false);
         return;
       }
       cb(null, true);

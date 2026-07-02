@@ -67,3 +67,21 @@ export class LedgerEntry {
 
 export const LedgerEntrySchema = SchemaFactory.createForClass(LedgerEntry);
 LedgerEntrySchema.index({ accountType: 1, accountSubject: 1 });
+
+export type LedgerTransactionMarkerDocument = HydratedDocument<LedgerTransactionMarker>;
+
+/**
+ * One row per posted transactionRef, with a unique index. Inserted before the entry lines
+ * so concurrent posts of the same ref race on the unique index instead of a check-then-act
+ * findOne, closing the double-post window that would otherwise exist in LedgerService.post.
+ */
+@Schema({ timestamps: true, collection: 'ledger_transaction_markers' })
+export class LedgerTransactionMarker {
+  @Prop({ required: true, unique: true })
+  transactionRef!: string;
+
+  createdAt!: Date;
+  updatedAt!: Date;
+}
+
+export const LedgerTransactionMarkerSchema = SchemaFactory.createForClass(LedgerTransactionMarker);

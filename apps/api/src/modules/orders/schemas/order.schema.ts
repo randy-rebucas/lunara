@@ -195,6 +195,15 @@ class OrderLaundryProcessing {
 
   @Prop({ type: Types.ObjectId })
   assignedBy?: Types.ObjectId;
+
+  @Prop()
+  shelfSlot?: string;
+
+  @Prop()
+  shelfAssignedAt?: Date;
+
+  @Prop({ type: Types.ObjectId })
+  shelfAssignedBy?: Types.ObjectId;
 }
 
 @Schema({ _id: false })

@@ -11,4 +11,7 @@ export function assertProductionJwtSecrets(): void {
   if (!process.env.JWT_SECRET?.trim() || !process.env.JWT_REFRESH_SECRET?.trim()) {
     throw new Error('JWT_SECRET and JWT_REFRESH_SECRET must be set in production');
   }
+  if (!process.env.PAYMENT_WEBHOOK_SECRET?.trim()) {
+    throw new Error('PAYMENT_WEBHOOK_SECRET must be set in production');
+  }
 }

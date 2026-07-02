@@ -40,6 +40,7 @@ interface InvestigationData {
     total: number;
     pickupReceipt?: string;
     deliveryReceipt?: string;
+    shelfSlot?: string;
   } | null;
   photos: { source: string; label: string; url: string; at?: string }[];
   laundryLogs: {
@@ -231,6 +232,9 @@ export default function SupportTicketInvestigationPage() {
                   label="Status"
                   value={<span className="capitalize">{formatSlugLabel(data.order.status)}</span>}
                 />
+                {data.order.shelfSlot ? (
+                  <DetailRow label="Shelf slot" value={data.order.shelfSlot} />
+                ) : null}
                 {data.order.pickupReceipt ? (
                   <DetailRow label="Pickup receipt" value={data.order.pickupReceipt} />
                 ) : null}

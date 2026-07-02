@@ -69,7 +69,13 @@ export function ProfileAvatar({ name, avatarUrl, uploading, onUpload }: ProfileA
   const busy = uploading || picking;
 
   return (
-    <Pressable onPress={pickAndUpload} disabled={busy} style={styles.wrap}>
+    <Pressable
+      onPress={pickAndUpload}
+      disabled={busy}
+      style={styles.wrap}
+      accessibilityRole="button"
+      accessibilityLabel={busy ? 'Uploading profile photo' : 'Change profile photo'}
+    >
       <View style={styles.avatarShell}>
         {imageUri ? (
           <Image source={{ uri: imageUri }} style={styles.avatarImage} />

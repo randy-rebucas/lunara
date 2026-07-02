@@ -31,7 +31,7 @@ export class Transaction {
   @Prop({ required: true })
   amount!: number;
 
-  @Prop({ required: true })
+  @Prop({ required: true, unique: true })
   reference!: string;
 
   @Prop({ required: true })

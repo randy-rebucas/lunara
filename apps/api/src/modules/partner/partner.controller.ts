@@ -15,23 +15,20 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { memoryStorage } from 'multer';
 import { UserRole } from '@lunara/types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import {
-  TASK_PHOTO_UPLOAD_DIR,
-  taskPhotoPublicPath,
-} from '../../common/uploads/upload-paths';
+import { CloudinaryService } from '../../common/cloudinary/cloudinary.service';
+import { taskPhotoPublicPath } from '../../common/uploads/upload-paths';
 import { Types } from 'mongoose';
 import { PickupService } from '../riders/pickup.service';
 import { LaundryService, LaundryServiceDocument } from '../catalog/schemas/laundry-service.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { AssignStaffDto } from './dto/assign-staff.dto';
 import { CreateStaffDto } from './dto/create-staff.dto';
-import { AdvanceProcessingDto, MoveProcessingStepDto } from './dto/processing.dto';
+import { AdvanceProcessingDto, MoveProcessingStepDto, SetShelfSlotDto } from './dto/processing.dto';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
 import { PartnerOperationsService } from './partner-operations.service';
 import { ProcessingService } from './processing.service';
@@ -48,16 +45,7 @@ import {
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/jpg']);
 
 const processingPhotoUploadOptions = {
-  storage: diskStorage({
-    destination: TASK_PHOTO_UPLOAD_DIR,
-    filename: (_req, file, cb) => {
-      const req = _req as { user?: { sub: string }; params?: { orderId?: string } };
-      const userId = req.user?.sub ?? 'partner';
-      const orderId = req.params?.orderId ?? 'order';
-      const ext = extname(file.originalname).toLowerCase() || '.jpg';
-      cb(null, `${userId}-${orderId}-${Date.now()}${ext}`);
-    },
-  }),
+  storage: memoryStorage(),
   limits: { fileSize: 8 * 1024 * 1024 },
   fileFilter: (_req: unknown, file: Express.Multer.File, cb: (error: Error | null, ok: boolean) => void) => {
     if (!ALLOWED_IMAGE_TYPES.has(file.mimetype)) {
@@ -84,6 +72,7 @@ export class PartnerController {
     private readonly userModel: Model<UserDocument>,
     @InjectModel('Order')
     private readonly orderModel: Model<Record<string, unknown>>,
+    private readonly cloudinaryService: CloudinaryService,
   ) {}
 
   @Get('settings')
@@ -332,7 +321,7 @@ export class PartnerController {
   @Post('orders/:orderId/processing/photo-upload')
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
   @UseInterceptors(FileInterceptor('photo', processingPhotoUploadOptions))
-  uploadProcessingPhoto(
+  async uploadProcessingPhoto(
     @Param('orderId') orderId: string,
     @Req() req: { user: { sub: string; role: UserRole } },
     @UploadedFile() file?: Express.Multer.File,
@@ -340,11 +329,13 @@ export class PartnerController {
     if (!file) {
       throw new BadRequestException('Photo image is required');
     }
+    const publicId = `${req.user.sub}-${orderId}-${Date.now()}`;
+    await this.cloudinaryService.uploadPrivateBuffer(file.buffer, 'lunara/task-photos', publicId);
     return this.processingService.registerProcessingPhoto(
       orderId,
       req.user.sub,
       req.user.role,
-      taskPhotoPublicPath(file.filename),
+      taskPhotoPublicPath(publicId),
     );
   }
 
@@ -366,6 +357,25 @@ export class PartnerController {
     @Body() dto: MoveProcessingStepDto,
   ) {
     return this.processingService.moveToStep(orderId, req.user.sub, req.user.role, dto);
+  }
+
+  @Patch('orders/:orderId/processing/shelf')
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
+  setShelfSlot(
+    @Param('orderId') orderId: string,
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Body() dto: SetShelfSlotDto,
+  ) {
+    return this.processingService.setShelfSlot(orderId, req.user.sub, req.user.role, dto);
+  }
+
+  @Get('orders/shelf-lookup')
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
+  findOnShelf(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Query('query') query?: string,
+  ) {
+    return this.processingService.findOnShelf(query ?? '', req.user.sub, req.user.role);
   }
 
   @Post('orders/:orderId/delivery/dispatch')

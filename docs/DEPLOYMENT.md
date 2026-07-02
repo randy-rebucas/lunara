@@ -165,7 +165,7 @@ Set these in the Render service **Environment** tab.
 | `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` | Mobile push (FCM) |
 | `GOOGLE_MAPS_API_KEY` | Distance / routing features |
 | `STRIPE_SECRET_KEY`, `GCASH_MERCHANT_ID`, `MAYA_PUBLIC_KEY` | Live payments |
-| `TWILIO_*`, `SENDGRID_API_KEY` | SMS / email |
+| `TWILIO_*`, `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS` | SMS / email |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `FACEBOOK_*` | OAuth login |
 
 See [`.env.example`](../.env.example) for the full list.

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
+import { Customer, CustomerSchema } from '../customers/schemas/customer.schema';
 import { LaundryService, LaundryServiceSchema } from '../catalog/schemas/laundry-service.schema';
 import { RidersModule } from '../riders/riders.module';
 import { RealtimeModule } from '../realtime/realtime.module';
@@ -23,6 +24,7 @@ import { LedgerModule } from '../ledger/ledger.module';
     MongooseModule.forFeature([
       { name: Order.name, schema: OrderSchema },
       { name: User.name, schema: UserSchema },
+      { name: Customer.name, schema: CustomerSchema },
       { name: ShopInventoryItem.name, schema: ShopInventorySchema },
       { name: Notification.name, schema: NotificationSchema },
       { name: Branch.name, schema: BranchSchema },

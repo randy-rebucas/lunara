@@ -14,23 +14,16 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
-import { randomUUID } from 'crypto';
+import { memoryStorage } from 'multer';
 import { UserRole } from '@lunara/types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import { MESSAGE_ATTACHMENT_UPLOAD_DIR } from '../../common/uploads/upload-paths';
+import { CloudinaryService } from '../../common/cloudinary/cloudinary.service';
 import { MessagingService } from './messaging.service';
 
 const attachmentUploadOptions = {
-  storage: diskStorage({
-    destination: MESSAGE_ATTACHMENT_UPLOAD_DIR,
-    filename: (_req: any, file: Express.Multer.File, cb: (err: any, name: string) => void) => {
-      cb(null, `${randomUUID()}${extname(file.originalname)}`);
-    },
-  }),
+  storage: memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (_req: any, file: Express.Multer.File, cb: (err: any, accept: boolean) => void) => {
     const allowed = [
@@ -53,7 +46,10 @@ const attachmentUploadOptions = {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
 export class MessagingController {
-  constructor(private readonly messaging: MessagingService) {}
+  constructor(
+    private readonly messaging: MessagingService,
+    private readonly cloudinaryService: CloudinaryService,
+  ) {}
 
   @Get()
   async getConversation(@Req() req: any) {
@@ -105,9 +101,15 @@ export class MessagingController {
 
   @Post(':id/upload')
   @UseInterceptors(FileInterceptor('file', attachmentUploadOptions))
-  uploadAttachment(@UploadedFile() file: Express.Multer.File) {
+  async uploadAttachment(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('No file provided');
-    const data = this.messaging.saveAttachment(file);
+    const result = await this.cloudinaryService.uploadBuffer(
+      file.buffer,
+      'lunara/message-attachments',
+      undefined,
+      'auto',
+    );
+    const data = this.messaging.saveAttachment(file, result.secure_url);
     return { success: true, data };
   }
 
@@ -131,7 +133,10 @@ export class MessagingController {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.ADMIN)
 export class AdminMessagingController {
-  constructor(private readonly messaging: MessagingService) {}
+  constructor(
+    private readonly messaging: MessagingService,
+    private readonly cloudinaryService: CloudinaryService,
+  ) {}
 
   @Get()
   async listConversations() {
@@ -179,9 +184,15 @@ export class AdminMessagingController {
 
   @Post(':id/upload')
   @UseInterceptors(FileInterceptor('file', attachmentUploadOptions))
-  uploadAttachment(@UploadedFile() file: Express.Multer.File) {
+  async uploadAttachment(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('No file provided');
-    const data = this.messaging.saveAttachment(file);
+    const result = await this.cloudinaryService.uploadBuffer(
+      file.buffer,
+      'lunara/message-attachments',
+      undefined,
+      'auto',
+    );
+    const data = this.messaging.saveAttachment(file, result.secure_url);
     return { success: true, data };
   }
 

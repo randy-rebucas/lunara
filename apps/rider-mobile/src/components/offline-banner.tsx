@@ -28,6 +28,8 @@ export function OfflineBanner({ embedded = false }: { embedded?: boolean }) {
         if (isOnline && !syncing) void syncNow();
       }}
       disabled={!isOnline || syncing}
+      accessibilityRole={isOnline && pendingCount > 0 && !syncing ? 'button' : undefined}
+      accessibilityLabel={message}
     >
       <View style={styles.row}>
         {syncing ? (

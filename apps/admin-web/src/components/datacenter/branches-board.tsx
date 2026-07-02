@@ -293,15 +293,20 @@ export function BranchesBoard() {
       setProfileError('');
       return;
     }
+    const controller = new AbortController();
     setLoadingProfile(true);
     setProfileError('');
-    adminFetch<BranchProfile>(`/admin/branches/${selectedId}/profile`)
+    adminFetch<BranchProfile>(`/admin/branches/${selectedId}/profile`, { signal: controller.signal })
       .then(setProfile)
       .catch((e) => {
+        if (controller.signal.aborted) return;
         setProfile(null);
         setProfileError(e instanceof Error ? e.message : 'Failed to load branch profile');
       })
-      .finally(() => setLoadingProfile(false));
+      .finally(() => {
+        if (!controller.signal.aborted) setLoadingProfile(false);
+      });
+    return () => controller.abort();
   }, [selectedId]);
 
   async function createBranch(e: React.FormEvent) {

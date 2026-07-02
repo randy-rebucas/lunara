@@ -77,37 +77,63 @@ export class WalletsService {
 
   async debit(userId: string, amount: number, reference: string, description: string) {
     const wallet = await this.findOrCreate(userId);
-    if (wallet.balance < amount) {
+
+    // Reserve the reference first so a concurrent duplicate call fails fast on the unique index.
+    try {
+      await this.transactionModel.create({
+        walletId: wallet._id,
+        type: 'debit',
+        amount,
+        reference,
+        description,
+      });
+    } catch (err) {
+      if (this.isDuplicateKeyError(err)) {
+        return this.findOrCreate(userId);
+      }
+      throw err;
+    }
+
+    const updated = await this.walletModel.findOneAndUpdate(
+      { _id: wallet._id, balance: { $gte: amount } },
+      { $inc: { balance: -amount } },
+      { new: true },
+    );
+    if (!updated) {
+      // Roll back the reserved transaction record — insufficient balance at debit time.
+      await this.transactionModel.deleteOne({ walletId: wallet._id, reference });
       throw new BadRequestException('Insufficient wallet balance');
     }
-    wallet.balance -= amount;
-    await wallet.save();
-    await this.transactionModel.create({
-      walletId: wallet._id,
-      type: 'debit',
-      amount,
-      reference,
-      description,
-    });
-    return wallet;
+    return updated;
   }
 
   async credit(userId: string, amount: number, reference: string, description: string) {
-    const existing = await this.transactionModel.findOne({ reference });
-    if (existing) {
-      return this.findOrCreate(userId);
+    const wallet = await this.findOrCreate(userId);
+
+    try {
+      await this.transactionModel.create({
+        walletId: wallet._id,
+        type: 'credit',
+        amount,
+        reference,
+        description,
+      });
+    } catch (err) {
+      if (this.isDuplicateKeyError(err)) {
+        return this.findOrCreate(userId);
+      }
+      throw err;
     }
 
-    const wallet = await this.findOrCreate(userId);
-    wallet.balance += amount;
-    await wallet.save();
-    await this.transactionModel.create({
-      walletId: wallet._id,
-      type: 'credit',
-      amount,
-      reference,
-      description,
-    });
-    return wallet;
+    const updated = await this.walletModel.findOneAndUpdate(
+      { _id: wallet._id },
+      { $inc: { balance: amount } },
+      { new: true },
+    );
+    return updated!;
+  }
+
+  private isDuplicateKeyError(err: unknown): boolean {
+    return typeof err === 'object' && err !== null && (err as { code?: number }).code === 11000;
   }
 }

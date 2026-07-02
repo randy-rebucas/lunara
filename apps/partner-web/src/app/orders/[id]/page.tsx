@@ -25,6 +25,9 @@ export default function StaffOrderProcessingPage() {
   const [note, setNote] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
   const [tagCode, setTagCode] = useState('');
+  const [shelfSlot, setShelfSlot] = useState('');
+  const [shelfSaving, setShelfSaving] = useState(false);
+  const [shelfError, setShelfError] = useState('');
   const [skipIroning, setSkipIroning] = useState(false);
   const [error, setError] = useState('');
   const [dispatchMessage, setDispatchMessage] = useState('');
@@ -47,6 +50,7 @@ export default function StaffOrderProcessingPage() {
     if (receivedStep?.tagCode) {
       setTagCode(String(receivedStep.tagCode));
     }
+    setShelfSlot(data.processing?.shelfSlot ?? '');
     return data;
   }, [id]);
 
@@ -147,6 +151,23 @@ export default function StaffOrderProcessingPage() {
       setError(e instanceof Error ? e.message : 'Advance failed');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function saveShelfSlot() {
+    if (!id || !shelfSlot.trim()) return;
+    setShelfSaving(true);
+    setShelfError('');
+    try {
+      await partnerFetch(`/partner/orders/${id}/processing/shelf`, {
+        method: 'PATCH',
+        body: JSON.stringify({ shelfSlot: shelfSlot.trim() }),
+      });
+      await reload();
+    } catch (e) {
+      setShelfError(e instanceof Error ? e.message : 'Could not save shelf slot');
+    } finally {
+      setShelfSaving(false);
     }
   }
 
@@ -388,6 +409,36 @@ export default function StaffOrderProcessingPage() {
           </button>
         </div>
       )}
+
+      {inProcessing &&
+        (view.currentStep.id === 'quality_check' ||
+          view.currentStep.id === 'ready_for_delivery' ||
+          view.isComplete ||
+          view.order.status === 'customer_pickup') && (
+          <div className="card card-body mt-8">
+            <h3 className="font-semibold">Shelf slot</h3>
+            <p className="mt-1 text-xs text-slate-500">
+              Assign where this bag sits so staff can trace the owner at a glance.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-3">
+              <input
+                className="min-h-[3rem] flex-1 touch-manipulation rounded border px-4 py-3 text-base font-mono uppercase sm:flex-none"
+                placeholder="e.g. A-12"
+                value={shelfSlot}
+                onChange={(e) => setShelfSlot(e.target.value)}
+              />
+              <button
+                type="button"
+                disabled={shelfSaving || !shelfSlot.trim()}
+                className="btn-primary min-h-[3rem] touch-manipulation px-5 text-base disabled:opacity-50"
+                onClick={saveShelfSlot}
+              >
+                {shelfSaving ? 'Saving…' : 'Save shelf slot'}
+              </button>
+            </div>
+            {shelfError && <p className="mt-2 text-sm text-red-500">{shelfError}</p>}
+          </div>
+        )}
 
       {view.order.status === 'customer_pickup' && (
         <div className="mt-8 rounded-xl border border-amber-300 bg-amber-50 p-6 text-center">

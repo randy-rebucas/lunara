@@ -8,6 +8,8 @@ import {
   LedgerAccountType,
   LedgerEntry,
   LedgerEntryDocument,
+  LedgerTransactionMarker,
+  LedgerTransactionMarkerDocument,
 } from './schemas/ledger-entry.schema';
 
 export interface LedgerLine {
@@ -22,6 +24,8 @@ export interface LedgerLine {
 export class LedgerService {
   constructor(
     @InjectModel(LedgerEntry.name) private entryModel: Model<LedgerEntryDocument>,
+    @InjectModel(LedgerTransactionMarker.name)
+    private markerModel: Model<LedgerTransactionMarkerDocument>,
     @InjectModel(PartnerSettlement.name) private settlementModel: Model<PartnerSettlementDocument>,
     @InjectModel(RiderWithdrawal.name) private withdrawalModel: Model<RiderWithdrawalDocument>,
     @InjectModel(Wallet.name) private walletModel: Model<WalletDocument>,
@@ -45,8 +49,14 @@ export class LedgerService {
       );
     }
 
-    const existing = await this.entryModel.findOne({ transactionRef });
-    if (existing) return; // idempotent: settlement/remittance/withdrawal already posted
+    // Reserve the ref via a uniquely-indexed marker first, so concurrent posts of the same
+    // transactionRef race on the DB's unique index instead of a check-then-act read.
+    try {
+      await this.markerModel.create({ transactionRef });
+    } catch (err) {
+      if (this.isDuplicateKeyError(err)) return; // idempotent: already posted
+      throw err;
+    }
 
     await this.entryModel.insertMany(
       lines.map((l) => ({
@@ -60,6 +70,38 @@ export class LedgerService {
         description: l.description,
       })),
     );
+  }
+
+  /**
+   * Reverses a previously posted transaction by re-posting its lines with direction flipped,
+   * under a new transactionRef. No-ops if the original transaction was never posted, so callers
+   * can safely call this to unwind a failure regardless of how far the forward flow got.
+   */
+  async reverse(
+    originalRef: string,
+    reversalRef: string,
+    sourceType: LedgerEntry['sourceType'],
+    sourceId: string,
+  ) {
+    const originalLines = await this.entryModel.find({ transactionRef: originalRef });
+    if (originalLines.length === 0) return;
+
+    await this.post(
+      reversalRef,
+      sourceType,
+      sourceId,
+      originalLines.map((l) => ({
+        accountType: l.accountType,
+        accountSubject: l.accountSubject || undefined,
+        direction: l.direction === 'debit' ? 'credit' : 'debit',
+        amount: l.amount,
+        description: `Reversal of ${originalRef}: ${l.description}`,
+      })),
+    );
+  }
+
+  private isDuplicateKeyError(err: unknown): boolean {
+    return typeof err === 'object' && err !== null && (err as { code?: number }).code === 11000;
   }
 
   /** Net balance of an account: credits minus debits (positive = platform owes this party). */

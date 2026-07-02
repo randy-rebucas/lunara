@@ -228,12 +228,20 @@ export class PaymentsService {
       try {
         await this.markOrderPaid(payment, order, `wallet-${payment._id}`);
       } catch (err) {
+        await this.ledgerService.reverse(
+          `payment:${payment._id.toString()}`,
+          `payment-rollback:${payment._id.toString()}`,
+          'refund',
+          payment._id.toString(),
+        );
         await this.walletsService.credit(
           userId,
           order.total,
           `refund-wallet-${payment._id}`,
           `Refund — order payment failed for ${orderId}`,
         );
+        payment.status = PaymentStatus.FAILED;
+        await payment.save();
         throw err;
       }
       return {

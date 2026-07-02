@@ -18,13 +18,14 @@ import { RiderAssignmentService } from '../riders/rider-assignment.service';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
 import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
 import {
   buildOrderPaymentSummary,
   buildPartnerPaymentLabel,
   loadLatestOrderPaymentsByOrderId,
 } from '../payments/payment-summary';
-import { AdvanceProcessingDto, MoveProcessingStepDto } from './dto/processing.dto';
+import { AdvanceProcessingDto, MoveProcessingStepDto, SetShelfSlotDto } from './dto/processing.dto';
 import {
   applyStaffBranchFilter,
   assertOrderPortalAccess,
@@ -37,6 +38,7 @@ export class ProcessingService {
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
+    @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
     private trackingGateway: TrackingGateway,
     private riderAssignmentService: RiderAssignmentService,
   ) {}
@@ -329,6 +331,72 @@ export class ProcessingService {
     }
 
     return { success: true, data: this.buildProcessingView(order) };
+  }
+
+  async setShelfSlot(orderId: string, userId: string, role: UserRole, dto: SetShelfSlotDto) {
+    const order = await this.orderModel.findById(orderId);
+    if (!order) throw new NotFoundException('Order not found');
+
+    const branchId = await resolvePortalBranchId(this.userModel, userId, role);
+    assertOrderPortalAccess(order, userId, role, branchId);
+
+    if (!order.laundryProcessing) order.laundryProcessing = { completedSteps: [], ironingSkipped: false };
+    order.laundryProcessing.shelfSlot = dto.shelfSlot.trim();
+    order.laundryProcessing.shelfAssignedAt = new Date();
+    order.laundryProcessing.shelfAssignedBy = new Types.ObjectId(userId);
+    await order.save();
+
+    return { success: true, data: this.buildProcessingView(order) };
+  }
+
+  async findOnShelf(query: string, userId: string, role: UserRole) {
+    const trimmed = query.trim();
+    if (!trimmed) throw new BadRequestException('Search query is required');
+
+    const filter: Record<string, unknown> = {
+      $or: [
+        { 'laundryProcessing.shelfSlot': trimmed },
+        { 'laundryProcessing.completedSteps.tagCode': trimmed },
+      ],
+    };
+    if (role === UserRole.PARTNER) {
+      filter.partnerId = new Types.ObjectId(userId);
+    } else if (role === UserRole.STAFF) {
+      const branchId = await resolvePortalBranchId(this.userModel, userId, role);
+      applyStaffBranchFilter(filter, role, branchId);
+    }
+
+    const order = await this.orderModel.findOne(filter).sort({ updatedAt: -1 });
+    if (!order) return { success: true, data: null };
+
+    const [customer, user] = await Promise.all([
+      this.customerModel.findOne({ userId: order.customerId }).select('firstName lastName').lean(),
+      this.userModel.findById(order.customerId).select('phone').lean(),
+    ]);
+
+    const currentStepId = this.resolveCurrentStepIdSafe(order);
+    const step = currentStepId ? getProcessingStep(currentStepId) : undefined;
+
+    return {
+      success: true,
+      data: {
+        orderId: order._id.toString(),
+        status: order.status,
+        shelfSlot: order.laundryProcessing?.shelfSlot,
+        currentStepId,
+        currentStepLabel: step?.label ?? currentStepId,
+        customerName: customer ? `${customer.firstName ?? ''} ${customer.lastName ?? ''}`.trim() : undefined,
+        customerPhone: user?.phone,
+      },
+    };
+  }
+
+  private resolveCurrentStepIdSafe(order: OrderDocument): LaundryProcessingStepId | null {
+    try {
+      return this.resolveCurrentStepId(order);
+    } catch {
+      return null;
+    }
   }
 
   async registerProcessingPhoto(

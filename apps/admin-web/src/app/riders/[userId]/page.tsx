@@ -474,7 +474,7 @@ export default function RiderProfileReviewPage() {
                 <div className="space-y-5">
                   <div>
                     <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted/70">Pending hold</p>
-                    <p className="mb-2 text-xs text-muted">Locks this amount from the rider's withdrawable balance.</p>
+                    <p className="mb-2 text-xs text-muted">Locks this amount from the rider&apos;s withdrawable balance.</p>
                     <div className="flex gap-2">
                       <input
                         id="wallet-hold"

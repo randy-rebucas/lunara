@@ -6,9 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { existsSync, unlinkSync } from 'fs';
 import { Model, Types } from 'mongoose';
-import { basename } from 'path';
 import { OrderStatus } from '@lunara/types';
 import {
   PARTNER_SHOP_LOCATION,
@@ -19,11 +17,7 @@ import {
   RIDER_EARNING_TYPE_LABELS,
   type RiderEarningType,
 } from '@lunara/utils';
-import {
-  RIDER_DOCUMENT_PUBLIC_PREFIX,
-  riderDocumentFilePath,
-  riderDocumentPublicPath,
-} from '../../common/uploads/upload-paths';
+import { riderDocumentPublicPath } from '../../common/uploads/upload-paths';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { Address, AddressDocument } from '../addresses/schemas/address.schema';
 import { Branch, BranchDocument } from '../branches/schemas/branch.schema';
@@ -542,15 +536,6 @@ export class RidersService {
 
     const rider = await this.findOrCreate(userId);
     const fileUrl = riderDocumentPublicPath(filename);
-    const existing = rider.documents?.find((d) => d.type === type);
-
-    if (existing?.fileUrl?.startsWith(RIDER_DOCUMENT_PUBLIC_PREFIX)) {
-      const oldFilename = basename(existing.fileUrl);
-      const oldPath = riderDocumentFilePath(oldFilename);
-      if (existsSync(oldPath)) {
-        unlinkSync(oldPath);
-      }
-    }
 
     const nextDocuments = (rider.documents ?? []).filter((d) => d.type !== type);
     nextDocuments.push({

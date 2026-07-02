@@ -1,10 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { existsSync, unlinkSync } from 'fs';
 import { Model, Types } from 'mongoose';
-import { basename } from 'path';
 import { AddressesService } from '../addresses/addresses.service';
-import { avatarFilePath, AVATAR_PUBLIC_PREFIX } from '../../common/uploads/upload-paths';
 import { OTP_PROFILE_PLACEHOLDER_FIRST_NAME, OTP_PROFILE_PLACEHOLDER_LAST_NAME } from './customers.constants';
 import { UpdateCustomerDto } from './dto/customer.dto';
 import { Customer, CustomerDocument } from './schemas/customer.schema';
@@ -56,19 +53,11 @@ export class CustomersService {
     return { success: true, data: customer };
   }
 
-  async updateAvatar(userId: string, filename: string) {
+  async updateAvatar(userId: string, avatarUrl: string) {
     const customer = await this.findByUserId(userId);
     if (!customer) throw new NotFoundException('Customer profile not found');
 
-    if (customer.avatarUrl?.startsWith(AVATAR_PUBLIC_PREFIX)) {
-      const oldFilename = basename(customer.avatarUrl);
-      const oldPath = avatarFilePath(oldFilename);
-      if (existsSync(oldPath)) {
-        unlinkSync(oldPath);
-      }
-    }
-
-    customer.avatarUrl = `${AVATAR_PUBLIC_PREFIX}/${filename}`;
+    customer.avatarUrl = avatarUrl;
     await customer.save();
     return { success: true, data: customer };
   }

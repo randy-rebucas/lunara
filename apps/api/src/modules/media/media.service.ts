@@ -1,13 +1,8 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { UserRole } from '@lunara/types';
-import { createReadStream, existsSync } from 'fs';
-import { extname } from 'path';
 import { Model } from 'mongoose';
-import {
-  riderDocumentFilePath,
-  taskPhotoFilePath,
-} from '../../common/uploads/upload-paths';
+import { CloudinaryService } from '../../common/cloudinary/cloudinary.service';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import {
@@ -16,13 +11,12 @@ import {
 } from '../partner/partner-access';
 import { parseTaskPhotoFilename } from './task-photo-filename';
 
-type MediaCategory = 'rider-documents' | 'task-photos';
+type MediaCategory = 'rider-documents' | 'task-photos' | 'remittance-proofs';
 
-const MIME_BY_EXT: Record<string, string> = {
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.png': 'image/png',
-  '.webp': 'image/webp',
+const CLOUDINARY_FOLDER_BY_CATEGORY: Record<MediaCategory, string> = {
+  'rider-documents': 'lunara/rider-documents',
+  'task-photos': 'lunara/task-photos',
+  'remittance-proofs': 'lunara/remittance-proofs',
 };
 
 @Injectable()
@@ -30,27 +24,15 @@ export class MediaService {
   constructor(
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    private readonly cloudinaryService: CloudinaryService,
   ) {}
 
-  resolveFile(category: MediaCategory, filename: string) {
+  getSignedUrl(category: MediaCategory, filename: string): string {
     if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
       throw new NotFoundException('File not found');
     }
-
-    const filePath =
-      category === 'rider-documents'
-        ? riderDocumentFilePath(filename)
-        : taskPhotoFilePath(filename);
-
-    if (!existsSync(filePath)) {
-      throw new NotFoundException('File not found');
-    }
-
-    const ext = extname(filename).toLowerCase();
-    return {
-      stream: createReadStream(filePath),
-      contentType: MIME_BY_EXT[ext] ?? 'application/octet-stream',
-    };
+    const publicId = `${CLOUDINARY_FOLDER_BY_CATEGORY[category]}/${filename}`;
+    return this.cloudinaryService.getSignedUrl(publicId);
   }
 
   async assertAccess(
@@ -60,15 +42,15 @@ export class MediaService {
   ) {
     if (user.role === UserRole.ADMIN) return;
 
-    if (category === 'rider-documents') {
-      this.assertRiderDocumentAccess(filename, user);
+    if (category === 'rider-documents' || category === 'remittance-proofs') {
+      this.assertOwnerPrefixAccess(filename, user);
       return;
     }
 
     await this.assertTaskPhotoAccess(filename, user);
   }
 
-  private assertRiderDocumentAccess(filename: string, user: { sub: string; role: UserRole }) {
+  private assertOwnerPrefixAccess(filename: string, user: { sub: string; role: UserRole }) {
     const ownerPrefix = `${user.sub}-`;
     if (!filename.startsWith(ownerPrefix)) {
       throw new ForbiddenException('Access denied');

@@ -332,5 +332,16 @@ export interface PartnerProcessingView {
     verifiedWeightKg?: number;
     ironingSkipped?: boolean;
     completedSteps?: { stepId: string; photoUrl?: string; tagCode?: string }[];
+    shelfSlot?: string;
   };
+}
+
+export interface PartnerShelfLookupResult {
+  orderId: string;
+  status: string;
+  shelfSlot?: string;
+  currentStepId: string | null;
+  currentStepLabel?: string;
+  customerName?: string;
+  customerPhone?: string;
 }

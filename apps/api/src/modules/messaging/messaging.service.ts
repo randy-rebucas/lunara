@@ -2,7 +2,6 @@ import { ForbiddenException, Inject, Injectable, forwardRef } from '@nestjs/comm
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import type { ChatMessage, MessageAttachment } from '@lunara/types';
-import { messageAttachmentPublicPath } from '../../common/uploads/upload-paths';
 import { Branch, BranchDocument } from '../branches/schemas/branch.schema';
 import { NotificationDispatchService } from '../push/notification-dispatch.service';
 import { TrackingGateway } from '../realtime/tracking.gateway';
@@ -224,10 +223,10 @@ export class MessagingService {
     };
   }
 
-  saveAttachment(file: Express.Multer.File): MessageAttachment {
+  saveAttachment(file: Express.Multer.File, url: string): MessageAttachment {
     return {
       filename: file.originalname,
-      url: messageAttachmentPublicPath(file.filename),
+      url,
       mimeType: file.mimetype,
       size: file.size,
     };

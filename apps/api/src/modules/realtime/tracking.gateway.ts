@@ -15,6 +15,7 @@ import type { ChatMessage, JwtPayload } from '@lunara/types';
 import { UserRole } from '@lunara/types';
 import { normalizeRiderLocationPayload, riderLocationWirePayload } from '@lunara/utils';
 import { getJwtSecret } from '../../common/config/jwt-config';
+import { getAllowedOrigins } from '../../common/config/cors-config';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { Conversation, ConversationDocument } from '../messaging/schemas/conversation.schema';
 import { RiderSosService } from '../sos/rider-sos.service';
@@ -22,7 +23,7 @@ import { CustomerOrderNotificationService } from '../push/customer-order-notific
 import { PartnerOrderNotificationService } from '../push/partner-order-notification.service';
 
 @Injectable()
-@WebSocketGateway({ cors: { origin: '*' }, namespace: '/tracking' })
+@WebSocketGateway({ cors: { origin: getAllowedOrigins(), credentials: true }, namespace: '/tracking' })
 export class TrackingGateway implements OnGatewayConnection {
   private readonly logger = new Logger(TrackingGateway.name);
   private readonly customerIdByOrderId = new Map<string, string>();

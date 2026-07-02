@@ -32,3 +32,10 @@ export class MoveProcessingStepDto {
   @IsNotEmpty()
   targetStepId!: string;
 }
+
+export class SetShelfSlotDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(50)
+  shelfSlot!: string;
+}

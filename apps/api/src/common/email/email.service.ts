@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import * as sgMail from '@sendgrid/mail';
+import { createTransport, Transporter } from 'nodemailer';
 
 export interface EmailPayload {
   to: string;
@@ -12,27 +12,35 @@ export interface EmailPayload {
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
   private readonly from: string;
-  private readonly enabled: boolean;
+  private readonly transporter: Transporter | null;
 
   constructor() {
-    const key = process.env.SENDGRID_API_KEY;
-    const from = process.env.SENDGRID_FROM_EMAIL ?? 'noreply@lunara.app';
-    this.from = from;
-    this.enabled = !!key;
-    if (key) {
-      sgMail.setApiKey(key);
+    const host = process.env.SMTP_HOST ?? 'smtp.hostinger.com';
+    const port = Number(process.env.SMTP_PORT ?? 465);
+    const user = process.env.SMTP_USER;
+    const pass = process.env.SMTP_PASS;
+    this.from = process.env.SMTP_FROM_EMAIL ?? user ?? 'noreply@lunara.app';
+
+    if (user && pass) {
+      this.transporter = createTransport({
+        host,
+        port,
+        secure: port === 465,
+        auth: { user, pass },
+      });
     } else {
-      this.logger.warn('SENDGRID_API_KEY not set — email notifications disabled');
+      this.transporter = null;
+      this.logger.warn('SMTP_USER/SMTP_PASS not set — email notifications disabled');
     }
   }
 
   async send(payload: EmailPayload): Promise<void> {
-    if (!this.enabled) {
-      this.logger.debug(`Email skipped (SendGrid disabled): ${payload.subject} → ${payload.to}`);
+    if (!this.transporter) {
+      this.logger.debug(`Email skipped (SMTP disabled): ${payload.subject} → ${payload.to}`);
       return;
     }
     try {
-      await sgMail.send({
+      await this.transporter.sendMail({
         to: payload.to,
         from: this.from,
         subject: payload.subject,

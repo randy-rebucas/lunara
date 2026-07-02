@@ -542,6 +542,7 @@ export class SupportService {
       total: order.total,
       estimatedWeightKg: order.estimatedWeightKg,
       verifiedWeightKg: order.laundryProcessing?.verifiedWeightKg,
+      shelfSlot: order.laundryProcessing?.shelfSlot,
       pickupReceipt: order.pickup?.receiptCode,
       deliveryReceipt: order.delivery?.receiptCode,
       processingStepsTotal: LAUNDRY_PROCESSING_STEPS.length,

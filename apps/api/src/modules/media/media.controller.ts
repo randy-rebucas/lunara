@@ -1,12 +1,4 @@
-import {
-  Controller,
-  Get,
-  Param,
-  Req,
-  Res,
-  StreamableFile,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Param, Req, Res, UseGuards } from '@nestjs/common';
 import type { UserRole } from '@lunara/types';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -21,25 +13,29 @@ export class MediaController {
   async getRiderDocument(
     @Param('filename') filename: string,
     @Req() req: { user: { sub: string; role: UserRole } },
-    @Res({ passthrough: true }) res: Response,
+    @Res() res: Response,
   ) {
     await this.mediaService.assertAccess('rider-documents', filename, req.user);
-    const file = this.mediaService.resolveFile('rider-documents', filename);
-    res.set('Cache-Control', 'private, max-age=300');
-    res.set('Content-Type', file.contentType);
-    return new StreamableFile(file.stream);
+    res.redirect(this.mediaService.getSignedUrl('rider-documents', filename));
   }
 
   @Get('task-photos/:filename')
   async getTaskPhoto(
     @Param('filename') filename: string,
     @Req() req: { user: { sub: string; role: UserRole } },
-    @Res({ passthrough: true }) res: Response,
+    @Res() res: Response,
   ) {
     await this.mediaService.assertAccess('task-photos', filename, req.user);
-    const file = this.mediaService.resolveFile('task-photos', filename);
-    res.set('Cache-Control', 'private, max-age=300');
-    res.set('Content-Type', file.contentType);
-    return new StreamableFile(file.stream);
+    res.redirect(this.mediaService.getSignedUrl('task-photos', filename));
+  }
+
+  @Get('remittance-proofs/:filename')
+  async getRemittanceProof(
+    @Param('filename') filename: string,
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Res() res: Response,
+  ) {
+    await this.mediaService.assertAccess('remittance-proofs', filename, req.user);
+    res.redirect(this.mediaService.getSignedUrl('remittance-proofs', filename));
   }
 }

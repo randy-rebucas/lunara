@@ -18,6 +18,10 @@ services:
         generateValue: true
       - key: JWT_REFRESH_SECRET
         generateValue: true
+      - key: PAYMENT_WEBHOOK_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        sync: false
       - key: JWT_EXPIRES_IN
         value: 7d
       - key: JWT_REFRESH_EXPIRES_IN

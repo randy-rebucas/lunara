@@ -13,19 +13,13 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { memoryStorage } from 'multer';
 import { UserRole } from '@lunara/types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import {
-  TASK_PHOTO_UPLOAD_DIR,
-  RIDER_DOCUMENT_UPLOAD_DIR,
-  REMITTANCE_PROOF_UPLOAD_DIR,
-  taskPhotoPublicPath,
-  remittanceProofPublicPath,
-} from '../../common/uploads/upload-paths';
+import { CloudinaryService } from '../../common/cloudinary/cloudinary.service';
+import { taskPhotoPublicPath, remittanceProofPublicPath } from '../../common/uploads/upload-paths';
 import { DeliveryPhotoDto } from './dto/delivery.dto';
 import { CapturePhotoDto, CollectLaundryDto, DropAtShopDto, VerifyCustomerDto, VerifyQrDto } from './dto/pickup.dto';
 import { UpdateLocationDto, UpdateRiderProfileDto } from './dto/rider.dto';
@@ -41,18 +35,9 @@ import { isValidRiderDocumentType } from './rider-compliance';
 
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/jpg']);
 
-const taskPhotoUploadOptions = {
-  storage: diskStorage({
-    destination: TASK_PHOTO_UPLOAD_DIR,
-    filename: (_req, file, cb) => {
-      const req = _req as { user?: { sub: string }; params?: { orderId?: string } };
-      const userId = req.user?.sub ?? 'rider';
-      const orderId = req.params?.orderId ?? 'task';
-      const ext = extname(file.originalname).toLowerCase() || '.jpg';
-      cb(null, `${userId}-${orderId}-${Date.now()}${ext}`);
-    },
-  }),
-  limits: { fileSize: 8 * 1024 * 1024 },
+const imageMemoryUploadOptions = (maxSizeBytes: number) => ({
+  storage: memoryStorage(),
+  limits: { fileSize: maxSizeBytes },
   fileFilter: (_req: unknown, file: Express.Multer.File, cb: (error: Error | null, ok: boolean) => void) => {
     if (!ALLOWED_IMAGE_TYPES.has(file.mimetype)) {
       cb(new BadRequestException('Only JPEG, PNG, and WebP images are allowed'), false);
@@ -60,48 +45,11 @@ const taskPhotoUploadOptions = {
     }
     cb(null, true);
   },
-};
+});
 
-const remittanceProofUploadOptions = {
-  storage: diskStorage({
-    destination: REMITTANCE_PROOF_UPLOAD_DIR,
-    filename: (_req, file, cb) => {
-      const req = _req as { user?: { sub: string } };
-      const userId = req.user?.sub ?? 'rider';
-      const ext = extname(file.originalname).toLowerCase() || '.jpg';
-      cb(null, `${userId}-remittance-${Date.now()}${ext}`);
-    },
-  }),
-  limits: { fileSize: 8 * 1024 * 1024 },
-  fileFilter: (_req: unknown, file: Express.Multer.File, cb: (error: Error | null, ok: boolean) => void) => {
-    if (!ALLOWED_IMAGE_TYPES.has(file.mimetype)) {
-      cb(new BadRequestException('Only JPEG, PNG, and WebP images are allowed'), false);
-      return;
-    }
-    cb(null, true);
-  },
-};
-
-const riderDocumentUploadOptions = {
-  storage: diskStorage({
-    destination: RIDER_DOCUMENT_UPLOAD_DIR,
-    filename: (req, file, cb) => {
-      const request = req as { user?: { sub: string }; params?: { type?: string } };
-      const userId = request.user?.sub ?? 'rider';
-      const docType = request.params?.type ?? 'document';
-      const ext = extname(file.originalname).toLowerCase() || '.jpg';
-      cb(null, `${userId}-${docType}-${Date.now()}${ext}`);
-    },
-  }),
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (_req: unknown, file: Express.Multer.File, cb: (error: Error | null, ok: boolean) => void) => {
-    if (!ALLOWED_IMAGE_TYPES.has(file.mimetype)) {
-      cb(new BadRequestException('Only JPEG, PNG, and WebP images are allowed'), false);
-      return;
-    }
-    cb(null, true);
-  },
-};
+const taskPhotoUploadOptions = imageMemoryUploadOptions(8 * 1024 * 1024);
+const remittanceProofUploadOptions = imageMemoryUploadOptions(8 * 1024 * 1024);
+const riderDocumentUploadOptions = imageMemoryUploadOptions(5 * 1024 * 1024);
 
 @Controller('riders')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -113,6 +61,7 @@ export class RidersController {
     private readonly riderSosService: RiderSosService,
     private readonly handoffQrService: HandoffQrService,
     private readonly riderWalletService: RiderWalletService,
+    private readonly cloudinaryService: CloudinaryService,
   ) {}
 
   @Get('pickup-offers')
@@ -208,7 +157,7 @@ export class RidersController {
   @Post('pickup-tasks/:orderId/photo-upload')
   @Roles(UserRole.RIDER)
   @UseInterceptors(FileInterceptor('photo', taskPhotoUploadOptions))
-  uploadPickupPhoto(
+  async uploadPickupPhoto(
     @Param('orderId') orderId: string,
     @Req() req: { user: { sub: string } },
     @UploadedFile() file?: Express.Multer.File,
@@ -216,11 +165,9 @@ export class RidersController {
     if (!file) {
       throw new BadRequestException('Photo image is required');
     }
-    return this.pickupService.capturePhoto(
-      orderId,
-      req.user.sub,
-      taskPhotoPublicPath(file.filename),
-    );
+    const publicId = `${req.user.sub}-${orderId}-${Date.now()}`;
+    await this.cloudinaryService.uploadPrivateBuffer(file.buffer, 'lunara/task-photos', publicId);
+    return this.pickupService.capturePhoto(orderId, req.user.sub, taskPhotoPublicPath(publicId));
   }
 
   @Post('pickup-tasks/:orderId/generate-receipt')
@@ -278,7 +225,7 @@ export class RidersController {
   @Post('me/documents/:type')
   @Roles(UserRole.RIDER)
   @UseInterceptors(FileInterceptor('document', riderDocumentUploadOptions))
-  uploadDocument(
+  async uploadDocument(
     @Param('type') type: string,
     @Req() req: { user: { sub: string } },
     @UploadedFile() file?: Express.Multer.File,
@@ -289,7 +236,9 @@ export class RidersController {
     if (!file) {
       throw new BadRequestException('Document image is required');
     }
-    return this.ridersService.uploadDocument(req.user.sub, type, file.filename);
+    const publicId = `${req.user.sub}-${type}-${Date.now()}`;
+    await this.cloudinaryService.uploadPrivateBuffer(file.buffer, 'lunara/rider-documents', publicId);
+    return this.ridersService.uploadDocument(req.user.sub, type, publicId);
   }
 
   @Get('notifications')
@@ -411,7 +360,7 @@ export class RidersController {
   @Post('delivery-tasks/:orderId/photo-upload')
   @Roles(UserRole.RIDER)
   @UseInterceptors(FileInterceptor('photo', taskPhotoUploadOptions))
-  uploadDeliveryPhoto(
+  async uploadDeliveryPhoto(
     @Param('orderId') orderId: string,
     @Req() req: { user: { sub: string } },
     @UploadedFile() file?: Express.Multer.File,
@@ -419,11 +368,9 @@ export class RidersController {
     if (!file) {
       throw new BadRequestException('Photo image is required');
     }
-    return this.deliveryService.capturePhoto(
-      orderId,
-      req.user.sub,
-      taskPhotoPublicPath(file.filename),
-    );
+    const publicId = `${req.user.sub}-${orderId}-${Date.now()}`;
+    await this.cloudinaryService.uploadPrivateBuffer(file.buffer, 'lunara/task-photos', publicId);
+    return this.deliveryService.capturePhoto(orderId, req.user.sub, taskPhotoPublicPath(publicId));
   }
 
   @Post('delivery-tasks/:orderId/collect-cash')
@@ -507,12 +454,17 @@ export class RidersController {
   @Post('remit-cash')
   @Roles(UserRole.RIDER)
   @UseInterceptors(FileInterceptor('proof', remittanceProofUploadOptions))
-  submitRemittance(
+  async submitRemittance(
     @Req() req: { user: { sub: string } },
     @Body('transactionId') transactionId?: string,
     @UploadedFile() file?: Express.Multer.File,
   ) {
-    const proofImageUrl = file ? remittanceProofPublicPath(file.filename) : undefined;
+    let proofImageUrl: string | undefined;
+    if (file) {
+      const publicId = `${req.user.sub}-remittance-${Date.now()}`;
+      await this.cloudinaryService.uploadPrivateBuffer(file.buffer, 'lunara/remittance-proofs', publicId);
+      proofImageUrl = remittanceProofPublicPath(publicId);
+    }
     return this.riderWalletService.submitRemittance(req.user.sub, proofImageUrl, transactionId);
   }
 

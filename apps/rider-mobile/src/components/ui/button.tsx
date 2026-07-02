@@ -30,6 +30,9 @@ export function Button({
         style,
       ]}
       disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !!disabled }}
       {...props}
     >
       <Text
