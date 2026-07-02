@@ -369,3 +369,15 @@ export class Order {
 }
 
 export const OrderSchema = SchemaFactory.createForClass(Order);
+
+// Sparse partial indexes: most orders never have a shelf slot / tag code, so
+// these only index the (small) subset of documents that do, keeping the
+// index compact. Backs ProcessingService.findOnShelf (shelf-lookup search).
+OrderSchema.index(
+  { 'laundryProcessing.shelfSlot': 1 },
+  { partialFilterExpression: { 'laundryProcessing.shelfSlot': { $exists: true } } },
+);
+OrderSchema.index(
+  { 'laundryProcessing.completedSteps.tagCode': 1 },
+  { partialFilterExpression: { 'laundryProcessing.completedSteps.tagCode': { $exists: true } } },
+);
