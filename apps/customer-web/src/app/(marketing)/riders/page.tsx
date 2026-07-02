@@ -8,7 +8,7 @@ import {
   MarketingInfoCard,
 } from '../../../components/marketing/marketing-design';
 import { MarketingActions } from '../../../components/marketing/marketing-actions';
-import { ButtonAnchor, ButtonLink } from '../../../components/ui/button-link';
+import { ButtonLink } from '../../../components/ui/button-link';
 
 export const metadata: Metadata = {
   title: `Drive with ${appConfig.name}`,
@@ -72,17 +72,13 @@ export default function RidersPage() {
         badgeVariant="secondary"
         variant="secondary"
         title="Join the rider fleet"
-        description="Rider accounts are created by Lunara operations after review. Email us with your name, phone number, city, and vehicle type to start your application."
+        description="Rider accounts are created by Lunara operations after review. Submit your application with your name, phone number, city, and vehicle type to get started."
         footer="Existing riders: use the Lunara Rider mobile app to sign in and manage your shift."
       >
         <MarketingActions gap="loose">
-          <ButtonAnchor
-            href={`mailto:${appConfig.supportEmail}?subject=${encodeURIComponent('Lunara rider application')}`}
-            size="lg"
-            layout="responsive"
-          >
+          <ButtonLink href="/riders/apply" size="lg" layout="responsive">
             Apply to drive
-          </ButtonAnchor>
+          </ButtonLink>
           <ButtonLink href="/faq" variant="outline" size="lg" layout="responsive">
             Read FAQ
           </ButtonLink>

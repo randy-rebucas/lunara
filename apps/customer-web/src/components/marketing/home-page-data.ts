@@ -34,6 +34,11 @@ export const HERO_IMAGE = {
   alt: 'Neatly folded clean laundry',
 };
 
+export const HERO_BANNER_IMAGE = {
+  src: u('1517677208171-0bc6725a3e60', 1920, 1080),
+  alt: 'Rows of washing machines in a bright commercial laundromat',
+};
+
 export type HowItWorksItem = {
   step: string;
   title: string;

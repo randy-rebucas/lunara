@@ -11,8 +11,10 @@ import { fetchOnboardingStatus, getOnboardingPath } from '@lunara/hooks/onboardi
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { resolveApiV1BaseUrl } from '@lunara/hooks';
 import { AuthLoading } from '../auth-loading';
-import { ButtonAnchor, ButtonLink } from '../ui/button-link';
+import { ButtonLink } from '../ui/button-link';
+import { Carousel } from '../ui/carousel';
 import { MarketingActions } from './marketing-actions';
+import { ParallaxBanner } from './parallax-banner';
 import {
   MarketingCtaPanel,
   MarketingFeatureCard,
@@ -25,6 +27,7 @@ import { MarketingShell } from './marketing-shell';
 import {
   CUSTOMER_REVIEWS,
   EXPANDING_AREAS,
+  HERO_BANNER_IMAGE,
   HERO_IMAGE,
   HERO_STATS,
   HOW_IT_WORKS,
@@ -243,6 +246,22 @@ export function HomePage() {
         </div>
       </section>
 
+      {/* ── Parallax banner ── */}
+      <ParallaxBanner
+        src={HERO_BANNER_IMAGE.src}
+        alt={HERO_BANNER_IMAGE.alt}
+        className="h-64 sm:h-80"
+      >
+        <div className="marketing-container flex h-64 flex-col items-center justify-center text-center sm:h-80">
+          <p className="text-xs font-semibold uppercase tracking-wider text-white/70">
+            Trusted laundry care
+          </p>
+          <h2 className="mt-3 max-w-2xl text-2xl font-bold text-white sm:text-3xl">
+            Professional-grade equipment, handled by vetted partners
+          </h2>
+        </div>
+      </ParallaxBanner>
+
       {/* ── Social proof strip ── */}
       <section className="bg-slate-900" aria-label="Social proof">
         <div className="marketing-container py-8">
@@ -314,19 +333,22 @@ export function HomePage() {
           description="Four steps from dirty laundry to fresh and delivered."
         />
 
-        <ol className="mx-auto mt-12 grid max-w-5xl gap-6 sm:grid-cols-2">
-          {HOW_IT_WORKS.map((item) => {
+        <Carousel
+          className="mx-auto mt-12 max-w-5xl"
+          items={HOW_IT_WORKS}
+          getKey={(item) => item.step}
+          renderItem={(item) => {
             const Icon = item.icon;
             return (
-              <li key={item.step} className="card h-full overflow-hidden">
+              <div className="card h-full overflow-hidden">
                 {/* Step image */}
                 <div className="relative aspect-video w-full">
                   <Image
                     src={item.image}
                     alt={item.imageAlt}
                     fill
-                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 40vw"
-                    className="object-cover"
+                    sizes="(max-width: 640px) 85vw, (max-width: 1024px) 45vw, 33vw"
+                    className="object-cover grayscale transition duration-300 hover:grayscale-0"
                   />
                   {/* Step number badge overlaid on image */}
                   <span
@@ -343,10 +365,10 @@ export function HomePage() {
                     <p className="mt-1.5 text-sm leading-relaxed text-muted">{item.description}</p>
                   </div>
                 </div>
-              </li>
+              </div>
             );
-          })}
-        </ol>
+          }}
+        />
       </MarketingSection>
 
       {/* ── Service areas ── */}
@@ -464,7 +486,7 @@ export function HomePage() {
                   alt={tier.imageAlt}
                   fill
                   sizes="(max-width: 768px) 100vw, 33vw"
-                  className="object-cover"
+                  className="object-cover grayscale transition duration-300 hover:grayscale-0"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-surface/50 to-transparent" aria-hidden />
               </div>
@@ -517,9 +539,12 @@ export function HomePage() {
           description={`What customers say about booking with ${appConfig.name}.`}
         />
 
-        <div className="mt-12 grid gap-6 md:grid-cols-3">
-          {CUSTOMER_REVIEWS.map((review) => (
-            <blockquote key={review.name} className="card h-full">
+        <Carousel
+          className="mt-12"
+          items={CUSTOMER_REVIEWS}
+          getKey={(review) => review.name}
+          renderItem={(review) => (
+            <blockquote className="card h-full">
               <div className="card-body flex h-full flex-col">
                 <StarRating count={review.rating} />
 
@@ -541,8 +566,8 @@ export function HomePage() {
                 </footer>
               </div>
             </blockquote>
-          ))}
-        </div>
+          )}
+        />
       </MarketingSection>
 
       {/* ── Partner & Rider CTA ── */}
@@ -558,14 +583,9 @@ export function HomePage() {
               <ButtonLink href="/partners" size="lg" layout="responsive">
                 Learn about partnering
               </ButtonLink>
-              <ButtonAnchor
-                href={`mailto:${appConfig.supportEmail}?subject=${encodeURIComponent('Lunara partner application')}`}
-                variant="outline"
-                size="lg"
-                layout="responsive"
-              >
+              <ButtonLink href="/partners/apply" variant="outline" size="lg" layout="responsive">
                 Apply now
-              </ButtonAnchor>
+              </ButtonLink>
             </MarketingActions>
           </MarketingCtaPanel>
 
@@ -580,14 +600,9 @@ export function HomePage() {
               <ButtonLink href="/riders" size="lg" layout="responsive">
                 Drive with Lunara
               </ButtonLink>
-              <ButtonAnchor
-                href={`mailto:${appConfig.supportEmail}?subject=${encodeURIComponent('Lunara rider application')}`}
-                variant="outline"
-                size="lg"
-                layout="responsive"
-              >
+              <ButtonLink href="/riders/apply" variant="outline" size="lg" layout="responsive">
                 Apply to drive
-              </ButtonAnchor>
+              </ButtonLink>
             </MarketingActions>
           </MarketingCtaPanel>
         </div>

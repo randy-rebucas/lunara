@@ -17,6 +17,8 @@ import { OrdersModule } from './modules/orders/orders.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { RidersModule } from './modules/riders/riders.module';
+import { RiderApplicationsModule } from './modules/rider-applications/rider-applications.module';
+import { PartnerApplicationsModule } from './modules/partner-applications/partner-applications.module';
 import { UsersModule } from './modules/users/users.module';
 import { WalletsModule } from './modules/wallets/wallets.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
@@ -56,6 +58,8 @@ import { EmailModule } from './common/email/email.module';
     PartnersModule,
     OrdersModule,
     RidersModule,
+    RiderApplicationsModule,
+    PartnerApplicationsModule,
     WalletsModule,
     PaymentsModule,
     ReviewsModule,

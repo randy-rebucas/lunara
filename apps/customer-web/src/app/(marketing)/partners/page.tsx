@@ -8,7 +8,7 @@ import {
   MarketingInfoCard,
 } from '../../../components/marketing/marketing-design';
 import { MarketingActions } from '../../../components/marketing/marketing-actions';
-import { ButtonAnchor, ButtonLink } from '../../../components/ui/button-link';
+import { ButtonLink } from '../../../components/ui/button-link';
 
 export const metadata: Metadata = {
   title: `Partner with ${appConfig.name}`,
@@ -74,13 +74,9 @@ export default function PartnersPage() {
         description="Tell us about your laundry shop, location, and daily capacity. Our partnerships team will review your application and follow up with onboarding steps."
       >
         <MarketingActions gap="loose">
-          <ButtonAnchor
-            href={`mailto:${appConfig.supportEmail}?subject=${encodeURIComponent('Lunara partner application')}`}
-            size="lg"
-            layout="responsive"
-          >
-            Email partnerships
-          </ButtonAnchor>
+          <ButtonLink href="/partners/apply" size="lg" layout="responsive">
+            Apply to become a partner
+          </ButtonLink>
           <ButtonLink href="/locations" variant="outline" size="lg" layout="responsive">
             View service areas
           </ButtonLink>

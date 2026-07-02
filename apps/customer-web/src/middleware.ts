@@ -49,6 +49,7 @@ export async function middleware(request: NextRequest) {
   response.cookies.set(TENANT_COOKIE, branding.partnerId, {
     sameSite: 'lax',
     path: '/',
+    secure: process.env.NODE_ENV === 'production',
   });
   return response;
 }
