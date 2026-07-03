@@ -4,6 +4,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { UpdateDeliveryFeeDto } from './dto/update-delivery-fee.dto';
+import { UpdateAutomationSettingsDto } from './dto/update-automation-settings.dto';
 import { SettingsService } from './settings.service';
 
 @Controller('admin/settings')
@@ -20,5 +21,15 @@ export class SettingsController {
   @Patch('delivery-fee')
   updateDeliveryFee(@Body() dto: UpdateDeliveryFeeDto) {
     return this.settingsService.updateDeliveryFeeSettings(dto);
+  }
+
+  @Get('automation')
+  getAutomationSettings() {
+    return this.settingsService.getAutomationSettings();
+  }
+
+  @Patch('automation')
+  updateAutomationSettings(@Body() dto: UpdateAutomationSettingsDto) {
+    return this.settingsService.updateAutomationSettings(dto);
   }
 }

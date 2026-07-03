@@ -352,6 +352,14 @@ export class Order {
   @Prop({ required: true })
   total!: number;
 
+  /** Pre-markup service subtotal (shop's own price × weight), for shop_markup orders only. */
+  @Prop()
+  baseSubtotal?: number;
+
+  /** How Lunara's cut was computed for this order — missing/legacy orders use branch.commissionRate at settlement. */
+  @Prop({ enum: ['legacy_commission', 'shop_markup'] })
+  pricingModel?: 'legacy_commission' | 'shop_markup';
+
   @Prop({ type: [OrderStatusEvent], default: [] })
   statusHistory!: OrderStatusEvent[];
 

@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BranchAddressEditor, type BranchAddressValue } from './branch-address-editor';
 import { MetricCell } from './metric-cell';
+import { ShopPricingPanel } from './shop-pricing-panel';
 import { adminFetch } from '../../lib/admin-api';
 import { formatPeso } from '../../lib/format-peso';
 import { useAdminQuery } from '../../lib/use-admin-query';
@@ -37,6 +38,7 @@ interface BranchProfile {
     dailyQuotaOrders: number;
     dailyQuotaWeightKg: number;
     commissionRate: number;
+    servicePricing: { serviceType: string; basePricePerKg: number }[];
     location: { latitude: number; longitude: number };
   };
   hierarchy: {
@@ -984,6 +986,13 @@ export function BranchesBoard() {
                           <p className="mt-1 text-xs text-muted">Platform fee on laundry subtotal. Default 20%.</p>
                         </div>
                       </div>
+
+                      {profile.branch.branchType === 'partner_shop' ? (
+                        <ShopPricingPanel
+                          branchId={profile.branch.id}
+                          initialPricing={profile.branch.servicePricing}
+                        />
+                      ) : null}
 
                       <div className="mt-4 border-t border-border/60 pt-4">
                         <h4 className="text-sm font-semibold text-slate-900">Address</h4>

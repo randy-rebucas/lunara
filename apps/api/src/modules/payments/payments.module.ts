@@ -9,6 +9,7 @@ import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 import { Payment, PaymentSchema } from './schemas/payment.schema';
 import { LedgerModule } from '../ledger/ledger.module';
+import { SettingsModule } from '../settings/settings.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { LedgerModule } from '../ledger/ledger.module';
     RealtimeModule,
     BranchesModule,
     LedgerModule,
+    SettingsModule,
   ],
   controllers: [PaymentsController],
   providers: [PaymentsService, PaymongoService],

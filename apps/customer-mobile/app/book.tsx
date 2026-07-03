@@ -35,7 +35,6 @@ import { colors, radius, spacing, typography } from '../src/theme';
 import { BookingProgress } from '../src/components/booking-progress';
 import { Button } from '../src/components/ui/button';
 import { ScheduleSupportPrompt } from '../src/components/schedule-support-prompt';
-import { NearestBranchesCard, type NearestBranchRow } from '../src/components/nearest-branches';
 import { PickupSchedulePicker } from '../src/components/pickup-schedule-picker';
 import { PaymentMethodPicker } from '../src/components/payment-method-picker';
 import { getCustomerClientOrigin } from '../src/lib/client-origin';
@@ -84,9 +83,29 @@ interface BookingConfig {
   maxWeightKg: number;
 }
 
+interface ShopServiceOption {
+  type: BookingType;
+  label: string;
+  basePricePerKg: number;
+  customerPricePerKg: number;
+}
+
+interface ShopOption {
+  branchId: string;
+  code: string;
+  name: string;
+  city: string;
+  distanceKm: number;
+  distanceLabel: string;
+  withinRadius: boolean;
+  capacityAvailable: boolean;
+  services: ShopServiceOption[];
+}
+
 const STEP_ICON: Record<BookingStep, keyof typeof Ionicons.glyphMap> = {
   service: 'shirt-outline',
   address: 'location-outline',
+  shop: 'storefront-outline',
   schedule: 'calendar-outline',
   weight: 'scale-outline',
   addons: 'sparkles-outline',
@@ -127,8 +146,8 @@ export default function BookScreen() {
   const [slots, setSlots] = useState<PickupSlot[]>([]);
   const [areaLabel, setAreaLabel] = useState('');
   const [dispatchNote, setDispatchNote] = useState('');
-  const [nearestBranches, setNearestBranches] = useState<NearestBranchRow[]>([]);
-  const [nearestNote, setNearestNote] = useState('');
+  const [shopOptions, setShopOptions] = useState<ShopOption[]>([]);
+  const [shopsLoading, setShopsLoading] = useState(false);
   const [quote, setQuote] = useState<QuoteBreakdown | null>(null);
   const [promoLoading, setPromoLoading] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.GCASH);
@@ -159,9 +178,16 @@ export default function BookScreen() {
       );
   }, [apiFetch]);
 
+  const selectedShop = shopOptions.find((s) => s.branchId === form.branchId);
+
   const localQuote = useMemo(() => {
     if (!form.bookingType) return null;
-    const service = config?.services.find((s) => s.type === form.bookingType);
+    const catalogService = config?.services.find((s) => s.type === form.bookingType);
+    const shopService = selectedShop?.services.find((s) => s.type === form.bookingType);
+    const service =
+      catalogService && shopService
+        ? { ...catalogService, pricePerKg: shopService.customerPricePerKg }
+        : catalogService;
     try {
       return calculateQuote(
         {
@@ -175,7 +201,7 @@ export default function BookScreen() {
     } catch {
       return null;
     }
-  }, [form.bookingType, form.weightKg, form.addonIds, config?.services, config?.addons]);
+  }, [form.bookingType, form.weightKg, form.addonIds, config?.services, config?.addons, selectedShop]);
 
   const loadAvailability = useCallback(
     async (addressId: string) => {
@@ -211,18 +237,18 @@ export default function BookScreen() {
     [apiFetch],
   );
 
-  const loadNearestBranches = useCallback(
+  const loadShops = useCallback(
     async (addressId: string) => {
+      setShopsLoading(true);
       try {
-        const res = await apiFetch<{
-          ranked: NearestBranchRow[];
-          note?: string;
-        }>(`/branches/nearest?addressId=${encodeURIComponent(addressId)}`);
-        setNearestBranches(res.ranked ?? []);
-        setNearestNote(res.note ?? '');
+        const res = await apiFetch<ShopOption[]>(
+          `/booking/shops?addressId=${encodeURIComponent(addressId)}`,
+        );
+        setShopOptions(res ?? []);
       } catch {
-        setNearestBranches([]);
-        setNearestNote('');
+        setShopOptions([]);
+      } finally {
+        setShopsLoading(false);
       }
     },
     [apiFetch],
@@ -231,8 +257,8 @@ export default function BookScreen() {
   useEffect(() => {
     if (!form.addressId) return;
     loadAvailability(form.addressId);
-    loadNearestBranches(form.addressId);
-  }, [form.addressId, loadAvailability, loadNearestBranches]);
+    loadShops(form.addressId);
+  }, [form.addressId, loadAvailability, loadShops]);
 
   useEffect(() => {
     if (step !== 'confirm') return;
@@ -253,13 +279,14 @@ export default function BookScreen() {
   }, [expressReturnAllowed]);
 
   async function refreshQuote(couponCode = form.couponCode) {
-    if (!form.bookingType || !form.addressId) return null;
+    if (!form.bookingType || !form.addressId || !form.branchId) return null;
     const q = await apiFetch<QuoteBreakdown>(
       `/booking/quote?addressId=${encodeURIComponent(form.addressId)}`,
       {
         method: 'POST',
         body: JSON.stringify({
           bookingType: form.bookingType,
+          branchId: form.branchId,
           weightKg: form.weightKg,
           addonIds: form.addonIds,
           ...(form.scheduledPickupAt ? { scheduledPickupAt: form.scheduledPickupAt } : {}),
@@ -321,6 +348,10 @@ export default function BookScreen() {
         return;
       }
     }
+    if (step === 'shop' && !form.branchId) {
+      setError('Select a laundry shop');
+      return;
+    }
     if (step === 'schedule' && !form.scheduledPickupAt) {
       setError('Select a pickup slot');
       return;
@@ -361,7 +392,7 @@ export default function BookScreen() {
   }, [step]);
 
   async function placeOrder() {
-    if (!form.bookingType || !form.addressId || !form.scheduledPickupAt) return;
+    if (!form.bookingType || !form.addressId || !form.branchId || !form.scheduledPickupAt) return;
     setLoading(true);
     setError('');
     try {
@@ -369,6 +400,7 @@ export default function BookScreen() {
         method: 'POST',
         body: JSON.stringify({
           bookingType: form.bookingType,
+          branchId: form.branchId,
           weightKg: form.weightKg,
           addonIds: form.addonIds,
           pickupAddressId: form.addressId,
@@ -397,7 +429,7 @@ export default function BookScreen() {
       if (payment.paid) {
         Alert.alert(
           'Booked!',
-          'Payment received. Lunara will assign your partner branch shortly.',
+          'Payment received. Your laundry shop has been notified.',
           [{ text: 'Track order', onPress: goToOrder }],
         );
         return;
@@ -409,7 +441,7 @@ export default function BookScreen() {
           payment.message ??
           (payment.receiptCode
             ? `Pay cash as arranged. Reference: ${payment.receiptCode}`
-            : 'Pay cash as arranged. Lunara will assign your partner branch shortly.'),
+            : 'Pay cash as arranged. Your laundry shop has been notified.'),
           [{ text: 'Track order', onPress: goToOrder }],
         );
         return;
@@ -524,7 +556,7 @@ export default function BookScreen() {
                       pressed && styles.optionPressed,
                     ]}
                     onPress={() =>
-                      setForm((f) => ({ ...f, addressId: a._id, scheduledPickupAt: '' }))
+                      setForm((f) => ({ ...f, addressId: a._id, branchId: '', scheduledPickupAt: '' }))
                     }
                     accessibilityRole="radio"
                     accessibilityState={{ selected }}
@@ -554,9 +586,59 @@ export default function BookScreen() {
                   );
                 })
               )}
-              {form.addressId ? (
-                <NearestBranchesCard branches={nearestBranches} note={nearestNote} />
-              ) : null}
+            </View>
+          )}
+
+          {step === 'shop' && (
+            <View>
+              <StepHeading step="shop" title="Choose a laundry shop" />
+              {shopsLoading ? (
+                <Text style={styles.sub}>Finding nearby shops…</Text>
+              ) : shopOptions.length === 0 ? (
+                <Text style={styles.sub}>No partner shops are available near this address yet.</Text>
+              ) : (
+                shopOptions.map((shop) => {
+                  const selected = form.branchId === shop.branchId;
+                  const shopService = shop.services.find((s) => s.type === form.bookingType);
+                  const disabled = !shop.withinRadius || !shop.capacityAvailable;
+                  return (
+                    <Pressable
+                      key={shop.branchId}
+                      disabled={disabled}
+                      style={({ pressed }) => [
+                        styles.option,
+                        selected && styles.optionSelected,
+                        disabled && styles.optionDisabled,
+                        pressed && !disabled && styles.optionPressed,
+                      ]}
+                      onPress={() => setForm((f) => ({ ...f, branchId: shop.branchId }))}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected, disabled }}
+                    >
+                      <View style={styles.optionTopRow}>
+                        <Text style={styles.optionTitle}>{shop.name}</Text>
+                        {selected ? (
+                          <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                        ) : null}
+                      </View>
+                      <Text style={styles.optionSub}>
+                        {shop.city} · {shop.distanceLabel}
+                      </Text>
+                      {shopService ? (
+                        <Text style={styles.optionPrice}>
+                          {formatCurrency(shopService.customerPricePerKg)} / kg
+                        </Text>
+                      ) : null}
+                      {!shop.capacityAvailable ? (
+                        <Text style={styles.optionGpsMissing}>Currently at capacity</Text>
+                      ) : null}
+                      {!shop.withinRadius ? (
+                        <Text style={styles.optionGpsMissing}>Outside delivery range</Text>
+                      ) : null}
+                    </Pressable>
+                  );
+                })
+              )}
             </View>
           )}
 
@@ -812,6 +894,10 @@ export default function BookScreen() {
                   {activeQuote.serviceLabel}
                 </Text>
                 <Text style={styles.summaryLine}>
+                  <Text style={styles.summaryMuted}>Shop: </Text>
+                  {selectedShop?.name ?? 'Selected shop'}
+                </Text>
+                <Text style={styles.summaryLine}>
                   <Text style={styles.summaryMuted}>Weight: </Text>~{activeQuote.weightKg} kg
                 </Text>
                 <Text style={styles.summaryLine}>
@@ -824,12 +910,10 @@ export default function BookScreen() {
                 </Text>
               </View>
               <Text style={styles.confirmNote}>
-                Lunara operations assigns your partner branch after payment. Pickup riders are
-                notified once dispatched. Final amount may adjust after weigh-in.
+                Your order goes straight to {selectedShop?.name ?? 'your selected shop'} after
+                payment. Pickup riders are notified once dispatched. Final amount may adjust after
+                weigh-in.
               </Text>
-              {nearestBranches.length > 0 && (
-                <NearestBranchesCard branches={nearestBranches} note={nearestNote} />
-              )}
               <PaymentMethodPicker
                 method={paymentMethod}
                 onMethodChange={setPaymentMethod}

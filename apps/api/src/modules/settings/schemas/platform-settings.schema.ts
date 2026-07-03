@@ -6,13 +6,49 @@ export type PlatformSettingsDocument = HydratedDocument<PlatformSettings>;
 /** Singleton document — exactly one row, created on first read with defaults. */
 @Schema({ timestamps: true, collection: 'platform_settings' })
 export class PlatformSettings {
-  /** Delivery fee for Metro Manila / NCR addresses. */
+  /** Flat pickup + delivery fee charged on every booking, regardless of address. */
+  @Prop({ required: true, default: 70 })
+  deliveryFee!: number;
+
+  /** @deprecated superseded by deliveryFee; kept for backward-compat reads only. */
   @Prop({ required: true, default: 50 })
   cityDeliveryFee!: number;
 
-  /** Delivery fee for provincial addresses outside Metro Manila. */
+  /** @deprecated superseded by deliveryFee; kept for backward-compat reads only. */
   @Prop({ required: true, default: 80 })
   provinceDeliveryFee!: number;
+
+  /** Auto-assign paid orders to the top-ranked branch instead of waiting for admin dispatch. */
+  @Prop({ default: false })
+  autoDispatchOrders!: boolean;
+
+  /** Auto-confirm the system-suggested rider for pickup instead of waiting for admin confirmation. */
+  @Prop({ default: false })
+  autoAssignPickupRider!: boolean;
+
+  /** Auto-confirm the system-suggested rider for delivery instead of waiting for admin confirmation. */
+  @Prop({ default: false })
+  autoAssignDeliveryRider!: boolean;
+
+  /** Auto-generate partner settlements on a schedule instead of requiring a manual admin trigger. */
+  @Prop({ default: false })
+  autoGenerateSettlements!: boolean;
+
+  /** Auto-approve/reject refund requests under autoApproveRefundsThreshold with clean evidence. */
+  @Prop({ default: false })
+  autoApproveRefunds!: boolean;
+
+  /** Peso ceiling under which a refund request may be auto-approved. */
+  @Prop({ default: 500 })
+  autoApproveRefundsThreshold!: number;
+
+  /** Auto-approve rider withdrawal requests under autoApproveWithdrawalsThreshold. */
+  @Prop({ default: false })
+  autoApproveWithdrawals!: boolean;
+
+  /** Peso ceiling under which a rider withdrawal may be auto-approved. */
+  @Prop({ default: 1000 })
+  autoApproveWithdrawalsThreshold!: number;
 
   createdAt!: Date;
   updatedAt!: Date;

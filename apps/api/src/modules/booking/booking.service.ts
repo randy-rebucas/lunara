@@ -2,16 +2,19 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Types } from 'mongoose';
 import { BookingType } from '@lunara/types';
 import {
+  applyShopMarkup,
   BOOKING_MAX_WEIGHT_KG,
   BOOKING_MIN_ORDER_AMOUNT,
   BOOKING_MIN_WEIGHT_KG,
   calculateQuote,
+  distanceKm,
   EXPRESS_RETURN_ADDON_ID,
   generatePickupSlots,
   isExpressReturnAllowed,
   isPickupSlotBookable,
   PICKUP_SCHEDULE_DAY_COUNT,
   isServiceAvailableInArea,
+  resolveCoordinates,
   SERVICE_AREAS,
   validateAddressFields,
   validateServiceArea,
@@ -52,10 +55,14 @@ export class BookingService {
         minOrderAmount: BOOKING_MIN_ORDER_AMOUNT,
         minWeightKg: BOOKING_MIN_WEIGHT_KG,
         maxWeightKg: BOOKING_MAX_WEIGHT_KG,
-        cityDeliveryFee: deliveryFees.data.cityDeliveryFee,
-        provinceDeliveryFee: deliveryFees.data.provinceDeliveryFee,
+        deliveryFee: deliveryFees.data.deliveryFee,
       },
     };
+  }
+
+  /** Nearby partner shops with their marked-up prices, for the customer's shop-selection step. */
+  async getShopOptions(userId: string, addressId: string) {
+    return this.branchesService.findNearbyShopsForAddressId(userId, addressId);
   }
 
   async validateAddressForUser(userId: string, addressId: string) {
@@ -122,22 +129,43 @@ export class BookingService {
         availableServices: area.availableServices,
         slots,
         partnerCoverage,
-        dispatchNote:
-          'After payment, Lunara operations will assign the best partner branch for your area.',
+        dispatchNote: 'Next, choose which laundry shop you\'d like to book with.',
       },
     };
   }
 
+  /**
+   * White-labeled partner bookings never have a customer-chosen branchId, so they keep using
+   * plain global catalog pricing (see F4 — shop markup is scoped to the general customer flow).
+   */
   async buildQuote(
     dto: BookingQuoteDto,
     areaServices: BookingType[],
     userId: string,
-    address: { city: string; province: string },
+    address: { city: string; province: string; latitude?: number; longitude?: number },
+    isWhiteLabel = false,
   ) {
     const service = await this.catalogService.findActiveByType(dto.bookingType);
     if (!service) throw new BadRequestException('Invalid or inactive service type');
     if (!isServiceAvailableInArea(dto.bookingType, areaServices)) {
       throw new BadRequestException('This service is not available in your area');
+    }
+
+    let priceableService = service;
+    if (!isWhiteLabel) {
+      if (!dto.branchId) throw new BadRequestException('Select a laundry shop first');
+      const branch = await this.branchesService.getActivePartnerShop(dto.branchId);
+      const [branchLng, branchLat] = branch.location.coordinates;
+      const customerCoords = resolveCoordinates(address.city, address.latitude, address.longitude);
+      const dist = distanceKm(customerCoords, [branchLng, branchLat]);
+      if (dist > branch.serviceRadiusKm) {
+        throw new BadRequestException('Selected shop does not deliver to this address');
+      }
+      const basePricePerKg = await this.branchesService.resolveBranchServicePrice(
+        branch,
+        dto.bookingType,
+      );
+      priceableService = { ...service, pricePerKg: applyShopMarkup(basePricePerKg) };
     }
 
     const activeAddons = await this.catalogService.listActiveAddons();
@@ -163,7 +191,7 @@ export class BookingService {
         weightKg: dto.weightKg,
         addonIds,
       },
-      service,
+      priceableService,
       activeAddons,
       deliveryFee,
     );
@@ -189,23 +217,23 @@ export class BookingService {
     partnerContextId?: string,
   ) {
     const { address, area } = await this.validateAddressForUser(userId, dto.pickupAddressId);
-    const quote = await this.buildQuote(dto, area.availableServices, userId, address);
-    const service = await this.catalogService.findActiveByType(dto.bookingType);
-    if (!service) throw new BadRequestException('Invalid or inactive service type');
+    const quote = await this.buildQuote(
+      dto,
+      area.availableServices,
+      userId,
+      address,
+      Boolean(partnerContextId),
+    );
     const slot = generatePickupSlots().find((s) => s.startAt === dto.scheduledPickupAt);
     if (!slot || !isPickupSlotBookable(slot)) {
       throw new BadRequestException('Selected pickup slot is no longer available');
     }
 
-    const partnerBranch = partnerContextId
-      ? await this.resolvePartnerBranch(partnerContextId, address, dto.bookingType, quote.weightKg)
-      : undefined;
-
     const items = [
       {
         serviceType: dto.bookingType,
         quantity: quote.weightKg,
-        unitPrice: service.pricePerKg,
+        unitPrice: quote.pricePerKg,
         notes: `Estimated ${quote.weightKg} kg`,
       },
       ...quote.addons.map((a) => ({
@@ -215,6 +243,41 @@ export class BookingService {
         notes: `Add-on: ${a.label}`,
       })),
     ];
+
+    let branchId: string | undefined;
+    let branchCode: string | undefined;
+    let branchName: string | undefined;
+    let resolvedPartnerId: string | undefined;
+    let baseSubtotal: number | undefined;
+    let pricingModel: 'shop_markup' | undefined;
+
+    if (partnerContextId) {
+      // White-labeled bookings stay within that partner's own branch pool — no customer choice.
+      const partnerBranch = await this.resolvePartnerBranch(
+        partnerContextId,
+        address,
+        dto.bookingType,
+        quote.weightKg,
+      );
+      branchId = partnerBranch.branchId;
+      branchCode = partnerBranch.code;
+      branchName = partnerBranch.name;
+      resolvedPartnerId = partnerContextId;
+    } else {
+      // General customer flow: the shop they picked at booking time is the order's branch.
+      // buildQuote() above already required and validated dto.branchId when not white-label.
+      const branch = await this.branchesService.getActivePartnerShop(dto.branchId!);
+      const basePricePerKg = await this.branchesService.resolveBranchServicePrice(
+        branch,
+        dto.bookingType,
+      );
+      branchId = branch._id.toString();
+      branchCode = branch.code;
+      branchName = branch.name;
+      resolvedPartnerId = branch.partnerUserId.toString();
+      baseSubtotal = Math.round(basePricePerKg * quote.weightKg);
+      pricingModel = 'shop_markup';
+    }
 
     return {
         bookingType: dto.bookingType,
@@ -230,10 +293,12 @@ export class BookingService {
         deliveryFee: quote.deliveryFee,
         discount: quote.discount,
         total: quote.total,
-        branchId: partnerBranch?.branchId,
-        branchCode: partnerBranch?.code,
-        branchName: partnerBranch?.name,
-        partnerId: partnerContextId,
+        branchId,
+        branchCode,
+        branchName,
+        partnerId: resolvedPartnerId,
+        baseSubtotal,
+        pricingModel,
     };
   }
 

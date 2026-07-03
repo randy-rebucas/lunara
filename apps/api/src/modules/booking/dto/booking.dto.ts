@@ -14,6 +14,11 @@ export class BookingQuoteDto {
   @IsEnum(BookingType)
   bookingType!: BookingType;
 
+  /** Required for the general customer shop-selection flow; omitted for white-labeled partner bookings. */
+  @IsOptional()
+  @IsString()
+  branchId?: string;
+
   @IsNumber()
   @Min(1)
   @Max(50)

@@ -94,10 +94,11 @@ const nav: NavItem[] = [
   { href: '/reports',       label: 'Reports',        icon: Icons.reports },
 
   { section: 'System' },
-  { href: '/messages',      label: 'Messages',       icon: Icons.messages },
-  { href: '/support',       label: 'Support',        icon: Icons.support },
-  { href: '/setup',         label: 'Setup',          icon: Icons.setup },
-  { href: '/maintenance',   label: 'Maintenance',    icon: Icons.maintenance },
+  { href: '/messages',              label: 'Messages',              icon: Icons.messages },
+  { href: '/support',               label: 'Support',                icon: Icons.support },
+  { href: '/automation-settings',   label: 'Automation settings',    icon: Icons.setup },
+  { href: '/setup',                 label: 'Setup',                  icon: Icons.setup },
+  { href: '/maintenance',           label: 'Maintenance',            icon: Icons.maintenance },
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────

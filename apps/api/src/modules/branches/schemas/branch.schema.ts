@@ -1,4 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { BookingType } from '@lunara/types';
 import { HydratedDocument, Types } from 'mongoose';
 
 export type BranchDocument = HydratedDocument<Branch>;
@@ -87,6 +88,16 @@ class BranchMachine {
   capacityKg!: number;
 }
 
+@Schema({ _id: false })
+class BranchServicePrice {
+  @Prop({ required: true, enum: BookingType })
+  serviceType!: BookingType;
+
+  /** Shop's own price per kg, before Lunara's customer-facing markup. */
+  @Prop({ required: true, min: 0 })
+  basePricePerKg!: number;
+}
+
 @Schema({ timestamps: true, collection: 'branches' })
 export class Branch {
   @Prop({ required: true, unique: true })
@@ -140,6 +151,10 @@ export class Branch {
   /** Platform commission rate on laundry subtotal (0–1). Default 20%. */
   @Prop({ default: 0.20, min: 0, max: 1 })
   commissionRate!: number;
+
+  /** This shop's own price per kg per service; falls back to the global catalog price when a type is missing. */
+  @Prop({ type: [BranchServicePrice], default: [] })
+  servicePricing!: BranchServicePrice[];
 
   @Prop({ type: PartnerPortalSettings, default: () => ({ ...DEFAULT_PARTNER_PORTAL_SETTINGS }) })
   portalSettings!: PartnerPortalSettings;
