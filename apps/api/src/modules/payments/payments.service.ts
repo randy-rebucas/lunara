@@ -16,6 +16,7 @@ import { WalletsService } from '../wallets/wallets.service';
 import { PaymongoService } from './paymongo.service';
 import { Payment, PaymentDocument } from './schemas/payment.schema';
 import { LedgerService } from '../ledger/ledger.service';
+import { SettingsService } from '../settings/settings.service';
 
 @Injectable()
 export class PaymentsService {
@@ -29,6 +30,7 @@ export class PaymentsService {
     private paymongo: PaymongoService,
     private branchesService: BranchesService,
     private ledgerService: LedgerService,
+    private settingsService: SettingsService,
   ) {}
 
   getCustomerWebUrl() {
@@ -596,6 +598,10 @@ export class PaymentsService {
       reason: 'payment_confirmed',
       orderId: order._id.toString(),
     });
+
+    if (await this.settingsService.isAutomationEnabled('autoDispatchOrders')) {
+      await this.branchesService.autoDispatchOrder(order);
+    }
   }
 
   async getRiderCashPaymentInfo(

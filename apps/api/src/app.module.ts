@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ConfigModule } from '@nestjs/config';
 import { resolveMonorepoEnvPaths } from './common/config/load-env';
 import { MongooseModule } from '@nestjs/mongoose';
@@ -34,6 +35,7 @@ import { LedgerModule } from './modules/ledger/ledger.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { MessagingModule } from './modules/messaging/messaging.module';
 import { EmailModule } from './common/email/email.module';
+import { AutomationModule } from './modules/automation/automation.module';
 
 @Module({
   imports: [
@@ -42,6 +44,7 @@ import { EmailModule } from './common/email/email.module';
       envFilePath: resolveMonorepoEnvPaths(),
       ignoreEnvFile: resolveMonorepoEnvPaths().length === 0,
     }),
+    ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
     EmailModule,
     CloudinaryModule,
@@ -74,6 +77,7 @@ import { EmailModule } from './common/email/email.module';
     LedgerModule,
     SettingsModule,
     MessagingModule,
+    AutomationModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Address, AddressSchema } from '../addresses/schemas/address.schema';
+import { CatalogModule } from '../catalog/catalog.module';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { User, UserSchema } from '../users/schemas/user.schema';
@@ -18,6 +19,7 @@ import { Branch, BranchSchema } from './schemas/branch.schema';
       { name: Address.name, schema: AddressSchema },
     ]),
     RealtimeModule,
+    CatalogModule,
   ],
   controllers: [BranchesController, PublicBranchesController],
   providers: [BranchesService, BranchManagementService],

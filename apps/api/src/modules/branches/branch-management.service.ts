@@ -220,6 +220,7 @@ export class BranchManagementService {
           dailyQuotaWeightKg: branch.dailyQuotaWeightKg ?? 250,
           commissionRate: branch.commissionRate ?? 0.20,
           serviceRadiusKm: branch.serviceRadiusKm,
+          servicePricing: branch.servicePricing ?? [],
           location: {
             longitude: branch.location.coordinates[0],
             latitude: branch.location.coordinates[1],

@@ -35,6 +35,18 @@ export class BookingController {
     return this.bookingService.getAvailability(req.user.sub, addressId.trim());
   }
 
+  @Get('shops')
+  @Roles(UserRole.CUSTOMER)
+  getShops(
+    @Req() req: { user: { sub: string } },
+    @Query('addressId') addressId: string,
+  ) {
+    if (!addressId?.trim()) {
+      throw new BadRequestException('Select a pickup address first');
+    }
+    return this.bookingService.getShopOptions(req.user.sub, addressId.trim());
+  }
+
   @Post('quote')
   @Roles(UserRole.CUSTOMER)
   quote(

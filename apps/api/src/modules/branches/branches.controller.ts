@@ -1,4 +1,4 @@
-import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, Req, UseGuards } from '@nestjs/common';
 import { UserRole } from '@lunara/types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -28,6 +28,21 @@ export class BranchesController {
     @Query('addressId') addressId: string,
   ) {
     return this.branchesService.findNearestByAddressId(req.user.sub, addressId);
+  }
+
+  @Get('nearby-shops')
+  @Roles(UserRole.CUSTOMER, UserRole.ADMIN)
+  findNearbyShops(
+    @Req() req: { user: { sub: string } },
+    @Query('addressId') addressId: string,
+  ) {
+    return this.branchesService.findNearbyShopsForAddressId(req.user.sub, addressId);
+  }
+
+  @Get(':id/pricing')
+  @Roles(UserRole.CUSTOMER, UserRole.ADMIN, UserRole.PARTNER)
+  getShopPricing(@Param('id') id: string) {
+    return this.branchesService.getShopPricing(id);
   }
 
   @Get()

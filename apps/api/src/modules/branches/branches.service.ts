@@ -1,8 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { OrderStatus } from '@lunara/types';
+import { BookingType, OrderStatus } from '@lunara/types';
 import {
+  applyShopMarkup,
   distanceKm,
   estimateTurnaroundHours,
   formatDistanceKm,
@@ -14,6 +15,7 @@ import {
   type PartnerCoverageInfo,
 } from '@lunara/utils';
 import { Address, AddressDocument } from '../addresses/schemas/address.schema';
+import { CatalogService } from '../catalog/catalog.service';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { User, UserDocument } from '../users/schemas/user.schema';
@@ -84,7 +86,106 @@ export class BranchesService {
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Address.name) private addressModel: Model<AddressDocument>,
     private trackingGateway: TrackingGateway,
+    private catalogService: CatalogService,
   ) {}
+
+  /** Shop's own price/kg for a service; falls back to the global catalog price when not customized. */
+  async resolveBranchServicePrice(branch: BranchDocument, bookingType: BookingType) {
+    const override = branch.servicePricing?.find((p) => p.serviceType === bookingType);
+    if (override) return override.basePricePerKg;
+    const service = await this.catalogService.findActiveByType(bookingType);
+    return service?.pricePerKg ?? 0;
+  }
+
+  private async serializeShopPricing(branch: BranchDocument) {
+    const services = await this.catalogService.listActiveServices();
+    return Promise.all(
+      services.map(async (service) => {
+        const basePricePerKg = await this.resolveBranchServicePrice(branch, service.type);
+        return {
+          type: service.type,
+          label: service.label,
+          basePricePerKg,
+          customerPricePerKg: applyShopMarkup(basePricePerKg),
+        };
+      }),
+    );
+  }
+
+  /** Active partner shops near an address, each with its own marked-up prices, for the customer shop-selection step. */
+  async findNearbyShopsWithPricing(address: {
+    city: string;
+    latitude?: number;
+    longitude?: number;
+  }) {
+    await this.ensureSeeded();
+    const customerCoords = resolveCoordinates(address.city, address.latitude, address.longitude);
+    const branches = await this.branchModel.find({ isActive: true, branchType: 'partner_shop' });
+
+    const ranked = await Promise.all(
+      branches.map(async (branch) => {
+        const [lng, lat] = branch.location.coordinates;
+        const dist = distanceKm(customerCoords, [lng, lat]);
+        const activeOrders = await this.countActiveOrders(branch._id);
+        const services = await this.serializeShopPricing(branch);
+        return {
+          branchId: branch._id.toString(),
+          code: branch.code,
+          name: branch.name,
+          city: branch.city,
+          distanceKm: Math.round(dist * 10) / 10,
+          distanceLabel: formatDistanceKm(dist),
+          withinRadius: dist <= branch.serviceRadiusKm,
+          capacityAvailable: activeOrders < branch.maxActiveOrders,
+          services,
+        };
+      }),
+    );
+
+    ranked.sort((a, b) => a.distanceKm - b.distanceKm);
+    return { success: true, data: ranked };
+  }
+
+  async findNearbyShopsForAddressId(userId: string, addressId: string) {
+    const address = await this.addressModel.findOne({
+      _id: addressId,
+      userId: new Types.ObjectId(userId),
+    });
+    if (!address) throw new NotFoundException('Address not found');
+    return this.findNearbyShopsWithPricing({
+      city: address.city,
+      latitude: address.latitude,
+      longitude: address.longitude,
+    });
+  }
+
+  /** Validated partner-shop branch document for the customer booking flow — active, correct type. */
+  async getActivePartnerShop(branchId: string) {
+    const branch = await this.branchModel.findById(branchId);
+    if (!branch || !branch.isActive || branch.branchType !== 'partner_shop') {
+      throw new BadRequestException('Selected shop is not available');
+    }
+    return branch;
+  }
+
+  async getShopPricing(branchId: string) {
+    const branch = await this.branchModel.findById(branchId);
+    if (!branch || !branch.isActive || branch.branchType !== 'partner_shop') {
+      throw new NotFoundException('Shop not found');
+    }
+    return { success: true, data: await this.serializeShopPricing(branch) };
+  }
+
+  async updateServicePricing(
+    branchId: string,
+    pricing: { serviceType: BookingType; basePricePerKg: number }[],
+  ) {
+    const branch = await this.branchModel.findById(branchId);
+    if (!branch) throw new NotFoundException('Branch not found');
+    branch.servicePricing = pricing;
+    await branch.save();
+    return { success: true, data: await this.serializeShopPricing(branch) };
+  }
 
   operationalBranchFilter(partnerUserId?: Types.ObjectId) {
     const filter: Record<string, unknown> = { isActive: true, branchType: { $ne: 'hq' as const } };
@@ -624,6 +725,47 @@ export class BranchesService {
         dispatchedAt: order.dispatchedAt,
       },
     };
+  }
+
+  /**
+   * Automation counterpart to adminDispatchOrder: assigns the top-ranked, capacity-available
+   * branch with no admin action. Gated behind the autoDispatchOrders platform setting — callers
+   * must check that flag before invoking this. Leaves the order in PENDING_DISPATCH (for the
+   * admin queue) if no branch is currently accepting orders.
+   */
+  async autoDispatchOrder(order: OrderDocument) {
+    if (order.status !== OrderStatus.PENDING_DISPATCH || order.branchId) return null;
+
+    const address = await this.addressModel.findById(order.pickupAddressId);
+    if (!address) return null;
+
+    const evaluation = await this.buildDispatchEvaluations(
+      {
+        line1: address.line1,
+        city: address.city,
+        province: address.province,
+        latitude: address.latitude,
+        longitude: address.longitude,
+      },
+      order.bookingType,
+      order.estimatedWeightKg ?? 5,
+    );
+
+    const top = evaluation.branchEvaluations[0];
+    if (!top || !top.availability.acceptingOrders) return null;
+
+    const branch = await this.branchModel.findById(top.branchId);
+    if (!branch) return null;
+
+    const activeOrders = await this.countActiveOrders(branch._id);
+    if (activeOrders >= branch.maxActiveOrders) return null;
+
+    const turnaround = await this.applyShopAssignment(order, branch, {
+      activeOrders,
+      noteOverride: `Auto-dispatched to ${branch.name} (ETA ${estimateTurnaroundHours(order.bookingType, order.estimatedWeightKg ?? 5, activeOrders).label})`,
+    });
+
+    return { branch, turnaround };
   }
 
   /**

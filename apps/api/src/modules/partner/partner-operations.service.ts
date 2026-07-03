@@ -103,6 +103,23 @@ export class PartnerOperationsService {
     private ledgerService: LedgerService,
   ) {}
 
+  /**
+   * Lunara's cut of a single order. Orders placed through the shop-markup flow (customer
+   * pays basePrice x1.30 up front) already have that cut baked into subtotal - baseSubtotal,
+   * so settlement doesn't re-apply commissionRate on top of it. Orders with no pricingModel
+   * (everything created before this flow shipped) keep the original commissionRate-of-subtotal
+   * formula unchanged - no backfill needed, this is a pure fallback on a missing field.
+   */
+  private computeOrderFee(
+    order: { subtotal?: number; total: number; baseSubtotal?: number; pricingModel?: string },
+    commissionRate: number,
+  ): number {
+    if (order.pricingModel === 'shop_markup' && order.baseSubtotal != null) {
+      return (order.subtotal ?? order.total) - order.baseSubtotal;
+    }
+    return Math.round((order.subtotal ?? order.total) * commissionRate);
+  }
+
   async ensureInventorySeeded() {
     const count = await this.inventoryModel.countDocuments();
     if (count === 0) {
@@ -197,9 +214,11 @@ export class PartnerOperationsService {
     ]);
 
     const commissionRate = branch?.commissionRate ?? 0.20;
-    const periodPayout = (orders: { total: number; subtotal?: number }[]) => {
+    const periodPayout = (
+      orders: { total: number; subtotal?: number; baseSubtotal?: number; pricingModel?: string }[],
+    ) => {
       const gross = orders.reduce((s, o) => s + o.total, 0);
-      const fee = Math.round(orders.reduce((s, o) => s + (o.subtotal ?? o.total) * commissionRate, 0));
+      const fee = Math.round(orders.reduce((s, o) => s + this.computeOrderFee(o, commissionRate), 0));
       return { gross, payout: gross - fee };
     };
 
@@ -624,8 +643,8 @@ export class PartnerOperationsService {
           .catch(() => null)
       : null;
     const commissionRate = (branch as { commissionRate?: number } | null)?.commissionRate ?? 0.20;
-    const subtotalSum = completed.reduce((sum, o) => sum + (o.subtotal ?? o.total), 0);
-    const payout = revenue - Math.round(subtotalSum * commissionRate);
+    const totalFee = completed.reduce((sum, o) => sum + this.computeOrderFee(o, commissionRate), 0);
+    const payout = revenue - totalFee;
 
     const byStatus = orders.reduce(
       (acc, o) => {
@@ -681,13 +700,37 @@ export class PartnerOperationsService {
       this.orderModel.find({ ...baseFilter, updatedAt: { $gte: weekStart } }),
       this.orderModel.find({ ...baseFilter, updatedAt: { $gte: startOfMonth } }),
       this.orderModel.find(baseFilter).sort({ updatedAt: -1 }).limit(200),
-      this.orderModel.aggregate<{ total: number; subtotalSum: number; count: number }>([
+      this.orderModel.aggregate<{
+        total: number;
+        legacyCommissionSubtotalSum: number;
+        shopMarkupFeeSum: number;
+        count: number;
+      }>([
         { $match: baseFilter },
         {
           $group: {
             _id: null,
             total: { $sum: '$total' },
-            subtotalSum: { $sum: { $ifNull: ['$subtotal', '$total'] } },
+            // Legacy orders (no pricingModel, or explicitly 'legacy_commission') settle via commissionRate * subtotal.
+            legacyCommissionSubtotalSum: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$pricingModel', 'shop_markup'] },
+                  0,
+                  { $ifNull: ['$subtotal', '$total'] },
+                ],
+              },
+            },
+            // shop_markup orders already have Lunara's cut baked in as subtotal - baseSubtotal.
+            shopMarkupFeeSum: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$pricingModel', 'shop_markup'] },
+                  { $subtract: [{ $ifNull: ['$subtotal', '$total'] }, { $ifNull: ['$baseSubtotal', 0] }] },
+                  0,
+                ],
+              },
+            },
             count: { $sum: 1 },
           },
         },
@@ -700,14 +743,17 @@ export class PartnerOperationsService {
     const allTimeRevenue = allTimeSummary[0]?.total ?? 0;
     const allTimeCompletedOrders = allTimeSummary[0]?.count ?? 0;
 
-    // Commission breakdown helper — consistent with createSettlement rounding
-    const periodBreakdown = (orders: { total: number; subtotal?: number }[], rate: number) => {
+    // Commission/markup breakdown helper — consistent with createSettlement rounding
+    const periodBreakdown = (
+      orders: { total: number; subtotal?: number; baseSubtotal?: number; pricingModel?: string }[],
+      rate: number,
+    ) => {
       const gross = orders.reduce((s, o) => s + o.total, 0);
-      const fee = Math.round(orders.reduce((s, o) => s + (o.subtotal ?? o.total) * rate, 0));
+      const fee = Math.round(orders.reduce((s, o) => s + this.computeOrderFee(o, rate), 0));
       return { gross, fee, payout: gross - fee };
     };
 
-    const last7: { date: string; revenue: number; payout: number; orders: number; _subtotalSum: number }[] = [];
+    const last7: { date: string; revenue: number; payout: number; orders: number; _dayOrders: { total: number; subtotal?: number; baseSubtotal?: number; pricingModel?: string }[] }[] = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(startOfDay);
       d.setDate(d.getDate() - i);
@@ -718,13 +764,12 @@ export class PartnerOperationsService {
         updatedAt: { $gte: d, $lt: next },
       });
       const dayRevenue = dayOrders.reduce((s, o) => s + o.total, 0);
-      const daySubtotalSum = dayOrders.reduce((s, o) => s + (o.subtotal ?? o.total), 0);
       last7.push({
         date: d.toISOString().slice(0, 10),
         revenue: dayRevenue,
         payout: 0, // filled in after commissionRate is resolved below
         orders: dayOrders.length,
-        _subtotalSum: daySubtotalSum,
+        _dayOrders: dayOrders,
       });
     }
 
@@ -742,16 +787,19 @@ export class PartnerOperationsService {
 
     // Backfill daily payout now that commissionRate is known (fee applied to subtotal, not total)
     for (const point of last7) {
-      const dayFee = Math.round(point._subtotalSum * commissionRate);
+      const dayFee = Math.round(
+        point._dayOrders.reduce((s, o) => s + this.computeOrderFee(o, commissionRate), 0),
+      );
       point.payout = point.revenue - dayFee;
-      delete (point as Partial<typeof point>)._subtotalSum;
+      delete (point as Partial<typeof point>)._dayOrders;
     }
 
     const todayBreakdown = periodBreakdown(today, commissionRate);
     const weekBreakdown = periodBreakdown(week, commissionRate);
     const monthBreakdown = periodBreakdown(month, commissionRate);
-    const allTimeSubtotalSum = allTimeSummary[0]?.subtotalSum ?? 0;
-    const allTimeFee = Math.round(allTimeSubtotalSum * commissionRate);
+    const allTimeLegacySubtotalSum = allTimeSummary[0]?.legacyCommissionSubtotalSum ?? 0;
+    const allTimeShopMarkupFee = allTimeSummary[0]?.shopMarkupFeeSum ?? 0;
+    const allTimeFee = Math.round(allTimeLegacySubtotalSum * commissionRate) + allTimeShopMarkupFee;
     const allTimePayout = allTimeRevenue - allTimeFee;
 
     const recentOrders = recentCompleted.map((o) => {
@@ -759,7 +807,7 @@ export class PartnerOperationsService {
       const isCash = payment?.method === PaymentMethod.CASH;
       const cashCollected = isCash && payment?.status === PaymentStatus.PAID;
       const subtotal = o.subtotal ?? o.total;
-      const lunaraFee = Math.round(subtotal * commissionRate);
+      const lunaraFee = this.computeOrderFee(o, commissionRate);
       const partnerPayout = o.total - lunaraFee;
       return {
         orderId: o._id.toString(),
@@ -769,6 +817,7 @@ export class PartnerOperationsService {
         lunaraFee,
         partnerPayout,
         commissionRate,
+        pricingModel: o.pricingModel ?? 'legacy_commission',
         bookingType: o.bookingType,
         paymentMethod: payment?.method ?? null,
         cashTiming: payment?.cashTiming ?? null,
@@ -862,7 +911,7 @@ export class PartnerOperationsService {
       const isCash = payment?.method === PaymentMethod.CASH;
       const cashCollected = isCash && payment?.status === PaymentStatus.PAID;
       const subtotal = o.subtotal ?? o.total;
-      const lunaraFee = Math.round(subtotal * commissionRate);
+      const lunaraFee = this.computeOrderFee(o, commissionRate);
       const partnerPayout = o.total - lunaraFee;
       return {
         orderId: o._id.toString(),
@@ -872,6 +921,7 @@ export class PartnerOperationsService {
         lunaraFee,
         partnerPayout,
         commissionRate,
+        pricingModel: o.pricingModel ?? 'legacy_commission',
         bookingType: o.bookingType,
         paymentMethod: payment?.method ?? null,
         cashTiming: payment?.cashTiming ?? null,
@@ -915,7 +965,7 @@ export class PartnerOperationsService {
       const isCash = payment?.method === PaymentMethod.CASH;
       const cashCollected = isCash && payment?.status === PaymentStatus.PAID;
       const subtotal = o.subtotal ?? o.total;
-      const lunaraFee = Math.round(subtotal * commissionRate);
+      const lunaraFee = this.computeOrderFee(o, commissionRate);
       const partnerPayout = o.total - lunaraFee;
       return {
         orderId: o._id.toString(),
@@ -925,6 +975,7 @@ export class PartnerOperationsService {
         lunaraFee,
         partnerPayout,
         commissionRate,
+        pricingModel: o.pricingModel ?? 'legacy_commission',
         bookingType: o.bookingType,
         paymentMethod: payment?.method ?? null,
         cashTiming: payment?.cashTiming ?? null,
@@ -986,9 +1037,10 @@ export class PartnerOperationsService {
 
     const commissionRate = branch.commissionRate ?? 0.20;
     const totalAmount = completedOrders.reduce((s, o) => s + o.total, 0);
-    // Commission is taken from the laundry subtotal only — not from delivery fee
+    // shop_markup orders already have Lunara's cut baked into the price the customer paid;
+    // legacy orders still take commissionRate off the laundry subtotal (not the delivery fee).
     const lunaraFee = Math.round(
-      completedOrders.reduce((s, o) => s + (o.subtotal ?? o.total) * commissionRate, 0),
+      completedOrders.reduce((s, o) => s + this.computeOrderFee(o, commissionRate), 0),
     );
     const partnerPayout = totalAmount - lunaraFee;
 

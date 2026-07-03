@@ -45,6 +45,8 @@ export interface BookingOrderPayload {
   branchCode?: string;
   branchName?: string;
   partnerId?: string;
+  baseSubtotal?: number;
+  pricingModel?: 'shop_markup';
 }
 
 @Injectable()
@@ -178,6 +180,8 @@ export class OrdersService {
       discount: payload.discount,
       couponCode: payload.couponCode,
       total: payload.total,
+      baseSubtotal: payload.baseSubtotal,
+      pricingModel: payload.pricingModel,
       statusHistory: [{ status: OrderStatus.PENDING, timestamp: new Date() }],
     });
 

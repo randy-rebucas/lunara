@@ -1,7 +1,12 @@
 import { BookingType } from '@lunara/types';
 
 export const BOOKING_MIN_ORDER_AMOUNT = 150;
+/** @deprecated use BOOKING_FLAT_DELIVERY_FEE */
 export const BOOKING_DELIVERY_FEE = 50;
+/** Flat pickup + delivery fee charged on every booking. */
+export const BOOKING_FLAT_DELIVERY_FEE = 70;
+/** Lunara's markup on a partner shop's base price per kg. Single source of truth — never hardcode 1.30 elsewhere. */
+export const SHOP_PRICE_MARKUP_MULTIPLIER = 1.3;
 export const BOOKING_MIN_WEIGHT_KG = 1;
 export const BOOKING_MAX_WEIGHT_KG = 50;
 export const BOOKING_DEFAULT_WEIGHT_KG = 5;
@@ -202,6 +207,11 @@ export const SERVICE_AREAS: ServiceAreaRule[] = [
   },
 ];
 
+/** Marks up a partner shop's base price/kg by Lunara's cut, rounded to the nearest centavo. */
+export function applyShopMarkup(basePricePerKg: number): number {
+  return Math.round(basePricePerKg * SHOP_PRICE_MARKUP_MULTIPLIER * 100) / 100;
+}
+
 export function getService(type: BookingType) {
   return LAUNDRY_SERVICES.find((s) => s.type === type);
 }
@@ -316,7 +326,7 @@ export function calculateQuote(
     .map((a) => ({ id: a.id, label: a.label, price: a.price }));
   const addonsSubtotal = addons.reduce((sum, a) => sum + a.price, 0);
   const subtotal = serviceSubtotal + addonsSubtotal;
-  const deliveryFee = deliveryFeeOverride ?? BOOKING_DELIVERY_FEE;
+  const deliveryFee = deliveryFeeOverride ?? BOOKING_FLAT_DELIVERY_FEE;
   const discount = 0;
   const total = subtotal + deliveryFee - discount;
 

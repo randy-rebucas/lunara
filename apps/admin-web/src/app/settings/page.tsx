@@ -21,8 +21,7 @@ const DEFAULT_SETTINGS: AdminAppSettings = {
 };
 
 interface DeliveryFeeSettings {
-  cityDeliveryFee: number;
-  provinceDeliveryFee: number;
+  deliveryFee: number;
 }
 
 interface BranchCoverageRow {
@@ -68,7 +67,7 @@ function DeliveryFeeSection() {
   return (
     <SectionPanel
       title="Delivery fee"
-      description="Charged per order based on the pickup address — Metro Manila addresses get the city rate, everywhere else gets the provincial rate."
+      description="Flat pickup + delivery fee charged on every order, regardless of address."
     >
       <div className="border-b border-border/60 px-6 py-4 sm:px-8">
         {loading && !form ? <p className="text-sm text-muted">Loading…</p> : null}
@@ -76,31 +75,16 @@ function DeliveryFeeSection() {
         {form ? (
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block">
-              <span className="text-sm font-medium text-slate-900">City rate (Metro Manila)</span>
+              <span className="text-sm font-medium text-slate-900">Delivery fee</span>
               <div className="mt-1.5 flex items-center gap-2">
                 <span className="text-sm text-muted">₱</span>
                 <input
                   type="number"
                   min={0}
                   className="input-field"
-                  value={form.cityDeliveryFee}
+                  value={form.deliveryFee}
                   onChange={(e) =>
-                    setForm((f) => (f ? { ...f, cityDeliveryFee: Number(e.target.value) } : f))
-                  }
-                />
-              </div>
-            </label>
-            <label className="block">
-              <span className="text-sm font-medium text-slate-900">Provincial rate</span>
-              <div className="mt-1.5 flex items-center gap-2">
-                <span className="text-sm text-muted">₱</span>
-                <input
-                  type="number"
-                  min={0}
-                  className="input-field"
-                  value={form.provinceDeliveryFee}
-                  onChange={(e) =>
-                    setForm((f) => (f ? { ...f, provinceDeliveryFee: Number(e.target.value) } : f))
+                    setForm((f) => (f ? { ...f, deliveryFee: Number(e.target.value) } : f))
                   }
                 />
               </div>

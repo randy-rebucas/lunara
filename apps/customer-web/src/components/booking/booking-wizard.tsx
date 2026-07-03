@@ -22,11 +22,9 @@ import {
   type QuoteBreakdown,
 } from '@lunara/utils';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
-import { NearestBranchesCard, type NearestBranchRow } from '../nearest-branches-card';
 import { OrderPartnerCoverageNotice } from '../order-partner-coverage-notice';
 import { ScheduleSupportPrompt } from '../schedule-support-prompt';
 import { formatAvailabilityLoadError } from '../../lib/booking-availability-error';
-import { loadCustomerSettings } from '../../lib/customer-settings';
 import {
   BOOKING_STEPS,
   initialBookingForm,
@@ -59,6 +57,25 @@ interface BookingConfig {
   minWeightKg: number;
   maxWeightKg: number;
   deliveryFee: number;
+}
+
+interface ShopServiceOption {
+  type: BookingType;
+  label: string;
+  basePricePerKg: number;
+  customerPricePerKg: number;
+}
+
+interface ShopOption {
+  branchId: string;
+  code: string;
+  name: string;
+  city: string;
+  distanceKm: number;
+  distanceLabel: string;
+  withinRadius: boolean;
+  capacityAvailable: boolean;
+  services: ShopServiceOption[];
 }
 
 function BookingProgress({ current }: { current: BookingStep }) {
@@ -175,6 +192,8 @@ function getNextStepLabel(step: BookingStep): string {
     case 'service':
       return 'Continue to address';
     case 'address':
+      return 'Continue to shop selection';
+    case 'shop':
       return 'Continue to schedule';
     case 'schedule':
       return 'Continue to weight';
@@ -201,6 +220,8 @@ function canProceedStep(
       return Boolean(form.bookingType);
     case 'address':
       return Boolean(form.addressId) && addresses.length > 0;
+    case 'shop':
+      return Boolean(form.branchId);
     case 'schedule':
       return (
         Boolean(form.scheduledPickupAt) &&
@@ -324,21 +345,11 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [stepping, setStepping] = useState(false);
-  const [nearestBranches, setNearestBranches] = useState<NearestBranchRow[]>([]);
-  const [nearestNote, setNearestNote] = useState('');
+  const [shopOptions, setShopOptions] = useState<ShopOption[]>([]);
+  const [shopsLoading, setShopsLoading] = useState(false);
   const [partnerCoverage, setPartnerCoverage] = useState<PartnerCoverageInfo | null>(null);
   const [coverageAddressId, setCoverageAddressId] = useState('');
   const selectedAddressIdRef = useRef(form.addressId);
-  const [showBranchHints, setShowBranchHints] = useState(
-    () => loadCustomerSettings().showBranchDistanceHints,
-  );
-
-  useEffect(() => {
-    const sync = () => setShowBranchHints(loadCustomerSettings().showBranchDistanceHints);
-    sync();
-    window.addEventListener('lunara-customer-settings', sync);
-    return () => window.removeEventListener('lunara-customer-settings', sync);
-  }, []);
 
   useEffect(() => {
     setConfigLoading(true);
@@ -360,9 +371,16 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
     selectedAddressIdRef.current = form.addressId;
   }, [form.addressId]);
 
+  const selectedShop = shopOptions.find((s) => s.branchId === form.branchId);
+
   const localQuote = useMemo(() => {
     if (!form.bookingType) return null;
-    const service = config?.services.find((s) => s.type === form.bookingType);
+    const catalogService = config?.services.find((s) => s.type === form.bookingType);
+    const shopService = selectedShop?.services.find((s) => s.type === form.bookingType);
+    const service =
+      catalogService && shopService
+        ? { ...catalogService, pricePerKg: shopService.customerPricePerKg }
+        : catalogService;
     try {
       return calculateQuote(
         {
@@ -376,15 +394,14 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
     } catch {
       return null;
     }
-  }, [form.bookingType, form.weightKg, form.addonIds, config]);
+  }, [form.bookingType, form.weightKg, form.addonIds, config, selectedShop]);
 
   const loadAvailability = useCallback(
     async (addressId: string) => {
       if (!addressId) return;
       setPartnerCoverage(null);
       setCoverageAddressId('');
-      setNearestBranches([]);
-      setNearestNote('');
+      setShopOptions([]);
       const res = await api.get<{
         areaLabel: string;
         availableServices: BookingType[];
@@ -422,32 +439,22 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
     activePartnerCoverage?.inServiceArea === true &&
     activePartnerCoverage?.hasPartnerNearby === true;
 
-  const loadNearestBranches = useCallback(
+  const loadShops = useCallback(
     async (addressId: string) => {
-      if (!showBranchHints) {
-        setNearestBranches([]);
-        setNearestNote('');
-        return;
-      }
+      setShopsLoading(true);
       try {
-        const res = await api.get<{ ranked: NearestBranchRow[]; note?: string }>(
-          `/branches/nearest?addressId=${encodeURIComponent(addressId)}`,
+        const res = await api.get<ShopOption[]>(
+          `/booking/shops?addressId=${encodeURIComponent(addressId)}`,
         );
         if (selectedAddressIdRef.current !== addressId) return;
-
-        const inRange = (res.data.ranked ?? []).filter(
-          (b) => b.withinRadius && b.capacityAvailable,
-        );
-        setNearestBranches(inRange);
-        setNearestNote(res.data.note ?? '');
+        setShopOptions(res.data ?? []);
       } catch {
-        if (selectedAddressIdRef.current === addressId) {
-          setNearestBranches([]);
-          setNearestNote('');
-        }
+        if (selectedAddressIdRef.current === addressId) setShopOptions([]);
+      } finally {
+        if (selectedAddressIdRef.current === addressId) setShopsLoading(false);
       }
     },
-    [api, showBranchHints],
+    [api],
   );
 
   useEffect(() => {
@@ -458,8 +465,7 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
       setAvailableServices([]);
       setSlots([]);
       setDispatchNote('');
-      setNearestBranches([]);
-      setNearestNote('');
+      setShopOptions([]);
       return;
     }
     setError('');
@@ -474,19 +480,19 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
 
   useEffect(() => {
     if (!form.addressId || !hasRealPartnerCoverage) {
-      setNearestBranches([]);
-      setNearestNote('');
+      setShopOptions([]);
       return;
     }
-    void loadNearestBranches(form.addressId);
-  }, [form.addressId, hasRealPartnerCoverage, loadNearestBranches]);
+    void loadShops(form.addressId);
+  }, [form.addressId, hasRealPartnerCoverage, loadShops]);
 
   async function refreshServerQuote(couponCode = form.couponCode) {
-    if (!form.bookingType || !form.addressId) return null;
+    if (!form.bookingType || !form.addressId || !form.branchId) return null;
     const res = await api.post<QuoteBreakdown>(
       `/booking/quote?addressId=${encodeURIComponent(form.addressId)}`,
       {
         bookingType: form.bookingType,
+        branchId: form.branchId,
         weightKg: form.weightKg,
         addonIds: form.addonIds,
         ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}),
@@ -579,6 +585,7 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
       await refreshServerQuote(form.couponCode);
       const res = await api.post<{ _id: string; total: number }>('/booking/orders', {
         bookingType: form.bookingType,
+        branchId: form.branchId,
         weightKg: form.weightKg,
         addonIds: form.addonIds,
         pickupAddressId: form.addressId,
@@ -650,7 +657,7 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
         <section>
           <StepHeader
             title="Pickup address"
-            description="Service availability depends on your area. After payment, Lunara assigns your laundry partner."
+            description="Service availability depends on your area. Next, you'll choose which laundry shop to book."
           />
           {form.addressId && coverageMatchesSelection && dispatchNote && (
             <div className="mb-4 rounded-lg bg-primary/5 p-4 text-sm text-slate-700 ring-1 ring-primary/15">
@@ -671,7 +678,7 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
                   key={a._id}
                   selected={form.addressId === a._id}
                   onClick={() =>
-                    setForm((f) => ({ ...f, addressId: a._id, scheduledPickupAt: '' }))
+                    setForm((f) => ({ ...f, addressId: a._id, branchId: '', scheduledPickupAt: '' }))
                   }
                 >
                   <p className="font-medium text-slate-900">{a.label}</p>
@@ -691,13 +698,53 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
               className="mt-4"
             />
           )}
-          {form.addressId &&
-            showBranchHints &&
-            coverageMatchesSelection &&
-            hasRealPartnerCoverage &&
-            nearestBranches.length > 0 && (
-              <NearestBranchesCard branches={nearestBranches} note={nearestNote} />
-            )}
+        </section>
+      )}
+
+      {step === 'shop' && (
+        <section>
+          <StepHeader
+            title="Choose a laundry shop"
+            description="Pick the partner shop you'd like to book with. Prices shown are what you'll pay."
+          />
+          {shopsLoading ? (
+            <div className="panel text-sm text-muted">Finding nearby shops…</div>
+          ) : shopOptions.length === 0 ? (
+            <div className="panel text-sm text-muted">
+              No partner shops are available near this address yet.
+            </div>
+          ) : (
+            <div className="list-stack">
+              {shopOptions.map((shop) => {
+                const shopService = shop.services.find((s) => s.type === form.bookingType);
+                const disabled = !shop.withinRadius || !shop.capacityAvailable;
+                return (
+                  <SelectableOption
+                    key={shop.branchId}
+                    selected={form.branchId === shop.branchId}
+                    disabled={disabled}
+                    onClick={() => setForm((f) => ({ ...f, branchId: shop.branchId }))}
+                  >
+                    <p className="font-medium text-slate-900">{shop.name}</p>
+                    <p className="mt-1 text-sm text-muted">
+                      {shop.city} · {shop.distanceLabel}
+                    </p>
+                    {shopService && (
+                      <p className="mt-2 text-sm font-medium text-primary">
+                        {formatCurrency(shopService.customerPricePerKg)} / kg
+                      </p>
+                    )}
+                    {!shop.capacityAvailable && (
+                      <p className="mt-2 text-xs text-amber-700">Currently at capacity</p>
+                    )}
+                    {!shop.withinRadius && (
+                      <p className="mt-2 text-xs text-amber-700">Outside delivery range</p>
+                    )}
+                  </SelectableOption>
+                );
+              })}
+            </div>
+          )}
         </section>
       )}
 
@@ -864,6 +911,7 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
           <div className="panel">
             <dl className="space-y-3 text-sm">
               <SummaryRow label="Service" value={activeQuote.serviceLabel} />
+              <SummaryRow label="Shop" value={selectedShop?.name ?? 'Selected shop'} />
               <SummaryRow label="Address" value={selectedAddress?.label ?? 'Selected address'} />
               <SummaryRow
                 label="Pickup"
@@ -892,8 +940,8 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
             </dl>
           </div>
           <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-            Lunara operations assigns your partner branch after payment. Pickup riders are notified
-            once dispatched. Final amount may adjust after weigh-in.
+            Your order goes straight to {selectedShop?.name ?? 'your selected shop'} after payment.
+            Pickup riders are notified once dispatched. Final amount may adjust after weigh-in.
           </p>
         </section>
       )}
