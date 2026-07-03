@@ -107,17 +107,39 @@ export class PartnerOperationsService {
    * Lunara's cut of a single order. Orders placed through the shop-markup flow (customer
    * pays basePrice x1.30 up front) already have that cut baked into subtotal - baseSubtotal,
    * so settlement doesn't re-apply commissionRate on top of it. Orders with no pricingModel
-   * (everything created before this flow shipped) keep the original commissionRate-of-subtotal
-   * formula unchanged - no backfill needed, this is a pure fallback on a missing field.
+   * (everything created before this flow shipped) fall back to that order's own branch's
+   * commissionRate-of-subtotal formula - a partner can own several branches with different
+   * rates, so the rate must be looked up per order rather than assumed to be one flat number.
    */
   private computeOrderFee(
-    order: { subtotal?: number; total: number; baseSubtotal?: number; pricingModel?: string },
-    commissionRate: number,
+    order: {
+      subtotal?: number;
+      total: number;
+      baseSubtotal?: number;
+      pricingModel?: string;
+      branchId?: Types.ObjectId;
+    },
+    commissionRateByBranchId: Map<string, number>,
+    fallbackRate = 0.20,
   ): number {
     if (order.pricingModel === 'shop_markup' && order.baseSubtotal != null) {
       return (order.subtotal ?? order.total) - order.baseSubtotal;
     }
-    return Math.round((order.subtotal ?? order.total) * commissionRate);
+    const rate = commissionRateByBranchId.get(order.branchId?.toString() ?? '') ?? fallbackRate;
+    return Math.round((order.subtotal ?? order.total) * rate);
+  }
+
+  /** All branches a user manages orders/revenue for: every branch under a partner's account, or the one representative branch shown to admins by default. */
+  private async resolvePartnerBranches(userId: string, role: UserRole): Promise<BranchDocument[]> {
+    if (role === UserRole.ADMIN) {
+      const branch = await this.branchModel.findOne({ branchType: 'partner_shop' }).sort({ name: 1 });
+      return branch ? [branch] : [];
+    }
+    return this.branchModel.find({ partnerUserId: new Types.ObjectId(userId) });
+  }
+
+  private commissionRateMap(branches: BranchDocument[]): Map<string, number> {
+    return new Map(branches.map((b) => [b._id.toString(), b.commissionRate ?? 0.2]));
   }
 
   async ensureInventorySeeded() {
@@ -133,14 +155,13 @@ export class PartnerOperationsService {
   ): Promise<{ filter: Record<string, unknown>; shop?: { name: string; code: string } }> {
     const filter: Record<string, unknown> = {};
     if (role === UserRole.PARTNER) {
-      const branchId = await this.resolvePartnerBranchId(userId, role);
-      filter.branchId = branchId;
+      const branches = await this.resolvePartnerBranches(userId, role);
+      if (branches.length === 0) return { filter };
+      filter.branchId = { $in: branches.map((b) => b._id) };
       filter.partnerId = new Types.ObjectId(userId);
-      const branch = await this.branchModel.findById(branchId).select('name code');
-      return {
-        filter,
-        shop: branch ? { name: branch.name, code: branch.code } : undefined,
-      };
+      const shopName = branches.length > 1 ? `${branches.length} shops` : branches[0].name;
+      const shopCode = branches.length > 1 ? branches.map((b) => b.code).join(', ') : branches[0].code;
+      return { filter, shop: { name: shopName, code: shopCode } };
     }
     if (role === UserRole.ADMIN) {
       const branch = await this.branchModel.findOne({ branchType: 'partner_shop' }).sort({ name: 1 });
@@ -169,9 +190,11 @@ export class PartnerOperationsService {
     const weekStart = new Date(startOfDay);
     weekStart.setDate(weekStart.getDate() - 6);
 
-    let staffBranchId: Types.ObjectId | undefined;
+    let staffBranchIds: Types.ObjectId[] | undefined;
+    let partnerBranches: BranchDocument[] = [];
     if (role !== UserRole.ADMIN) {
-      staffBranchId = await this.resolvePartnerBranchId(userId, role);
+      partnerBranches = await this.resolvePartnerBranches(userId, role);
+      staffBranchIds = partnerBranches.map((b) => b._id);
     }
 
     const [
@@ -184,7 +207,6 @@ export class PartnerOperationsService {
       staffCount,
       lowStock,
       recent,
-      branch,
     ] = await Promise.all([
       this.orderModel.countDocuments(incomingBase),
       this.orderModel.countDocuments({
@@ -201,24 +223,32 @@ export class PartnerOperationsService {
       }),
       this.orderModel.find({ ...revenueFilter, updatedAt: { $gte: startOfDay } }),
       this.orderModel.find({ ...revenueFilter, updatedAt: { $gte: weekStart } }),
-      staffBranchId
-        ? this.userModel.countDocuments({ role: UserRole.STAFF, isActive: true, branchId: staffBranchId })
+      staffBranchIds
+        ? this.userModel.countDocuments({ role: UserRole.STAFF, isActive: true, branchId: { $in: staffBranchIds } })
         : this.userModel.countDocuments({ role: UserRole.STAFF, isActive: true }),
       this.inventoryModel.countDocuments({
         $expr: { $lte: ['$quantity', '$lowStockThreshold'] },
       }),
       this.orderModel.find(incomingBase).sort({ updatedAt: -1 }).limit(8),
-      staffBranchId
-        ? this.branchModel.findById(staffBranchId).select('commissionRate').catch(() => null)
-        : Promise.resolve(null),
     ]);
 
-    const commissionRate = branch?.commissionRate ?? 0.20;
+    const commissionRateByBranchId =
+      role === UserRole.ADMIN
+        ? this.commissionRateMap(await this.resolvePartnerBranches(userId, role))
+        : this.commissionRateMap(partnerBranches);
     const periodPayout = (
-      orders: { total: number; subtotal?: number; baseSubtotal?: number; pricingModel?: string }[],
+      orders: {
+        total: number;
+        subtotal?: number;
+        baseSubtotal?: number;
+        pricingModel?: string;
+        branchId?: Types.ObjectId;
+      }[],
     ) => {
       const gross = orders.reduce((s, o) => s + o.total, 0);
-      const fee = Math.round(orders.reduce((s, o) => s + this.computeOrderFee(o, commissionRate), 0));
+      const fee = Math.round(
+        orders.reduce((s, o) => s + this.computeOrderFee(o, commissionRateByBranchId), 0),
+      );
       return { gross, payout: gross - fee };
     };
 
@@ -637,13 +667,12 @@ export class PartnerOperationsService {
     const completed = orders.filter((o) => COMPLETED_STATUSES.includes(o.status));
     const revenue = completed.reduce((sum, o) => sum + o.total, 0);
 
-    const branch = role !== UserRole.ADMIN
-      ? await this.resolvePartnerBranchId(userId, role)
-          .then((id) => this.branchModel.findById(id).select('commissionRate'))
-          .catch(() => null)
-      : null;
-    const commissionRate = (branch as { commissionRate?: number } | null)?.commissionRate ?? 0.20;
-    const totalFee = completed.reduce((sum, o) => sum + this.computeOrderFee(o, commissionRate), 0);
+    const branches = await this.resolvePartnerBranches(userId, role);
+    const commissionRateByBranchId = this.commissionRateMap(branches);
+    const totalFee = completed.reduce(
+      (sum, o) => sum + this.computeOrderFee(o, commissionRateByBranchId),
+      0,
+    );
     const payout = revenue - totalFee;
 
     const byStatus = orders.reduce(
@@ -681,8 +710,8 @@ export class PartnerOperationsService {
   private async revenueOrderFilter(userId: string, role: UserRole): Promise<Record<string, unknown>> {
     const filter: Record<string, unknown> = { status: { $in: COMPLETED_STATUSES } };
     if (role !== UserRole.ADMIN) {
-      const branchId = await this.resolvePartnerBranchId(userId, role);
-      filter.branchId = branchId;
+      const branches = await this.resolvePartnerBranches(userId, role);
+      filter.branchId = { $in: branches.map((b) => b._id) };
     }
     return filter;
   }
@@ -700,7 +729,10 @@ export class PartnerOperationsService {
       this.orderModel.find({ ...baseFilter, updatedAt: { $gte: weekStart } }),
       this.orderModel.find({ ...baseFilter, updatedAt: { $gte: startOfMonth } }),
       this.orderModel.find(baseFilter).sort({ updatedAt: -1 }).limit(200),
+      // Grouped per branchId — a partner can own several branches with different commissionRate,
+      // so the legacy-commission subtotal must stay bucketed until each branch's own rate is applied in JS below.
       this.orderModel.aggregate<{
+        _id: Types.ObjectId | null;
         total: number;
         legacyCommissionSubtotalSum: number;
         shopMarkupFeeSum: number;
@@ -709,7 +741,7 @@ export class PartnerOperationsService {
         { $match: baseFilter },
         {
           $group: {
-            _id: null,
+            _id: '$branchId',
             total: { $sum: '$total' },
             // Legacy orders (no pricingModel, or explicitly 'legacy_commission') settle via commissionRate * subtotal.
             legacyCommissionSubtotalSum: {
@@ -740,20 +772,30 @@ export class PartnerOperationsService {
     const todayTotal = today.reduce((s, o) => s + o.total, 0);
     const weekTotal = week.reduce((s, o) => s + o.total, 0);
     const monthTotal = month.reduce((s, o) => s + o.total, 0);
-    const allTimeRevenue = allTimeSummary[0]?.total ?? 0;
-    const allTimeCompletedOrders = allTimeSummary[0]?.count ?? 0;
+    const allTimeRevenue = allTimeSummary.reduce((s, r) => s + r.total, 0);
+    const allTimeCompletedOrders = allTimeSummary.reduce((s, r) => s + r.count, 0);
+
+    const branches = await this.resolvePartnerBranches(userId, role);
+    const commissionRateByBranchId = this.commissionRateMap(branches);
 
     // Commission/markup breakdown helper — consistent with createSettlement rounding
     const periodBreakdown = (
-      orders: { total: number; subtotal?: number; baseSubtotal?: number; pricingModel?: string }[],
-      rate: number,
+      orders: {
+        total: number;
+        subtotal?: number;
+        baseSubtotal?: number;
+        pricingModel?: string;
+        branchId?: Types.ObjectId;
+      }[],
     ) => {
       const gross = orders.reduce((s, o) => s + o.total, 0);
-      const fee = Math.round(orders.reduce((s, o) => s + this.computeOrderFee(o, rate), 0));
+      const fee = Math.round(
+        orders.reduce((s, o) => s + this.computeOrderFee(o, commissionRateByBranchId), 0),
+      );
       return { gross, fee, payout: gross - fee };
     };
 
-    const last7: { date: string; revenue: number; payout: number; orders: number; _dayOrders: { total: number; subtotal?: number; baseSubtotal?: number; pricingModel?: string }[] }[] = [];
+    const last7: { date: string; revenue: number; payout: number; orders: number; _dayOrders: { total: number; subtotal?: number; baseSubtotal?: number; pricingModel?: string; branchId?: Types.ObjectId }[] }[] = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(startOfDay);
       d.setDate(d.getDate() - i);
@@ -767,39 +809,38 @@ export class PartnerOperationsService {
       last7.push({
         date: d.toISOString().slice(0, 10),
         revenue: dayRevenue,
-        payout: 0, // filled in after commissionRate is resolved below
+        payout: 0, // filled in below now that commissionRateByBranchId is known
         orders: dayOrders.length,
         _dayOrders: dayOrders,
       });
     }
 
-    // Fetch payment details and branch commission rate for per-order breakdown
-    const [paymentsByOrderId, branch] = await Promise.all([
-      loadLatestOrderPaymentsByOrderId(this.paymentModel, recentCompleted.map((o) => o._id)),
-      role !== UserRole.ADMIN
-        ? this.resolvePartnerBranchId(userId, role)
-            .then((id) => this.branchModel.findById(id).select('commissionRate'))
-            .catch(() => null)
-        : Promise.resolve(null),
-    ]);
+    const paymentsByOrderId = await loadLatestOrderPaymentsByOrderId(
+      this.paymentModel,
+      recentCompleted.map((o) => o._id),
+    );
 
-    const commissionRate = branch?.commissionRate ?? 0.20;
-
-    // Backfill daily payout now that commissionRate is known (fee applied to subtotal, not total)
+    // Backfill daily payout now that commissionRateByBranchId is known (fee applied to subtotal, not total)
     for (const point of last7) {
       const dayFee = Math.round(
-        point._dayOrders.reduce((s, o) => s + this.computeOrderFee(o, commissionRate), 0),
+        point._dayOrders.reduce((s, o) => s + this.computeOrderFee(o, commissionRateByBranchId), 0),
       );
       point.payout = point.revenue - dayFee;
       delete (point as Partial<typeof point>)._dayOrders;
     }
 
-    const todayBreakdown = periodBreakdown(today, commissionRate);
-    const weekBreakdown = periodBreakdown(week, commissionRate);
-    const monthBreakdown = periodBreakdown(month, commissionRate);
-    const allTimeLegacySubtotalSum = allTimeSummary[0]?.legacyCommissionSubtotalSum ?? 0;
-    const allTimeShopMarkupFee = allTimeSummary[0]?.shopMarkupFeeSum ?? 0;
-    const allTimeFee = Math.round(allTimeLegacySubtotalSum * commissionRate) + allTimeShopMarkupFee;
+    const todayBreakdown = periodBreakdown(today);
+    const weekBreakdown = periodBreakdown(week);
+    const monthBreakdown = periodBreakdown(month);
+    const allTimeFee = Math.round(
+      allTimeSummary.reduce(
+        (s, r) =>
+          s +
+          r.legacyCommissionSubtotalSum * (commissionRateByBranchId.get(r._id?.toString() ?? '') ?? 0.2) +
+          r.shopMarkupFeeSum,
+        0,
+      ),
+    );
     const allTimePayout = allTimeRevenue - allTimeFee;
 
     const recentOrders = recentCompleted.map((o) => {
@@ -807,8 +848,9 @@ export class PartnerOperationsService {
       const isCash = payment?.method === PaymentMethod.CASH;
       const cashCollected = isCash && payment?.status === PaymentStatus.PAID;
       const subtotal = o.subtotal ?? o.total;
-      const lunaraFee = this.computeOrderFee(o, commissionRate);
+      const lunaraFee = this.computeOrderFee(o, commissionRateByBranchId);
       const partnerPayout = o.total - lunaraFee;
+      const commissionRate = commissionRateByBranchId.get(o.branchId?.toString() ?? '') ?? 0.2;
       return {
         orderId: o._id.toString(),
         completedAt: o.updatedAt?.toISOString() ?? o.createdAt?.toISOString(),
@@ -886,14 +928,15 @@ export class PartnerOperationsService {
   }
 
   async getUnsettledOrders(partnerId: string) {
-    const branch = await this.branchModel.findOne({
+    const branches = await this.branchModel.find({
       partnerUserId: new Types.ObjectId(partnerId),
     });
-    if (!branch) throw new NotFoundException('Partner branch not found');
+    if (branches.length === 0) throw new NotFoundException('Partner branch not found');
+    const commissionRateByBranchId = this.commissionRateMap(branches);
 
     const orders = await this.orderModel
       .find({
-        branchId: branch._id,
+        branchId: { $in: branches.map((b) => b._id) },
         status: { $in: COMPLETED_STATUSES },
         settlementId: { $exists: false },
       })
@@ -904,15 +947,14 @@ export class PartnerOperationsService {
       orders.map((o) => o._id),
     );
 
-    const commissionRate = branch.commissionRate ?? 0.20;
-
     const data = orders.map((o) => {
       const payment = paymentsByOrderId.get(o._id.toString());
       const isCash = payment?.method === PaymentMethod.CASH;
       const cashCollected = isCash && payment?.status === PaymentStatus.PAID;
       const subtotal = o.subtotal ?? o.total;
-      const lunaraFee = this.computeOrderFee(o, commissionRate);
+      const lunaraFee = this.computeOrderFee(o, commissionRateByBranchId);
       const partnerPayout = o.total - lunaraFee;
+      const commissionRate = commissionRateByBranchId.get(o.branchId?.toString() ?? '') ?? 0.2;
       return {
         orderId: o._id.toString(),
         completedAt: o.updatedAt?.toISOString() ?? o.createdAt?.toISOString(),
@@ -943,10 +985,10 @@ export class PartnerOperationsService {
       }
     }
 
-    const branch = await this.branchModel.findOne({
+    const branches = await this.branchModel.find({
       partnerUserId: new Types.ObjectId(settlement.partnerId),
     });
-    if (!branch) throw new NotFoundException('Partner branch not found');
+    if (branches.length === 0) throw new NotFoundException('Partner branch not found');
 
     const orders = await this.orderModel
       .find({ settlementId: settlement._id })
@@ -957,15 +999,18 @@ export class PartnerOperationsService {
       orders.map((o) => o._id),
     );
 
-    // Use the commission rate snapshot from the settlement for exact reconciliation
+    // Use the commission rate snapshot from the settlement (a weighted average across whichever
+    // branches contributed orders) for legacy orders, for exact historical reconciliation.
+    // shop_markup orders ignore this and use their own baseSubtotal regardless (see computeOrderFee).
     const commissionRate = settlement.commissionRate ?? 0.20;
+    const emptyBranchRateMap = new Map<string, number>();
 
     const data = orders.map((o) => {
       const payment = paymentsByOrderId.get(o._id.toString());
       const isCash = payment?.method === PaymentMethod.CASH;
       const cashCollected = isCash && payment?.status === PaymentStatus.PAID;
       const subtotal = o.subtotal ?? o.total;
-      const lunaraFee = this.computeOrderFee(o, commissionRate);
+      const lunaraFee = this.computeOrderFee(o, emptyBranchRateMap, commissionRate);
       const partnerPayout = o.total - lunaraFee;
       return {
         orderId: o._id.toString(),
@@ -997,15 +1042,17 @@ export class PartnerOperationsService {
       throw new BadRequestException('At least one order must be selected');
     }
 
-    // Find partner's branch
-    const branch = await this.branchModel.findOne({
+    // Find all of the partner's branches — a partner account can own several shops, and orders
+    // selected for this settlement may span any of them.
+    const branches = await this.branchModel.find({
       partnerUserId: new Types.ObjectId(partnerId),
     });
-    if (!branch) throw new NotFoundException('Partner branch not found');
+    if (branches.length === 0) throw new NotFoundException('Partner branch not found');
+    const commissionRateByBranchId = this.commissionRateMap(branches);
 
     const completedOrders = await this.orderModel.find({
       _id: { $in: dto.orderIds.map((id) => new Types.ObjectId(id)) },
-      branchId: branch._id,
+      branchId: { $in: branches.map((b) => b._id) },
       status: { $in: COMPLETED_STATUSES },
       settlementId: { $exists: false },
     });
@@ -1035,14 +1082,29 @@ export class PartnerOperationsService {
       }
     }
 
-    const commissionRate = branch.commissionRate ?? 0.20;
     const totalAmount = completedOrders.reduce((s, o) => s + o.total, 0);
     // shop_markup orders already have Lunara's cut baked into the price the customer paid;
-    // legacy orders still take commissionRate off the laundry subtotal (not the delivery fee).
+    // legacy orders take their own branch's commissionRate off the laundry subtotal (not the
+    // delivery fee) — branches under the same partner can carry different rates, so this must
+    // be computed per order rather than with one flat number.
     const lunaraFee = Math.round(
-      completedOrders.reduce((s, o) => s + this.computeOrderFee(o, commissionRate), 0),
+      completedOrders.reduce((s, o) => s + this.computeOrderFee(o, commissionRateByBranchId), 0),
     );
     const partnerPayout = totalAmount - lunaraFee;
+
+    // Stored commissionRate becomes a display-only weighted average across the legacy-priced
+    // orders in this settlement (shop_markup orders don't have a "rate" at all) — once a
+    // settlement can span branches with different rates, this field is no longer the single
+    // source of truth for the fee; lunaraFee (computed per-order above) always is.
+    const legacyOrders = completedOrders.filter((o) => o.pricingModel !== 'shop_markup');
+    const legacySubtotalSum = legacyOrders.reduce((s, o) => s + (o.subtotal ?? o.total), 0);
+    const weightedCommissionRate =
+      legacySubtotalSum > 0
+        ? legacyOrders.reduce((s, o) => {
+            const rate = commissionRateByBranchId.get(o.branchId?.toString() ?? '') ?? 0.2;
+            return s + rate * (o.subtotal ?? o.total);
+          }, 0) / legacySubtotalSum
+        : 0.2;
 
     const settlement = await this.settlementModel.create({
       partnerId: new Types.ObjectId(partnerId),
@@ -1054,7 +1116,7 @@ export class PartnerOperationsService {
       totalAmount,
       lunaraFee,
       partnerPayout,
-      commissionRate,
+      commissionRate: weightedCommissionRate,
       status: 'paid',
       paidAt: new Date(),
       paidBy: new Types.ObjectId(adminUserId),

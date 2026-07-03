@@ -130,7 +130,7 @@ export default function BookScreen() {
     code?: string;
   }>();
   const apiFetch = useAuthStore((s) => s.apiFetch);
-  const [step, setStep] = useState<BookingStep>('service');
+  const [step, setStep] = useState<BookingStep>('address');
   const [form, setForm] = useState<BookingFormState>(() => {
     const initial = { ...initialBookingForm };
     if (serviceParam && Object.values(BookingType).includes(serviceParam as BookingType)) {
@@ -489,39 +489,6 @@ export default function BookScreen() {
             <Text style={styles.sub}>Loading services…</Text>
           ) : null}
 
-          {step === 'service' && config && (
-            <View>
-              <StepHeading step="service" title="Choose service" />
-              {config.services.map((s) => {
-                const selected = form.bookingType === s.type;
-                return (
-                  <Pressable
-                    key={s.type}
-                    style={({ pressed }) => [
-                      styles.option,
-                      selected && styles.optionSelected,
-                      pressed && styles.optionPressed,
-                    ]}
-                    onPress={() => setForm((f) => ({ ...f, bookingType: s.type as BookingType }))}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected }}
-                  >
-                    <View style={styles.optionTopRow}>
-                      <Text style={styles.optionTitle}>{s.label}</Text>
-                      {selected ? (
-                        <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
-                      ) : null}
-                    </View>
-                    <Text style={styles.optionSub}>{s.description}</Text>
-                    <Text style={styles.optionPrice}>
-                      {formatCurrency(s.pricePerKg)} / kg · min {s.minWeightKg} kg
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          )}
-
           {step === 'address' && (
             <View>
               <StepHeading step="address" title="Pickup address" />
@@ -599,7 +566,10 @@ export default function BookScreen() {
               ) : (
                 shopOptions.map((shop) => {
                   const selected = form.branchId === shop.branchId;
-                  const shopService = shop.services.find((s) => s.type === form.bookingType);
+                  const cheapest = shop.services.reduce<ShopServiceOption | null>(
+                    (min, s) => (!min || s.customerPricePerKg < min.customerPricePerKg ? s : min),
+                    null,
+                  );
                   const disabled = !shop.withinRadius || !shop.capacityAvailable;
                   return (
                     <Pressable
@@ -624,9 +594,9 @@ export default function BookScreen() {
                       <Text style={styles.optionSub}>
                         {shop.city} · {shop.distanceLabel}
                       </Text>
-                      {shopService ? (
+                      {cheapest ? (
                         <Text style={styles.optionPrice}>
-                          {formatCurrency(shopService.customerPricePerKg)} / kg
+                          From {formatCurrency(cheapest.customerPricePerKg)} / kg
                         </Text>
                       ) : null}
                       {!shop.capacityAvailable ? (
@@ -639,6 +609,43 @@ export default function BookScreen() {
                   );
                 })
               )}
+            </View>
+          )}
+
+          {step === 'service' && config && (
+            <View>
+              <StepHeading
+                step="service"
+                title={selectedShop ? `${selectedShop.name} services` : 'Choose service'}
+              />
+              {config.services.map((s) => {
+                const selected = form.bookingType === s.type;
+                const shopService = selectedShop?.services.find((sv) => sv.type === s.type);
+                return (
+                  <Pressable
+                    key={s.type}
+                    style={({ pressed }) => [
+                      styles.option,
+                      selected && styles.optionSelected,
+                      pressed && styles.optionPressed,
+                    ]}
+                    onPress={() => setForm((f) => ({ ...f, bookingType: s.type as BookingType }))}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected }}
+                  >
+                    <View style={styles.optionTopRow}>
+                      <Text style={styles.optionTitle}>{s.label}</Text>
+                      {selected ? (
+                        <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                      ) : null}
+                    </View>
+                    <Text style={styles.optionSub}>{s.description}</Text>
+                    <Text style={styles.optionPrice}>
+                      {formatCurrency(shopService?.customerPricePerKg ?? s.pricePerKg)} / kg · min {s.minWeightKg} kg
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
           )}
 

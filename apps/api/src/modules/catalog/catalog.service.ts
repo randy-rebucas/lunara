@@ -213,6 +213,18 @@ export class CatalogService {
 
 
 
+  async findActiveAddonBySlug(slug: string) {
+
+    await this.ensureAddonsSeeded();
+
+    const doc = await this.laundryAddonModel.findOne({ slug, isActive: true });
+
+    return doc ? this.toAddonOption(doc) : null;
+
+  }
+
+
+
   async listAllServices() {
 
     await this.ensureSeeded();

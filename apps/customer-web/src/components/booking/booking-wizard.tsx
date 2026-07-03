@@ -189,11 +189,11 @@ function SummaryRow({ label, value, emphasis }: { label: string; value: string; 
 
 function getNextStepLabel(step: BookingStep): string {
   switch (step) {
-    case 'service':
-      return 'Continue to address';
     case 'address':
       return 'Continue to shop selection';
     case 'shop':
+      return 'Continue to service selection';
+    case 'service':
       return 'Continue to schedule';
     case 'schedule':
       return 'Continue to weight';
@@ -259,7 +259,7 @@ function WizardActions({
   onNext: () => void;
   onConfirm: () => void;
 }) {
-  const isFirstStep = step === 'service';
+  const isFirstStep = step === BOOKING_STEPS[0].id;
   const isConfirmStep = step === 'confirm';
   const primaryDisabled = isConfirmStep ? loading : stepping || !canProceed;
 
@@ -328,7 +328,7 @@ function WizardActions({
 export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
   const { api } = useAuthContext();
   const router = useRouter();
-  const [step, setStep] = useState<BookingStep>('service');
+  const [step, setStep] = useState<BookingStep>('address');
   const [form, setForm] = useState<BookingFormState>(() => ({
     ...initialBookingForm,
     couponCode: initialCouponCode?.trim().toUpperCase() ?? '',
@@ -620,39 +620,6 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
     <div className="pb-28 sm:pb-0">
       <BookingProgress current={step} />
 
-      {step === 'service' && (
-        <section>
-          <StepHeader
-            title="Select service"
-            description="Choose the type of laundry service you need. Pricing is per kilogram."
-          />
-          <div className="list-stack">
-            {services.map((s) => {
-              const areaOk =
-                availableServices.length === 0 || availableServices.includes(s.type);
-              const disabled = Boolean(form.addressId && !areaOk);
-              return (
-                <SelectableOption
-                  key={s.type}
-                  selected={form.bookingType === s.type}
-                  disabled={disabled}
-                  onClick={() => setForm((f) => ({ ...f, bookingType: s.type }))}
-                >
-                  <p className="font-medium text-slate-900">{s.label}</p>
-                  <p className="mt-1 text-sm text-muted">{s.description}</p>
-                  <p className="mt-2 text-sm font-medium text-primary">
-                    {formatCurrency(s.pricePerKg)} / kg · min {s.minWeightKg} kg
-                  </p>
-                  {disabled && (
-                    <p className="mt-2 text-xs text-amber-700">Not available in your area</p>
-                  )}
-                </SelectableOption>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
       {step === 'address' && (
         <section>
           <StepHeader
@@ -716,7 +683,10 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
           ) : (
             <div className="list-stack">
               {shopOptions.map((shop) => {
-                const shopService = shop.services.find((s) => s.type === form.bookingType);
+                const cheapest = shop.services.reduce<ShopServiceOption | null>(
+                  (min, s) => (!min || s.customerPricePerKg < min.customerPricePerKg ? s : min),
+                  null,
+                );
                 const disabled = !shop.withinRadius || !shop.capacityAvailable;
                 return (
                   <SelectableOption
@@ -729,9 +699,9 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
                     <p className="mt-1 text-sm text-muted">
                       {shop.city} · {shop.distanceLabel}
                     </p>
-                    {shopService && (
+                    {cheapest && (
                       <p className="mt-2 text-sm font-medium text-primary">
-                        {formatCurrency(shopService.customerPricePerKg)} / kg
+                        From {formatCurrency(cheapest.customerPricePerKg)} / kg
                       </p>
                     )}
                     {!shop.capacityAvailable && (
@@ -745,6 +715,44 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
               })}
             </div>
           )}
+        </section>
+      )}
+
+      {step === 'service' && (
+        <section>
+          <StepHeader
+            title="Select service"
+            description={
+              selectedShop
+                ? `Prices below are what ${selectedShop.name} charges.`
+                : 'Choose the type of laundry service you need.'
+            }
+          />
+          <div className="list-stack">
+            {services.map((s) => {
+              const areaOk =
+                availableServices.length === 0 || availableServices.includes(s.type);
+              const disabled = Boolean(form.addressId && !areaOk);
+              const shopService = selectedShop?.services.find((sv) => sv.type === s.type);
+              return (
+                <SelectableOption
+                  key={s.type}
+                  selected={form.bookingType === s.type}
+                  disabled={disabled}
+                  onClick={() => setForm((f) => ({ ...f, bookingType: s.type }))}
+                >
+                  <p className="font-medium text-slate-900">{s.label}</p>
+                  <p className="mt-1 text-sm text-muted">{s.description}</p>
+                  <p className="mt-2 text-sm font-medium text-primary">
+                    {formatCurrency(shopService?.customerPricePerKg ?? s.pricePerKg)} / kg · min {s.minWeightKg} kg
+                  </p>
+                  {disabled && (
+                    <p className="mt-2 text-xs text-amber-700">Not available in your area</p>
+                  )}
+                </SelectableOption>
+              );
+            })}
+          </div>
         </section>
       )}
 

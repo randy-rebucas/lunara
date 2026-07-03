@@ -39,6 +39,7 @@ interface BranchProfile {
     dailyQuotaWeightKg: number;
     commissionRate: number;
     servicePricing: { serviceType: string; basePricePerKg: number }[];
+    addonPricing: { addonSlug: string; basePrice: number }[];
     location: { latitude: number; longitude: number };
   };
   hierarchy: {
@@ -991,6 +992,7 @@ export function BranchesBoard() {
                         <ShopPricingPanel
                           branchId={profile.branch.id}
                           initialPricing={profile.branch.servicePricing}
+                          initialAddonPricing={profile.branch.addonPricing}
                         />
                       ) : null}
 

@@ -98,6 +98,17 @@ class BranchServicePrice {
   basePricePerKg!: number;
 }
 
+@Schema({ _id: false })
+class BranchAddonPrice {
+  /** LaundryAddon.slug */
+  @Prop({ required: true })
+  addonSlug!: string;
+
+  /** Shop's own add-on price, before Lunara's customer-facing markup. */
+  @Prop({ required: true, min: 0 })
+  basePrice!: number;
+}
+
 @Schema({ timestamps: true, collection: 'branches' })
 export class Branch {
   @Prop({ required: true, unique: true })
@@ -155,6 +166,10 @@ export class Branch {
   /** This shop's own price per kg per service; falls back to the global catalog price when a type is missing. */
   @Prop({ type: [BranchServicePrice], default: [] })
   servicePricing!: BranchServicePrice[];
+
+  /** This shop's own price per add-on; falls back to the global catalog price when a slug is missing. */
+  @Prop({ type: [BranchAddonPrice], default: [] })
+  addonPricing!: BranchAddonPrice[];
 
   @Prop({ type: PartnerPortalSettings, default: () => ({ ...DEFAULT_PARTNER_PORTAL_SETTINGS }) })
   portalSettings!: PartnerPortalSettings;

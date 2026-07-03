@@ -25,7 +25,11 @@ import { taskPhotoPublicPath } from '../../common/uploads/upload-paths';
 import { Types } from 'mongoose';
 import { PickupService } from '../riders/pickup.service';
 import { LaundryService, LaundryServiceDocument } from '../catalog/schemas/laundry-service.schema';
+import { LaundryAddon, LaundryAddonDocument } from '../catalog/schemas/laundry-addon.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import { BranchesService } from '../branches/branches.service';
+import { UpdateBranchPricingDto } from '../branches/dto/update-branch-pricing.dto';
+import { UpdateBranchAddonPricingDto } from '../branches/dto/update-branch-addon-pricing.dto';
 import { AssignStaffDto } from './dto/assign-staff.dto';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { AdvanceProcessingDto, MoveProcessingStepDto, SetShelfSlotDto } from './dto/processing.dto';
@@ -68,12 +72,59 @@ export class PartnerController {
     private readonly pickupService: PickupService,
     @InjectModel(LaundryService.name)
     private readonly laundryServiceModel: Model<LaundryServiceDocument>,
+    @InjectModel(LaundryAddon.name)
+    private readonly laundryAddonModel: Model<LaundryAddonDocument>,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
     @InjectModel('Order')
     private readonly orderModel: Model<Record<string, unknown>>,
     private readonly cloudinaryService: CloudinaryService,
+    private readonly branchesService: BranchesService,
   ) {}
+
+  @Get('branches')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  listOwnBranches(@Req() req: { user: { sub: string } }) {
+    return this.branchesService.listBranchesForPartner(req.user.sub);
+  }
+
+  @Get('branches/:id/pricing')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  async getOwnBranchPricing(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('id') id: string,
+  ) {
+    if (req.user.role !== UserRole.ADMIN) {
+      await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
+    }
+    return this.branchesService.getShopPricing(id);
+  }
+
+  @Patch('branches/:id/pricing')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  async updateOwnBranchPricing(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('id') id: string,
+    @Body() dto: UpdateBranchPricingDto,
+  ) {
+    if (req.user.role !== UserRole.ADMIN) {
+      await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
+    }
+    return this.branchesService.updateServicePricing(id, dto.servicePricing);
+  }
+
+  @Patch('branches/:id/addon-pricing')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  async updateOwnBranchAddonPricing(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('id') id: string,
+    @Body() dto: UpdateBranchAddonPricingDto,
+  ) {
+    if (req.user.role !== UserRole.ADMIN) {
+      await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
+    }
+    return this.branchesService.updateAddonPricing(id, dto.addonPricing);
+  }
 
   @Get('settings')
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
@@ -392,6 +443,16 @@ export class PartnerController {
       .sort({ sortOrder: 1 })
       .lean();
     return { success: true, data: services };
+  }
+
+  @Get('addons')
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
+  async getAddons() {
+    const addons = await this.laundryAddonModel
+      .find({ isActive: true })
+      .sort({ sortOrder: 1 })
+      .lean();
+    return { success: true, data: addons };
   }
 
   @Get('customers')

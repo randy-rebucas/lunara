@@ -152,6 +152,7 @@ export class BookingService {
     }
 
     let priceableService = service;
+    let priceableAddons = await this.catalogService.listActiveAddons();
     if (!isWhiteLabel) {
       if (!dto.branchId) throw new BadRequestException('Select a laundry shop first');
       const branch = await this.branchesService.getActivePartnerShop(dto.branchId);
@@ -166,11 +167,16 @@ export class BookingService {
         dto.bookingType,
       );
       priceableService = { ...service, pricePerKg: applyShopMarkup(basePricePerKg) };
+      priceableAddons = await Promise.all(
+        priceableAddons.map(async (addon) => {
+          const basePrice = await this.branchesService.resolveBranchAddonPrice(branch, addon.id);
+          return { ...addon, price: applyShopMarkup(basePrice) };
+        }),
+      );
     }
 
-    const activeAddons = await this.catalogService.listActiveAddons();
     const addonIds = dto.addonIds ?? [];
-    const invalidAddon = addonIds.find((id) => !activeAddons.some((a) => a.id === id));
+    const invalidAddon = addonIds.find((id) => !priceableAddons.some((a) => a.id === id));
     if (invalidAddon) {
       throw new BadRequestException('Invalid or inactive add-on');
     }
@@ -192,7 +198,7 @@ export class BookingService {
         addonIds,
       },
       priceableService,
-      activeAddons,
+      priceableAddons,
       deliveryFee,
     );
 
@@ -271,11 +277,16 @@ export class BookingService {
         branch,
         dto.bookingType,
       );
+      const baseAddonsSum = await quote.addons.reduce(async (accPromise, a) => {
+        const acc = await accPromise;
+        const basePrice = await this.branchesService.resolveBranchAddonPrice(branch, a.id);
+        return acc + basePrice;
+      }, Promise.resolve(0));
       branchId = branch._id.toString();
       branchCode = branch.code;
       branchName = branch.name;
       resolvedPartnerId = branch.partnerUserId.toString();
-      baseSubtotal = Math.round(basePricePerKg * quote.weightKg);
+      baseSubtotal = Math.round(basePricePerKg * quote.weightKg + baseAddonsSum);
       pricingModel = 'shop_markup';
     }
 

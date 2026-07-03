@@ -10,7 +10,13 @@ interface PartnerRow {
   _id: string;
   email?: string;
   phone?: string;
-  branchName?: string;
+  branchNames?: string[];
+}
+
+function branchLabel(branchNames?: string[]): string | undefined {
+  if (!branchNames || branchNames.length === 0) return undefined;
+  if (branchNames.length <= 2) return branchNames.join(', ');
+  return `${branchNames.length} shops`;
 }
 
 interface UnsettledOrder {
@@ -186,7 +192,12 @@ function CreateSettlementModal({
                 <span className="font-medium text-slate-900">{formatPeso(totalGross)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted">Lunara fee ({Math.round((selectedOrders[0]?.commissionRate ?? 0.2) * 100)}%)</span>
+                <span className="text-muted">
+                  Lunara fee
+                  {new Set(selectedOrders.map((o) => o.commissionRate)).size > 1
+                    ? ' (mixed rates)'
+                    : ` (${Math.round((selectedOrders[0]?.commissionRate ?? 0.2) * 100)}%)`}
+                </span>
                 <span className="font-medium text-rose-600">+{formatPeso(totalFee)}</span>
               </div>
               <div className="flex justify-between border-t border-border pt-2">
@@ -246,7 +257,7 @@ export default function PartnerSettlementsPage() {
   );
 
   const partnerLabel = selectedPartner
-    ? (selectedPartner.branchName ?? selectedPartner.email ?? selectedPartner._id)
+    ? (branchLabel(selectedPartner.branchNames) ?? selectedPartner.email ?? selectedPartner._id)
     : '';
 
   return (
@@ -290,8 +301,8 @@ export default function PartnerSettlementsPage() {
                   selectedPartner?._id === p._id ? 'bg-primary/5 font-medium text-primary' : 'text-slate-700'
                 }`}
               >
-                {p.branchName ?? p.email ?? p._id}
-                {p.email && p.branchName && (
+                {branchLabel(p.branchNames) ?? p.email ?? p._id}
+                {p.email && branchLabel(p.branchNames) && (
                   <span className="mt-0.5 block text-xs text-muted">{p.email}</span>
                 )}
               </button>

@@ -12,9 +12,9 @@ export type BookingStep =
   | 'done';
 
 export const BOOKING_STEPS: { id: BookingStep; label: string }[] = [
-  { id: 'service', label: 'Service' },
   { id: 'address', label: 'Address' },
   { id: 'shop', label: 'Shop' },
+  { id: 'service', label: 'Service' },
   { id: 'schedule', label: 'Schedule' },
   { id: 'weight', label: 'Weight' },
   { id: 'addons', label: 'Add-ons' },

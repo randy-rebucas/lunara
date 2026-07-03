@@ -403,6 +403,19 @@ export class AdminService {
       orderStats.map((s) => [s._id.toString(), { totalOrders: s.totalOrders, revenue: s.revenue }]),
     );
 
+    // A partner account can own several branches (e.g. franchise locations) — surface all of
+    // them here so admin-web doesn't just show a blank/singular branch name for those partners.
+    const branches = await this.branchModel
+      .find({ partnerUserId: { $in: partners.map((p) => p._id) } })
+      .select('partnerUserId name');
+    const branchNamesByPartnerId = new Map<string, string[]>();
+    for (const b of branches) {
+      const key = b.partnerUserId.toString();
+      const names = branchNamesByPartnerId.get(key) ?? [];
+      names.push(b.name);
+      branchNamesByPartnerId.set(key, names);
+    }
+
     const staffCount = await this.userModel.countDocuments({ role: UserRole.STAFF, isActive: true });
 
     return {
@@ -416,6 +429,7 @@ export class AdminService {
           staffCount,
           totalOrders: statsMap.get(p._id.toString())?.totalOrders ?? 0,
           revenue: statsMap.get(p._id.toString())?.revenue ?? 0,
+          branchNames: branchNamesByPartnerId.get(p._id.toString()) ?? [],
         })),
       },
     };

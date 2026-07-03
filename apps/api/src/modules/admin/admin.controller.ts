@@ -25,6 +25,7 @@ import { BranchesService } from '../branches/branches.service';
 import { CreateBranchDto } from '../branches/dto/create-branch.dto';
 import { UpdateBranchDto } from '../branches/dto/update-branch.dto';
 import { UpdateBranchPricingDto } from '../branches/dto/update-branch-pricing.dto';
+import { UpdateBranchAddonPricingDto } from '../branches/dto/update-branch-addon-pricing.dto';
 import { RefundsService } from '../refunds/refunds.service';
 import { ReviewRefundDto } from '../refunds/dto/review-refund.dto';
 import { SupportService } from '../support/support.service';
@@ -368,6 +369,11 @@ export class AdminController {
   @Patch('branches/:id/pricing')
   updateBranchPricing(@Param('id') id: string, @Body() dto: UpdateBranchPricingDto) {
     return this.branchesService.updateServicePricing(id, dto.servicePricing);
+  }
+
+  @Patch('branches/:id/addon-pricing')
+  updateBranchAddonPricing(@Param('id') id: string, @Body() dto: UpdateBranchAddonPricingDto) {
+    return this.branchesService.updateAddonPricing(id, dto.addonPricing);
   }
 
   @Get('dispatch/dashboard')

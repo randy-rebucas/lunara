@@ -97,6 +97,14 @@ export class BranchesService {
     return service?.pricePerKg ?? 0;
   }
 
+  /** Shop's own price for an add-on; falls back to the global catalog price when not customized. */
+  async resolveBranchAddonPrice(branch: BranchDocument, addonSlug: string) {
+    const override = branch.addonPricing?.find((p) => p.addonSlug === addonSlug);
+    if (override) return override.basePrice;
+    const addon = await this.catalogService.findActiveAddonBySlug(addonSlug);
+    return addon?.price ?? 0;
+  }
+
   private async serializeShopPricing(branch: BranchDocument) {
     const services = await this.catalogService.listActiveServices();
     return Promise.all(
@@ -110,6 +118,54 @@ export class BranchesService {
         };
       }),
     );
+  }
+
+  private async serializeShopAddonPricing(branch: BranchDocument) {
+    const addons = await this.catalogService.listActiveAddons();
+    return Promise.all(
+      addons.map(async (addon) => {
+        const basePrice = await this.resolveBranchAddonPrice(branch, addon.id);
+        return {
+          slug: addon.id,
+          label: addon.label,
+          basePrice,
+          customerPrice: applyShopMarkup(basePrice),
+        };
+      }),
+    );
+  }
+
+  /** Throws if the branch isn't owned by this partner user — guards partner-facing pricing writes/reads. */
+  assertBranchOwnedByPartner(branch: BranchDocument, partnerUserId: string) {
+    if (branch.partnerUserId.toString() !== partnerUserId) {
+      throw new NotFoundException('Branch not found');
+    }
+  }
+
+  /** All shops a partner owns — for the partner-web branch selector when editing pricing. */
+  async listBranchesForPartner(partnerUserId: string) {
+    const branches = await this.branchModel
+      .find({ partnerUserId: new Types.ObjectId(partnerUserId) })
+      .select('code name branchType city')
+      .sort({ name: 1 });
+    return {
+      success: true,
+      data: branches.map((b) => ({
+        _id: b._id.toString(),
+        code: b.code,
+        name: b.name,
+        branchType: b.branchType,
+        city: b.city,
+      })),
+    };
+  }
+
+  /** Ownership-checked variant of getShopPricing/updateServicePricing/updateAddonPricing for the partner portal. */
+  async getOwnBranchOrThrow(branchId: string, partnerUserId: string) {
+    const branch = await this.branchModel.findById(branchId);
+    if (!branch) throw new NotFoundException('Branch not found');
+    this.assertBranchOwnedByPartner(branch, partnerUserId);
+    return branch;
   }
 
   /** Active partner shops near an address, each with its own marked-up prices, for the customer shop-selection step. */
@@ -128,6 +184,7 @@ export class BranchesService {
         const dist = distanceKm(customerCoords, [lng, lat]);
         const activeOrders = await this.countActiveOrders(branch._id);
         const services = await this.serializeShopPricing(branch);
+        const addons = await this.serializeShopAddonPricing(branch);
         return {
           branchId: branch._id.toString(),
           code: branch.code,
@@ -138,6 +195,7 @@ export class BranchesService {
           withinRadius: dist <= branch.serviceRadiusKm,
           capacityAvailable: activeOrders < branch.maxActiveOrders,
           services,
+          addons,
         };
       }),
     );
@@ -173,7 +231,13 @@ export class BranchesService {
     if (!branch || !branch.isActive || branch.branchType !== 'partner_shop') {
       throw new NotFoundException('Shop not found');
     }
-    return { success: true, data: await this.serializeShopPricing(branch) };
+    return {
+      success: true,
+      data: {
+        services: await this.serializeShopPricing(branch),
+        addons: await this.serializeShopAddonPricing(branch),
+      },
+    };
   }
 
   async updateServicePricing(
@@ -185,6 +249,14 @@ export class BranchesService {
     branch.servicePricing = pricing;
     await branch.save();
     return { success: true, data: await this.serializeShopPricing(branch) };
+  }
+
+  async updateAddonPricing(branchId: string, pricing: { addonSlug: string; basePrice: number }[]) {
+    const branch = await this.branchModel.findById(branchId);
+    if (!branch) throw new NotFoundException('Branch not found');
+    branch.addonPricing = pricing;
+    await branch.save();
+    return { success: true, data: await this.serializeShopAddonPricing(branch) };
   }
 
   operationalBranchFilter(partnerUserId?: Types.ObjectId) {
