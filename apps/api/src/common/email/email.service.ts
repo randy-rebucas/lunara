@@ -83,4 +83,20 @@ export class EmailService {
       text: `Your refund of ₱${amount.toFixed(2)} for order #${orderId} has been approved and credited to your wallet.\n\nThank you for your patience.`,
     });
   }
+
+  async sendRiderInvite(to: string, password: string): Promise<void> {
+    await this.send({
+      to,
+      subject: "You've been invited to ride for Lunara",
+      text: `An account has been created for you on Lunara.\n\nEmail: ${to}\nTemporary password: ${password}\n\nSign in on the Lunara rider app, complete your profile, and upload your KYC documents to get started.`,
+    });
+  }
+
+  async sendPartnerInvite(to: string, password: string): Promise<void> {
+    await this.send({
+      to,
+      subject: "You've been invited to join Lunara as a partner",
+      text: `A partner account has been created for you on Lunara.\n\nEmail: ${to}\nTemporary password: ${password}\n\nSign in on the Lunara partner portal to manage your branch. You can change your password after logging in.`,
+    });
+  }
 }

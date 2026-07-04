@@ -331,8 +331,10 @@ export interface PartnerProcessingView {
   processing?: {
     verifiedWeightKg?: number;
     ironingSkipped?: boolean;
-    completedSteps?: { stepId: string; photoUrl?: string; tagCode?: string }[];
+    completedSteps?: { stepId: string; photoUrl?: string }[];
     shelfSlot?: string;
+    tagId?: string;
+    tagCode?: string;
   };
 }
 

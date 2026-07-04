@@ -29,6 +29,8 @@ import { HandoffModule } from '../handoff/handoff.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { SosModule } from '../sos/sos.module';
 import { LedgerModule } from '../ledger/ledger.module';
+import { SettingsModule } from '../settings/settings.module';
+import { LaundryTagsModule } from '../laundry-tags/laundry-tags.module';
 
 @Module({
   imports: [
@@ -51,6 +53,8 @@ import { LedgerModule } from '../ledger/ledger.module';
     PaymentsModule,
     SosModule,
     LedgerModule,
+    SettingsModule,
+    LaundryTagsModule,
   ],
   controllers: [RidersController],
   providers: [RidersService, PickupService, DeliveryService, RiderAssignmentService, RiderNotificationService, RiderWalletService],

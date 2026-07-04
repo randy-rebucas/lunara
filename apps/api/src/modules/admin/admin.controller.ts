@@ -26,6 +26,8 @@ import { CreateBranchDto } from '../branches/dto/create-branch.dto';
 import { UpdateBranchDto } from '../branches/dto/update-branch.dto';
 import { UpdateBranchPricingDto } from '../branches/dto/update-branch-pricing.dto';
 import { UpdateBranchAddonPricingDto } from '../branches/dto/update-branch-addon-pricing.dto';
+import { UpdateBranchCustomServiceDto } from '../branches/dto/update-branch-custom-service.dto';
+import { UpdateBranchCustomAddonDto } from '../branches/dto/update-branch-custom-addon.dto';
 import { RefundsService } from '../refunds/refunds.service';
 import { ReviewRefundDto } from '../refunds/dto/review-refund.dto';
 import { SupportService } from '../support/support.service';
@@ -374,6 +376,34 @@ export class AdminController {
   @Patch('branches/:id/addon-pricing')
   updateBranchAddonPricing(@Param('id') id: string, @Body() dto: UpdateBranchAddonPricingDto) {
     return this.branchesService.updateAddonPricing(id, dto.addonPricing);
+  }
+
+  @Get('branches/:id/custom-services')
+  listBranchCustomServices(@Param('id') id: string) {
+    return this.branchesService.listCustomServicesForBranch(id);
+  }
+
+  @Patch('branches/:id/custom-services/:serviceId')
+  updateBranchCustomService(
+    @Param('id') id: string,
+    @Param('serviceId') serviceId: string,
+    @Body() dto: UpdateBranchCustomServiceDto,
+  ) {
+    return this.branchesService.updateCustomService(id, serviceId, dto);
+  }
+
+  @Get('branches/:id/custom-addons')
+  listBranchCustomAddons(@Param('id') id: string) {
+    return this.branchesService.listCustomAddonsForBranch(id);
+  }
+
+  @Patch('branches/:id/custom-addons/:addonId')
+  updateBranchCustomAddon(
+    @Param('id') id: string,
+    @Param('addonId') addonId: string,
+    @Body() dto: UpdateBranchCustomAddonDto,
+  ) {
+    return this.branchesService.updateCustomAddon(id, addonId, dto);
   }
 
   @Get('dispatch/dashboard')

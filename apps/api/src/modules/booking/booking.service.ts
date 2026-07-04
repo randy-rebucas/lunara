@@ -162,11 +162,25 @@ export class BookingService {
       if (dist > branch.serviceRadiusKm) {
         throw new BadRequestException('Selected shop does not deliver to this address');
       }
-      const basePricePerKg = await this.branchesService.resolveBranchServicePrice(
+      const offered = await this.branchesService.isServiceTypeOfferedByBranch(
         branch,
         dto.bookingType,
       );
-      priceableService = { ...service, pricePerKg: applyShopMarkup(basePricePerKg) };
+      if (!offered) {
+        throw new BadRequestException('This shop does not offer this service');
+      }
+      const resolved = await this.branchesService.resolvePriceableService(
+        branch,
+        dto.bookingType,
+        dto.customServiceId,
+      );
+      priceableService = {
+        ...service,
+        label: resolved.label ?? service.label,
+        description: resolved.description ?? service.description,
+        pricePerKg: applyShopMarkup(resolved.pricePerKg),
+      };
+      priceableAddons = await this.branchesService.listPriceableAddonOptions(branch);
       priceableAddons = await Promise.all(
         priceableAddons.map(async (addon) => {
           const basePrice = await this.branchesService.resolveBranchAddonPrice(branch, addon.id);
@@ -273,10 +287,12 @@ export class BookingService {
       // General customer flow: the shop they picked at booking time is the order's branch.
       // buildQuote() above already required and validated dto.branchId when not white-label.
       const branch = await this.branchesService.getActivePartnerShop(dto.branchId!);
-      const basePricePerKg = await this.branchesService.resolveBranchServicePrice(
+      const resolved = await this.branchesService.resolvePriceableService(
         branch,
         dto.bookingType,
+        dto.customServiceId,
       );
+      const basePricePerKg = resolved.pricePerKg;
       const baseAddonsSum = await quote.addons.reduce(async (accPromise, a) => {
         const acc = await accPromise;
         const basePrice = await this.branchesService.resolveBranchAddonPrice(branch, a.id);

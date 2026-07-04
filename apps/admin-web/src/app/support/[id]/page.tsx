@@ -48,7 +48,6 @@ interface InvestigationData {
     label: string;
     at?: string;
     note?: string;
-    tagCode?: string;
     photoUrl?: string;
   }[];
 }
@@ -283,7 +282,6 @@ export default function SupportTicketInvestigationPage() {
                   {log.at ? (
                     <p className="text-xs text-muted">{new Date(log.at).toLocaleString()}</p>
                   ) : null}
-                  {log.tagCode ? <p className="text-xs">Tag: {log.tagCode}</p> : null}
                   {log.note ? <p className="text-xs text-muted">{log.note}</p> : null}
                   {log.photoUrl ? (
                     <div className="mt-2">

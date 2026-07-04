@@ -20,6 +20,7 @@ import { BranchesModule } from '../branches/branches.module';
 import { PartnerSettingsService } from './partner-settings.service';
 import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
 import { LedgerModule } from '../ledger/ledger.module';
+import { LaundryTagsModule } from '../laundry-tags/laundry-tags.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { LedgerModule } from '../ledger/ledger.module';
     RidersModule,
     LedgerModule,
     BranchesModule,
+    LaundryTagsModule,
   ],
   controllers: [PartnerController],
   providers: [

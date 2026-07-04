@@ -22,6 +22,7 @@ import { RiderOfferPushService } from '../push/rider-offer-push.service';
 import { ReviewsService } from '../reviews/reviews.service';
 import { HandoffQrService } from '../handoff/handoff-qr.service';
 import { PaymentsService } from '../payments/payments.service';
+import { LaundryTagsService } from '../laundry-tags/laundry-tags.service';
 import { VerifyQrDto } from './dto/pickup.dto';
 import { RidersService } from './riders.service';
 import { RiderWalletService } from './rider-wallet.service';
@@ -53,6 +54,7 @@ export class DeliveryService {
     private handoffQrService: HandoffQrService,
     private paymentsService: PaymentsService,
     private riderWalletService: RiderWalletService,
+    private laundryTagsService: LaundryTagsService,
   ) {}
 
   async dispatchDeliverySearch(orderId: string) {
@@ -451,6 +453,7 @@ export class DeliveryService {
       updatedBy: riderUserId,
     });
     await order.save();
+    await this.laundryTagsService.releaseFromOrder(orderId, 'delivered');
 
     this.trackingGateway.emitOrderStatus(orderId, OrderStatus.DELIVERED);
     this.trackingGateway.emitOrderEvent(orderId, 'delivered', {

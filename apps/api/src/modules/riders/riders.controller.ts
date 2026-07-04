@@ -22,6 +22,7 @@ import { CloudinaryService } from '../../common/cloudinary/cloudinary.service';
 import { taskPhotoPublicPath, remittanceProofPublicPath } from '../../common/uploads/upload-paths';
 import { DeliveryPhotoDto } from './dto/delivery.dto';
 import { CapturePhotoDto, CollectLaundryDto, DropAtShopDto, VerifyCustomerDto, VerifyQrDto } from './dto/pickup.dto';
+import { AssignTagDto } from '../laundry-tags/dto/assign-tag.dto';
 import { UpdateLocationDto, UpdateRiderProfileDto } from './dto/rider.dto';
 import { RequestWithdrawalDto, UpdatePayoutMethodDto } from './dto/rider-wallet.dto';
 import { DeliveryService } from './delivery.service';
@@ -142,6 +143,16 @@ export class RidersController {
     @Body() dto: CollectLaundryDto,
   ) {
     return this.pickupService.collectLaundry(orderId, req.user.sub, dto);
+  }
+
+  @Post('pickup-tasks/:orderId/assign-tag')
+  @Roles(UserRole.RIDER)
+  assignLaundryTag(
+    @Param('orderId') orderId: string,
+    @Req() req: { user: { sub: string } },
+    @Body() dto: AssignTagDto,
+  ) {
+    return this.pickupService.assignLaundryTag(orderId, req.user.sub, dto);
   }
 
   @Post('pickup-tasks/:orderId/photo')

@@ -9,8 +9,9 @@ export const PARTNER_SHOP_LOCATION = {
   longitude: 121.0244,
 } as const;
 
-export const RIDER_PICKUP_PAYOUT = 80;
-export const RIDER_DELIVERY_PAYOUT = 120;
+/** Fallback only — actual rates are admin-configurable via PlatformSettings. */
+export const RIDER_PICKUP_PAYOUT = 35;
+export const RIDER_DELIVERY_PAYOUT = 35;
 
 export type RiderEarningType = 'pickup' | 'delivery' | 'bonus' | 'adjustment';
 

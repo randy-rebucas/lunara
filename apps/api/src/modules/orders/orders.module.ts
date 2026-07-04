@@ -8,6 +8,7 @@ import { BranchesModule } from '../branches/branches.module';
 import { HandoffModule } from '../handoff/handoff.module';
 import { PromotionsModule } from '../promotions/promotions.module';
 import { LedgerModule } from '../ledger/ledger.module';
+import { LaundryTagsModule } from '../laundry-tags/laundry-tags.module';
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 import { Order, OrderSchema } from './schemas/order.schema';
@@ -25,6 +26,7 @@ import { Order, OrderSchema } from './schemas/order.schema';
     HandoffModule,
     PromotionsModule,
     LedgerModule,
+    LaundryTagsModule,
   ],
   controllers: [OrdersController],
   providers: [OrdersService],

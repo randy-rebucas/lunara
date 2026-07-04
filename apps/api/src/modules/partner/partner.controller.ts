@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -30,6 +31,11 @@ import { User, UserDocument } from '../users/schemas/user.schema';
 import { BranchesService } from '../branches/branches.service';
 import { UpdateBranchPricingDto } from '../branches/dto/update-branch-pricing.dto';
 import { UpdateBranchAddonPricingDto } from '../branches/dto/update-branch-addon-pricing.dto';
+import { CreateBranchCustomServiceDto } from '../branches/dto/create-branch-custom-service.dto';
+import { UpdateBranchCustomServiceDto } from '../branches/dto/update-branch-custom-service.dto';
+import { CreateBranchCustomAddonDto } from '../branches/dto/create-branch-custom-addon.dto';
+import { UpdateBranchCustomAddonDto } from '../branches/dto/update-branch-custom-addon.dto';
+import { UpdateBranchHiddenCatalogDto } from '../branches/dto/update-branch-hidden-catalog.dto';
 import { AssignStaffDto } from './dto/assign-staff.dto';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { AdvanceProcessingDto, MoveProcessingStepDto, SetShelfSlotDto } from './dto/processing.dto';
@@ -124,6 +130,99 @@ export class PartnerController {
       await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
     }
     return this.branchesService.updateAddonPricing(id, dto.addonPricing);
+  }
+
+  @Patch('branches/:id/hidden-catalog')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  async updateOwnHiddenCatalog(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('id') id: string,
+    @Body() dto: UpdateBranchHiddenCatalogDto,
+  ) {
+    if (req.user.role !== UserRole.ADMIN) {
+      await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
+    }
+    return this.branchesService.updateHiddenCatalog(id, dto);
+  }
+
+  @Post('branches/:id/custom-services')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  async createOwnCustomService(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('id') id: string,
+    @Body() dto: CreateBranchCustomServiceDto,
+  ) {
+    if (req.user.role !== UserRole.ADMIN) {
+      await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
+    }
+    return this.branchesService.createCustomService(id, req.user.sub, dto);
+  }
+
+  @Patch('branches/:id/custom-services/:serviceId')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  async updateOwnCustomService(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('id') id: string,
+    @Param('serviceId') serviceId: string,
+    @Body() dto: UpdateBranchCustomServiceDto,
+  ) {
+    if (req.user.role !== UserRole.ADMIN) {
+      await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
+    }
+    return this.branchesService.updateCustomService(id, serviceId, dto);
+  }
+
+  @Delete('branches/:id/custom-services/:serviceId')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  async deleteOwnCustomService(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('id') id: string,
+    @Param('serviceId') serviceId: string,
+  ) {
+    if (req.user.role !== UserRole.ADMIN) {
+      await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
+    }
+    return this.branchesService.deleteCustomService(id, serviceId);
+  }
+
+  @Post('branches/:id/custom-addons')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  async createOwnCustomAddon(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('id') id: string,
+    @Body() dto: CreateBranchCustomAddonDto,
+  ) {
+    if (req.user.role !== UserRole.ADMIN) {
+      await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
+    }
+    return this.branchesService.createCustomAddon(id, req.user.sub, dto);
+  }
+
+  @Patch('branches/:id/custom-addons/:addonId')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  async updateOwnCustomAddon(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('id') id: string,
+    @Param('addonId') addonId: string,
+    @Body() dto: UpdateBranchCustomAddonDto,
+  ) {
+    if (req.user.role !== UserRole.ADMIN) {
+      await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
+    }
+    return this.branchesService.updateCustomAddon(id, addonId, dto);
+  }
+
+  @Delete('branches/:id/custom-addons/:addonId')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  async deleteOwnCustomAddon(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('id') id: string,
+    @Param('addonId') addonId: string,
+  ) {
+    if (req.user.role !== UserRole.ADMIN) {
+      await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
+    }
+    return this.branchesService.deleteCustomAddon(id, addonId);
   }
 
   @Get('settings')

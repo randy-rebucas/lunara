@@ -24,6 +24,11 @@ interface DeliveryFeeSettings {
   deliveryFee: number;
 }
 
+interface RiderFeeSettings {
+  riderPickupFee: number;
+  riderDeliveryFee: number;
+}
+
 interface BranchCoverageRow {
   _id: string;
   code: string;
@@ -100,6 +105,96 @@ function DeliveryFeeSection() {
             onClick={() => void save()}
           >
             {saving ? 'Saving…' : 'Save delivery fees'}
+          </button>
+          {saved ? <span className="badge-accent text-xs">Saved</span> : null}
+        </div>
+      </div>
+    </SectionPanel>
+  );
+}
+
+function RiderFeesSection() {
+  const load = useCallback(() => adminFetch<RiderFeeSettings>('/admin/settings/rider-fees'), []);
+  const { data, loading, error, reload } = useAdminQuery(load, []);
+  const [form, setForm] = useState<RiderFeeSettings | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState('');
+
+  useEffect(() => {
+    if (data) setForm(data);
+  }, [data]);
+
+  async function save() {
+    if (!form) return;
+    setSaving(true);
+    setSaveError('');
+    try {
+      await adminFetch('/admin/settings/rider-fees', {
+        method: 'PATCH',
+        body: JSON.stringify(form),
+      });
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 2000);
+      await reload();
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'Failed to save rider fees');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <SectionPanel
+      title="Rider fees"
+      description="Flat fee paid to the rider who completes each leg of an order."
+    >
+      <div className="border-b border-border/60 px-6 py-4 sm:px-8">
+        {loading && !form ? <p className="text-sm text-muted">Loading…</p> : null}
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {form ? (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="text-sm font-medium text-slate-900">Pickup fee</span>
+              <div className="mt-1.5 flex items-center gap-2">
+                <span className="text-sm text-muted">₱</span>
+                <input
+                  type="number"
+                  min={0}
+                  className="input-field"
+                  value={form.riderPickupFee}
+                  onChange={(e) =>
+                    setForm((f) => (f ? { ...f, riderPickupFee: Number(e.target.value) } : f))
+                  }
+                />
+              </div>
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-900">Delivery fee</span>
+              <div className="mt-1.5 flex items-center gap-2">
+                <span className="text-sm text-muted">₱</span>
+                <input
+                  type="number"
+                  min={0}
+                  className="input-field"
+                  value={form.riderDeliveryFee}
+                  onChange={(e) =>
+                    setForm((f) => (f ? { ...f, riderDeliveryFee: Number(e.target.value) } : f))
+                  }
+                />
+              </div>
+            </label>
+          </div>
+        ) : null}
+        {saveError ? <p className="mt-3 text-sm text-destructive">{saveError}</p> : null}
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            type="button"
+            className="btn-primary btn-sm"
+            disabled={saving || !form}
+            onClick={() => void save()}
+          >
+            {saving ? 'Saving…' : 'Save rider fees'}
           </button>
           {saved ? <span className="badge-accent text-xs">Saved</span> : null}
         </div>
@@ -367,6 +462,8 @@ export default function AdminSettingsPage() {
           </SectionPanel>
 
           <DeliveryFeeSection />
+
+          <RiderFeesSection />
 
           <ServiceCoverageSection />
 

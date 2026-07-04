@@ -171,6 +171,14 @@ export class Branch {
   @Prop({ type: [BranchAddonPrice], default: [] })
   addonPricing!: BranchAddonPrice[];
 
+  /** Global catalog BookingType values this shop does not offer. Empty = offers everything active. */
+  @Prop({ type: [String], enum: BookingType, default: [] })
+  hiddenServiceTypes!: BookingType[];
+
+  /** Global catalog LaundryAddon slugs this shop does not offer. Empty = offers everything active. */
+  @Prop({ type: [String], default: [] })
+  hiddenAddonSlugs!: string[];
+
   @Prop({ type: PartnerPortalSettings, default: () => ({ ...DEFAULT_PARTNER_PORTAL_SETTINGS }) })
   portalSettings!: PartnerPortalSettings;
 

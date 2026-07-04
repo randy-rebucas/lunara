@@ -13,12 +13,42 @@ Riders earn a fixed fee per task (pickup and delivery). How that fee is settled 
 
 | Task | Fee |
 |---|---|
-| Pickup completed | ₱80 |
-| Delivery completed | ₱120 |
+| Pickup completed | ₱35 (admin-configurable) |
+| Delivery completed | ₱35 (admin-configurable) |
 | Admin bonus | Manual (any amount) |
 | Admin adjustment | Manual (positive or negative) |
 
-Source: `packages/utils/src/rider-ops.ts` → `RIDER_PICKUP_PAYOUT`, `RIDER_DELIVERY_PAYOUT`
+Rates are stored in `PlatformSettings.riderPickupFee` / `riderDeliveryFee` (`apps/api/src/modules/settings/schemas/platform-settings.schema.ts`), editable by admin at **Settings → Rider fees** in admin-web, via:
+
+```
+GET   /admin/settings/rider-fees
+PATCH /admin/settings/rider-fees
+Body: { "riderPickupFee": 35, "riderDeliveryFee": 35 }
+```
+
+`packages/utils/src/rider-ops.ts` → `RIDER_PICKUP_PAYOUT`, `RIDER_DELIVERY_PAYOUT` are only fallback defaults (also 35); `riderEarningAmount(type, override)` is always called with the live configured value fetched via `SettingsService.getRiderFeeAmounts()`.
+
+---
+
+## Split-rider orders (different rider for pickup vs. delivery)
+
+An order tracks pickup and delivery as two independent assignments — `order.pickupRiderId` and `order.deliveryRiderId` (`apps/api/src/modules/orders/schemas/order.schema.ts`). They are assigned through separate admin flows (`assignPickupRider()` / `assignDeliveryRider()` in `apps/api/src/modules/riders/rider-assignment.service.ts`), and nothing in the codebase checks whether the two IDs match.
+
+Because of this, **there is no fee-splitting logic** — each leg is priced and paid independently:
+
+| Scenario | Pickup rider gets | Delivery rider gets |
+|---|---|---|
+| Same rider does both legs | ₱35 (on pickup completion) | ₱35 (on delivery completion) — same rider receives both credits |
+| Two different riders | ₱35 (rider A, on pickup completion) | ₱35 (rider B, on delivery completion) |
+
+`RidersService.creditEarning(userId, orderId, type)` (`apps/api/src/modules/riders/riders.service.ts`) is called once per leg, always against whichever rider is assigned to that leg:
+
+- `apps/api/src/modules/riders/pickup.service.ts` → `creditEarning(pickupRiderId, orderId, 'pickup')`
+- `apps/api/src/modules/riders/delivery.service.ts` → `creditEarning(deliveryRiderId, orderId, 'delivery')`
+
+The earning ledger reference `earning:{type}:{orderId}` is keyed per (order, leg-type) — not per rider — so it stays idempotent regardless of whether one or two riders are involved.
+
+Rider payouts are entirely disconnected from the customer-facing `order.deliveryFee` (the quoted delivery charge); the flat ₱80/₱120 rates apply the same way no matter how the order was priced.
 
 ---
 

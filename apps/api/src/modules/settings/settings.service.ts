@@ -4,6 +4,7 @@ import { Model } from 'mongoose';
 import { PlatformSettings, PlatformSettingsDocument } from './schemas/platform-settings.schema';
 import { UpdateDeliveryFeeDto } from './dto/update-delivery-fee.dto';
 import { UpdateAutomationSettingsDto } from './dto/update-automation-settings.dto';
+import { UpdateRiderFeesDto } from './dto/update-rider-fees.dto';
 
 @Injectable()
 export class SettingsService {
@@ -44,6 +45,37 @@ export class SettingsService {
   async getDeliveryFeeForAddress(_address: { city: string; province: string }) {
     const settings = await this.getOrCreateSettings();
     return settings.deliveryFee;
+  }
+
+  async getRiderFeeSettings() {
+    const settings = await this.getOrCreateSettings();
+    return {
+      success: true,
+      data: {
+        riderPickupFee: settings.riderPickupFee,
+        riderDeliveryFee: settings.riderDeliveryFee,
+      },
+    };
+  }
+
+  async updateRiderFeeSettings(dto: UpdateRiderFeesDto) {
+    const settings = await this.getOrCreateSettings();
+    if (dto.riderPickupFee !== undefined) settings.riderPickupFee = dto.riderPickupFee;
+    if (dto.riderDeliveryFee !== undefined) settings.riderDeliveryFee = dto.riderDeliveryFee;
+    await settings.save();
+    return {
+      success: true,
+      data: {
+        riderPickupFee: settings.riderPickupFee,
+        riderDeliveryFee: settings.riderDeliveryFee,
+      },
+    };
+  }
+
+  /** Configured flat rider fees, used by rider earning/netting logic. */
+  async getRiderFeeAmounts(): Promise<{ pickup: number; delivery: number }> {
+    const settings = await this.getOrCreateSettings();
+    return { pickup: settings.riderPickupFee, delivery: settings.riderDeliveryFee };
   }
 
   private automationFields(settings: PlatformSettingsDocument) {

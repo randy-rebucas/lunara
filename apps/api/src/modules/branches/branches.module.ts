@@ -9,6 +9,8 @@ import { BranchManagementService } from './branch-management.service';
 import { BranchesController, PublicBranchesController } from './branches.controller';
 import { BranchesService } from './branches.service';
 import { Branch, BranchSchema } from './schemas/branch.schema';
+import { BranchCustomService, BranchCustomServiceSchema } from './schemas/branch-custom-service.schema';
+import { BranchCustomAddon, BranchCustomAddonSchema } from './schemas/branch-custom-addon.schema';
 
 @Module({
   imports: [
@@ -17,6 +19,8 @@ import { Branch, BranchSchema } from './schemas/branch.schema';
       { name: Order.name, schema: OrderSchema },
       { name: User.name, schema: UserSchema },
       { name: Address.name, schema: AddressSchema },
+      { name: BranchCustomService.name, schema: BranchCustomServiceSchema },
+      { name: BranchCustomAddon.name, schema: BranchCustomAddonSchema },
     ]),
     RealtimeModule,
     CatalogModule,

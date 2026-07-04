@@ -50,6 +50,14 @@ export class PlatformSettings {
   @Prop({ default: 1000 })
   autoApproveWithdrawalsThreshold!: number;
 
+  /** Flat fee paid to the rider who completes the pickup leg. */
+  @Prop({ required: true, default: 35 })
+  riderPickupFee!: number;
+
+  /** Flat fee paid to the rider who completes the delivery leg. */
+  @Prop({ required: true, default: 35 })
+  riderDeliveryFee!: number;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

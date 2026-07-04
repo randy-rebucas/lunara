@@ -21,6 +21,7 @@ import {
 } from '@lunara/utils';
 import { UpdatePayoutMethodDto } from './dto/rider-wallet.dto';
 import { LedgerService } from '../ledger/ledger.service';
+import { SettingsService } from '../settings/settings.service';
 import { Rider, RiderDocument } from './schemas/rider.schema';
 import {
   RiderCashRemittance,
@@ -86,6 +87,7 @@ export class RiderWalletService {
     @InjectModel(RiderCashRemittance.name)
     private remittanceModel: Model<RiderCashRemittanceDocument>,
     private ledgerService: LedgerService,
+    private settingsService: SettingsService,
   ) {}
 
   private riderObjectId(userId: string) {
@@ -511,7 +513,11 @@ export class RiderWalletService {
     // depend on creditEarning() having already run — collectCash() fires this before the task
     // is marked complete (where creditEarning() actually runs), so a lookup-based amount would
     // never find a match and would silently skip creating the remittance record every time.
-    const earningOffset = riderEarningAmount(earningType);
+    const fees = await this.settingsService.getRiderFeeAmounts();
+    const earningOffset = riderEarningAmount(
+      earningType,
+      earningType === 'pickup' ? fees.pickup : fees.delivery,
+    );
     const netRemittance = Math.max(0, cashAmount - earningOffset);
     const nettingRef = `netting:${stage}:${orderId}`;
 

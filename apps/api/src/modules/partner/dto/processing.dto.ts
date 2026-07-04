@@ -12,11 +12,6 @@ export class AdvanceProcessingDto {
   verifiedWeightKg?: number;
 
   @IsOptional()
-  @IsString()
-  @MaxLength(50)
-  tagCode?: string;
-
-  @IsOptional()
   @IsBoolean()
   skipIroning?: boolean;
 

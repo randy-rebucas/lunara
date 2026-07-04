@@ -19,6 +19,11 @@ export class BookingQuoteDto {
   @IsString()
   branchId?: string;
 
+  /** When set, prices/labels this line item from the shop's own custom service instead of the global catalog. */
+  @IsOptional()
+  @IsString()
+  customServiceId?: string;
+
   @IsNumber()
   @Min(1)
   @Max(50)

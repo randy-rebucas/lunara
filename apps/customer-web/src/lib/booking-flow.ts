@@ -24,6 +24,7 @@ export const BOOKING_STEPS: { id: BookingStep; label: string }[] = [
 
 export interface BookingFormState {
   bookingType: BookingType | null;
+  customServiceId: string;
   addressId: string;
   branchId: string;
   scheduledPickupAt: string;
@@ -35,6 +36,7 @@ export interface BookingFormState {
 
 export const initialBookingForm: BookingFormState = {
   bookingType: null,
+  customServiceId: '',
   addressId: '',
   branchId: '',
   scheduledPickupAt: '',

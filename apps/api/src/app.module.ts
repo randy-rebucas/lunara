@@ -36,6 +36,8 @@ import { SettingsModule } from './modules/settings/settings.module';
 import { MessagingModule } from './modules/messaging/messaging.module';
 import { EmailModule } from './common/email/email.module';
 import { AutomationModule } from './modules/automation/automation.module';
+import { AuditLogModule } from './modules/audit/audit-log.module';
+import { LaundryTagsModule } from './modules/laundry-tags/laundry-tags.module';
 
 @Module({
   imports: [
@@ -78,6 +80,8 @@ import { AutomationModule } from './modules/automation/automation.module';
     SettingsModule,
     MessagingModule,
     AutomationModule,
+    AuditLogModule,
+    LaundryTagsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

@@ -46,10 +46,7 @@ export default function StaffOrderProcessingPage() {
     const data = await partnerFetch<PartnerOrderDetailView>(`/partner/orders/${id}/processing`);
     setSkipIroning(!!data.processing?.ironingSkipped);
     setPhotoUrl('');
-    const receivedStep = data.processing?.completedSteps?.find((s) => s.stepId === 'received');
-    if (receivedStep?.tagCode) {
-      setTagCode(String(receivedStep.tagCode));
-    }
+    setTagCode(data.processing?.tagCode ?? '');
     setShelfSlot(data.processing?.shelfSlot ?? '');
     return data;
   }, [id]);
@@ -141,7 +138,6 @@ export default function StaffOrderProcessingPage() {
           note: note || undefined,
           skipIroning: view.currentStep.id === 'folding' ? skipIroning : undefined,
           photoUrl: photoUrl.trim() || undefined,
-          tagCode: view.currentStep.id === 'received' ? tagCode.trim() || undefined : undefined,
         }),
       });
       await reload();
@@ -371,16 +367,17 @@ export default function StaffOrderProcessingPage() {
 
           {view.currentStep.id === 'received' && (
             <div className="mt-4">
-              <label className="text-sm font-medium text-slate-700">Laundry tag code</label>
+              <label className="text-sm font-medium text-slate-700">Laundry tag</label>
               <p className="text-xs text-slate-500">
-                Assign a tag to track this order through the shop pipeline
+                {tagCode
+                  ? 'Scanned by the rider at pickup — used to track this order through the shop pipeline'
+                  : 'No tag was scanned at pickup for this order'}
               </p>
-              <input
-                className="mt-2 min-h-[3rem] w-full touch-manipulation rounded border px-4 py-3 text-base font-mono uppercase"
-                placeholder="e.g. LNR-1042"
-                value={tagCode}
-                onChange={(e) => setTagCode(e.target.value)}
-              />
+              {tagCode ? (
+                <p className="mt-2 rounded border bg-slate-50 px-4 py-3 font-mono text-base uppercase text-slate-800">
+                  {tagCode}
+                </p>
+              ) : null}
             </div>
           )}
 

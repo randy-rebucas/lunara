@@ -25,6 +25,7 @@ import {
   loadLatestOrderPaymentsByOrderId,
 } from '../payments/payment-summary';
 import { PromotionsService } from '../promotions/promotions.service';
+import { LaundryTagsService } from '../laundry-tags/laundry-tags.service';
 import { Order, OrderDocument } from './schemas/order.schema';
 
 export interface BookingOrderPayload {
@@ -60,6 +61,7 @@ export class OrdersService {
     private branchesService: BranchesService,
     private promotionsService: PromotionsService,
     private ledgerService: LedgerService,
+    private laundryTagsService: LaundryTagsService,
   ) {}
 
   private isBranchAssigned(order: OrderDocument) {
@@ -454,6 +456,7 @@ export class OrdersService {
       updatedBy,
     });
     await order.save();
+    await this.laundryTagsService.releaseFromOrder(id, 'delivered');
 
     this.trackingGateway.emitOrderStatus(order._id.toString(), OrderStatus.COMPLETED);
 

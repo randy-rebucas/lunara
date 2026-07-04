@@ -36,6 +36,7 @@ import { inferRiderNotificationCategory } from './rider-notification.constants';
 import { RiderNotificationService } from './rider-notification.service';
 import { RiderWalletService } from './rider-wallet.service';
 import { LedgerService } from '../ledger/ledger.service';
+import { SettingsService } from '../settings/settings.service';
 import { Rider, RiderDocument } from './schemas/rider.schema';
 import {
   buildActiveAssignmentPayload,
@@ -59,6 +60,7 @@ export class RidersService {
     private riderNotificationService: RiderNotificationService,
     private riderWalletService: RiderWalletService,
     private ledgerService: LedgerService,
+    private settingsService: SettingsService,
   ) {}
 
   async listNotifications(userId: string, limit = 20) {
@@ -175,7 +177,8 @@ export class RidersService {
 
   async creditEarning(userId: string, orderId: string, type: Extract<RiderEarningType, 'pickup' | 'delivery'>) {
     const rider = await this.findOrCreate(userId);
-    const amount = riderEarningAmount(type);
+    const fees = await this.settingsService.getRiderFeeAmounts();
+    const amount = riderEarningAmount(type, type === 'pickup' ? fees.pickup : fees.delivery);
 
     rider.totalEarnings += amount;
     this.ensureTodayBucket(rider);

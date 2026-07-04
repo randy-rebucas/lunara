@@ -89,9 +89,6 @@ class ProcessingStepRecord {
   verifiedWeightKg?: number;
 
   @Prop()
-  tagCode?: string;
-
-  @Prop()
   photoUrl?: string;
 }
 
@@ -204,6 +201,10 @@ class OrderLaundryProcessing {
 
   @Prop({ type: Types.ObjectId })
   shelfAssignedBy?: Types.ObjectId;
+
+  /** Reusable physical QR tag assigned at pickup, persists across the whole processing pipeline. */
+  @Prop({ type: Types.ObjectId, ref: 'LaundryTag' })
+  tagId?: Types.ObjectId;
 }
 
 @Schema({ _id: false })
@@ -386,6 +387,6 @@ OrderSchema.index(
   { partialFilterExpression: { 'laundryProcessing.shelfSlot': { $exists: true } } },
 );
 OrderSchema.index(
-  { 'laundryProcessing.completedSteps.tagCode': 1 },
-  { partialFilterExpression: { 'laundryProcessing.completedSteps.tagCode': { $exists: true } } },
+  { 'laundryProcessing.tagId': 1 },
+  { partialFilterExpression: { 'laundryProcessing.tagId': { $exists: true } } },
 );

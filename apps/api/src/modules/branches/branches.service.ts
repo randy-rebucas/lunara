@@ -20,6 +20,21 @@ import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { Branch, BranchDocument } from './schemas/branch.schema';
+import {
+  BranchCustomService,
+  BranchCustomServiceDocument,
+} from './schemas/branch-custom-service.schema';
+import {
+  BranchCustomAddon,
+  BranchCustomAddonDocument,
+} from './schemas/branch-custom-addon.schema';
+import { CreateBranchCustomServiceDto } from './dto/create-branch-custom-service.dto';
+import { UpdateBranchCustomServiceDto } from './dto/update-branch-custom-service.dto';
+import { CreateBranchCustomAddonDto } from './dto/create-branch-custom-addon.dto';
+import { UpdateBranchCustomAddonDto } from './dto/update-branch-custom-addon.dto';
+import { UpdateBranchHiddenCatalogDto } from './dto/update-branch-hidden-catalog.dto';
+
+export const CUSTOM_ADDON_ID_PREFIX = 'custom:';
 
 const CAPACITY_STATUSES = [
   OrderStatus.PENDING,
@@ -85,6 +100,10 @@ export class BranchesService {
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Address.name) private addressModel: Model<AddressDocument>,
+    @InjectModel(BranchCustomService.name)
+    private customServiceModel: Model<BranchCustomServiceDocument>,
+    @InjectModel(BranchCustomAddon.name)
+    private customAddonModel: Model<BranchCustomAddonDocument>,
     private trackingGateway: TrackingGateway,
     private catalogService: CatalogService,
   ) {}
@@ -97,42 +116,276 @@ export class BranchesService {
     return service?.pricePerKg ?? 0;
   }
 
-  /** Shop's own price for an add-on; falls back to the global catalog price when not customized. */
+  /** Shop's own price for an add-on; falls back to the global catalog price when not customized.
+   * Also resolves branch-owned custom add-ons (id prefixed with CUSTOM_ADDON_ID_PREFIX). */
   async resolveBranchAddonPrice(branch: BranchDocument, addonSlug: string) {
+    if (addonSlug.startsWith(CUSTOM_ADDON_ID_PREFIX)) {
+      const slug = addonSlug.slice(CUSTOM_ADDON_ID_PREFIX.length);
+      const custom = await this.customAddonModel.findOne({
+        branchId: branch._id,
+        slug,
+        isActive: true,
+      });
+      return custom?.price ?? 0;
+    }
     const override = branch.addonPricing?.find((p) => p.addonSlug === addonSlug);
     if (override) return override.basePrice;
     const addon = await this.catalogService.findActiveAddonBySlug(addonSlug);
     return addon?.price ?? 0;
   }
 
+  /** Branch's own active custom add-ons, shaped like BookingAddonOption for use alongside the
+   * global catalog list in the booking quote/order path. */
+  async listCustomAddonOptions(branch: BranchDocument) {
+    const customAddons = await this.customAddonModel.find({
+      branchId: branch._id,
+      isActive: true,
+    });
+    return customAddons.map((custom) => ({
+      id: `${CUSTOM_ADDON_ID_PREFIX}${custom.slug}`,
+      label: custom.label,
+      description: custom.description,
+      price: custom.price,
+    }));
+  }
+
   private async serializeShopPricing(branch: BranchDocument) {
     const services = await this.catalogService.listActiveServices();
-    return Promise.all(
-      services.map(async (service) => {
-        const basePricePerKg = await this.resolveBranchServicePrice(branch, service.type);
-        return {
-          type: service.type,
-          label: service.label,
-          basePricePerKg,
-          customerPricePerKg: applyShopMarkup(basePricePerKg),
-        };
-      }),
+    const hidden = new Set(branch.hiddenServiceTypes ?? []);
+    const globalItems = await Promise.all(
+      services
+        .filter((service) => !hidden.has(service.type))
+        .map(async (service) => {
+          const basePricePerKg = await this.resolveBranchServicePrice(branch, service.type);
+          return {
+            type: service.type,
+            label: service.label,
+            basePricePerKg,
+            customerPricePerKg: applyShopMarkup(basePricePerKg),
+            isCustom: false,
+          };
+        }),
     );
+
+    const customServices = await this.customServiceModel.find({
+      branchId: branch._id,
+      isActive: true,
+    });
+    const customItems = customServices.map((custom) => ({
+      type: custom.baseBookingType,
+      label: custom.label,
+      description: custom.description,
+      basePricePerKg: custom.pricePerKg,
+      customerPricePerKg: applyShopMarkup(custom.pricePerKg),
+      isCustom: true,
+      customServiceId: custom._id.toString(),
+    }));
+
+    return [...globalItems, ...customItems];
   }
 
   private async serializeShopAddonPricing(branch: BranchDocument) {
     const addons = await this.catalogService.listActiveAddons();
-    return Promise.all(
-      addons.map(async (addon) => {
-        const basePrice = await this.resolveBranchAddonPrice(branch, addon.id);
-        return {
-          slug: addon.id,
-          label: addon.label,
-          basePrice,
-          customerPrice: applyShopMarkup(basePrice),
-        };
-      }),
+    const hidden = new Set(branch.hiddenAddonSlugs ?? []);
+    const globalItems = await Promise.all(
+      addons
+        .filter((addon) => !hidden.has(addon.id))
+        .map(async (addon) => {
+          const basePrice = await this.resolveBranchAddonPrice(branch, addon.id);
+          return {
+            slug: addon.id,
+            label: addon.label,
+            basePrice,
+            customerPrice: applyShopMarkup(basePrice),
+            isCustom: false,
+          };
+        }),
     );
+
+    const customAddons = await this.customAddonModel.find({
+      branchId: branch._id,
+      isActive: true,
+    });
+    const customItems = customAddons.map((custom) => ({
+      slug: `${CUSTOM_ADDON_ID_PREFIX}${custom.slug}`,
+      label: custom.label,
+      description: custom.description,
+      basePrice: custom.price,
+      customerPrice: applyShopMarkup(custom.price),
+      isCustom: true,
+      customAddonId: custom._id.toString(),
+    }));
+
+    return [...globalItems, ...customItems];
+  }
+
+  /** Global catalog addon options (BookingAddonOption shape) minus this branch's hidden slugs,
+   * plus this branch's own active custom add-ons — used by booking.service.ts's quote/order path. */
+  async listPriceableAddonOptions(branch: BranchDocument) {
+    const globalAddons = await this.catalogService.listActiveAddons();
+    const hidden = new Set(branch.hiddenAddonSlugs ?? []);
+    const visibleGlobal = globalAddons.filter((addon) => !hidden.has(addon.id));
+    const customAddons = await this.listCustomAddonOptions(branch);
+    return [...visibleGlobal, ...customAddons];
+  }
+
+  /** Resolves a service (global type or custom service id) for order pricing. */
+  async resolvePriceableService(
+    branch: BranchDocument,
+    bookingType: BookingType,
+    customServiceId?: string,
+  ) {
+    if (customServiceId) {
+      const custom = await this.customServiceModel.findOne({
+        _id: customServiceId,
+        branchId: branch._id,
+        isActive: true,
+      });
+      if (!custom) throw new NotFoundException('Custom service not found');
+      return {
+        bookingType: custom.baseBookingType,
+        label: custom.label,
+        description: custom.description,
+        pricePerKg: custom.pricePerKg,
+      };
+    }
+    const basePricePerKg = await this.resolveBranchServicePrice(branch, bookingType);
+    return { bookingType, pricePerKg: basePricePerKg };
+  }
+
+  /** Whether the branch offers this BookingType — false if hidden, unless a custom service overrides it. */
+  async isServiceTypeOfferedByBranch(branch: BranchDocument, bookingType: BookingType) {
+    if (!branch.hiddenServiceTypes?.includes(bookingType)) return true;
+    const customOverride = await this.customServiceModel.exists({
+      branchId: branch._id,
+      baseBookingType: bookingType,
+      isActive: true,
+    });
+    return !!customOverride;
+  }
+
+  async createCustomService(
+    branchId: string,
+    partnerUserId: string,
+    dto: CreateBranchCustomServiceDto,
+  ) {
+    const branch = await this.branchModel.findById(branchId);
+    if (!branch) throw new NotFoundException('Branch not found');
+    const created = await this.customServiceModel.create({
+      branchId: branch._id,
+      partnerUserId: new Types.ObjectId(partnerUserId),
+      baseBookingType: dto.baseBookingType,
+      label: dto.label,
+      description: dto.description,
+      pricePerKg: dto.pricePerKg,
+      minWeightKg: dto.minWeightKg ?? 3,
+      sortOrder: dto.sortOrder ?? 0,
+    });
+    return { success: true, data: { _id: created._id.toString() } };
+  }
+
+  async updateCustomService(
+    branchId: string,
+    serviceId: string,
+    dto: UpdateBranchCustomServiceDto,
+  ) {
+    const custom = await this.customServiceModel.findOne({
+      _id: serviceId,
+      branchId: new Types.ObjectId(branchId),
+    });
+    if (!custom) throw new NotFoundException('Custom service not found');
+    Object.assign(custom, dto);
+    await custom.save();
+    return { success: true, data: { _id: custom._id.toString() } };
+  }
+
+  async deleteCustomService(branchId: string, serviceId: string) {
+    const result = await this.customServiceModel.deleteOne({
+      _id: serviceId,
+      branchId: new Types.ObjectId(branchId),
+    });
+    if (result.deletedCount === 0) throw new NotFoundException('Custom service not found');
+    return { success: true };
+  }
+
+  async createCustomAddon(
+    branchId: string,
+    partnerUserId: string,
+    dto: CreateBranchCustomAddonDto,
+  ) {
+    const branch = await this.branchModel.findById(branchId);
+    if (!branch) throw new NotFoundException('Branch not found');
+    try {
+      const created = await this.customAddonModel.create({
+        branchId: branch._id,
+        partnerUserId: new Types.ObjectId(partnerUserId),
+        slug: dto.slug,
+        label: dto.label,
+        description: dto.description,
+        price: dto.price,
+        imageUrl: dto.imageUrl ?? null,
+      });
+      return { success: true, data: { _id: created._id.toString() } };
+    } catch (err) {
+      if ((err as { code?: number }).code === 11000) {
+        throw new BadRequestException('Slug already exists for this shop');
+      }
+      throw err;
+    }
+  }
+
+  async updateCustomAddon(branchId: string, addonId: string, dto: UpdateBranchCustomAddonDto) {
+    const custom = await this.customAddonModel.findOne({
+      _id: addonId,
+      branchId: new Types.ObjectId(branchId),
+    });
+    if (!custom) throw new NotFoundException('Custom add-on not found');
+    Object.assign(custom, dto);
+    try {
+      await custom.save();
+    } catch (err) {
+      if ((err as { code?: number }).code === 11000) {
+        throw new BadRequestException('Slug already exists for this shop');
+      }
+      throw err;
+    }
+    return { success: true, data: { _id: custom._id.toString() } };
+  }
+
+  async deleteCustomAddon(branchId: string, addonId: string) {
+    const result = await this.customAddonModel.deleteOne({
+      _id: addonId,
+      branchId: new Types.ObjectId(branchId),
+    });
+    if (result.deletedCount === 0) throw new NotFoundException('Custom add-on not found');
+    return { success: true };
+  }
+
+  async updateHiddenCatalog(branchId: string, dto: UpdateBranchHiddenCatalogDto) {
+    const branch = await this.branchModel.findById(branchId);
+    if (!branch) throw new NotFoundException('Branch not found');
+    if (dto.hiddenServiceTypes !== undefined) branch.hiddenServiceTypes = dto.hiddenServiceTypes;
+    if (dto.hiddenAddonSlugs !== undefined) branch.hiddenAddonSlugs = dto.hiddenAddonSlugs;
+    await branch.save();
+    return {
+      success: true,
+      data: {
+        hiddenServiceTypes: branch.hiddenServiceTypes,
+        hiddenAddonSlugs: branch.hiddenAddonSlugs,
+      },
+    };
+  }
+
+  async listCustomServicesForBranch(branchId: string) {
+    return this.customServiceModel
+      .find({ branchId: new Types.ObjectId(branchId) })
+      .sort({ sortOrder: 1 });
+  }
+
+  async listCustomAddonsForBranch(branchId: string) {
+    return this.customAddonModel
+      .find({ branchId: new Types.ObjectId(branchId) })
+      .sort({ sortOrder: 1 });
   }
 
   /** Throws if the branch isn't owned by this partner user — guards partner-facing pricing writes/reads. */
@@ -236,6 +489,8 @@ export class BranchesService {
       data: {
         services: await this.serializeShopPricing(branch),
         addons: await this.serializeShopAddonPricing(branch),
+        hiddenServiceTypes: branch.hiddenServiceTypes ?? [],
+        hiddenAddonSlugs: branch.hiddenAddonSlugs ?? [],
       },
     };
   }
@@ -530,8 +785,20 @@ export class BranchesService {
     const nearest = await this.findNearestForAddress(address, partnerUserId);
     const branches = await this.branchModel.find(this.operationalBranchFilter(partnerUserId));
 
-    const inputs = await Promise.all(
+    // Exclude shops that have opted out of this booking type (Branch.hiddenServiceTypes) —
+    // dispatch (manual admin queue and autoDispatchOrder) must never route an order to a shop
+    // that explicitly said it doesn't offer this service.
+    const eligibility = await Promise.all(
       nearest.ranked.map(async (r) => {
+        const branch = branches.find((b) => b._id.toString() === r.branchId);
+        if (!branch) return true;
+        return this.isServiceTypeOfferedByBranch(branch, bookingType as BookingType);
+      }),
+    );
+    const eligibleRanked = nearest.ranked.filter((_, i) => eligibility[i]);
+
+    const inputs = await Promise.all(
+      eligibleRanked.map(async (r) => {
         const branch = branches.find((b) => b._id.toString() === r.branchId);
         const performance = branch
           ? await this.getBranchPerformance(branch._id)
@@ -768,6 +1035,11 @@ export class BranchesService {
     const branch = await this.branchModel.findById(branchId);
     if (!branch || !branch.isActive || branch.branchType === 'hq') {
       throw new NotFoundException('Branch not found');
+    }
+
+    const offered = await this.isServiceTypeOfferedByBranch(branch, order.bookingType);
+    if (!offered) {
+      throw new BadRequestException(`${branch.name} does not offer this service type`);
     }
 
     const activeOrders = await this.countActiveOrders(branch._id);

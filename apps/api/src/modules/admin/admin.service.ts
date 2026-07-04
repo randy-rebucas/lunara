@@ -29,6 +29,7 @@ import {
   buildOrderPaymentSummary,
   loadLatestOrderPaymentsByOrderId,
 } from '../payments/payment-summary';
+import { EmailService } from '../../common/email/email.service';
 
 const COMPLETED = [OrderStatus.DELIVERED, OrderStatus.COMPLETED];
 const ACTIVE_ORDER_STATUSES = Object.values(OrderStatus).filter(
@@ -48,6 +49,7 @@ export class AdminService {
     private branchesService: BranchesService,
     private branchManagementService: BranchManagementService,
     private promotionsService: PromotionsService,
+    private emailService: EmailService,
   ) {}
 
   async ensureSeeded() {
@@ -212,6 +214,8 @@ export class AdminService {
 
     const compliance = isRiderCompliant(rider, user);
 
+    await this.emailService.sendRiderInvite(email, dto.password);
+
     return {
       success: true,
       data: {
@@ -320,6 +324,8 @@ export class AdminService {
       isActive: true,
     });
 
+    await this.emailService.sendPartnerInvite(email, dto.password);
+
     return {
       success: true,
       data: {
@@ -375,6 +381,8 @@ export class AdminService {
       await this.userModel.deleteOne({ _id: user._id });
       throw err;
     }
+
+    await this.emailService.sendPartnerInvite(email, dto.password);
 
     return {
       success: true,

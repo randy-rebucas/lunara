@@ -62,8 +62,21 @@ interface BookingConfig {
 interface ShopServiceOption {
   type: BookingType;
   label: string;
+  description?: string;
   basePricePerKg: number;
   customerPricePerKg: number;
+  isCustom?: boolean;
+  customServiceId?: string;
+}
+
+interface ShopAddonOption {
+  slug: string;
+  label: string;
+  description?: string;
+  basePrice: number;
+  customerPrice: number;
+  isCustom?: boolean;
+  customAddonId?: string;
 }
 
 interface ShopOption {
@@ -76,6 +89,7 @@ interface ShopOption {
   withinRadius: boolean;
   capacityAvailable: boolean;
   services: ShopServiceOption[];
+  addons: ShopAddonOption[];
 }
 
 function BookingProgress({ current }: { current: BookingStep }) {
@@ -376,10 +390,16 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
   const localQuote = useMemo(() => {
     if (!form.bookingType) return null;
     const catalogService = config?.services.find((s) => s.type === form.bookingType);
-    const shopService = selectedShop?.services.find((s) => s.type === form.bookingType);
+    const shopService = form.customServiceId
+      ? selectedShop?.services.find((s) => s.customServiceId === form.customServiceId)
+      : selectedShop?.services.find((s) => s.type === form.bookingType && !s.isCustom);
     const service =
       catalogService && shopService
-        ? { ...catalogService, pricePerKg: shopService.customerPricePerKg }
+        ? {
+            ...catalogService,
+            label: shopService.label,
+            pricePerKg: shopService.customerPricePerKg,
+          }
         : catalogService;
     try {
       return calculateQuote(
@@ -394,7 +414,7 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
     } catch {
       return null;
     }
-  }, [form.bookingType, form.weightKg, form.addonIds, config, selectedShop]);
+  }, [form.bookingType, form.customServiceId, form.weightKg, form.addonIds, config, selectedShop]);
 
   const loadAvailability = useCallback(
     async (addressId: string) => {
@@ -493,6 +513,7 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
       {
         bookingType: form.bookingType,
         branchId: form.branchId,
+        ...(form.customServiceId ? { customServiceId: form.customServiceId } : {}),
         weightKg: form.weightKg,
         addonIds: form.addonIds,
         ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}),
@@ -586,6 +607,7 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
       const res = await api.post<{ _id: string; total: number }>('/booking/orders', {
         bookingType: form.bookingType,
         branchId: form.branchId,
+        ...(form.customServiceId ? { customServiceId: form.customServiceId } : {}),
         weightKg: form.weightKg,
         addonIds: form.addonIds,
         pickupAddressId: form.addressId,
@@ -600,8 +622,40 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
     }
   }
 
-  const services = config?.services ?? [];
-  const addons = config?.addons ?? [];
+  const services = useMemo(() => {
+    if (selectedShop) {
+      return selectedShop.services.map((s) => {
+        const catalogMatch = config?.services.find((cs) => cs.type === s.type);
+        return {
+          type: s.type,
+          label: s.label,
+          description: s.description ?? catalogMatch?.description ?? '',
+          pricePerKg: s.customerPricePerKg,
+          minWeightKg: catalogMatch?.minWeightKg ?? 3,
+          isCustom: s.isCustom ?? false,
+          customServiceId: s.customServiceId,
+        };
+      });
+    }
+    return (config?.services ?? []).map((s) => ({ ...s, isCustom: false, customServiceId: undefined }));
+  }, [config, selectedShop]);
+
+  const addons = useMemo(() => {
+    if (selectedShop) {
+      return selectedShop.addons.map((a) => {
+        const catalogMatch = config?.addons.find((ca) => ca.id === a.slug);
+        return {
+          id: a.slug,
+          label: a.label,
+          description: a.description ?? catalogMatch?.description ?? '',
+          price: a.customerPrice,
+          imageUrl: catalogMatch?.imageUrl,
+          isCustom: a.isCustom ?? false,
+        };
+      });
+    }
+    return (config?.addons ?? []).map((a) => ({ ...a, isCustom: false }));
+  }, [config, selectedShop]);
   const activeQuote = quote ?? localQuote;
   const selectedAddress = addresses.find((a) => a._id === form.addressId);
   const selectedSlot = slots.find((s) => s.startAt === form.scheduledPickupAt);
@@ -733,18 +787,29 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
               const areaOk =
                 availableServices.length === 0 || availableServices.includes(s.type);
               const disabled = Boolean(form.addressId && !areaOk);
-              const shopService = selectedShop?.services.find((sv) => sv.type === s.type);
+              const selected = s.isCustom
+                ? form.customServiceId === s.customServiceId
+                : form.bookingType === s.type && !form.customServiceId;
               return (
                 <SelectableOption
-                  key={s.type}
-                  selected={form.bookingType === s.type}
+                  key={s.customServiceId ?? s.type}
+                  selected={selected}
                   disabled={disabled}
-                  onClick={() => setForm((f) => ({ ...f, bookingType: s.type }))}
+                  onClick={() =>
+                    setForm((f) => ({
+                      ...f,
+                      bookingType: s.type,
+                      customServiceId: s.customServiceId ?? '',
+                    }))
+                  }
                 >
-                  <p className="font-medium text-slate-900">{s.label}</p>
+                  <p className="font-medium text-slate-900">
+                    {s.label}
+                    {s.isCustom && <span className="badge-accent ml-2 text-xs">Shop special</span>}
+                  </p>
                   <p className="mt-1 text-sm text-muted">{s.description}</p>
                   <p className="mt-2 text-sm font-medium text-primary">
-                    {formatCurrency(shopService?.customerPricePerKg ?? s.pricePerKg)} / kg · min {s.minWeightKg} kg
+                    {formatCurrency(s.pricePerKg)} / kg · min {s.minWeightKg} kg
                   </p>
                   {disabled && (
                     <p className="mt-2 text-xs text-amber-700">Not available in your area</p>
@@ -873,7 +938,12 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
                       ) : null}
                       <div className="min-w-0 flex-1">
                         <div className="flex justify-between gap-4">
-                          <span className="font-medium text-slate-900">{a.label}</span>
+                          <span className="font-medium text-slate-900">
+                            {a.label}
+                            {a.isCustom && (
+                              <span className="badge-accent ml-2 text-xs">Shop special</span>
+                            )}
+                          </span>
                           <span className="shrink-0 font-medium text-primary">
                             +{formatCurrency(a.price)}
                           </span>

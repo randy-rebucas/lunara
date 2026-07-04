@@ -19,8 +19,10 @@ import { User, UserDocument } from '../users/schemas/user.schema';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { RiderOfferPushService } from '../push/rider-offer-push.service';
 import { CollectLaundryDto, DropAtShopDto, VerifyCustomerDto } from './dto/pickup.dto';
+import { AssignTagDto } from '../laundry-tags/dto/assign-tag.dto';
 import { HandoffQrService } from '../handoff/handoff-qr.service';
 import { PaymentsService } from '../payments/payments.service';
+import { LaundryTagsService } from '../laundry-tags/laundry-tags.service';
 import { RidersService } from './riders.service';
 import { RiderWalletService } from './rider-wallet.service';
 import { buildRiderTaskDetails } from './rider-task-summary';
@@ -50,6 +52,7 @@ export class PickupService {
     private handoffQrService: HandoffQrService,
     private paymentsService: PaymentsService,
     private riderWalletService: RiderWalletService,
+    private laundryTagsService: LaundryTagsService,
   ) {}
 
   async dispatchPickupSearch(orderId: string) {
@@ -285,6 +288,16 @@ export class PickupService {
     return { success: true, data: await this.buildPickupSummary(order, riderUserId) };
   }
 
+  async assignLaundryTag(orderId: string, riderUserId: string, dto: AssignTagDto) {
+    const order = await this.getActivePickupOrder(orderId, riderUserId);
+    const tag = await this.laundryTagsService.assignToOrder(dto.scannedValue, orderId, riderUserId);
+    if (!order.laundryProcessing) order.laundryProcessing = { completedSteps: [], ironingSkipped: false };
+    order.laundryProcessing.tagId = tag._id;
+    await order.save();
+
+    return { success: true, data: { tagId: tag._id.toString(), tagCode: tag.code } };
+  }
+
   async capturePhoto(orderId: string, riderUserId: string, photoUrl: string) {
     const order = await this.getActivePickupOrder(orderId, riderUserId);
     if (!order.pickup?.collectedAt) {
@@ -483,6 +496,7 @@ export class PickupService {
       scheduledPickupAt: order.scheduledPickupAt,
       total: order.total,
       pickup: order.pickup,
+      laundryTagId: order.laundryProcessing?.tagId?.toString(),
       pickupAddress: address
         ? {
             label: address.label,

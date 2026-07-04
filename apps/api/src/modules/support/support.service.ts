@@ -487,7 +487,6 @@ export class SupportService {
       label: string;
       at?: Date;
       note?: string;
-      tagCode?: string;
       verifiedWeightKg?: number;
       photoUrl?: string;
     }[] = [];
@@ -499,7 +498,6 @@ export class SupportService {
         label: meta?.label ?? step.stepId,
         at: step.completedAt,
         note: step.note,
-        tagCode: step.tagCode,
         verifiedWeightKg: step.verifiedWeightKg,
         photoUrl: step.photoUrl,
       });

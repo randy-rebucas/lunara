@@ -16,6 +16,7 @@ import {
 } from '@lunara/utils';
 import { RiderAssignmentService } from '../riders/rider-assignment.service';
 import { TrackingGateway } from '../realtime/tracking.gateway';
+import { LaundryTagsService } from '../laundry-tags/laundry-tags.service';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
@@ -41,6 +42,7 @@ export class ProcessingService {
     @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
     private trackingGateway: TrackingGateway,
     private riderAssignmentService: RiderAssignmentService,
+    private laundryTagsService: LaundryTagsService,
   ) {}
 
   getConfig() {
@@ -110,7 +112,7 @@ export class ProcessingService {
     if (!PARTNER_PROCESSING_QUEUE_STATUSES.includes(order.status)) {
       return { success: true, data: this.buildPreProcessingView(order) };
     }
-    return { success: true, data: this.buildProcessingView(order) };
+    return { success: true, data: await this.buildProcessingView(order) };
   }
 
   async acceptJob(orderId: string, userId: string, role: UserRole) {
@@ -151,7 +153,7 @@ export class ProcessingService {
       branchId: order.branchId?.toString(),
     });
 
-    return { success: true, data: this.buildProcessingView(order) };
+    return { success: true, data: await this.buildProcessingView(order) };
   }
 
   async advance(orderId: string, userId: string, role: UserRole, dto: AdvanceProcessingDto) {
@@ -195,7 +197,6 @@ export class ProcessingService {
       completedAt: new Date(),
       note: dto.note,
       verifiedWeightKg: dto.verifiedWeightKg,
-      tagCode: dto.tagCode,
       photoUrl: dto.photoUrl,
     });
 
@@ -232,7 +233,7 @@ export class ProcessingService {
       await this.riderAssignmentService.notifyAwaitingDeliveryDispatch(orderId);
     }
 
-    return { success: true, data: this.buildProcessingView(order) };
+    return { success: true, data: await this.buildProcessingView(order) };
   }
 
   /**
@@ -268,7 +269,7 @@ export class ProcessingService {
 
     const currentStepId = this.resolveCurrentStepId(order);
     if (targetStepId === currentStepId) {
-      return { success: true, data: this.buildProcessingView(order) };
+      return { success: true, data: await this.buildProcessingView(order) };
     }
 
     const currentIndex = LAUNDRY_PROCESSING_STEPS.findIndex((s) => s.id === currentStepId);
@@ -330,7 +331,7 @@ export class ProcessingService {
       await this.riderAssignmentService.notifyAwaitingDeliveryDispatch(orderId);
     }
 
-    return { success: true, data: this.buildProcessingView(order) };
+    return { success: true, data: await this.buildProcessingView(order) };
   }
 
   async setShelfSlot(orderId: string, userId: string, role: UserRole, dto: SetShelfSlotDto) {
@@ -346,19 +347,18 @@ export class ProcessingService {
     order.laundryProcessing.shelfAssignedBy = new Types.ObjectId(userId);
     await order.save();
 
-    return { success: true, data: this.buildProcessingView(order) };
+    return { success: true, data: await this.buildProcessingView(order) };
   }
 
   async findOnShelf(query: string, userId: string, role: UserRole) {
     const trimmed = query.trim();
     if (!trimmed) throw new BadRequestException('Search query is required');
 
-    const filter: Record<string, unknown> = {
-      $or: [
-        { 'laundryProcessing.shelfSlot': trimmed },
-        { 'laundryProcessing.completedSteps.tagCode': trimmed },
-      ],
-    };
+    const tag = await this.laundryTagsService.findByCode(trimmed);
+    const filter: Record<string, unknown> = tag?.currentOrderId
+      ? { _id: tag.currentOrderId }
+      : { 'laundryProcessing.shelfSlot': trimmed };
+
     if (role === UserRole.PARTNER) {
       filter.partnerId = new Types.ObjectId(userId);
     } else if (role === UserRole.STAFF) {
@@ -500,12 +500,15 @@ export class ProcessingService {
     };
   }
 
-  private buildProcessingView(order: OrderDocument) {
+  private async buildProcessingView(order: OrderDocument) {
     const currentStepId = this.resolveCurrentStepId(order);
     const currentStep = getProcessingStep(currentStepId);
     const nextStep = getNextProcessingStep(currentStepId, {
       skipIroning: order.laundryProcessing?.ironingSkipped,
     });
+
+    const tagId = order.laundryProcessing?.tagId;
+    const tag = tagId ? await this.laundryTagsService.getById(tagId.toString()).catch(() => null) : null;
 
     return {
       order: {
@@ -516,7 +519,11 @@ export class ProcessingService {
         estimatedWeightKg: order.estimatedWeightKg,
         pickup: order.pickup,
       },
-      processing: order.laundryProcessing,
+      processing: {
+        ...(order.laundryProcessing as unknown as Record<string, unknown>),
+        tagId: tagId?.toString(),
+        tagCode: tag?.code,
+      },
       currentStep,
       nextStep,
       steps: LAUNDRY_PROCESSING_STEPS,
