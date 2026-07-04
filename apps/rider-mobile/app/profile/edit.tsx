@@ -243,15 +243,15 @@ export default function EditProfileScreen() {
           lastName: lastName.trim(),
           phone: phone.trim(),
           homeAddress: {
-            line1: line1.trim(),
+            line1: line1.trim() || undefined,
             line2: line2.trim() || undefined,
-            city: city.trim(),
-            province: province.trim(),
-            postalCode: postalCode.trim(),
+            city: city.trim() || undefined,
+            province: province.trim() || undefined,
+            postalCode: postalCode.trim() || undefined,
           },
           vehicleType,
-          plateNumber: plateNumber.trim(),
-          orCrNumber: orCrNumber.trim(),
+          plateNumber: plateNumber.trim() || undefined,
+          orCrNumber: orCrNumber.trim() || undefined,
         }),
       });
       refresh();

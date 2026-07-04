@@ -287,6 +287,14 @@ export class TrackingGateway implements OnGatewayConnection {
     });
   }
 
+  /** Refresh admin laundry-tag pool view when a tag's status changes (assigned/released/retired/generated). */
+  emitLaundryTagsUpdated(payload: Record<string, unknown> = {}) {
+    this.server.to('admin:operations').emit('laundryTagsUpdated', {
+      ...payload,
+      at: new Date().toISOString(),
+    });
+  }
+
   /** Notify partner portal / branch rooms that laundry pipeline changed. */
   emitPartnerPipelineUpdated(params: {
     orderId: string;

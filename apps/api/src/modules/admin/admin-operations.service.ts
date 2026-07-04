@@ -199,6 +199,18 @@ export class AdminOperationsService {
     return this.ordersService.assignRider(orderId, riderId, type, adminUserId);
   }
 
+  async reassignRider(
+    orderId: string,
+    riderId: string,
+    adminUserId: string,
+    type: 'pickup' | 'delivery' = 'pickup',
+  ) {
+    if (type === 'delivery') {
+      return this.riderAssignmentService.reassignDeliveryRider(orderId, riderId, adminUserId);
+    }
+    return this.riderAssignmentService.reassignPickupRider(orderId, riderId, adminUserId);
+  }
+
   async triggerPickupDispatch(orderId: string) {
     return this.pickupService.dispatchPickupSearch(orderId);
   }

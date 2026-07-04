@@ -183,6 +183,45 @@ export class RiderAssignmentService {
     };
   }
 
+  async reassignPickupRider(orderId: string, newRiderUserId: string, adminUserId?: string) {
+    const order = await this.orderModel.findById(orderId);
+    if (!order) throw new NotFoundException('Order not found');
+
+    if (!order.pickupRiderId) {
+      throw new BadRequestException('No pickup rider currently assigned — use assign instead');
+    }
+    if (order.pickupRiderId.toString() === newRiderUserId) {
+      throw new BadRequestException('Rider is already assigned to this pickup');
+    }
+    if (order.pickup?.arrivedAt || order.pickup?.collectedAt) {
+      throw new BadRequestException('Cannot reassign after pickup has started');
+    }
+
+    const previousRiderId = order.pickupRiderId.toString();
+    const now = new Date();
+    order.set('pickupRiderId', undefined);
+    order.status = order.branchId ? OrderStatus.SHOP_ASSIGNED : OrderStatus.CONFIRMED;
+    if (order.pickup) {
+      order.pickup.acceptedAt = undefined;
+      order.pickup.verificationHint = undefined;
+    }
+    order.statusHistory.push({
+      status: order.status,
+      timestamp: now,
+      note: 'Pickup rider unassigned for reassignment by Lunara operations',
+      updatedBy: adminUserId,
+    });
+    await order.save();
+
+    this.trackingGateway.emitDispatchQueueUpdated({
+      reason: 'pickup_rider_rejected',
+      orderId,
+    });
+    await this.riderNotificationService.notifyAssignmentReassigned(previousRiderId, order, 'pickup');
+
+    return this.assignPickupRider(orderId, newRiderUserId, adminUserId, 'admin_direct');
+  }
+
   private assertReadyForPickupAssignment(order: OrderDocument) {
     if (!order.branchId || order.dispatchStatus !== 'dispatched') {
       throw new BadRequestException('Assign a laundry shop before assigning a pickup rider');
@@ -414,6 +453,44 @@ export class RiderAssignmentService {
         branchName: order.branchName,
       },
     };
+  }
+
+  async reassignDeliveryRider(orderId: string, newRiderUserId: string, adminUserId?: string) {
+    const order = await this.orderModel.findById(orderId);
+    if (!order) throw new NotFoundException('Order not found');
+
+    if (!order.deliveryRiderId) {
+      throw new BadRequestException('No delivery rider currently assigned — use assign instead');
+    }
+    if (order.deliveryRiderId.toString() === newRiderUserId) {
+      throw new BadRequestException('Rider is already assigned to this delivery');
+    }
+    if (order.delivery?.pickedUpFromShopAt) {
+      throw new BadRequestException('Cannot reassign after pickup from shop');
+    }
+
+    const previousRiderId = order.deliveryRiderId.toString();
+    const now = new Date();
+    order.set('deliveryRiderId', undefined);
+    order.status = OrderStatus.READY_FOR_DELIVERY;
+    if (order.delivery) {
+      order.delivery.acceptedAt = undefined;
+    }
+    order.statusHistory.push({
+      status: order.status,
+      timestamp: now,
+      note: 'Delivery rider unassigned for reassignment by Lunara operations',
+      updatedBy: adminUserId,
+    });
+    await order.save();
+
+    this.trackingGateway.emitDispatchQueueUpdated({
+      reason: 'delivery_rider_rejected',
+      orderId,
+    });
+    await this.riderNotificationService.notifyAssignmentReassigned(previousRiderId, order, 'delivery');
+
+    return this.assignDeliveryRider(orderId, newRiderUserId, adminUserId, 'admin_direct');
   }
 
   private assertReadyForDeliveryAssignment(order: OrderDocument) {

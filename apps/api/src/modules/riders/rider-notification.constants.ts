@@ -14,6 +14,7 @@ export const RIDER_NOTIFICATION_TITLES = {
   PICKUP_OVERDUE: 'Pickup Overdue',
   EARNINGS_CREDITED: 'Earnings Credited',
   PLATFORM_ANNOUNCEMENT: 'Platform Announcement',
+  ASSIGNMENT_REASSIGNED: 'Assignment Reassigned',
 } as const;
 
 export const RIDER_NOTIFICATION_TYPES = {
@@ -22,6 +23,7 @@ export const RIDER_NOTIFICATION_TYPES = {
   PICKUP_OVERDUE: 'pickup_overdue',
   EARNINGS_CREDITED: 'earnings_credited',
   PLATFORM_ANNOUNCEMENT: 'platform_announcement',
+  ASSIGNMENT_REASSIGNED: 'assignment_reassigned',
 } as const;
 
 export function inferRiderNotificationCategory(

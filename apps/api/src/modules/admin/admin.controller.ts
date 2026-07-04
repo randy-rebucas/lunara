@@ -137,6 +137,23 @@ export class AdminController {
     );
   }
 
+  @Post('operations/orders/:orderId/reassign-rider')
+  reassignRider(
+    @Param('orderId') orderId: string,
+    @Req() req: { user: { sub: string } },
+    @Body() dto: AdminAssignRiderDto,
+  ) {
+    if (!dto.riderId) {
+      throw new BadRequestException('riderId is required for reassignment');
+    }
+    return this.adminOperationsService.reassignRider(
+      orderId,
+      dto.riderId,
+      req.user.sub,
+      dto.type ?? 'pickup',
+    );
+  }
+
   @Post('operations/orders/:orderId/dispatch-pickup')
   dispatchPickup(@Param('orderId') orderId: string) {
     return this.adminOperationsService.triggerPickupDispatch(orderId);

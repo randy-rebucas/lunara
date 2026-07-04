@@ -169,6 +169,7 @@ export default function AdminOrderOpsPage() {
   const { id } = useParams<{ id: string }>();
   const [riderId, setRiderId] = useState('');
   const [assignType, setAssignType] = useState<'pickup' | 'delivery'>('pickup');
+  const [reassignMode, setReassignMode] = useState(false);
   const [conflictNote, setConflictNote] = useState('');
   const [resolution, setResolution] = useState('');
   const [error, setError] = useState('');
@@ -220,6 +221,11 @@ export default function AdminOrderOpsPage() {
     partnerAccepted &&
     o.status === 'ready_for_delivery' &&
     !o.deliveryRiderId &&
+    o.fulfillmentType !== 'customer_pickup';
+  const canReassignPickup = !!o.pickupRiderId && o.status === 'rider_assigned_pickup';
+  const canReassignDelivery =
+    !!o.deliveryRiderId &&
+    o.status === 'rider_assigned_delivery' &&
     o.fulfillmentType !== 'customer_pickup';
   const canMarkCustomerPickup = o.status === 'ready_for_delivery' && o.fulfillmentType !== 'customer_pickup';
   const canCompleteCustomerPickup = o.status === 'customer_pickup';
@@ -365,7 +371,22 @@ export default function AdminOrderOpsPage() {
                 <div>
                   <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted/70">Pickup rider</p>
                   {o.pickupRiderId ? (
-                    <RiderMiniCard riderId={o.pickupRiderId} label="Assigned pickup rider" />
+                    <div className="space-y-2">
+                      <RiderMiniCard riderId={o.pickupRiderId} label="Assigned pickup rider" />
+                      {canReassignPickup && (
+                        <button
+                          type="button"
+                          className="link-primary text-xs font-medium"
+                          onClick={() => {
+                            setAssignType('pickup');
+                            setReassignMode(true);
+                            setRiderId('');
+                          }}
+                        >
+                          Reassign to another rider →
+                        </button>
+                      )}
+                    </div>
                   ) : awaitingPartnerAccept && (o.status === 'shop_assigned' || o.status === 'confirmed') ? (
                     <p className="text-sm text-amber-800">Partner must accept before pickup assignment.</p>
                   ) : !canAssignPickup ? (
@@ -416,7 +437,22 @@ export default function AdminOrderOpsPage() {
                 <div>
                   <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted/70">Delivery rider</p>
                   {o.deliveryRiderId ? (
-                    <RiderMiniCard riderId={o.deliveryRiderId} label="Assigned delivery rider" />
+                    <div className="space-y-2">
+                      <RiderMiniCard riderId={o.deliveryRiderId} label="Assigned delivery rider" />
+                      {canReassignDelivery && (
+                        <button
+                          type="button"
+                          className="link-primary text-xs font-medium"
+                          onClick={() => {
+                            setAssignType('delivery');
+                            setReassignMode(true);
+                            setRiderId('');
+                          }}
+                        >
+                          Reassign to another rider →
+                        </button>
+                      )}
+                    </div>
                   ) : o.fulfillmentType === 'customer_pickup' ? (
                     <p className="text-sm text-muted">Customer pickup — no delivery rider needed.</p>
                   ) : awaitingPartnerAccept && o.status === 'ready_for_delivery' ? (
@@ -508,79 +544,119 @@ export default function AdminOrderOpsPage() {
           {/* Right column — manual override + conflicts */}
           <div className="space-y-4">
 
-            <OpsPanel title="Manual assignment" description="Override suggestions or broadcast to marketplace.">
-              <div className="space-y-3">
-                <div>
-                  <label htmlFor="assign-type" className="form-label">Type</label>
-                  <select
-                    id="assign-type"
-                    className="input-field disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={!canAssignPickup && !canAssignDelivery}
-                    value={assignType}
-                    onChange={(e) => setAssignType(e.target.value as 'pickup' | 'delivery')}
-                  >
-                    <option value="pickup">Pickup</option>
-                    <option value="delivery">Delivery</option>
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="manual-rider" className="form-label">Rider</label>
-                  <select
-                    id="manual-rider"
-                    className="input-field disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={!canAssignPickup && !canAssignDelivery}
-                    value={riderId || data.suggestedPickupRiderId || ''}
-                    onChange={(e) => setRiderId(e.target.value)}
-                  >
-                    <option value="">Select rider…</option>
-                    {(assignType === 'delivery'
-                      ? data.deliveryRiderSuggestions?.suggestions
-                      : data.pickupRiderSuggestions?.suggestions
-                    )?.map((s) => (
-                      <option key={s.userId} value={s.userId}>
-                        #{s.rank} {s.email ?? s.userId} — {s.recommendationScore}
-                      </option>
-                    ))}
-                    {data.availableRiders.map((r) => (
-                      <option key={r.userId} value={r.userId}>
-                        {r.email ?? r.userId}{r.isOnline ? ' (online)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="dc-form-actions mt-4">
-                <button
-                  type="button"
-                  disabled={
-                    busy ||
-                    (assignType === 'delivery' ? !canAssignDelivery : !canAssignPickup) ||
-                    !(riderId || (assignType === 'delivery' ? data.suggestedDeliveryRiderId : data.suggestedPickupRiderId))
-                  }
-                  className="btn-primary btn-sm disabled:opacity-50"
-                  onClick={() =>
-                    run(() =>
-                      adminFetch(`/admin/operations/orders/${id}/assign-rider`, {
-                        method: 'POST',
-                        body: JSON.stringify({
-                          riderId: riderId || (assignType === 'delivery' ? data.suggestedDeliveryRiderId : data.suggestedPickupRiderId),
-                          type: assignType,
-                        }),
-                      }),
-                    )
-                  }
-                >
-                  Assign directly
-                </button>
-                <button
-                  type="button"
-                  disabled={busy || !canAssignPickup}
-                  className="btn-outline btn-sm disabled:cursor-not-allowed disabled:opacity-50"
-                  onClick={() => run(() => adminFetch(`/admin/operations/orders/${id}/dispatch-pickup`, { method: 'POST' }))}
-                >
-                  Broadcast pickup
-                </button>
-              </div>
+            <OpsPanel
+              title="Manual assignment"
+              description={
+                reassignMode
+                  ? 'Reassigning the current rider to a different one.'
+                  : 'Override suggestions or broadcast to marketplace.'
+              }
+            >
+              {(() => {
+                const canAssignActive = assignType === 'delivery' ? canAssignDelivery : canAssignPickup;
+                const canReassignActive = assignType === 'delivery' ? canReassignDelivery : canReassignPickup;
+                const activeMode = reassignMode && canReassignActive ? 'reassign' : canAssignActive ? 'assign' : null;
+                const typeSelectDisabled =
+                  !canAssignPickup && !canAssignDelivery && !canReassignPickup && !canReassignDelivery;
+
+                return (
+                  <>
+                    {reassignMode && (
+                      <div className="mb-3 flex items-center justify-between gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-amber-200">
+                        <span>Reassign mode — pick a new rider below.</span>
+                        <button
+                          type="button"
+                          className="font-medium text-amber-900 hover:underline"
+                          onClick={() => {
+                            setReassignMode(false);
+                            setRiderId('');
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                    <div className="space-y-3">
+                      <div>
+                        <label htmlFor="assign-type" className="form-label">Type</label>
+                        <select
+                          id="assign-type"
+                          className="input-field disabled:cursor-not-allowed disabled:opacity-50"
+                          disabled={typeSelectDisabled}
+                          value={assignType}
+                          onChange={(e) => {
+                            setAssignType(e.target.value as 'pickup' | 'delivery');
+                            setRiderId('');
+                          }}
+                        >
+                          <option value="pickup">Pickup</option>
+                          <option value="delivery">Delivery</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label htmlFor="manual-rider" className="form-label">Rider</label>
+                        <select
+                          id="manual-rider"
+                          className="input-field disabled:cursor-not-allowed disabled:opacity-50"
+                          disabled={!activeMode}
+                          value={riderId || (activeMode === 'assign' ? data.suggestedPickupRiderId ?? '' : '')}
+                          onChange={(e) => setRiderId(e.target.value)}
+                        >
+                          <option value="">Select rider…</option>
+                          {(assignType === 'delivery'
+                            ? data.deliveryRiderSuggestions?.suggestions
+                            : data.pickupRiderSuggestions?.suggestions
+                          )?.map((s) => (
+                            <option key={s.userId} value={s.userId}>
+                              #{s.rank} {s.email ?? s.userId} — {s.recommendationScore}
+                            </option>
+                          ))}
+                          {data.availableRiders.map((r) => (
+                            <option key={r.userId} value={r.userId}>
+                              {r.email ?? r.userId}{r.isOnline ? ' (online)' : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="dc-form-actions mt-4">
+                      <button
+                        type="button"
+                        disabled={
+                          busy ||
+                          !activeMode ||
+                          !(riderId || (activeMode === 'assign' && (assignType === 'delivery' ? data.suggestedDeliveryRiderId : data.suggestedPickupRiderId)))
+                        }
+                        className="btn-primary btn-sm disabled:opacity-50"
+                        onClick={() =>
+                          run(async () => {
+                            const endpoint = activeMode === 'reassign' ? 'reassign-rider' : 'assign-rider';
+                            await adminFetch(`/admin/operations/orders/${id}/${endpoint}`, {
+                              method: 'POST',
+                              body: JSON.stringify({
+                                riderId: riderId || (assignType === 'delivery' ? data.suggestedDeliveryRiderId : data.suggestedPickupRiderId),
+                                type: assignType,
+                              }),
+                            });
+                            setReassignMode(false);
+                            setRiderId('');
+                          })
+                        }
+                      >
+                        {activeMode === 'reassign' ? 'Reassign rider' : 'Assign directly'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy || !canAssignPickup}
+                        className="btn-outline btn-sm disabled:cursor-not-allowed disabled:opacity-50"
+                        onClick={() => run(() => adminFetch(`/admin/operations/orders/${id}/dispatch-pickup`, { method: 'POST' }))}
+                      >
+                        Broadcast pickup
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
             </OpsPanel>
 
             <OpsPanel

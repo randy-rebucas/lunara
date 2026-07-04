@@ -8,7 +8,10 @@ import { UserRole } from '@lunara/types';
 import { AuthLoading } from '../../../components/auth-loading';
 import { DataPageStatus } from '../../../components/data-page-status';
 import { ProcessingPhotoUpload } from '../../../components/processing-photo-upload';
+import { OrderHandoffQr } from '../../../components/order-handoff-qr';
 import { AuthenticatedImage } from '../../../components/authenticated-image';
+import { PageHeader } from '../../../components/ui/page-header';
+import { ActionCard, Icon, ICONS, StepIcon } from '../../../components/ui/icon';
 import { useProtectedPage } from '../../../hooks/use-protected-page';
 import { isPartnerRole, partnerFetch } from '../../../lib/partner-api';
 import {
@@ -18,6 +21,38 @@ import {
 } from '../../../lib/order-processing-phase';
 import { usePartnerQuery } from '../../../lib/use-partner-query';
 import { usePartnerOrderSocket } from '../../../lib/use-partner-pipeline-socket';
+
+function InfoBanner({
+  icon,
+  tone,
+  title,
+  children,
+}: {
+  icon: string;
+  tone: 'amber' | 'accent' | 'slate';
+  title: string;
+  children?: React.ReactNode;
+}) {
+  const tones = {
+    amber: { wrap: 'border-amber-200 bg-amber-50', iconWrap: 'bg-amber-100 text-amber-700', title: 'text-amber-900', body: 'text-amber-800' },
+    accent: { wrap: 'border-accent/30 bg-green-50', iconWrap: 'bg-accent/10 text-accent', title: 'text-accent', body: 'text-slate-600' },
+    slate: { wrap: 'border-slate-200 bg-slate-50', iconWrap: 'bg-slate-100 text-slate-600', title: 'text-slate-900', body: 'text-slate-600' },
+  }[tone];
+
+  return (
+    <div className={`mt-6 rounded-xl border p-5 ${tones.wrap}`}>
+      <div className="flex items-start gap-3">
+        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${tones.iconWrap}`}>
+          <Icon d={icon} className="h-4 w-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className={`font-semibold ${tones.title}`}>{title}</p>
+          {children && <div className={`mt-1 text-sm ${tones.body}`}>{children}</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function StaffOrderProcessingPage() {
   const { id } = useParams<{ id: string }>();
@@ -171,7 +206,7 @@ export default function StaffOrderProcessingPage() {
 
   if (pageLoading || loadError || !view) {
     return (
-      <div>
+      <div className="mx-auto max-w-2xl">
         <Link href={backHref} className="text-sm text-slate-500 hover:text-primary">
           ← Back to {backLabel}
         </Link>
@@ -190,67 +225,84 @@ export default function StaffOrderProcessingPage() {
   const needsAccept = inProcessing && !view.isJobAccepted;
 
   return (
-    <div>
-      <Link
-        href={backHref}
-        className="touch-manipulation inline-flex items-center py-2 text-sm text-slate-500 hover:text-primary active:text-primary"
-      >
-        ← Back to {backLabel}
-      </Link>
+    <div className="mx-auto max-w-2xl">
+      <PageHeader
+        title={view.order.bookingType
+          .replace(/_/g, ' ')
+          .replace(/\b\w/g, (c) => c.toUpperCase())}
+        backHref={backHref}
+        backLabel={`Back to ${backLabel}`}
+        badge={
+          socketLive ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              Live
+            </span>
+          ) : undefined
+        }
+        description={
+          <>
+            <span className="capitalize">{view.order.status.replace(/_/g, ' ')}</span>
+            {' · '}
+            <span className="font-semibold text-slate-900">₱{view.order.total}</span>
+          </>
+        }
+      />
 
-      <h2 className="mt-4 text-2xl font-bold capitalize">
-        {view.order.bookingType.replace(/_/g, ' ')}
-        {socketLive ? (
-          <span className="ml-3 align-middle rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
-            ● Live
-          </span>
-        ) : null}
-      </h2>
-      <p className="text-sm capitalize text-slate-500">
-        Order {view.order.status.replace(/_/g, ' ')} · ₱{view.order.total}
-      </p>
+      {/* ── Receipt strip ── */}
       {view.order.pickup?.receiptCode && (
-        <p className="mt-1 text-sm text-slate-600">Pickup receipt: {view.order.pickup.receiptCode}</p>
+        <div className="flex items-center gap-3 rounded-lg border border-border/60 bg-surface px-4 py-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+            <Icon d={ICONS.receipt} className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Pickup receipt</p>
+            <p className="truncate font-mono text-sm font-semibold text-slate-900">
+              {view.order.pickup.receiptCode}
+            </p>
+          </div>
+        </div>
       )}
 
       {preProcessing && (
-        <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-5">
-          <p className="font-semibold text-slate-900">{view.currentStep.label}</p>
-          <p className="mt-1 text-sm text-slate-600">
-            {view.currentStep.description ??
-              'This order is not in laundry processing yet. Lunara assigns pickup riders from dispatch.'}
-          </p>
-        </div>
+        <InfoBanner icon={ICONS.truck} tone="slate" title={view.currentStep.label}>
+          {view.currentStep.description ??
+            'This order is not in laundry processing yet. Lunara assigns pickup riders from dispatch.'}
+        </InfoBanner>
+      )}
+
+      {preProcessing && view.order.pickup?.receiptCode && !view.order.pickup?.droppedAtShop && (
+        <OrderHandoffQr orderId={view.order._id} receiptCode={view.order.pickup.receiptCode} />
       )}
 
       {needsReceiving && (
-        <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-5">
-          <p className="font-semibold text-amber-900">Shop receiving required</p>
-          <p className="mt-1 text-sm text-amber-800">
-            {view.order.status === 'received_at_shop'
-              ? 'Intake complete. Continue in processing below, or reopen receiving.'
-              : 'Receive laundry, verify weight, and confirm items before processing.'}
-          </p>
+        <InfoBanner icon={ICONS.alert} tone="amber" title="Shop receiving required">
+          {view.order.status === 'received_at_shop'
+            ? 'Intake complete. Continue in processing below, or reopen receiving.'
+            : 'Receive laundry, verify weight, and confirm items before processing.'}
           <Link
             href={`/orders/${id}/receiving`}
-            className="touch-manipulation mt-3 inline-flex min-h-[3rem] items-center rounded-lg bg-amber-600 px-5 py-3 text-base font-medium text-white active:bg-amber-700"
+            className="touch-manipulation mt-3 inline-flex min-h-[2.75rem] items-center gap-1.5 rounded-lg bg-amber-600 px-5 py-2.5 text-sm font-medium text-white active:bg-amber-700"
           >
-            Open shop receiving →
+            Open shop receiving
+            <Icon d={ICONS.arrow} className="h-4 w-4" />
           </Link>
-        </div>
+        </InfoBanner>
       )}
 
       {partner && inProcessing && (
-        <div className="card card-body mt-6 !py-5">
-          <h3 className="font-semibold">Assign staff</h3>
-          <p className="mt-1 text-sm text-slate-500">
-            {view.assignedStaffId
+        <ActionCard
+          icon={ICONS.users}
+          title="Assign staff"
+          description={
+            view.assignedStaffId
               ? 'Staff member is assigned and can process this order.'
-              : 'Choose staff before processing begins.'}
-          </p>
-          <div className="mt-4 flex flex-wrap gap-3">
+              : 'Choose staff before processing begins.'
+          }
+        >
+          <div className="flex flex-wrap gap-3">
             <select
-              className="min-h-[3rem] flex-1 touch-manipulation rounded-lg border px-3 py-3 text-base sm:flex-none"
+              className="input-field min-h-[2.75rem] flex-1 sm:flex-none"
               value={assignStaffId || view.assignedStaffId || ''}
               onChange={(e) => setAssignStaffId(e.target.value)}
             >
@@ -261,52 +313,59 @@ export default function StaffOrderProcessingPage() {
                 </option>
               ))}
             </select>
-            {staffError && <p className="w-full text-sm text-red-500">{staffError}</p>}
             <button
               type="button"
               disabled={loading || !assignStaffId}
-              className="btn-primary min-h-[3rem] touch-manipulation px-5 text-base disabled:opacity-50"
+              className="btn-primary min-h-[2.75rem]"
               onClick={assignStaff}
             >
               {view.assignedStaffId ? 'Reassign' : 'Assign'}
             </button>
           </div>
-        </div>
+          {staffError && <p className="mt-2 text-sm text-red-500">{staffError}</p>}
+        </ActionCard>
       )}
 
       {needsAccept && (
-        <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-5">
-          <p className="font-medium text-amber-900">Accept this job to start processing</p>
-          <p className="mt-1 text-sm text-amber-800">
-            You must accept before updating status or uploading progress photos.
-          </p>
+        <InfoBanner icon={ICONS.alert} tone="amber" title="Accept this job to start processing">
+          You must accept before updating status or uploading progress photos.
           <button
             type="button"
             disabled={loading}
-            className="mt-4 min-h-[3rem] w-full touch-manipulation rounded-lg bg-primary px-5 py-3 text-base font-medium text-white active:bg-primary/90 disabled:opacity-50 sm:w-auto"
+            className="mt-3 min-h-[2.75rem] w-full touch-manipulation rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-white active:bg-primary/90 disabled:opacity-50 sm:w-auto"
             onClick={acceptJob}
           >
             Accept job
           </button>
-        </div>
+        </InfoBanner>
       )}
 
       {inProcessing && (
         <>
-          <div className="mt-6 h-2 overflow-hidden rounded-full bg-slate-200">
-            <div className="h-full bg-primary transition-all" style={{ width: `${view.progress}%` }} />
+          <div className="mt-6 flex items-center justify-between text-xs text-muted-foreground">
+            <span>Laundry pipeline progress</span>
+            <span className="tabular-nums font-medium text-slate-700">{view.progress}%</span>
+          </div>
+          <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-200">
+            <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${view.progress}%` }} />
           </div>
 
-          <p className="mt-2 text-xs text-slate-500">
+          <p className="mt-3 text-xs text-slate-500">
             Click any stage to move this order there directly — useful for correcting a mistake
             or skipping ahead.
           </p>
-          {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+          {error && (
+            <div className="alert-error mt-2 flex items-center gap-2">
+              <Icon d={ICONS.alert} className="h-4 w-4 shrink-0" />
+              {error}
+            </div>
+          )}
 
-          <ol className="mt-3 space-y-3">
+          <ol className="mt-3 space-y-2.5">
             {view.steps.map((step, i) => {
               const done = i < stepIndex || view.isComplete;
               const active = i === stepIndex && !view.isComplete;
+              const stepState = done ? 'done' : active ? 'current' : 'upcoming';
               const stepRecord = view.processing?.completedSteps?.find((s) => s.stepId === step.id);
               const clickable = !needsAccept && !active && !loading;
               return (
@@ -315,28 +374,28 @@ export default function StaffOrderProcessingPage() {
                     type="button"
                     disabled={!clickable}
                     onClick={() => moveToStep(step.id)}
-                    className={`min-h-[3.5rem] w-full touch-manipulation rounded-lg border px-5 py-4 text-left text-base transition ${
+                    className={`flex w-full touch-manipulation items-start gap-3 rounded-lg border px-4 py-3.5 text-left text-base transition-all duration-200 ${
                       active
                         ? 'border-primary bg-primary/5'
                         : done
-                          ? 'border-accent/30 bg-green-50'
-                          : 'bg-white'
+                          ? 'border-accent/20 bg-accent/5 opacity-60 hover:opacity-100'
+                          : 'border-border/60 bg-white'
                     } ${clickable ? 'cursor-pointer hover:border-primary/50 hover:ring-1 hover:ring-primary/20 active:bg-primary/10 active:ring-2 active:ring-primary/30' : 'cursor-default'}`}
                   >
-                    <span className="font-medium">
-                      {done ? '✓ ' : active ? '→ ' : '○ '}
-                      {step.label}
+                    <StepIcon state={stepState} />
+                    <span className="min-w-0 flex-1">
+                      <span className="font-medium text-slate-900">{step.label}</span>
+                      {active && <span className="mt-1 block text-sm text-slate-600">{step.description}</span>}
+                      {stepRecord?.photoUrl && (
+                        <span className="mt-2 block">
+                          <AuthenticatedImage
+                            publicPath={stepRecord.photoUrl}
+                            alt={`${step.label} photo`}
+                            className="max-h-36 rounded-lg border border-border/60 object-cover"
+                          />
+                        </span>
+                      )}
                     </span>
-                    {active && <p className="mt-1 text-slate-600">{step.description}</p>}
-                    {stepRecord?.photoUrl && (
-                      <div className="mt-2">
-                        <AuthenticatedImage
-                          publicPath={stepRecord.photoUrl}
-                          alt={`${step.label} photo`}
-                          className="max-h-36 rounded-lg border border-border/60 object-cover"
-                        />
-                      </div>
-                    )}
                   </button>
                 </li>
               );
@@ -346,38 +405,36 @@ export default function StaffOrderProcessingPage() {
       )}
 
       {inProcessing && !view.isComplete && !needsAccept && id && (
-        <div className="card card-body mt-8">
-          <h3 className="font-semibold">Mark complete: {view.currentStep.label}</h3>
-          <p className="mt-1 text-xs text-slate-500">
-            Completing this stage forwards the order to the next step
-            {view.nextStep ? `: ${view.nextStep.label}` : ''}.
-          </p>
-
+        <ActionCard
+          icon={ICONS.camera}
+          title={`Mark complete: ${view.currentStep.label}`}
+          description={`Completing this stage forwards the order to the next step${view.nextStep ? `: ${view.nextStep.label}` : ''}.`}
+        >
           {view.canSkipIroning && view.currentStep.id === 'folding' && (
-            <label className="mt-4 flex min-h-[3rem] touch-manipulation items-center gap-3 text-base active:bg-slate-50">
+            <label className="mb-4 flex min-h-[2.75rem] touch-manipulation items-center gap-3 rounded-lg bg-surface-muted px-3 text-sm active:bg-slate-100">
               <input
                 type="checkbox"
                 checked={skipIroning}
                 onChange={(e) => setSkipIroning(e.target.checked)}
-                className="h-5 w-5 shrink-0"
+                className="h-4 w-4 shrink-0"
               />
               Skip ironing (optional step)
             </label>
           )}
 
           {view.currentStep.id === 'received' && (
-            <div className="mt-4">
-              <label className="text-sm font-medium text-slate-700">Laundry tag</label>
-              <p className="text-xs text-slate-500">
-                {tagCode
-                  ? 'Scanned by the rider at pickup — used to track this order through the shop pipeline'
-                  : 'No tag was scanned at pickup for this order'}
-              </p>
-              {tagCode ? (
-                <p className="mt-2 rounded border bg-slate-50 px-4 py-3 font-mono text-base uppercase text-slate-800">
-                  {tagCode}
-                </p>
-              ) : null}
+            <div className="mb-4 flex items-center gap-3 rounded-lg bg-surface-muted px-4 py-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white ring-1 ring-border/60 text-slate-600">
+                <Icon d={ICONS.tag} className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Laundry tag</p>
+                {tagCode ? (
+                  <p className="truncate font-mono text-sm font-semibold uppercase text-slate-900">{tagCode}</p>
+                ) : (
+                  <p className="text-sm text-muted">No tag was scanned at pickup for this order</p>
+                )}
+              </div>
             </div>
           )}
 
@@ -388,9 +445,12 @@ export default function StaffOrderProcessingPage() {
             disabled={loading}
           />
 
+          <label className="form-label mt-4" htmlFor="processing-note">
+            Notes <span className="font-normal text-muted-foreground">(optional)</span>
+          </label>
           <textarea
-            className="mt-4 min-h-[5rem] w-full touch-manipulation rounded border px-4 py-3 text-base"
-            placeholder="Notes (optional)"
+            id="processing-note"
+            className="input-field min-h-[5rem]"
             rows={2}
             value={note}
             onChange={(e) => setNote(e.target.value)}
@@ -399,12 +459,12 @@ export default function StaffOrderProcessingPage() {
           <button
             type="button"
             disabled={loading}
-            className="mt-4 min-h-[3.5rem] w-full touch-manipulation rounded-lg bg-accent px-5 py-4 text-base font-medium text-white active:bg-accent/90 disabled:opacity-50"
+            className="mt-4 min-h-[3rem] w-full touch-manipulation rounded-lg bg-accent px-5 py-3 text-sm font-medium text-white active:bg-accent/90 disabled:opacity-50"
             onClick={advance}
           >
             {loading ? 'Saving…' : 'Complete stage & forward'}
           </button>
-        </div>
+        </ActionCard>
       )}
 
       {inProcessing &&
@@ -412,14 +472,18 @@ export default function StaffOrderProcessingPage() {
           view.currentStep.id === 'ready_for_delivery' ||
           view.isComplete ||
           view.order.status === 'customer_pickup') && (
-          <div className="card card-body mt-8">
-            <h3 className="font-semibold">Shelf slot</h3>
-            <p className="mt-1 text-xs text-slate-500">
-              Assign where this bag sits so staff can trace the owner at a glance.
-            </p>
-            <div className="mt-3 flex flex-wrap gap-3">
+          <ActionCard
+            icon={ICONS.shelf}
+            title="Shelf slot"
+            description="Assign where this bag sits so staff can trace the owner at a glance."
+          >
+            <label className="form-label" htmlFor="shelf-slot">
+              Slot label
+            </label>
+            <div className="flex flex-wrap gap-3">
               <input
-                className="min-h-[3rem] flex-1 touch-manipulation rounded border px-4 py-3 text-base font-mono uppercase sm:flex-none"
+                id="shelf-slot"
+                className="input-field flex-1 font-mono uppercase sm:flex-none"
                 placeholder="e.g. A-12"
                 value={shelfSlot}
                 onChange={(e) => setShelfSlot(e.target.value)}
@@ -427,26 +491,23 @@ export default function StaffOrderProcessingPage() {
               <button
                 type="button"
                 disabled={shelfSaving || !shelfSlot.trim()}
-                className="btn-primary min-h-[3rem] touch-manipulation px-5 text-base disabled:opacity-50"
+                className="btn-primary min-h-[2.75rem]"
                 onClick={saveShelfSlot}
               >
                 {shelfSaving ? 'Saving…' : 'Save shelf slot'}
               </button>
             </div>
             {shelfError && <p className="mt-2 text-sm text-red-500">{shelfError}</p>}
-          </div>
+          </ActionCard>
         )}
 
       {view.order.status === 'customer_pickup' && (
-        <div className="mt-8 rounded-xl border border-amber-300 bg-amber-50 p-6 text-center">
-          <p className="text-lg font-semibold text-amber-900">Awaiting customer self-collection</p>
-          <p className="mt-2 text-sm text-amber-800">
-            The customer will come to the shop to collect their laundry. Confirm once they have collected it.
-          </p>
+        <InfoBanner icon={ICONS.bell} tone="amber" title="Awaiting customer self-collection">
+          The customer will come to the shop to collect their laundry. Confirm once they have collected it.
           <button
             type="button"
             disabled={loading}
-            className="mt-4 min-h-[3rem] w-full touch-manipulation rounded-lg bg-accent px-5 py-3 text-base font-medium text-white active:bg-accent/90 disabled:opacity-50 sm:w-auto"
+            className="mt-3 min-h-[2.75rem] w-full touch-manipulation rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-white active:bg-accent/90 disabled:opacity-50 sm:w-auto"
             onClick={async () => {
               if (!id) return;
               setLoading(true);
@@ -464,19 +525,16 @@ export default function StaffOrderProcessingPage() {
             Confirm customer collected
           </button>
           {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
-        </div>
+        </InfoBanner>
       )}
 
       {inProcessing && view.isComplete && view.order.fulfillmentType !== 'customer_pickup' && canDispatchDelivery && (
-        <div className="mt-8 rounded-xl border border-accent bg-green-50 p-6 text-center">
-          <p className="text-lg font-semibold text-accent">Ready for delivery</p>
-          <p className="mt-2 text-sm text-slate-600">
-            Riders are notified automatically. Re-broadcast if needed.
-          </p>
+        <InfoBanner icon={ICONS.truck} tone="accent" title="Ready for delivery">
+          Riders are notified automatically. Re-broadcast if needed.
           <button
             type="button"
             disabled={loading}
-            className="mt-4 min-h-[3rem] w-full touch-manipulation rounded-lg bg-primary px-5 py-3 text-base text-white active:bg-primary/90 disabled:opacity-50 sm:w-auto"
+            className="mt-3 min-h-[2.75rem] w-full touch-manipulation rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-white active:bg-primary/90 disabled:opacity-50 sm:w-auto"
             onClick={async () => {
               if (!id) return;
               setLoading(true);
@@ -494,18 +552,15 @@ export default function StaffOrderProcessingPage() {
           >
             Notify delivery riders
           </button>
-          {dispatchMessage && <p className="mt-3 text-sm text-green-700">{dispatchMessage}</p>}
+          {dispatchMessage && <p className="mt-3 text-sm text-emerald-700">{dispatchMessage}</p>}
           {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
-        </div>
+        </InfoBanner>
       )}
 
       {inProcessing && view.isComplete && view.order.fulfillmentType !== 'customer_pickup' && !canDispatchDelivery && (
-        <div className="mt-8 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center">
-          <p className="text-lg font-semibold text-slate-900">Ready for delivery</p>
-          <p className="mt-2 text-sm text-slate-600">
-            Your shop partner will request a delivery rider from incoming orders or dispatch.
-          </p>
-        </div>
+        <InfoBanner icon={ICONS.truck} tone="slate" title="Ready for delivery">
+          Your shop partner will request a delivery rider from incoming orders or dispatch.
+        </InfoBanner>
       )}
     </div>
   );

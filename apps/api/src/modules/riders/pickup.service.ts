@@ -295,6 +295,17 @@ export class PickupService {
     order.laundryProcessing.tagId = tag._id;
     await order.save();
 
+    this.trackingGateway.emitOrderEvent(orderId, 'laundryTagAssigned', {
+      tagId: tag._id.toString(),
+      tagCode: tag.code,
+    });
+    this.trackingGateway.emitPartnerPipelineUpdated({
+      orderId,
+      status: order.status,
+      partnerId: order.partnerId?.toString(),
+      branchId: order.branchId?.toString(),
+    });
+
     return { success: true, data: { tagId: tag._id.toString(), tagCode: tag.code } };
   }
 

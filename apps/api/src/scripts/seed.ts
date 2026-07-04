@@ -37,6 +37,75 @@ const RIDER_DOCUMENT_TYPES = [
   'selfie',
 ] as const;
 
+interface RiderSeedProfile {
+  email: string;
+  firstName: string;
+  lastName: string;
+  employmentType: 'employee' | 'independent_contractor';
+  vehicleType: string;
+  plateNumber: string;
+  orCrNumber: string;
+  homeAddress: typeof RIDER_HOME_ADDRESS;
+  walletBalance: number;
+  payoutMethod: 'gcash' | 'maya' | 'bank';
+  gcashNumber?: string;
+  bankName?: string;
+  bankAccountName?: string;
+  bankAccountNumber?: string;
+}
+
+async function seedRiderProfile(
+  db: import('mongodb').Db,
+  users: import('mongodb').Collection,
+  profile: RiderSeedProfile,
+) {
+  const riderUser = await users.findOne({ email: profile.email });
+  if (!riderUser) return;
+
+  const now = new Date();
+  await db.collection('riders').updateOne(
+    { userId: riderUser._id },
+    {
+      $set: {
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        employmentType: profile.employmentType,
+        homeAddress: profile.homeAddress,
+        vehicleType: profile.vehicleType,
+        plateNumber: profile.plateNumber,
+        orCrNumber: profile.orCrNumber,
+        documents: RIDER_DOCUMENT_TYPES.map((type) => ({
+          type,
+          fileUrl: `/api/v1/uploads/rider-documents/${riderUser._id.toString()}-${type}-seed.jpg`,
+          status: 'approved',
+          uploadedAt: now,
+          reviewedAt: now,
+          reviewedBy: 'seed',
+        })),
+        isOnline: true,
+        totalEarnings: profile.walletBalance,
+        todayEarnings: 0,
+        walletBalance: profile.walletBalance,
+        walletBackfilled: true,
+        payoutMethod: profile.payoutMethod,
+        gcashNumber: profile.gcashNumber,
+        bankName: profile.bankName,
+        bankAccountName: profile.bankAccountName,
+        bankAccountNumber: profile.bankAccountNumber,
+        updatedAt: now,
+      },
+      $setOnInsert: {
+        currentLocation: { type: 'Point', coordinates: [121.0244, 14.5547] },
+        createdAt: now,
+      },
+    },
+    { upsert: true },
+  );
+  console.log(
+    `Seeded rider profile (${profile.employmentType}): ${profile.firstName} ${profile.lastName} — ${profile.email}`,
+  );
+}
+
 async function seed() {
   await mongoose.connect(MONGODB_URI);
   const db = mongoose.connection.db!;
@@ -49,6 +118,8 @@ async function seed() {
     { email: 'admin@lunara.dev', role: 'admin', phone: '+639173333333' },
     { email: 'staff@lunara.dev', role: 'staff', phone: '+639174444444' },
     { email: 'customer@lunara.dev', role: 'customer', phone: '+639175555555' },
+    { email: 'rider2@lunara.dev', role: 'rider', phone: '+639176666666' },
+    { email: 'rider3@lunara.dev', role: 'rider', phone: '+639177777777' },
   ];
 
   for (const s of seeds) {
@@ -70,45 +141,49 @@ async function seed() {
     console.log(`Seeded ${s.role}: ${s.email} / password123`);
   }
 
-  const riderUser = await users.findOne({ email: 'rider@lunara.dev' });
-  if (riderUser) {
-    const now = new Date();
-    await db.collection('riders').updateOne(
-      { userId: riderUser._id },
-      {
-        $set: {
-          firstName: 'Demo',
-          lastName: 'Rider',
-          homeAddress: RIDER_HOME_ADDRESS,
-          vehicleType: 'motorcycle',
-          plateNumber: 'ABC1234',
-          orCrNumber: 'ORCR-SEED-001',
-          documents: RIDER_DOCUMENT_TYPES.map((type) => ({
-            type,
-            fileUrl: `/api/v1/uploads/rider-documents/${riderUser._id.toString()}-${type}-seed.jpg`,
-            status: 'approved',
-            uploadedAt: now,
-            reviewedAt: now,
-            reviewedBy: 'seed',
-          })),
-          isOnline: true,
-          totalEarnings: 400,
-          todayEarnings: 0,
-          walletBalance: 400,
-          walletBackfilled: true,
-          payoutMethod: 'gcash',
-          gcashNumber: '09172222222',
-          updatedAt: now,
-        },
-        $setOnInsert: {
-          currentLocation: { type: 'Point', coordinates: [121.0244, 14.5547] },
-          createdAt: now,
-        },
-      },
-      { upsert: true },
-    );
-    console.log('Seeded rider profile + approved KYC documents + wallet (₱400, GCash)');
-  }
+  await seedRiderProfile(db, users, {
+    email: 'rider@lunara.dev',
+    firstName: 'Demo',
+    lastName: 'Rider',
+    employmentType: 'independent_contractor',
+    homeAddress: RIDER_HOME_ADDRESS,
+    vehicleType: 'motorcycle',
+    plateNumber: 'ABC1234',
+    orCrNumber: 'ORCR-SEED-001',
+    walletBalance: 400,
+    payoutMethod: 'gcash',
+    gcashNumber: '09172222222',
+  });
+
+  await seedRiderProfile(db, users, {
+    email: 'rider2@lunara.dev',
+    firstName: 'Employee',
+    lastName: 'Rider',
+    employmentType: 'employee',
+    homeAddress: RIDER_HOME_ADDRESS,
+    vehicleType: 'motorcycle',
+    plateNumber: 'EMP5678',
+    orCrNumber: 'ORCR-SEED-002',
+    walletBalance: 0,
+    payoutMethod: 'bank',
+    bankName: 'BDO',
+    bankAccountName: 'Employee Rider',
+    bankAccountNumber: '001234567890',
+  });
+
+  await seedRiderProfile(db, users, {
+    email: 'rider3@lunara.dev',
+    firstName: 'Contractor',
+    lastName: 'Rider',
+    employmentType: 'independent_contractor',
+    homeAddress: RIDER_HOME_ADDRESS,
+    vehicleType: 'bicycle',
+    plateNumber: 'N/A',
+    orCrNumber: 'N/A',
+    walletBalance: 0,
+    payoutMethod: 'gcash',
+    gcashNumber: '09177777777',
+  });
 
   const customerUser = await users.findOne({ email: 'customer@lunara.dev' });
   if (customerUser) {

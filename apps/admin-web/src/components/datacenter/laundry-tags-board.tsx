@@ -1,11 +1,14 @@
 'use client';
 
 import QRCode from 'react-qr-code';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { buildTagQrPayload } from '@lunara/utils';
 import { filterBySearch, ListControls } from '../list-controls';
 import { MetricCell } from './metric-cell';
+import { LiveBadge } from '../ui/stat-card';
 import { adminFetch } from '../../lib/admin-api';
+import { isAdminRealtimeConnected } from '../../lib/admin-realtime';
+import { useAdminOperationsSocket } from '../../lib/use-admin-operations-socket';
 import { useAdminQuery } from '../../lib/use-admin-query';
 
 type LaundryTagStatus = 'available' | 'assigned' | 'retired';
@@ -26,6 +29,47 @@ const STATUS_FILTER_OPTIONS = [
   { value: 'retired',   label: 'Retired' },
 ];
 
+function TagQrPreviewModal({ tag, onClose }: { tag: LaundryTag | null; onClose: () => void }) {
+  if (!tag) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <button
+        type="button"
+        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+        aria-label="Close QR preview"
+        onClick={onClose}
+      />
+      <div role="dialog" aria-modal="true" className="card-elevated relative z-10 w-full max-w-xs">
+        <div className="card-body flex flex-col items-center gap-3 text-center">
+          <p className="text-xs font-bold uppercase tracking-wide text-primary">Lunara</p>
+          <div className="rounded-lg bg-white p-3 ring-1 ring-border/60">
+            <QRCode value={buildTagQrPayload(tag.code)} size={192} />
+          </div>
+          <p className="text-code text-base font-bold">{tag.code}</p>
+          <span
+            className={
+              tag.status === 'available'
+                ? 'badge-accent'
+                : 'badge-neutral'
+            }
+          >
+            {tag.status}
+          </span>
+          <div className="mt-2 flex w-full justify-center gap-2">
+            <button type="button" className="btn-outline btn-sm" onClick={() => window.print()}>
+              Print
+            </button>
+            <button type="button" className="btn-secondary btn-sm" onClick={onClose}>
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function LaundryTagsBoard() {
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch]             = useState('');
@@ -36,6 +80,7 @@ export function LaundryTagsBoard() {
   const [saving, setSaving]           = useState(false);
   const [actionError, setActionError] = useState('');
   const [lastBatch, setLastBatch]     = useState<LaundryTag[] | null>(null);
+  const [previewTag, setPreviewTag]   = useState<LaundryTag | null>(null);
 
   const load = useCallback(async () => {
     const pageSize = 200;
@@ -51,6 +96,18 @@ export function LaundryTagsBoard() {
   }, []);
 
   const { data: items, loading, error, reload } = useAdminQuery(load, []);
+
+  const [socketLive, setSocketLive] = useState(false);
+  useAdminOperationsSocket({
+    onLaundryTagsUpdated: () => {
+      void reload();
+    },
+  });
+  useEffect(() => {
+    setSocketLive(isAdminRealtimeConnected());
+    const id = setInterval(() => setSocketLive(isAdminRealtimeConnected()), 2000);
+    return () => clearInterval(id);
+  }, []);
 
   const tags = useMemo(() => items ?? [], [items]);
   const { availableCount, assignedCount, retiredCount } = useMemo(
@@ -129,9 +186,12 @@ export function LaundryTagsBoard() {
               available pool once an order is delivered or picked up.
             </p>
           </div>
-          <button type="button" className="btn-outline btn-sm" onClick={() => void reload()} disabled={loading}>
-            {loading ? 'Syncing…' : 'Sync'}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {socketLive ? <LiveBadge /> : <span className="badge-neutral">Polling</span>}
+            <button type="button" className="btn-outline btn-sm" onClick={() => void reload()} disabled={loading}>
+              {loading ? 'Syncing…' : 'Sync'}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -220,15 +280,20 @@ export function LaundryTagsBoard() {
                         <td className="text-code text-xs text-muted">{t.batchId.slice(0, 8)}</td>
                         <td className="text-sm text-muted">{new Date(t.createdAt).toLocaleDateString()}</td>
                         <td>
-                          {t.status === 'retired' ? (
-                            <button type="button" className="link-primary text-xs font-medium" onClick={() => void reactivate(t)}>
-                              Reactivate
+                          <div className="flex flex-wrap items-center gap-3">
+                            <button type="button" className="link-primary text-xs font-medium" onClick={() => setPreviewTag(t)}>
+                              Preview QR
                             </button>
-                          ) : (
-                            <button type="button" className="link-primary text-xs font-medium" onClick={() => void retire(t)}>
-                              Retire
-                            </button>
-                          )}
+                            {t.status === 'retired' ? (
+                              <button type="button" className="link-primary text-xs font-medium" onClick={() => void reactivate(t)}>
+                                Reactivate
+                              </button>
+                            ) : (
+                              <button type="button" className="link-primary text-xs font-medium" onClick={() => void retire(t)}>
+                                Retire
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -289,6 +354,8 @@ export function LaundryTagsBoard() {
           </section>
         </div>
       )}
+
+      <TagQrPreviewModal tag={previewTag} onClose={() => setPreviewTag(null)} />
     </div>
   );
 }

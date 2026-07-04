@@ -65,6 +65,23 @@ export class RiderNotificationService {
     this.trackingGateway.emitDeliveryAssignment(riderUserId, { ...data, title, body });
   }
 
+  async notifyAssignmentReassigned(
+    riderUserId: string,
+    order: Pick<OrderDocument, '_id' | 'branchName' | 'bookingType'>,
+    leg: 'pickup' | 'delivery',
+  ) {
+    const title = RIDER_NOTIFICATION_TITLES.ASSIGNMENT_REASSIGNED;
+    const body = `Your ${leg} for ${order.branchName ?? 'this order'} · ${order.bookingType.replace(/_/g, ' ')} was reassigned to another rider.`;
+    const data = {
+      category: RIDER_NOTIFICATION_CATEGORY.SYSTEM,
+      type: RIDER_NOTIFICATION_TYPES.ASSIGNMENT_REASSIGNED,
+      orderId: order._id.toString(),
+      leg,
+    };
+
+    await this.dispatch(riderUserId, title, body, data, 'assignmentReassigned');
+  }
+
   async notifyEarningsCredited(
     riderUserId: string,
     referenceId: string,

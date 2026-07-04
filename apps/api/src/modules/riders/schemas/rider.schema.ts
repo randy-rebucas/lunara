@@ -87,6 +87,9 @@ export class Rider {
   @Prop()
   orCrNumber?: string;
 
+  @Prop({ default: 'independent_contractor', enum: ['employee', 'independent_contractor'] })
+  employmentType!: 'employee' | 'independent_contractor';
+
   @Prop({ type: [RiderKycDocument], default: [] })
   documents!: RiderKycDocument[];
 

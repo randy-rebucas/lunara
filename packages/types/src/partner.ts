@@ -318,7 +318,7 @@ export interface PartnerProcessingView {
     estimatedWeightKg?: number;
     fulfillmentType?: 'delivery' | 'customer_pickup';
     customerPickupAt?: string;
-    pickup?: { actualWeightKg?: number; receiptCode?: string };
+    pickup?: { actualWeightKg?: number; receiptCode?: string; droppedAtShop?: string };
   };
   currentStep: { id: string; label: string; description?: string; orderStatus?: string };
   nextStep: { id: string; label: string } | null;

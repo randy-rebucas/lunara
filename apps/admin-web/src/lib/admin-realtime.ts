@@ -19,6 +19,7 @@ const dispatcherAlertListeners = new Set<AlertListener>();
 const sosLocationListeners = new Set<LocationListener>();
 const connectedListeners = new Set<ConnectedListener>();
 const newMessageListeners = new Set<NewMessageListener>();
+const laundryTagsListeners = new Set<VoidListener>();
 const joinedConversations = new Set<string>();
 
 function setConnected(next: boolean) {
@@ -41,6 +42,10 @@ function emitSosLocationUpdate(update: SosLocationUpdate) {
 
 function emitNewMessage(msg: ChatMessage) {
   for (const listener of newMessageListeners) listener(msg);
+}
+
+function emitLaundryTagsUpdated() {
+  for (const listener of laundryTagsListeners) listener();
 }
 
 function ensureSocket() {
@@ -68,6 +73,7 @@ function ensureSocket() {
   socket.on('dispatcherAlert', emitDispatcherAlert);
   socket.on('sosLocationUpdate', emitSosLocationUpdate);
   socket.on('newMessage', emitNewMessage);
+  socket.on('laundryTagsUpdated', emitLaundryTagsUpdated);
 }
 
 export function joinAdminConversation(conversationId: string) {
@@ -95,6 +101,7 @@ export function subscribeAdminRealtime(handlers: {
   onSosLocationUpdate?: LocationListener;
   onConnected?: ConnectedListener;
   onNewMessage?: NewMessageListener;
+  onLaundryTagsUpdated?: VoidListener;
 }): () => void {
   subscriberCount += 1;
   ensureSocket();
@@ -115,6 +122,9 @@ export function subscribeAdminRealtime(handlers: {
   if (handlers.onNewMessage) {
     newMessageListeners.add(handlers.onNewMessage);
   }
+  if (handlers.onLaundryTagsUpdated) {
+    laundryTagsListeners.add(handlers.onLaundryTagsUpdated);
+  }
 
   return () => {
     if (handlers.onDispatchQueueUpdated) {
@@ -131,6 +141,9 @@ export function subscribeAdminRealtime(handlers: {
     }
     if (handlers.onNewMessage) {
       newMessageListeners.delete(handlers.onNewMessage);
+    }
+    if (handlers.onLaundryTagsUpdated) {
+      laundryTagsListeners.delete(handlers.onLaundryTagsUpdated);
     }
 
     subscriberCount = Math.max(0, subscriberCount - 1);

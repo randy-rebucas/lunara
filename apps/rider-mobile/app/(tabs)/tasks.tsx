@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useRiderOperations } from '../../src/context/rider-operations';
 import { EmptyState } from '../../src/components/ui/empty-state';
@@ -607,13 +607,20 @@ export default function TasksScreen() {
 
   const showOfflineGate = !online && filter !== 'completed' && filter !== 'cancelled';
 
-  return (
-    <Screen
-      inTab
-      scroll
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
-      contentStyle={{ paddingBottom: tabPadding }}
-    >
+  const keyExtractor = useCallback((row: TaskListRow, index: number) => {
+    const id =
+      row.kind === 'pickup_offer' ||
+      row.kind === 'delivery_offer' ||
+      row.kind === 'task' ||
+      row.kind === 'history' ||
+      row.kind === 'cancelled'
+        ? row.item._id
+        : String(index);
+    return `${row.kind}-${id}`;
+  }, []);
+
+  const listHeader = (
+    <>
       {/* ── Title row ── */}
       <View style={styles.titleRow}>
         <View>
@@ -657,34 +664,29 @@ export default function TasksScreen() {
           );
         })}
       </ScrollView>
+    </>
+  );
 
-      {/* ── Content ── */}
-      {showOfflineGate ? (
-        <EmptyState title="Start your shift" message={taskListEmptyMessage(filter, online)} />
-      ) : rows.length === 0 ? (
-        <EmptyState
-          title={`No ${TASK_LIST_FILTERS.find((f) => f.id === filter)?.label ?? ''} tasks`}
-          message={taskListEmptyMessage(filter, online)}
-        />
-      ) : (
-        <View>
-          {rows.map((row, index) => {
-            const id =
-              row.kind === 'pickup_offer' ||
-              row.kind === 'delivery_offer' ||
-              row.kind === 'task' ||
-              row.kind === 'history' ||
-              row.kind === 'cancelled'
-                ? row.item._id
-                : String(index);
-            return (
-              <View key={`${row.kind}-${id}`}>
-                {renderRow({ item: row })}
-              </View>
-            );
-          })}
-        </View>
-      )}
+  const listEmpty = showOfflineGate ? (
+    <EmptyState title="Start your shift" message={taskListEmptyMessage(filter, online)} />
+  ) : (
+    <EmptyState
+      title={`No ${TASK_LIST_FILTERS.find((f) => f.id === filter)?.label ?? ''} tasks`}
+      message={taskListEmptyMessage(filter, online)}
+    />
+  );
+
+  return (
+    <Screen inTab contentStyle={{ paddingBottom: 0 }}>
+      <FlatList
+        data={showOfflineGate ? [] : rows}
+        keyExtractor={keyExtractor}
+        renderItem={renderRow}
+        ListHeaderComponent={listHeader}
+        ListEmptyComponent={listEmpty}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
+        contentContainerStyle={{ paddingBottom: tabPadding, flexGrow: 1 }}
+      />
     </Screen>
   );
 }

@@ -6,6 +6,7 @@ import { UserRole, type PortalRole } from '@lunara/types';
 import { resolveTagCode } from '@lunara/utils';
 import { Branch, BranchDocument } from '../branches/schemas/branch.schema';
 import { resolvePortalBranchId } from '../partner/partner-access';
+import { TrackingGateway } from '../realtime/tracking.gateway';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { LaundryTag, LaundryTagDocument, LaundryTagStatus } from './schemas/laundry-tag.schema';
 import { CreateTagBatchDto } from './dto/create-batch.dto';
@@ -20,6 +21,7 @@ export class LaundryTagsService {
     @InjectModel(LaundryTag.name) private tagModel: Model<LaundryTagDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Branch.name) private branchModel: Model<BranchDocument>,
+    private trackingGateway: TrackingGateway,
   ) {}
 
   async generateBatch(dto: CreateTagBatchDto, adminUserId: string) {
@@ -48,6 +50,7 @@ export class LaundryTagsService {
 
       try {
         const tags = await this.tagModel.insertMany(docs, { ordered: true });
+        this.trackingGateway.emitLaundryTagsUpdated({ reason: 'generated', batchId, count: tags.length });
         return { batchId, tags };
       } catch (e) {
         // Duplicate key (E11000): another batch claimed this code range concurrently — retry with a fresh sequence.
@@ -84,7 +87,15 @@ export class LaundryTagsService {
       },
       { new: true },
     );
-    if (assigned) return assigned;
+    if (assigned) {
+      this.trackingGateway.emitLaundryTagsUpdated({
+        reason: 'assigned',
+        tagId: assigned._id.toString(),
+        tagCode: assigned.code,
+        orderId,
+      });
+      return assigned;
+    }
 
     // The atomic update matched nothing — figure out why, to return an accurate error.
     const tag = await this.tagModel.findOne({ code });
@@ -97,6 +108,12 @@ export class LaundryTagsService {
 
   async releaseFromOrder(orderId: string, reason: 'delivered' | 'manual' | 'admin_override' = 'delivered'): Promise<void> {
     const orderObjectId = new Types.ObjectId(orderId);
+    const tagBeforeRelease = await this.tagModel.findOne(
+      { currentOrderId: orderObjectId, status: LaundryTagStatus.ASSIGNED },
+      { _id: 1, code: 1 },
+    );
+    if (!tagBeforeRelease) return;
+
     await this.tagModel.updateOne(
       { currentOrderId: orderObjectId, status: LaundryTagStatus.ASSIGNED },
       [
@@ -122,6 +139,13 @@ export class LaundryTagsService {
         },
       ],
     );
+
+    this.trackingGateway.emitLaundryTagsUpdated({
+      reason: 'released',
+      tagId: tagBeforeRelease._id.toString(),
+      tagCode: tagBeforeRelease.code,
+      orderId,
+    });
   }
 
   async retire(tagId: string, dto: RetireTagDto, adminUserId: string): Promise<LaundryTagDocument> {
@@ -143,6 +167,7 @@ export class LaundryTagsService {
       }
     }
     await tag.save();
+    this.trackingGateway.emitLaundryTagsUpdated({ reason: 'retired', tagId: tag._id.toString(), tagCode: tag.code });
     return tag;
   }
 
@@ -156,6 +181,7 @@ export class LaundryTagsService {
     tag.retiredBy = undefined;
     tag.retiredReason = undefined;
     await tag.save();
+    this.trackingGateway.emitLaundryTagsUpdated({ reason: 'reactivated', tagId: tag._id.toString(), tagCode: tag.code });
     return tag;
   }
 

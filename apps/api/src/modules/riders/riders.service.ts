@@ -143,6 +143,7 @@ export class RidersService {
       vehicleType: rider.vehicleType,
       plateNumber: rider.plateNumber,
       orCrNumber: rider.orCrNumber,
+      employmentType: rider.employmentType,
       documents: serializeRiderDocuments(rider.documents),
       compliance: {
         isCompliant: compliance.isCompliant,
