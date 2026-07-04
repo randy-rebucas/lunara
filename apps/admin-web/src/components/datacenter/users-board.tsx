@@ -108,7 +108,7 @@ export function UsersBoard() {
   const load = useCallback(() => adminFetch<UserRow[]>('/users'), []);
   const { data, loading, error, reload, setData } = useAdminQuery(load, []);
 
-  const users = data ?? [];
+  const users = useMemo(() => data ?? [], [data]);
 
   const counts = useMemo(() => {
     return Object.fromEntries(ROLES.map((r) => [r, users.filter((u) => u.role === r).length]));

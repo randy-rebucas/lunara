@@ -373,7 +373,7 @@ export default function LoginScreen() {
                   Need help?{' '}
                   <Text style={styles.supportLink}>Contact support</Text>
                 </Text>
-                <Text style={styles.supportSub}>We're here to help 24/7</Text>
+                <Text style={styles.supportSub}>We&apos;re here to help 24/7</Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
             </Pressable>

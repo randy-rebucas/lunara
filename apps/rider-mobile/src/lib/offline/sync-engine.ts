@@ -16,6 +16,13 @@ import {
 import { removeTaskCache } from './task-cache';
 import type { GpsQueueItem, PhotoQueueItem, StatusQueueItem } from './types';
 
+/** Past this many failed attempts, stop retrying an item on every sync cycle and surface it as stuck instead. */
+const MAX_ITEM_RETRIES = 20;
+
+function isAuthFailure(message: string): boolean {
+  return message.includes('Session expired') || message.includes('sign in to continue');
+}
+
 let syncing = false;
 let syncListeners = new Set<(syncing: boolean) => void>();
 
@@ -83,10 +90,13 @@ async function processStatusItem(item: StatusQueueItem): Promise<'done' | 'retry
     if (isAlreadyDoneError(message)) {
       return 'done';
     }
-    if (message.includes('Cannot reach API')) {
+    if (message.includes('Cannot reach API') || isAuthFailure(message)) {
+      // Pause the whole sync rather than burning retries while offline or logged out.
       return 'stop';
     }
-    await incrementRetry(item.id);
+    if (item.retries < MAX_ITEM_RETRIES) {
+      await incrementRetry(item.id);
+    }
     return 'retry';
   }
 }
@@ -110,18 +120,21 @@ async function processPhotoItem(item: PhotoQueueItem): Promise<'done' | 'retry' 
       await deletePhoto(item.localUri);
       return 'done';
     }
-    if (message.includes('Cannot reach API')) {
+    if (message.includes('Cannot reach API') || isAuthFailure(message)) {
+      // Pause the whole sync rather than burning retries while offline or logged out.
       return 'stop';
     }
-    await incrementRetry(item.id);
+    if (item.retries < MAX_ITEM_RETRIES) {
+      await incrementRetry(item.id);
+    }
     return 'retry';
   }
 }
 
 async function processGpsBatch(items: GpsQueueItem[]): Promise<'done' | 'stop'> {
   const collapsed = collapseGpsItems(items);
-  try {
-    for (const point of collapsed) {
+  for (const point of collapsed) {
+    try {
       await useAuthStore.getState().apiFetch('/riders/location', {
         method: 'PATCH',
         body: JSON.stringify({
@@ -134,15 +147,16 @@ async function processGpsBatch(items: GpsQueueItem[]): Promise<'done' | 'stop'> 
           timestamp: point.recordedAt,
         }),
       });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : '';
+      if (message.includes('Cannot reach API')) {
+        // Offline again mid-batch: stop here and keep the whole batch queued for the next sync.
+        return 'stop';
+      }
+      // A single bad point (e.g. rejected payload) shouldn't block later, still-valid points.
     }
-    return 'done';
-  } catch (e) {
-    const message = e instanceof Error ? e.message : '';
-    if (message.includes('Cannot reach API')) {
-      return 'stop';
-    }
-    return 'done';
   }
+  return 'done';
 }
 
 export async function runSync(): Promise<{ synced: number; remaining: number }> {

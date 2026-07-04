@@ -205,7 +205,7 @@ export default function ProfileScreen() {
       {/* ── Earnings summary ── */}
       <View style={styles.earningsRow}>
         <View style={styles.earnBox}>
-          <Text style={styles.earnLabel}>TODAY'S EARNINGS</Text>
+          <Text style={styles.earnLabel}>TODAY&apos;S EARNINGS</Text>
           <Text style={[styles.earnValue, { color: colors.accentDark }]}>
             {formatCurrency(me?.todayEarnings ?? 0)}
           </Text>

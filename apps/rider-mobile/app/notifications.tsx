@@ -48,6 +48,13 @@ export default function NotificationsScreen() {
     return items.filter((item) => resolveNotificationCategory(item) === filter);
   }, [filter, items]);
 
+  const renderNotification = useCallback(
+    ({ item }: { item: Parameters<typeof NotificationListItem>[0]['notification'] }) => (
+      <NotificationListItem notification={item} onMarkRead={markRead} />
+    ),
+    [markRead],
+  );
+
   if (loading && items.length === 0) {
     return (
       <Screen inStack>
@@ -114,9 +121,7 @@ export default function NotificationsScreen() {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.primary} />
         }
-        renderItem={useCallback(({ item }: { item: Parameters<typeof NotificationListItem>[0]['notification'] }) => (
-          <NotificationListItem notification={item} onMarkRead={markRead} />
-        ), [markRead])}
+        renderItem={renderNotification}
         ItemSeparatorComponent={Separator}
         ListEmptyComponent={
           <View style={styles.emptyWrap}>

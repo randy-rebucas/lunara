@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
 import { PaymentMethod } from '@lunara/types';
 import { formatCurrency } from '@lunara/utils';
@@ -41,6 +41,7 @@ export function PaymentCheckout({ orderId, onPaid }: PaymentCheckoutProps) {
   const [cashTiming, setCashTiming] = useState<CashTiming>('pickup');
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
+  const payingRef = useRef(false);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
@@ -82,6 +83,8 @@ export function PaymentCheckout({ orderId, onPaid }: PaymentCheckoutProps) {
   }, [load]);
 
   async function handlePay() {
+    if (payingRef.current) return;
+    payingRef.current = true;
     setPaying(true);
     setError('');
     try {
@@ -120,8 +123,10 @@ export function PaymentCheckout({ orderId, onPaid }: PaymentCheckoutProps) {
         return;
       }
 
+      payingRef.current = false;
       setError('Payment could not be started');
     } catch (e) {
+      payingRef.current = false;
       setError(e instanceof Error ? e.message : 'Payment failed');
     } finally {
       setPaying(false);

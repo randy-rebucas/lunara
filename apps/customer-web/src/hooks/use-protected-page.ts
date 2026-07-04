@@ -56,8 +56,3 @@ export function useProtectedPage(options: ProtectedPageOptions = {}) {
 
   return { isAuthenticated, isLoading, ready };
 }
-
-/** @deprecated Use `useProtectedPage({ requireOnboarding: true })` */
-export function useRequireOnboardingComplete() {
-  return useProtectedPage({ requireOnboarding: true });
-}

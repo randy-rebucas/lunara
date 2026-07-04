@@ -88,8 +88,8 @@ export function WithdrawalsBoard() {
 
   const { data, loading, error, reload } = useAdminQuery(load, [statusFilter]);
 
-  const rows = data?.rows ?? [];
-  const pendingRows = data?.pendingRows ?? [];
+  const rows = useMemo(() => data?.rows ?? [], [data?.rows]);
+  const pendingRows = useMemo(() => data?.pendingRows ?? [], [data?.pendingRows]);
   const pendingCount = pendingRows.length;
   const totalPending = useMemo(
     () => pendingRows.reduce((sum, r) => sum + r.amount, 0),

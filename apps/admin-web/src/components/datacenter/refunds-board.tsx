@@ -109,8 +109,8 @@ export function RefundsBoard() {
     return () => window.clearInterval(id);
   }, [reload]);
 
-  const counts = data?.counts ?? { pending: 0, underReview: 0, approved: 0 };
-  const items  = data?.items ?? [];
+  const counts = useMemo(() => data?.counts ?? { pending: 0, underReview: 0, approved: 0 }, [data?.counts]);
+  const items  = useMemo(() => data?.items ?? [], [data?.items]);
 
   const filteredItems = useMemo(() => {
     return filterBySearch(items, search, [

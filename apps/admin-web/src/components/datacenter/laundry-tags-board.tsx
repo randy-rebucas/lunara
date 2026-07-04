@@ -38,16 +38,29 @@ export function LaundryTagsBoard() {
   const [lastBatch, setLastBatch]     = useState<LaundryTag[] | null>(null);
 
   const load = useCallback(async () => {
-    const data = await adminFetch<{ items: LaundryTag[]; total: number }>('/laundry-tags?limit=200');
-    return data.items;
+    const pageSize = 200;
+    const all: LaundryTag[] = [];
+    for (let page = 1; ; page++) {
+      const data = await adminFetch<{ items: LaundryTag[]; total: number }>(
+        `/laundry-tags?limit=${pageSize}&page=${page}`,
+      );
+      all.push(...data.items);
+      if (all.length >= data.total || data.items.length === 0) break;
+    }
+    return all;
   }, []);
 
   const { data: items, loading, error, reload } = useAdminQuery(load, []);
 
   const tags = useMemo(() => items ?? [], [items]);
-  const availableCount = tags.filter((t) => t.status === 'available').length;
-  const assignedCount  = tags.filter((t) => t.status === 'assigned').length;
-  const retiredCount   = tags.filter((t) => t.status === 'retired').length;
+  const { availableCount, assignedCount, retiredCount } = useMemo(
+    () => ({
+      availableCount: tags.filter((t) => t.status === 'available').length,
+      assignedCount: tags.filter((t) => t.status === 'assigned').length,
+      retiredCount: tags.filter((t) => t.status === 'retired').length,
+    }),
+    [tags],
+  );
 
   const filteredTags = useMemo(() => {
     let list = tags;

@@ -42,6 +42,17 @@ async function saveQueue(items: QueueItem[]) {
   notify();
 }
 
+// Serializes read-modify-write mutations against the queue so two overlapping calls
+// (e.g. a status update and a GPS ping queued back to back) can't clobber each other
+// by both reading the same snapshot before either writes back.
+let mutationChain: Promise<unknown> = Promise.resolve();
+
+function withQueueLock<T>(fn: () => Promise<T>): Promise<T> {
+  const result = mutationChain.then(fn, fn);
+  mutationChain = result.catch(() => {});
+  return result;
+}
+
 export function subscribeQueue(listener: Listener) {
   listeners.add(listener);
   return () => {
@@ -58,38 +69,41 @@ export async function getPendingCount(): Promise<number> {
 }
 
 export async function getPendingCountForOrder(orderId: string): Promise<number> {
-  return (await loadQueue()).filter((item) => {
-    if (item.kind === 'gps') return item.orderId === orderId;
-    return item.orderId === orderId;
-  }).length;
+  return (await loadQueue()).filter((item) => item.orderId === orderId).length;
 }
 
 export async function enqueueItem(item: QueueItem): Promise<void> {
-  const items = await loadQueue();
-  let next = [...items, item];
+  return withQueueLock(async () => {
+    const items = await loadQueue();
+    let next = [...items, item];
 
-  const gpsCount = next.filter((i) => i.kind === 'gps').length;
-  if (gpsCount > GPS_QUEUE_CAP) {
-    const nonGps = next.filter((i) => i.kind !== 'gps');
-    const gps = next.filter((i) => i.kind === 'gps').slice(-GPS_QUEUE_CAP);
-    next = [...nonGps, ...gps];
-  }
+    const gpsCount = next.filter((i) => i.kind === 'gps').length;
+    if (gpsCount > GPS_QUEUE_CAP) {
+      const nonGps = next.filter((i) => i.kind !== 'gps');
+      const gps = next.filter((i) => i.kind === 'gps').slice(-GPS_QUEUE_CAP);
+      next = [...nonGps, ...gps];
+    }
 
-  await saveQueue(next);
+    await saveQueue(next);
+  });
 }
 
 export async function removeItems(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
-  const set = new Set(ids);
-  const items = await loadQueue();
-  await saveQueue(items.filter((item) => !set.has(item.id)));
+  return withQueueLock(async () => {
+    const set = new Set(ids);
+    const items = await loadQueue();
+    await saveQueue(items.filter((item) => !set.has(item.id)));
+  });
 }
 
 export async function incrementRetry(id: string): Promise<void> {
-  const items = await loadQueue();
-  await saveQueue(
-    items.map((item) => (item.id === id ? { ...item, retries: item.retries + 1 } : item)),
-  );
+  return withQueueLock(async () => {
+    const items = await loadQueue();
+    await saveQueue(
+      items.map((item) => (item.id === id ? { ...item, retries: item.retries + 1 } : item)),
+    );
+  });
 }
 
 export function createQueueId(): string {

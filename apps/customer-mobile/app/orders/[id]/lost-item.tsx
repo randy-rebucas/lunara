@@ -60,7 +60,7 @@ export default function ReportLostItemScreen() {
         <View style={styles.heroText}>
           <Text style={styles.title}>Report a missing item</Text>
           <Text style={styles.sub}>
-            We'll open a support ticket and investigate with pickup/delivery photos and shop logs.
+            We&apos;ll open a support ticket and investigate with pickup/delivery photos and shop logs.
           </Text>
         </View>
       </View>

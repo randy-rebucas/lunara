@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -154,6 +154,7 @@ export default function BookScreen() {
   const [cashTiming, setCashTiming] = useState<CashTiming>('pickup');
   const [walletBalance, setWalletBalance] = useState(0);
   const [loading, setLoading] = useState(false);
+  const placingOrderRef = useRef(false);
   const [error, setError] = useState('');
   const [configLoading, setConfigLoading] = useState(true);
   const [addressesError, setAddressesError] = useState('');
@@ -389,10 +390,16 @@ export default function BookScreen() {
         </Pressable>
       ),
     });
+    // `goBack`/`navigation` intentionally excluded: `goBack` is redefined every render and
+    // already closes over the current `step`, so re-running this effect only on `step` change
+    // (not on every render) is correct and avoids redundant header resets.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
   async function placeOrder() {
     if (!form.bookingType || !form.addressId || !form.branchId || !form.scheduledPickupAt) return;
+    if (placingOrderRef.current) return;
+    placingOrderRef.current = true;
     setLoading(true);
     setError('');
     try {
@@ -457,8 +464,10 @@ export default function BookScreen() {
         return;
       }
 
+      placingOrderRef.current = false;
       setError('Payment could not be started');
     } catch (e) {
+      placingOrderRef.current = false;
       setError(e instanceof Error ? e.message : 'Booking failed');
     } finally {
       setLoading(false);

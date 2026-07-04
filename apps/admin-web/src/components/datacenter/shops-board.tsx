@@ -114,8 +114,8 @@ export function ShopsBoard() {
     }
   }
 
-  const shops = data?.shops ?? [];
-  const branches = data?.branches ?? [];
+  const shops = useMemo(() => data?.shops ?? [], [data?.shops]);
+  const branches = useMemo(() => data?.branches ?? [], [data?.branches]);
 
   const atCapacityBranches = useMemo(
     () => branches.filter((b) => !b.capacityAvailable),

@@ -1,8 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChatMessage, MessageAttachment, PartnerConversation } from '@lunara/types';
 import { AuthLoading } from '../../components/auth-loading';
+import { AuthenticatedImage } from '../../components/authenticated-image';
 import { PageHeader } from '../../components/ui/page-header';
 import { useRequirePartner } from '../../hooks/use-protected-page';
 import { resolveApiOrigin } from '@lunara/utils';
@@ -27,8 +28,8 @@ function MessageBubble({ msg, myId }: { msg: ChatMessage; myId: string }) {
         {msg.attachments.map((a) =>
           a.mimeType.startsWith('image/') ? (
             <a key={a.url} href={resolveMediaUrl(a.url)} target="_blank" rel="noreferrer" className="mt-2 block">
-              <img
-                src={resolveMediaUrl(a.url)}
+              <AuthenticatedImage
+                publicPath={a.url}
                 alt={a.filename}
                 className="max-h-48 w-auto rounded-lg object-cover transition-opacity hover:opacity-90"
               />
@@ -69,7 +70,7 @@ export default function MessagesPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const myId = (() => {
+  const myId = useMemo(() => {
     try {
       const token = getPartnerToken();
       if (!token) return '';
@@ -78,7 +79,7 @@ export default function MessagesPage() {
     } catch {
       return '';
     }
-  })();
+  }, []);
 
   const loadMessages = useCallback(async (convId: string) => {
     const res = await partnerFetch<{ items: ChatMessage[] }>(`/partner/messages/${convId}/messages`);
@@ -99,7 +100,6 @@ export default function MessagesPage() {
   const messagesLen = messages.length;
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: messagesLen <= 1 ? 'instant' : 'smooth' });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messagesLen]);
 
   useMessagingSocket({

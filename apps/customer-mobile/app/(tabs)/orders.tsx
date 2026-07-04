@@ -444,7 +444,7 @@ export default function OrdersScreen() {
                     <View style={styles.promoTextCol}>
                       <Text style={styles.promoTitle}>Enjoy free pickup on your next order!</Text>
                       <Text style={styles.promoHint}>
-                        You're only {formatCurrency(freePickupRemaining)} away from unlocking free pickup.
+                        You&apos;re only {formatCurrency(freePickupRemaining)} away from unlocking free pickup.
                       </Text>
                       <View style={styles.promoTrack}>
                         <View style={[styles.promoFill, { width: `${freePickupProgress * 100}%` }]} />

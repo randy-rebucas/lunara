@@ -26,6 +26,8 @@ import {
 } from '../payments/payment-summary';
 import { PromotionsService } from '../promotions/promotions.service';
 import { LaundryTagsService } from '../laundry-tags/laundry-tags.service';
+import { User, UserDocument } from '../users/schemas/user.schema';
+import { assertOrderPortalAccess, resolvePortalBranchId } from '../partner/partner-access';
 import { Order, OrderDocument } from './schemas/order.schema';
 
 export interface BookingOrderPayload {
@@ -55,6 +57,7 @@ export class OrdersService {
   constructor(
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
     private trackingGateway: TrackingGateway,
     private riderAssignmentService: RiderAssignmentService,
     private walletsService: WalletsService,
@@ -256,6 +259,10 @@ export class OrdersService {
       const isPickupRider = order.pickupRiderId?.toString() === user.sub;
       const isDeliveryRider = order.deliveryRiderId?.toString() === user.sub;
       if (!isPickupRider && !isDeliveryRider) throw new ForbiddenException();
+    }
+    if (user.role === UserRole.PARTNER || user.role === UserRole.STAFF) {
+      const staffBranchId = await resolvePortalBranchId(this.userModel, user.sub, user.role);
+      assertOrderPortalAccess(order, user.sub, user.role, staffBranchId);
     }
 
     const data =

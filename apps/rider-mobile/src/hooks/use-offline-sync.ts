@@ -34,6 +34,9 @@ export function useOfflineSync() {
   useEffect(() => {
     if (!isOnline) return;
     void refreshPending().then(() => syncNow());
+    // Intentionally keyed only on `isOnline`: `syncNow`'s identity changes with `pendingCount`,
+    // which it itself updates — including it here would re-trigger this effect after every sync.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOnline]);
 
   useEffect(() => {

@@ -140,9 +140,9 @@ export function OrdersBoard() {
     return () => clearInterval(id);
   }, [data]);
 
-  const statusCounts = data?.statusCounts ?? {};
+  const statusCounts = useMemo(() => data?.statusCounts ?? {}, [data?.statusCounts]);
   const statuses = Object.keys(statusCounts).sort();
-  const items = data?.items ?? [];
+  const items = useMemo(() => data?.items ?? [], [data?.items]);
   const summary = useMemo(() => summarizeCounts(statusCounts), [statusCounts]);
 
   const filteredItems = useMemo(

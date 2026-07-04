@@ -2,43 +2,60 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { randomUUID } from 'crypto';
+import { UserRole, type PortalRole } from '@lunara/types';
 import { resolveTagCode } from '@lunara/utils';
+import { Branch, BranchDocument } from '../branches/schemas/branch.schema';
+import { resolvePortalBranchId } from '../partner/partner-access';
+import { User, UserDocument } from '../users/schemas/user.schema';
 import { LaundryTag, LaundryTagDocument, LaundryTagStatus } from './schemas/laundry-tag.schema';
 import { CreateTagBatchDto } from './dto/create-batch.dto';
 import { RetireTagDto } from './dto/retire-tag.dto';
 import { QueryTagsDto } from './dto/query-tags.dto';
 
+const MAX_BATCH_CODE_RETRIES = 5;
+
 @Injectable()
 export class LaundryTagsService {
   constructor(
     @InjectModel(LaundryTag.name) private tagModel: Model<LaundryTagDocument>,
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Branch.name) private branchModel: Model<BranchDocument>,
   ) {}
 
   async generateBatch(dto: CreateTagBatchDto, adminUserId: string) {
     const batchId = randomUUID();
     const prefix = dto.codePrefix ? dto.codePrefix.trim().toUpperCase() : 'TAG';
 
-    const lastTag = await this.tagModel
-      .findOne({ code: new RegExp(`^${prefix}-`) })
-      .sort({ code: -1 })
-      .lean();
-    let nextSeq = 1;
-    if (lastTag) {
-      const match = lastTag.code.match(/-(\d+)$/);
-      if (match) nextSeq = parseInt(match[1], 10) + 1;
+    for (let attempt = 0; attempt < MAX_BATCH_CODE_RETRIES; attempt++) {
+      const lastTag = await this.tagModel
+        .findOne({ code: new RegExp(`^${prefix}-`) })
+        .sort({ code: -1 })
+        .lean();
+      let nextSeq = 1;
+      if (lastTag) {
+        const match = lastTag.code.match(/-(\d+)$/);
+        if (match) nextSeq = parseInt(match[1], 10) + 1;
+      }
+
+      const docs = Array.from({ length: dto.quantity }, (_, i) => ({
+        code: `${prefix}-${String(nextSeq + i).padStart(6, '0')}`,
+        status: LaundryTagStatus.AVAILABLE,
+        branchId: dto.branchId ? new Types.ObjectId(dto.branchId) : undefined,
+        generatedBy: new Types.ObjectId(adminUserId),
+        batchId,
+        assignmentHistory: [],
+      }));
+
+      try {
+        const tags = await this.tagModel.insertMany(docs, { ordered: true });
+        return { batchId, tags };
+      } catch (e) {
+        // Duplicate key (E11000): another batch claimed this code range concurrently — retry with a fresh sequence.
+        const isDuplicateKey = (e as { code?: number })?.code === 11000;
+        if (!isDuplicateKey || attempt === MAX_BATCH_CODE_RETRIES - 1) throw e;
+      }
     }
-
-    const docs = Array.from({ length: dto.quantity }, (_, i) => ({
-      code: `${prefix}-${String(nextSeq + i).padStart(6, '0')}`,
-      status: LaundryTagStatus.AVAILABLE,
-      branchId: dto.branchId ? new Types.ObjectId(dto.branchId) : undefined,
-      generatedBy: new Types.ObjectId(adminUserId),
-      batchId,
-      assignmentHistory: [],
-    }));
-
-    const tags = await this.tagModel.insertMany(docs);
-    return { batchId, tags };
+    throw new BadRequestException('Could not generate a unique tag code range, please retry');
   }
 
   async findByCode(codeOrPayload: string): Promise<LaundryTagDocument | null> {
@@ -47,55 +64,84 @@ export class LaundryTagsService {
   }
 
   async assignToOrder(scannedValue: string, orderId: string, riderUserId: string): Promise<LaundryTagDocument> {
-    const tag = await this.findByCode(scannedValue);
-    if (!tag) throw new NotFoundException('Tag not found');
+    const code = resolveTagCode(scannedValue);
+    const orderObjectId = new Types.ObjectId(orderId);
+    const now = new Date();
 
+    // Atomic compare-and-swap: only succeeds if the tag is still AVAILABLE (or already
+    // assigned to this same order, for an idempotent re-scan) at the moment of the update,
+    // closing the TOCTOU window where two riders could otherwise both pass a read-then-save check.
+    const assigned = await this.tagModel.findOneAndUpdate(
+      {
+        code,
+        $or: [{ status: LaundryTagStatus.AVAILABLE }, { currentOrderId: orderObjectId }],
+      },
+      {
+        $set: { status: LaundryTagStatus.ASSIGNED, currentOrderId: orderObjectId, currentAssignedAt: now },
+        $push: {
+          assignmentHistory: { orderId: orderObjectId, assignedAt: now, assignedBy: new Types.ObjectId(riderUserId) },
+        },
+      },
+      { new: true },
+    );
+    if (assigned) return assigned;
+
+    // The atomic update matched nothing — figure out why, to return an accurate error.
+    const tag = await this.tagModel.findOne({ code });
+    if (!tag) throw new NotFoundException('Tag not found');
     if (tag.status === LaundryTagStatus.RETIRED) {
       throw new BadRequestException('Tag is retired and cannot be assigned');
     }
-    if (tag.status === LaundryTagStatus.ASSIGNED) {
-      if (tag.currentOrderId?.toString() === orderId) {
-        return tag;
-      }
-      throw new BadRequestException('Tag is already in use on another order');
-    }
-
-    tag.status = LaundryTagStatus.ASSIGNED;
-    tag.currentOrderId = new Types.ObjectId(orderId);
-    tag.currentAssignedAt = new Date();
-    tag.assignmentHistory.push({
-      orderId: new Types.ObjectId(orderId),
-      assignedAt: new Date(),
-      assignedBy: new Types.ObjectId(riderUserId),
-    });
-    await tag.save();
-    return tag;
+    throw new BadRequestException('Tag is already in use on another order');
   }
 
   async releaseFromOrder(orderId: string, reason: 'delivered' | 'manual' | 'admin_override' = 'delivered'): Promise<void> {
-    const tag = await this.tagModel.findOne({
-      currentOrderId: new Types.ObjectId(orderId),
-      status: LaundryTagStatus.ASSIGNED,
-    });
-    if (!tag) return;
-
-    tag.status = LaundryTagStatus.AVAILABLE;
-    tag.currentOrderId = undefined;
-    tag.currentAssignedAt = undefined;
-    const openEvent = [...tag.assignmentHistory].reverse().find((e) => !e.releasedAt);
-    if (openEvent) {
-      openEvent.releasedAt = new Date();
-      openEvent.releaseReason = reason;
-    }
-    await tag.save();
+    const orderObjectId = new Types.ObjectId(orderId);
+    await this.tagModel.updateOne(
+      { currentOrderId: orderObjectId, status: LaundryTagStatus.ASSIGNED },
+      [
+        {
+          $set: {
+            status: LaundryTagStatus.AVAILABLE,
+            currentOrderId: '$$REMOVE',
+            currentAssignedAt: '$$REMOVE',
+            assignmentHistory: {
+              $map: {
+                input: '$assignmentHistory',
+                as: 'event',
+                in: {
+                  $cond: [
+                    { $and: [{ $eq: ['$$event.orderId', orderObjectId] }, { $not: ['$$event.releasedAt'] }] },
+                    { $mergeObjects: ['$$event', { releasedAt: new Date(), releaseReason: reason }] },
+                    '$$event',
+                  ],
+                },
+              },
+            },
+          },
+        },
+      ],
+    );
   }
 
   async retire(tagId: string, dto: RetireTagDto, adminUserId: string): Promise<LaundryTagDocument> {
     const tag = await this.getById(tagId);
+    const wasAssignedToOrderId = tag.currentOrderId;
     tag.status = LaundryTagStatus.RETIRED;
     tag.retiredAt = new Date();
     tag.retiredBy = new Types.ObjectId(adminUserId);
     tag.retiredReason = dto.reason;
+    tag.currentOrderId = undefined;
+    tag.currentAssignedAt = undefined;
+    if (wasAssignedToOrderId) {
+      // Close the open assignment record instead of leaving it dangling: the order still
+      // references this tagId, but its history now correctly shows the assignment ended.
+      const openEvent = [...tag.assignmentHistory].reverse().find((e) => !e.releasedAt);
+      if (openEvent) {
+        openEvent.releasedAt = new Date();
+        openEvent.releaseReason = 'admin_override';
+      }
+    }
     await tag.save();
     return tag;
   }
@@ -113,11 +159,33 @@ export class LaundryTagsService {
     return tag;
   }
 
-  async listTags(query: QueryTagsDto) {
+  async listTags(query: QueryTagsDto, actor: { sub: string; role: PortalRole }) {
     const filter: Record<string, unknown> = {};
     if (query.status) filter.status = query.status;
-    if (query.branchId) filter.branchId = new Types.ObjectId(query.branchId);
     if (query.batchId) filter.batchId = query.batchId;
+
+    if (actor.role === UserRole.STAFF) {
+      // Staff are locked to their own branch regardless of what branchId (if any) was requested.
+      const staffBranchId = await resolvePortalBranchId(this.userModel, actor.sub, actor.role);
+      if (!staffBranchId) return { items: [], total: 0 };
+      filter.branchId = staffBranchId;
+    } else if (actor.role === UserRole.PARTNER) {
+      // Partners see tags across whichever branches they own; a requested branchId narrows
+      // that set further but can never widen it to another partner's branch.
+      const ownedBranchIds = (
+        await this.branchModel.find({ partnerUserId: new Types.ObjectId(actor.sub) }).select('_id').lean()
+      ).map((b) => b._id);
+      if (query.branchId) {
+        const requested = new Types.ObjectId(query.branchId);
+        if (!ownedBranchIds.some((id) => id.equals(requested))) return { items: [], total: 0 };
+        filter.branchId = requested;
+      } else {
+        filter.branchId = { $in: ownedBranchIds };
+      }
+    } else if (query.branchId) {
+      // ADMIN — free to filter by any branch.
+      filter.branchId = new Types.ObjectId(query.branchId);
+    }
 
     const page = query.page ?? 1;
     const limit = query.limit ?? 50;

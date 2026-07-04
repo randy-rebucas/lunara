@@ -256,7 +256,7 @@ export default function SignUpScreen() {
               />
 
               <View style={styles.resendRow}>
-                <Text style={styles.resendBase}>Didn't receive the code?{' '}</Text>
+                <Text style={styles.resendBase}>Didn&apos;t receive the code?{' '}</Text>
                 <Pressable
                   onPress={handleSendOtp}
                   disabled={submitting || resendCooldown > 0}

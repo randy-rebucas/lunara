@@ -603,7 +603,7 @@ export default function TasksScreen() {
     }
 
     return null;
-  }, [shopName, acceptPickupOffer, previewDeliveryQueue, openTask, dismissedPickup, dismissedDelivery]);
+  }, [shopName, acceptPickupOffer, previewDeliveryQueue, openTask]);
 
   const showOfflineGate = !online && filter !== 'completed' && filter !== 'cancelled';
 

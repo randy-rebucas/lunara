@@ -80,7 +80,7 @@ export default function OnboardingProfileScreen() {
           <OnboardingProgress current="profile" />
 
           <Text style={styles.title}>Tell us about you</Text>
-          <Text style={styles.sub}>We'll use this to personalize your experience</Text>
+          <Text style={styles.sub}>We&apos;ll use this to personalize your experience</Text>
 
           <Text style={styles.inputLabel}>First name</Text>
           <Input
@@ -115,7 +115,7 @@ export default function OnboardingProfileScreen() {
           <View style={styles.emailHintRow}>
             <Ionicons name="information-circle-outline" size={13} color={colors.muted} />
             <Text style={styles.emailHint}>
-              We'll send updates about your orders and promotions.
+              We&apos;ll send updates about your orders and promotions.
             </Text>
           </View>
 

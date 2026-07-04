@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { OrderStatus } from '@lunara/types';
 import { PaymentMethod } from '@lunara/types';
 import { Button } from '@lunara/ui';
@@ -45,6 +45,7 @@ export function PaymentCheckout({ orderId }: PaymentCheckoutProps) {
   const [cashTiming, setCashTiming] = useState<CashTiming>('pickup');
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
+  const payingRef = useRef(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
 
@@ -119,6 +120,8 @@ export function PaymentCheckout({ orderId }: PaymentCheckoutProps) {
   }
 
   async function handlePay() {
+    if (payingRef.current) return;
+    payingRef.current = true;
     setPaying(true);
     setError('');
     try {
@@ -149,8 +152,10 @@ export function PaymentCheckout({ orderId }: PaymentCheckoutProps) {
         return;
       }
 
+      payingRef.current = false;
       setError('Payment could not be started');
     } catch (e) {
+      payingRef.current = false;
       setError(e instanceof Error ? e.message : 'Payment failed');
     } finally {
       setPaying(false);

@@ -242,6 +242,15 @@ export default function EarningsScreen() {
     }
   }
 
+  const lastIndex = data.recentEarnings.length - 1;
+  type EarningItem = (typeof data.recentEarnings)[number];
+  const renderEarningItem = useCallback(({ item, index }: { item: EarningItem; index: number }) => (
+    <View style={styles.breakdownCard}>
+      <EarningRow item={item} />
+      {index < lastIndex ? <View style={styles.rowDivider} /> : null}
+    </View>
+  ), [lastIndex]);
+
   if (loading && !error) {
     return (
       <Screen inStack>
@@ -257,14 +266,6 @@ export default function EarningsScreen() {
       </Screen>
     );
   }
-
-  const lastIndex = data.recentEarnings.length - 1;
-  const renderEarningItem = useCallback(({ item, index }: { item: typeof data.recentEarnings[number]; index: number }) => (
-    <View style={styles.breakdownCard}>
-      <EarningRow item={item} />
-      {index < lastIndex ? <View style={styles.rowDivider} /> : null}
-    </View>
-  ), [lastIndex]);
 
   return (
     <Screen inStack>
@@ -326,7 +327,7 @@ export default function EarningsScreen() {
             </View>
 
             {/* ── Today's activity ── */}
-            <Text style={styles.sectionLabel}>TODAY'S ACTIVITY</Text>
+            <Text style={styles.sectionLabel}>TODAY&apos;S ACTIVITY</Text>
             <View style={styles.activityRow}>
               <ActivityStat
                 count={data.todayPickups}

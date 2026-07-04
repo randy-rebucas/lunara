@@ -364,7 +364,7 @@ export default function HomeScreen() {
           <Text style={styles.greeting}>
             {greeting}, <Text style={styles.greetingName}>{name}!</Text>
           </Text>
-          <Text style={styles.greetingSub}>Here's your overview for today.</Text>
+          <Text style={styles.greetingSub}>Here&apos;s your overview for today.</Text>
         </View>
         <Pressable
           style={[styles.onlinePill, online ? styles.onlinePillActive : styles.onlinePillOff]}

@@ -577,7 +577,22 @@ export default function PickupScreen() {
                   icon="qr-code-outline"
                   variant={task.laundryTagId ? 'outline' : 'accent'}
                   disabled={loading}
-                  onPress={() => router.push({ pathname: '/scan', params: { orderId: id!, mode: 'assign_laundry_tag' } })}
+                  onPress={() => {
+                    const goToScan = () =>
+                      router.push({ pathname: '/scan', params: { orderId: id!, mode: 'assign_laundry_tag' } });
+                    if (task.laundryTagId) {
+                      Alert.alert(
+                        'Replace laundry tag?',
+                        'This bag already has a tag attached. Scanning a new one will replace it.',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Scan new tag', style: 'destructive', onPress: goToScan },
+                        ],
+                      );
+                      return;
+                    }
+                    goToScan();
+                  }}
                 />
               </StepCard>
             )}

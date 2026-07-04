@@ -22,8 +22,11 @@ export class LaundryTagsController {
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.PARTNER, UserRole.STAFF)
-  async listTags(@Query() query: QueryTagsDto) {
-    const data = await this.laundryTagsService.listTags(query);
+  async listTags(
+    @Query() query: QueryTagsDto,
+    @Req() req: { user: { sub: string; role: UserRole.ADMIN | UserRole.PARTNER | UserRole.STAFF } },
+  ) {
+    const data = await this.laundryTagsService.listTags(query, req.user);
     return { success: true, data };
   }
 

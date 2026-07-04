@@ -128,7 +128,9 @@ export function PromotionsBoard() {
     if (statusFilter === 'active')   list = list.filter((p) => p.isActive && !isPromoExpired(p, now));
     if (statusFilter === 'inactive') list = list.filter((p) => !p.isActive || isPromoExpired(p, now));
     return filterBySearch(list, search, [(p) => p.code, (p) => p.title, (p) => p.description]).slice(0, limit);
-  }, [promos, statusFilter, search, limit, now]);
+    // `now` intentionally excluded: expiry is re-evaluated whenever promos/filters change, doesn't need its own tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [promos, statusFilter, search, limit]);
 
   const promoState = derivePromoState(promos);
   const copy       = promoCopy[promoState];

@@ -5,6 +5,7 @@ import type { ChatMessage, ConversationDetail, MessageAttachment } from '@lunara
 import { resolveApiOrigin } from '@lunara/utils';
 import { adminFetch, adminUpload } from '../lib/admin-api';
 import { joinAdminConversation, leaveAdminConversation, subscribeAdminRealtime } from '../lib/admin-realtime';
+import { AuthenticatedImage } from './authenticated-image';
 
 function resolveImgUrl(url: string) {
   if (!url || url.startsWith('http')) return url;
@@ -30,8 +31,8 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
         {msg.attachments.map((a) =>
           a.mimeType.startsWith('image/') ? (
             <a key={a.url} href={resolveImgUrl(a.url)} target="_blank" rel="noreferrer" className="mt-2 block">
-              <img
-                src={resolveImgUrl(a.url)}
+              <AuthenticatedImage
+                publicPath={a.url}
                 alt={a.filename}
                 className="max-h-48 w-auto rounded-lg object-cover transition-opacity hover:opacity-90"
               />
@@ -117,7 +118,6 @@ export function ConversationPane({ conversationId, onBack }: ConversationPanePro
   const hasDetail = !!detail;
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: messagesLen <= 1 ? 'instant' : 'smooth' });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messagesLen, hasDetail]);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {

@@ -358,6 +358,7 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
   const [promoLoading, setPromoLoading] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const creatingOrderRef = useRef(false);
   const [stepping, setStepping] = useState(false);
   const [shopOptions, setShopOptions] = useState<ShopOption[]>([]);
   const [shopsLoading, setShopsLoading] = useState(false);
@@ -600,6 +601,8 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
   }
 
   async function createOrder() {
+    if (creatingOrderRef.current) return;
+    creatingOrderRef.current = true;
     setLoading(true);
     setError('');
     try {
@@ -617,6 +620,7 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
       router.push(`/checkout/${res.data._id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Booking failed');
+      creatingOrderRef.current = false;
     } finally {
       setLoading(false);
     }

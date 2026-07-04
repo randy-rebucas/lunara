@@ -60,7 +60,7 @@ export default function ForgotPasswordScreen() {
         </View>
         <Text style={styles.pageTitle}>Reset password</Text>
         <Text style={styles.pageSubtitle}>
-          We'll send a verification code to the mobile number linked to your rider account.
+          We&apos;ll send a verification code to the mobile number linked to your rider account.
         </Text>
       </View>
 

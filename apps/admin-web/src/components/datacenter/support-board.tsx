@@ -121,8 +121,8 @@ export function SupportBoard() {
     return () => window.clearInterval(id);
   }, [reload]);
 
-  const counts = data?.counts ?? { open: 0, inProgress: 0, resolved: 0, lostItem: 0 };
-  const items = data?.items ?? [];
+  const counts = useMemo(() => data?.counts ?? { open: 0, inProgress: 0, resolved: 0, lostItem: 0 }, [data?.counts]);
+  const items = useMemo(() => data?.items ?? [], [data?.items]);
 
   const filteredItems = useMemo(() => {
     const searched = filterBySearch(items, search, [

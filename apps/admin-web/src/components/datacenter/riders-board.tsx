@@ -173,7 +173,7 @@ export function RidersBoard() {
     return () => clearInterval(id);
   }, [riders]);
 
-  const fleet = riders ?? [];
+  const fleet = useMemo(() => riders ?? [], [riders]);
   const online = fleet.filter((r) => r.isOnline).length;
   const pendingCount = pendingDocs?.length ?? 0;
   const activeTasks = fleet.reduce((n, r) => n + r.activeTasks, 0);
