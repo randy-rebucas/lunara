@@ -4,7 +4,7 @@ import { formatCurrency, HANDOFF_QR_LABELS, type HandoffQrKind } from '@lunara/u
 import { QrScanner } from '../src/components/qr-scanner';
 import { riderFetch } from '../src/api';
 
-const SCAN_MODES = ['customer_pickup', 'order_handover', 'customer_delivery'] as const;
+const SCAN_MODES = ['customer_pickup', 'order_handover', 'customer_delivery', 'assign_laundry_tag'] as const;
 type ScanMode = (typeof SCAN_MODES)[number];
 
 function isScanMode(value: string | undefined): value is ScanMode {
@@ -28,14 +28,25 @@ export default function ScanScreen() {
     );
   }
 
-  const title = HANDOFF_QR_LABELS[mode as HandoffQrKind];
+  const title = mode === 'assign_laundry_tag' ? 'Scan Laundry Tag' : HANDOFF_QR_LABELS[mode as HandoffQrKind];
   const hints: Record<ScanMode, string> = {
     customer_pickup: 'Ask the customer to open their Lunara app and show their pickup QR.',
     order_handover: 'Scan the order QR displayed at the partner shop.',
     customer_delivery: 'Ask the customer to show their delivery QR in the Lunara app.',
+    assign_laundry_tag: 'Scan an available laundry tag to attach it to this bag.',
   };
 
   async function handleScan(payload: string) {
+    if (mode === 'assign_laundry_tag') {
+      const res = await riderFetch<{ tagCode?: string }>(`/riders/pickup-tasks/${orderId}/assign-tag`, {
+        method: 'POST',
+        body: JSON.stringify({ scannedValue: payload }),
+      });
+      Alert.alert('Tag assigned', res.tagCode ? `Tag ${res.tagCode} attached to this order.` : 'Tag attached to this order.');
+      router.back();
+      return;
+    }
+
     if (mode === 'customer_pickup') {
       await riderFetch(`/riders/pickup-tasks/${orderId}/verify`, {
         method: 'POST',

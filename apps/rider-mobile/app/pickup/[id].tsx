@@ -48,6 +48,7 @@ interface PickupTask {
   canReject?: boolean;
   pickupWorkflowStep?: number;
   pickupWorkflowSteps?: string[];
+  laundryTagId?: string;
   pickup?: {
     acceptedAt?: string;
     arrivedAt?: string;
@@ -558,6 +559,25 @@ export default function PickupScreen() {
                       body: JSON.stringify({ actualWeightKg: Number(weight), notes: notes || undefined }),
                     }), 'Laundry picked up')
                   }
+                />
+              </StepCard>
+            )}
+
+            {/* ── Assign laundry tag ── */}
+            {p.collectedAt && (
+              <StepCard
+                icon="pricetag-outline"
+                iconBg={colors.accentLight}
+                iconColor={colors.accentDark}
+                title="Laundry tag"
+                hint={task.laundryTagId ? 'Tag attached to this bag.' : 'Scan a tag to attach it to this bag.'}
+              >
+                <ActionBtn
+                  label={task.laundryTagId ? 'Re-scan tag' : 'Scan tag'}
+                  icon="qr-code-outline"
+                  variant={task.laundryTagId ? 'outline' : 'accent'}
+                  disabled={loading}
+                  onPress={() => router.push({ pathname: '/scan', params: { orderId: id!, mode: 'assign_laundry_tag' } })}
                 />
               </StepCard>
             )}
