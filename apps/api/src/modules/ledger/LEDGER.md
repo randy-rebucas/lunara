@@ -33,7 +33,8 @@ await ledgerService.post(transactionRef, sourceType, sourceId, [
 | `rider_remittance_receivable` | riderUserId | Cash a rider is holding that's owed back to the platform. Debited when cash is collected, credited when admin verifies the remittance. |
 | `cash_out` | payout method (`gcash`/`maya`/`bank`) | Real cash paid out to riders via withdrawal. |
 | `platform_cash` | — | Cash actually received by the platform: PayMongo payments, PayMongo wallet top-ups, verified rider remittances. |
-| `rider_payout_expense` | — | P&L side of rider earnings (pickup/delivery fees, bonuses, adjustments). |
+| `rider_payout_expense` | — | P&L side of independent-contractor rider earnings (pickup/delivery fees, bonuses, adjustments). |
+| `rider_wage_expense` | — | P&L side of fixed-wage payments to employee riders — kept separate from `rider_payout_expense` since it isn't tied to task volume. |
 | `customer_wallet_liability` | userId | Customer wallet balances — money the platform owes back to customers. Credited on top-up/refund, debited when a wallet-funded order is paid. |
 | `refund_expense` | — | P&L side of refunds and goodwill payouts (e.g. lost-item compensation) that don't reverse an existing clearing entry. |
 
@@ -49,6 +50,7 @@ await ledgerService.post(transactionRef, sourceType, sourceId, [
 | Rider withdrawal paid out | `rider-wallet.service.ts:approveWithdrawal` | Dr `rider_payable` / Cr `cash_out` |
 | Rider earns a pickup/delivery fee | `riders.service.ts:creditEarning` | Dr `rider_payout_expense` / Cr `rider_payable` |
 | Rider bonus / manual adjustment | `riders.service.ts:creditManualEarning` | Dr `rider_payout_expense` / Cr `rider_payable` |
+| Employee rider wage payment (manual) | `riders.service.ts:creditManualEarning` | Dr `rider_wage_expense` / Cr `rider_payable` |
 | Partner settlement created | `partner-operations.service.ts:createSettlement` | Dr `order_revenue_clearing` / Cr `partner_payable` + `platform_revenue` |
 | Refund request approved | `refunds.service.ts:executeRefund` | Dr `order_revenue_clearing` / Cr `customer_wallet_liability` |
 | Order cancelled with a refundable payment | `orders.service.ts:cancelByCustomer` | Dr `order_revenue_clearing` / Cr `customer_wallet_liability` |

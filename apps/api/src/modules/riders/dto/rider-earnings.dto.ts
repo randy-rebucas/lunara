@@ -2,8 +2,8 @@ import { IsEnum, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-va
 import type { RiderEarningType } from '@lunara/utils';
 
 export class CreditRiderEarningDto {
-  @IsEnum(['bonus', 'adjustment'])
-  type!: Extract<RiderEarningType, 'bonus' | 'adjustment'>;
+  @IsEnum(['bonus', 'adjustment', 'wage'])
+  type!: Extract<RiderEarningType, 'bonus' | 'adjustment' | 'wage'>;
 
   @IsNumber()
   @Min(1)

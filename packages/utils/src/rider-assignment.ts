@@ -117,3 +117,15 @@ export function rankRidersForDelivery(
     isRecommended: i === 0 && s.isOnline,
   }));
 }
+
+/** Whether a rider's current location falls within a branch's service radius. Unknown rider location = not within range. */
+export function isWithinServiceRadius(
+  riderLat: number | undefined,
+  riderLng: number | undefined,
+  branchLat: number,
+  branchLng: number,
+  serviceRadiusKm: number,
+): boolean {
+  if (riderLat == null || riderLng == null) return false;
+  return haversineKm([branchLng, branchLat], [riderLng, riderLat]) <= serviceRadiusKm;
+}

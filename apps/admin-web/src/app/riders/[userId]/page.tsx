@@ -1,7 +1,7 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { AuthenticatedImage } from '../../../components/authenticated-image';
 import { DetailPageHeader } from '../../../components/detail-page-header';
 import { DataPageStatus } from '../../../components/data-page-status';
@@ -52,6 +52,9 @@ interface RiderProfileData {
   vehicleType?: string;
   plateNumber?: string;
   orCrNumber?: string;
+  employmentType?: 'employee' | 'independent_contractor';
+  fixedWageAmount?: number;
+  wageFrequency?: 'daily' | 'weekly' | 'monthly';
   documents?: RiderDocument[];
   compliance?: {
     isCompliant: boolean;
@@ -102,8 +105,13 @@ export default function RiderProfileReviewPage() {
   const [walletHold, setWalletHold] = useState('');
   const [creditAmount, setCreditAmount] = useState('');
   const [creditNote, setCreditNote] = useState('');
-  const [creditType, setCreditType] = useState<'bonus' | 'adjustment'>('bonus');
+  const [creditType, setCreditType] = useState<'bonus' | 'adjustment' | 'wage'>('bonus');
   const [walletBusy, setWalletBusy] = useState(false);
+  const [employmentType, setEmploymentType] = useState<'employee' | 'independent_contractor'>('independent_contractor');
+  const [fixedWageAmount, setFixedWageAmount] = useState('');
+  const [wageFrequency, setWageFrequency] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+  const [employmentBusy, setEmploymentBusy] = useState(false);
+  const [employmentSynced, setEmploymentSynced] = useState(false);
   const [remittances, setRemittances] = useState<CashRemittance[]>([]);
   const [remittancesLoading, setRemittancesLoading] = useState(false);
   const [remittancesError, setRemittancesError] = useState('');
@@ -175,6 +183,27 @@ export default function RiderProfileReviewPage() {
     }
   }
 
+  async function saveEmployment() {
+    if (!userId) return;
+    setEmploymentBusy(true);
+    setActionError('');
+    try {
+      await adminFetch(`/admin/riders/${userId}/employment`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          employmentType,
+          fixedWageAmount: fixedWageAmount.trim() ? Number(fixedWageAmount) : undefined,
+          wageFrequency: employmentType === 'employee' ? wageFrequency : undefined,
+        }),
+      });
+      await reload();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Failed to save employment details');
+    } finally {
+      setEmploymentBusy(false);
+    }
+  }
+
   const loadRemittances = useCallback(async () => {
     if (!userId) return;
     setRemittancesLoading(true);
@@ -198,6 +227,16 @@ export default function RiderProfileReviewPage() {
     }, [userId, loadRemittances]),
     [userId],
   );
+
+  // Sync the employment form from the loaded profile once, so in-progress edits
+  // aren't clobbered by reloads triggered by unrelated actions on this page.
+  useEffect(() => {
+    if (!data || employmentSynced) return;
+    setEmploymentType(data.employmentType ?? 'independent_contractor');
+    setFixedWageAmount(data.fixedWageAmount != null ? String(data.fixedWageAmount) : '');
+    setWageFrequency(data.wageFrequency ?? 'daily');
+    setEmploymentSynced(true);
+  }, [data, employmentSynced]);
 
   async function verifyRemittances(ids?: string[]) {
     if (!userId) return;
@@ -469,6 +508,68 @@ export default function RiderProfileReviewPage() {
                 ) : null}
               </OpsPanel>
 
+              {/* Employment classification + wage config */}
+              <OpsPanel title="Employment" description="Controls how this rider is paid — see the Wallet panel to issue a wage payment.">
+                <div className="space-y-3">
+                  <div>
+                    <label htmlFor="employment-type" className="form-label">Type</label>
+                    <select
+                      id="employment-type"
+                      className="input-field w-full"
+                      value={employmentType}
+                      onChange={(e) => setEmploymentType(e.target.value as 'employee' | 'independent_contractor')}
+                    >
+                      <option value="independent_contractor">Independent contractor</option>
+                      <option value="employee">Employee</option>
+                    </select>
+                    <p className="mt-1 text-xs text-muted">
+                      {employmentType === 'employee'
+                        ? 'Paid a fixed wage; remits 100% of any cash collected.'
+                        : 'Paid a per-task pickup/delivery fee; keeps the fee out of cash collected.'}
+                    </p>
+                  </div>
+
+                  {employmentType === 'employee' && (
+                    <>
+                      <div>
+                        <label htmlFor="fixed-wage" className="form-label">Fixed wage (₱)</label>
+                        <input
+                          id="fixed-wage"
+                          type="number"
+                          min={0}
+                          className="input-field w-full"
+                          placeholder="e.g. 500"
+                          value={fixedWageAmount}
+                          onChange={(e) => setFixedWageAmount(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="wage-frequency" className="form-label">Frequency</label>
+                        <select
+                          id="wage-frequency"
+                          className="input-field w-full"
+                          value={wageFrequency}
+                          onChange={(e) => setWageFrequency(e.target.value as 'daily' | 'weekly' | 'monthly')}
+                        >
+                          <option value="daily">Daily</option>
+                          <option value="weekly">Weekly</option>
+                          <option value="monthly">Monthly</option>
+                        </select>
+                      </div>
+                    </>
+                  )}
+
+                  <button
+                    type="button"
+                    className="btn-primary btn-sm w-full"
+                    disabled={employmentBusy}
+                    onClick={saveEmployment}
+                  >
+                    {employmentBusy ? 'Saving…' : 'Save employment details'}
+                  </button>
+                </div>
+              </OpsPanel>
+
               {/* Wallet operations */}
               <OpsPanel title="Wallet operations">
                 <div className="space-y-5">
@@ -505,11 +606,20 @@ export default function RiderProfileReviewPage() {
                           id="credit-type"
                           className="input-field w-full"
                           value={creditType}
-                          onChange={(e) => setCreditType(e.target.value as 'bonus' | 'adjustment')}
+                          onChange={(e) => setCreditType(e.target.value as 'bonus' | 'adjustment' | 'wage')}
                         >
                           <option value="bonus">Bonus</option>
                           <option value="adjustment">Adjustment</option>
+                          {data.employmentType === 'employee' && (
+                            <option value="wage">Wage payment</option>
+                          )}
                         </select>
+                        {creditType === 'wage' && (
+                          <p className="mt-1 text-xs text-muted">
+                            Configured wage: {data.fixedWageAmount != null ? formatPeso(data.fixedWageAmount) : '—'}
+                            {data.wageFrequency ? ` / ${data.wageFrequency}` : ''}
+                          </p>
+                        )}
                       </div>
                       <div>
                         <label htmlFor="credit-amount" className="form-label">Amount</label>

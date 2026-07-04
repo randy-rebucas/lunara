@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsString,
   MaxLength,
+  Min,
   MinLength,
   ValidateNested,
 } from 'class-validator';
@@ -109,6 +110,21 @@ export class UpdateRiderProfileDto {
   @MinLength(1)
   @MaxLength(40)
   orCrNumber?: string;
+}
+
+export class UpdateRiderEmploymentDto {
+  @IsOptional()
+  @IsIn(['employee', 'independent_contractor'])
+  employmentType?: 'employee' | 'independent_contractor';
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  fixedWageAmount?: number;
+
+  @IsOptional()
+  @IsIn(['daily', 'weekly', 'monthly'])
+  wageFrequency?: 'daily' | 'weekly' | 'monthly';
 }
 
 export class ReviewRiderDocumentDto {

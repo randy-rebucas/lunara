@@ -2,8 +2,14 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { OrderStatus } from '@lunara/types';
-import { isShopAssignedStatus, rankRidersForDelivery, rankRidersForPickup } from '@lunara/utils';
+import {
+  isShopAssignedStatus,
+  isWithinServiceRadius,
+  rankRidersForDelivery,
+  rankRidersForPickup,
+} from '@lunara/utils';
 import { Address, AddressDocument } from '../addresses/schemas/address.schema';
+import { Branch, BranchDocument } from '../branches/schemas/branch.schema';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { User, UserDocument } from '../users/schemas/user.schema';
@@ -23,9 +29,39 @@ export class RiderAssignmentService {
     @InjectModel(Rider.name) private riderModel: Model<RiderDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Address.name) private addressModel: Model<AddressDocument>,
+    @InjectModel(Branch.name) private branchModel: Model<BranchDocument>,
     private riderNotificationService: RiderNotificationService,
     private trackingGateway: TrackingGateway,
   ) {}
+
+  /**
+   * If the order's branch has a default assigned rider and that rider is online, use them directly.
+   * If the default rider is offline, restricts the candidate pool to online riders within the
+   * branch's service radius (branches without a default rider are unaffected — pool stays as-is).
+   */
+  private async applyBranchDefaultRider(
+    order: OrderDocument,
+    riders: RiderDocument[],
+  ): Promise<{ shortCircuitRiderId: string | null; riders: RiderDocument[] }> {
+    if (!order.branchId) return { shortCircuitRiderId: null, riders };
+    const branch = await this.branchModel.findById(order.branchId);
+    if (!branch?.assignedRiderId) return { shortCircuitRiderId: null, riders };
+
+    const defaultRider = await this.riderModel.findOne({ userId: branch.assignedRiderId });
+    if (defaultRider?.isOnline) {
+      return { shortCircuitRiderId: branch.assignedRiderId.toString(), riders };
+    }
+
+    const [branchLng, branchLat] = branch.location.coordinates;
+    const filtered = riders.filter((r) => {
+      const coords = r.currentLocation?.coordinates;
+      return (
+        r.isOnline &&
+        isWithinServiceRadius(coords?.[1], coords?.[0], branchLat, branchLng, branch.serviceRadiusKm)
+      );
+    });
+    return { shortCircuitRiderId: null, riders: filtered };
+  }
 
   async suggestPickupRider(orderId: string) {
     const order = await this.orderModel.findById(orderId);
@@ -35,7 +71,24 @@ export class RiderAssignmentService {
     const address = await this.addressModel.findById(order.pickupAddressId);
     if (!address) throw new NotFoundException('Pickup address not found');
 
-    const riders = await this.riderModel.find().limit(50);
+    const allRiders = await this.riderModel.find().limit(50);
+    const { shortCircuitRiderId, riders } = await this.applyBranchDefaultRider(order, allRiders);
+    if (shortCircuitRiderId) {
+      order.suggestedPickupRiderId = new Types.ObjectId(shortCircuitRiderId);
+      order.suggestedPickupRiderAt = new Date();
+      await order.save();
+      return {
+        success: true,
+        data: {
+          orderId,
+          customerLocation: { line1: address.line1, city: address.city, province: address.province },
+          suggestions: [],
+          suggestedRiderId: shortCircuitRiderId,
+          mode: 'branch_default_rider',
+        },
+      };
+    }
+
     const riderUsers = await this.userModel
       .find({ _id: { $in: riders.map((r) => r.userId) } })
       .select('email');
@@ -295,7 +348,24 @@ export class RiderAssignmentService {
     const address = await this.addressModel.findById(order.deliveryAddressId);
     if (!address) throw new NotFoundException('Delivery address not found');
 
-    const riders = await this.riderModel.find().limit(50);
+    const allRiders = await this.riderModel.find().limit(50);
+    const { shortCircuitRiderId, riders } = await this.applyBranchDefaultRider(order, allRiders);
+    if (shortCircuitRiderId) {
+      order.suggestedDeliveryRiderId = new Types.ObjectId(shortCircuitRiderId);
+      order.suggestedDeliveryRiderAt = new Date();
+      await order.save();
+      return {
+        success: true,
+        data: {
+          orderId,
+          customerLocation: { line1: address.line1, city: address.city, province: address.province },
+          suggestions: [],
+          suggestedRiderId: shortCircuitRiderId,
+          mode: 'branch_default_rider',
+        },
+      };
+    }
+
     const riderUsers = await this.userModel
       .find({ _id: { $in: riders.map((r) => r.userId) } })
       .select('email');

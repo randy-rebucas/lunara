@@ -26,6 +26,7 @@ import { CreateBranchDto } from '../branches/dto/create-branch.dto';
 import { UpdateBranchDto } from '../branches/dto/update-branch.dto';
 import { UpdateBranchPricingDto } from '../branches/dto/update-branch-pricing.dto';
 import { UpdateBranchAddonPricingDto } from '../branches/dto/update-branch-addon-pricing.dto';
+import { UpdateBranchAssignedRiderDto } from '../branches/dto/update-branch-assigned-rider.dto';
 import { UpdateBranchCustomServiceDto } from '../branches/dto/update-branch-custom-service.dto';
 import { UpdateBranchCustomAddonDto } from '../branches/dto/update-branch-custom-addon.dto';
 import { RefundsService } from '../refunds/refunds.service';
@@ -37,7 +38,7 @@ import { AdminAssignRiderDto, ResolveConflictDto } from './dto/admin-operations.
 import { AdminOperationsService } from './admin-operations.service';
 import { AdminDispatchService } from './admin-dispatch.service';
 import { RiderSosService } from '../sos/rider-sos.service';
-import { ReviewRiderDocumentDto } from '../riders/dto/rider.dto';
+import { ReviewRiderDocumentDto, UpdateRiderEmploymentDto } from '../riders/dto/rider.dto';
 import { CreditRiderEarningDto } from '../riders/dto/rider-earnings.dto';
 import { RidersService } from '../riders/riders.service';
 import { RiderNotificationService } from '../riders/rider-notification.service';
@@ -269,6 +270,14 @@ export class AdminController {
     return this.ridersService.getRiderProfileForAdmin(userId);
   }
 
+  @Patch('riders/:userId/employment')
+  updateRiderEmployment(
+    @Param('userId') userId: string,
+    @Body() dto: UpdateRiderEmploymentDto,
+  ) {
+    return this.ridersService.updateEmployment(userId, dto);
+  }
+
   @Patch('riders/:userId/documents/:type')
   reviewRiderDocument(
     @Param('userId') userId: string,
@@ -393,6 +402,11 @@ export class AdminController {
   @Patch('branches/:id/addon-pricing')
   updateBranchAddonPricing(@Param('id') id: string, @Body() dto: UpdateBranchAddonPricingDto) {
     return this.branchesService.updateAddonPricing(id, dto.addonPricing);
+  }
+
+  @Patch('branches/:id/assigned-rider')
+  updateBranchAssignedRider(@Param('id') id: string, @Body() dto: UpdateBranchAssignedRiderDto) {
+    return this.branchesService.setAssignedRider(id, dto.riderId);
   }
 
   @Get('branches/:id/custom-services')

@@ -138,6 +138,10 @@ export class Branch {
   @Prop({ type: Types.ObjectId })
   managerUserId?: Types.ObjectId;
 
+  /** Default/preferred rider for pickups & deliveries dispatched from this branch. */
+  @Prop({ type: Types.ObjectId })
+  assignedRiderId?: Types.ObjectId;
+
   @Prop({ default: 25 })
   maxActiveOrders!: number;
 

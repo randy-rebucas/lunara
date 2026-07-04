@@ -12,6 +12,7 @@ interface ReconciliationData {
   pnl: {
     platformRevenue: number;
     riderCost: number;
+    riderWageCost: number;
     refundCost: number;
     netMargin: number;
   };
@@ -196,6 +197,7 @@ export function ReconciliationBoard() {
               <dl>
                 <DetailRow label="Commission earned" value={<span className="text-emerald-700">{peso(data.pnl.platformRevenue)}</span>} />
                 <DetailRow label="Rider task costs" value={<span className="text-rose-600">−{peso(data.pnl.riderCost)}</span>} />
+                <DetailRow label="Rider wage costs" value={<span className="text-rose-600">−{peso(data.pnl.riderWageCost)}</span>} />
                 <DetailRow label="Refund & compensation" value={<span className="text-rose-600">−{peso(data.pnl.refundCost)}</span>} />
               </dl>
               <div className="mt-2 flex items-baseline justify-between border-t-2 border-slate-200 pt-2.5">

@@ -25,7 +25,7 @@ import { Customer, CustomerDocument } from '../customers/schemas/customer.schema
 import { Notification, NotificationDocument } from '../reviews/schemas/notification.schema';
 import { Review, ReviewDocument } from '../reviews/schemas/review.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
-import { UpdateLocationDto, UpdateRiderProfileDto } from './dto/rider.dto';
+import { UpdateLocationDto, UpdateRiderEmploymentDto, UpdateRiderProfileDto } from './dto/rider.dto';
 import {
   isRiderCompliant,
   isValidRiderDocumentType,
@@ -144,6 +144,8 @@ export class RidersService {
       plateNumber: rider.plateNumber,
       orCrNumber: rider.orCrNumber,
       employmentType: rider.employmentType,
+      fixedWageAmount: rider.fixedWageAmount,
+      wageFrequency: rider.wageFrequency,
       documents: serializeRiderDocuments(rider.documents),
       compliance: {
         isCompliant: compliance.isCompliant,
@@ -178,6 +180,16 @@ export class RidersService {
 
   async creditEarning(userId: string, orderId: string, type: Extract<RiderEarningType, 'pickup' | 'delivery'>) {
     const rider = await this.findOrCreate(userId);
+
+    if (rider.employmentType === 'employee') {
+      // Employees are paid a fixed wage, not per-task fees — nothing to credit here.
+      return {
+        amount: 0,
+        totalEarnings: rider.totalEarnings,
+        todayEarnings: rider.todayEarnings,
+      };
+    }
+
     const fees = await this.settingsService.getRiderFeeAmounts();
     const amount = riderEarningAmount(type, type === 'pickup' ? fees.pickup : fees.delivery);
 
@@ -233,14 +245,20 @@ export class RidersService {
 
   async creditManualEarning(
     userId: string,
-    type: Extract<RiderEarningType, 'bonus' | 'adjustment'>,
+    type: Extract<RiderEarningType, 'bonus' | 'adjustment' | 'wage'>,
     amount: number,
     note?: string,
   ) {
     const rider = await this.findOrCreate(userId);
+
+    if (type === 'wage' && rider.employmentType !== 'employee') {
+      throw new BadRequestException('Wage payments are only valid for employee riders');
+    }
+
     const referenceId = new Types.ObjectId().toString();
     const label = RIDER_EARNING_TYPE_LABELS[type];
     const description = note?.trim() ? `${label}: ${note.trim()}` : label;
+    const expenseAccount = type === 'wage' ? 'rider_wage_expense' : 'rider_payout_expense';
 
     rider.totalEarnings += amount;
     this.ensureTodayBucket(rider);
@@ -270,7 +288,7 @@ export class RidersService {
       referenceId,
       [
         {
-          accountType: 'rider_payout_expense',
+          accountType: expenseAccount,
           direction: 'debit',
           amount,
           description: `${description} for rider ${userId}`,
@@ -528,6 +546,17 @@ export class RidersService {
         await user.save();
       }
     }
+
+    await rider.save();
+    return this.getMe(userId);
+  }
+
+  async updateEmployment(userId: string, dto: UpdateRiderEmploymentDto) {
+    const rider = await this.findOrCreate(userId);
+
+    if (dto.employmentType !== undefined) rider.employmentType = dto.employmentType;
+    if (dto.fixedWageAmount !== undefined) rider.fixedWageAmount = dto.fixedWageAmount;
+    if (dto.wageFrequency !== undefined) rider.wageFrequency = dto.wageFrequency;
 
     await rider.save();
     return this.getMe(userId);

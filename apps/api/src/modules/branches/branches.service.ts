@@ -17,6 +17,7 @@ import {
 import { Address, AddressDocument } from '../addresses/schemas/address.schema';
 import { CatalogService } from '../catalog/catalog.service';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
+import { Rider, RiderDocument } from '../riders/schemas/rider.schema';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { Branch, BranchDocument } from './schemas/branch.schema';
@@ -104,6 +105,7 @@ export class BranchesService {
     private customServiceModel: Model<BranchCustomServiceDocument>,
     @InjectModel(BranchCustomAddon.name)
     private customAddonModel: Model<BranchCustomAddonDocument>,
+    @InjectModel(Rider.name) private riderModel: Model<RiderDocument>,
     private trackingGateway: TrackingGateway,
     private catalogService: CatalogService,
   ) {}
@@ -374,6 +376,22 @@ export class BranchesService {
         hiddenAddonSlugs: branch.hiddenAddonSlugs,
       },
     };
+  }
+
+  async setAssignedRider(branchId: string, riderId?: string | null) {
+    const branch = await this.branchModel.findById(branchId);
+    if (!branch) throw new NotFoundException('Branch not found');
+
+    if (!riderId) {
+      branch.assignedRiderId = undefined;
+    } else {
+      const rider = await this.riderModel.findOne({ userId: new Types.ObjectId(riderId) });
+      if (!rider) throw new NotFoundException('Rider not found');
+      branch.assignedRiderId = new Types.ObjectId(riderId);
+    }
+
+    await branch.save();
+    return { success: true, data: { assignedRiderId: branch.assignedRiderId?.toString() ?? null } };
   }
 
   async listCustomServicesForBranch(branchId: string) {
@@ -1218,6 +1236,7 @@ export class BranchesService {
       province: branch.province,
       partnerUserId: branch.partnerUserId.toString(),
       managerUserId: branch.managerUserId?.toString(),
+      assignedRiderId: branch.assignedRiderId?.toString(),
       maxActiveOrders: branch.maxActiveOrders,
       maxWeightCapacityKg: capacityKg,
       dailyQuotaOrders: branch.dailyQuotaOrders,

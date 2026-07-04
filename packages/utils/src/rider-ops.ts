@@ -13,13 +13,14 @@ export const PARTNER_SHOP_LOCATION = {
 export const RIDER_PICKUP_PAYOUT = 35;
 export const RIDER_DELIVERY_PAYOUT = 35;
 
-export type RiderEarningType = 'pickup' | 'delivery' | 'bonus' | 'adjustment';
+export type RiderEarningType = 'pickup' | 'delivery' | 'bonus' | 'adjustment' | 'wage';
 
 export const RIDER_EARNING_TYPE_LABELS: Record<RiderEarningType, string> = {
   pickup: 'Pickup Fee',
   delivery: 'Delivery Fee',
   bonus: 'Bonus',
   adjustment: 'Adjustment',
+  wage: 'Wage Payment',
 };
 
 export function riderEarningAmount(type: RiderEarningType, override?: number) {
@@ -87,7 +88,8 @@ export function parseEarningReference(reference: string): { type: RiderEarningTy
     type !== 'pickup' &&
     type !== 'delivery' &&
     type !== 'bonus' &&
-    type !== 'adjustment'
+    type !== 'adjustment' &&
+    type !== 'wage'
   ) {
     return null;
   }

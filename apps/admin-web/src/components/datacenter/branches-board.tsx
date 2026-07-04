@@ -41,6 +41,7 @@ interface BranchProfile {
     servicePricing: { serviceType: string; basePricePerKg: number }[];
     addonPricing: { addonSlug: string; basePrice: number }[];
     location: { latitude: number; longitude: number };
+    assignedRiderId?: string;
   };
   hierarchy: {
     parent: { id: string; code: string; name: string } | null;
@@ -202,6 +203,8 @@ export function BranchesBoard() {
     latitude: 14.5995,
     longitude: 120.9842,
   });
+  const [assignedRiderId, setAssignedRiderId] = useState('');
+  const [riderBusy, setRiderBusy] = useState(false);
 
   const loadNetwork = useCallback(async () => {
     const data = await adminFetch<{
@@ -214,11 +217,14 @@ export function BranchesBoard() {
   }, []);
 
   const loadMeta = useCallback(async () => {
-    const [branches, shops] = await Promise.all([
+    const [branches, shops, riders] = await Promise.all([
       adminFetch<Array<{ _id: string; code: string; name: string }>>('/admin/branches'),
       adminFetch<{ shops: Array<{ _id: string; email?: string }> }>('/admin/shops'),
+      adminFetch<Array<{ userId: string; email?: string; firstName?: string; lastName?: string; isOnline: boolean }>>(
+        '/admin/riders',
+      ),
     ]);
-    return { branches, shops: shops.shops };
+    return { branches, shops: shops.shops, riders };
   }, []);
 
   const {
@@ -279,6 +285,7 @@ export function BranchesBoard() {
       latitude: profile.branch.location.latitude,
       longitude: profile.branch.location.longitude,
     });
+    setAssignedRiderId(profile.branch.assignedRiderId ?? '');
   }, [profile]);
 
   useEffect(() => {
@@ -371,6 +378,25 @@ export function BranchesBoard() {
       setBranchMsg(err instanceof Error ? err.message : 'Update failed');
     } finally {
       setBranchBusy(false);
+    }
+  }
+
+  async function saveAssignedRider() {
+    if (!selectedId) return;
+    setRiderBusy(true);
+    setBranchMsg('');
+    try {
+      await adminFetch(`/admin/branches/${selectedId}/assigned-rider`, {
+        method: 'PATCH',
+        body: JSON.stringify({ riderId: assignedRiderId || null }),
+      });
+      setBranchMsg(assignedRiderId ? 'Assigned rider updated.' : 'Assigned rider cleared.');
+      const refreshed = await adminFetch<BranchProfile>(`/admin/branches/${selectedId}/profile`);
+      setProfile(refreshed);
+    } catch (err) {
+      setBranchMsg(err instanceof Error ? err.message : 'Failed to update assigned rider');
+    } finally {
+      setRiderBusy(false);
     }
   }
 
@@ -851,6 +877,40 @@ export function BranchesBoard() {
                             ))}
                           </ul>
                         )}
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border border-border/60 p-3">
+                      <p className="dc-label">Assigned rider</p>
+                      <p className="mt-1 text-xs text-muted">
+                        Default rider dispatched for pickups/deliveries at this branch. If they&apos;re
+                        offline when a task comes up, the nearest online rider is used instead.
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <select
+                          id="assigned-rider"
+                          className="input-field min-w-0 flex-1"
+                          value={assignedRiderId}
+                          onChange={(e) => setAssignedRiderId(e.target.value)}
+                        >
+                          <option value="">No default rider</option>
+                          {(meta?.riders ?? []).map((r) => (
+                            <option key={r.userId} value={r.userId}>
+                              {r.firstName || r.lastName
+                                ? `${r.firstName ?? ''} ${r.lastName ?? ''}`.trim()
+                                : (r.email ?? r.userId)}
+                              {r.isOnline ? ' (online)' : ' (offline)'}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="btn-primary btn-sm shrink-0"
+                          disabled={riderBusy}
+                          onClick={() => void saveAssignedRider()}
+                        >
+                          {riderBusy ? 'Saving…' : 'Save'}
+                        </button>
                       </div>
                     </div>
 

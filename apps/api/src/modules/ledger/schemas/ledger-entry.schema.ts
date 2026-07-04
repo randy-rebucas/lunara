@@ -12,6 +12,7 @@ export const LEDGER_ACCOUNT_TYPES = [
   'cash_out',
   'platform_cash',
   'rider_payout_expense',
+  'rider_wage_expense',
   'customer_wallet_liability',
   'refund_expense',
 ] as const;

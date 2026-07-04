@@ -192,8 +192,9 @@ export class LedgerService {
     // Asset/expense accounts: get() = credits − debits = NEGATIVE of natural balance → negate
     const platformRevenue = get('platform_revenue');
     const riderCost      = -get('rider_payout_expense');  // expense account: debits increase it
+    const riderWageCost  = -get('rider_wage_expense');    // expense account: debits increase it
     const refundCost     = -get('refund_expense');         // expense account: debits increase it
-    const netMargin = platformRevenue - riderCost - refundCost;
+    const netMargin = platformRevenue - riderCost - riderWageCost - refundCost;
 
     // ── Cash flow ──
     const cashIn  = -get('platform_cash');  // asset account: debits = cash received → negate
@@ -212,6 +213,7 @@ export class LedgerService {
       pnl: {
         platformRevenue,
         riderCost,
+        riderWageCost,
         refundCost,
         netMargin,
       },

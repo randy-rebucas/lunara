@@ -6,8 +6,8 @@ export type RiderDocument = HydratedDocument<Rider>;
 
 @Schema({ _id: false })
 class RiderEarningRecord {
-  @Prop({ required: true, enum: ['pickup', 'delivery', 'bonus', 'adjustment'] })
-  type!: 'pickup' | 'delivery' | 'bonus' | 'adjustment';
+  @Prop({ required: true, enum: ['pickup', 'delivery', 'bonus', 'adjustment', 'wage'] })
+  type!: 'pickup' | 'delivery' | 'bonus' | 'adjustment' | 'wage';
 
   @Prop({ required: true })
   amount!: number;
@@ -89,6 +89,12 @@ export class Rider {
 
   @Prop({ default: 'independent_contractor', enum: ['employee', 'independent_contractor'] })
   employmentType!: 'employee' | 'independent_contractor';
+
+  @Prop()
+  fixedWageAmount?: number;
+
+  @Prop({ enum: ['daily', 'weekly', 'monthly'] })
+  wageFrequency?: 'daily' | 'weekly' | 'monthly';
 
   @Prop({ type: [RiderKycDocument], default: [] })
   documents!: RiderKycDocument[];

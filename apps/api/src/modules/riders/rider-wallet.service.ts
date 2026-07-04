@@ -509,15 +509,23 @@ export class RiderWalletService {
     });
     if (existing) return { alreadyNetted: true, remittance: this.serializeRemittance(existing) };
 
+    // Fetched once, up front: needed both to gate the fee lookup below (employees don't earn a
+    // per-task fee) and for the wallet debit later — reused rather than querying twice.
+    const rider = await this.findOrCreateRider(riderUserId);
+
     // The fee is a fixed constant (not looked up from a wallet transaction) so this doesn't
     // depend on creditEarning() having already run — collectCash() fires this before the task
     // is marked complete (where creditEarning() actually runs), so a lookup-based amount would
     // never find a match and would silently skip creating the remittance record every time.
-    const fees = await this.settingsService.getRiderFeeAmounts();
-    const earningOffset = riderEarningAmount(
-      earningType,
-      earningType === 'pickup' ? fees.pickup : fees.delivery,
-    );
+    // Employees are paid a fixed wage, not a per-task fee, so they remit 100% of cash collected.
+    let earningOffset = 0;
+    if (rider.employmentType !== 'employee') {
+      const fees = await this.settingsService.getRiderFeeAmounts();
+      earningOffset = riderEarningAmount(
+        earningType,
+        earningType === 'pickup' ? fees.pickup : fees.delivery,
+      );
+    }
     const netRemittance = Math.max(0, cashAmount - earningOffset);
     const nettingRef = `netting:${stage}:${orderId}`;
 
@@ -526,17 +534,18 @@ export class RiderWalletService {
     // complete), so the balance may dip briefly negative here and self-correct moments later.
     // Clamping to 0 would silently donate the rider a phantom credit whenever their balance is
     // currently below the fee amount.
-    const rider = await this.findOrCreateRider(riderUserId);
     rider.walletBalance -= earningOffset;
     await rider.save();
 
-    await this.transactionModel.create({
-      riderUserId: new Types.ObjectId(riderUserId),
-      type: 'netting',
-      amount: earningOffset,
-      reference: nettingRef,
-      description: `Fee offset against cash collected at ${stage} · order ${orderId.slice(-6)}`,
-    });
+    if (earningOffset > 0) {
+      await this.transactionModel.create({
+        riderUserId: new Types.ObjectId(riderUserId),
+        type: 'netting',
+        amount: earningOffset,
+        reference: nettingRef,
+        description: `Fee offset against cash collected at ${stage} · order ${orderId.slice(-6)}`,
+      });
+    }
 
     const remittance = await this.remittanceModel.create({
       riderUserId: new Types.ObjectId(riderUserId),
