@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { CloudinaryService } from '../../common/cloudinary/cloudinary.service';
+import { LocalStorageService } from '../../common/storage/local-storage.service';
 import { CreateRiderApplicationDto } from './dto/create-rider-application.dto';
 import {
   RIDER_APPLICATION_DOCUMENT_LABELS,
@@ -14,14 +14,14 @@ import {
   RiderApplicationStatus,
 } from './schemas/rider-application.schema';
 
-const CLOUDINARY_FOLDER = 'lunara/rider-application-documents';
+const UPLOAD_FOLDER = 'lunara/rider-application-documents';
 
 @Injectable()
 export class RiderApplicationsService {
   constructor(
     @InjectModel(RiderApplication.name)
     private readonly riderApplicationModel: Model<RiderApplicationDocument>,
-    private readonly cloudinaryService: CloudinaryService,
+    private readonly localStorageService: LocalStorageService,
   ) {}
 
   async create(dto: CreateRiderApplicationDto, files: Record<string, Express.Multer.File[]>) {
@@ -53,8 +53,14 @@ export class RiderApplicationsService {
     for (const type of RIDER_APPLICATION_DOCUMENT_TYPES) {
       const file = files[type][0];
       const publicId = `${application._id.toString()}-${type}-${Date.now()}`;
-      await this.cloudinaryService.uploadPrivateBuffer(file.buffer, CLOUDINARY_FOLDER, publicId);
-      documents[type] = { publicId, uploadedAt: new Date() };
+      const result = await this.localStorageService.uploadPrivateBuffer(
+        file.buffer,
+        UPLOAD_FOLDER,
+        publicId,
+        'image',
+        file.mimetype,
+      );
+      documents[type] = { publicId: result.public_id, uploadedAt: new Date() };
     }
 
     application.documents = documents;

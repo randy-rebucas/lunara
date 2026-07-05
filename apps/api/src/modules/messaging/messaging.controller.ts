@@ -19,7 +19,7 @@ import { UserRole } from '@lunara/types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import { CloudinaryService } from '../../common/cloudinary/cloudinary.service';
+import { LocalStorageService } from '../../common/storage/local-storage.service';
 import { MessagingService } from './messaging.service';
 
 const attachmentUploadOptions = {
@@ -48,7 +48,7 @@ const attachmentUploadOptions = {
 export class MessagingController {
   constructor(
     private readonly messaging: MessagingService,
-    private readonly cloudinaryService: CloudinaryService,
+    private readonly localStorageService: LocalStorageService,
   ) {}
 
   @Get()
@@ -103,11 +103,12 @@ export class MessagingController {
   @UseInterceptors(FileInterceptor('file', attachmentUploadOptions))
   async uploadAttachment(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('No file provided');
-    const result = await this.cloudinaryService.uploadBuffer(
+    const result = await this.localStorageService.uploadBuffer(
       file.buffer,
       'lunara/message-attachments',
       undefined,
       'auto',
+      file.mimetype,
     );
     const data = this.messaging.saveAttachment(file, result.secure_url);
     return { success: true, data };
@@ -135,7 +136,7 @@ export class MessagingController {
 export class AdminMessagingController {
   constructor(
     private readonly messaging: MessagingService,
-    private readonly cloudinaryService: CloudinaryService,
+    private readonly localStorageService: LocalStorageService,
   ) {}
 
   @Get()
@@ -186,11 +187,12 @@ export class AdminMessagingController {
   @UseInterceptors(FileInterceptor('file', attachmentUploadOptions))
   async uploadAttachment(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('No file provided');
-    const result = await this.cloudinaryService.uploadBuffer(
+    const result = await this.localStorageService.uploadBuffer(
       file.buffer,
       'lunara/message-attachments',
       undefined,
       'auto',
+      file.mimetype,
     );
     const data = this.messaging.saveAttachment(file, result.secure_url);
     return { success: true, data };

@@ -15,7 +15,7 @@ import { UserRole } from '@lunara/types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import { CloudinaryService } from '../../common/cloudinary/cloudinary.service';
+import { LocalStorageService } from '../../common/storage/local-storage.service';
 import { partnerBrandAssetUploadOptions } from './partner-brand-upload.options';
 import {
   CreatePartnerDto,
@@ -33,7 +33,7 @@ type AssetField = (typeof ASSET_FIELDS)[number];
 export class PartnersAdminController {
   constructor(
     private readonly partnersService: PartnersService,
-    private readonly cloudinaryService: CloudinaryService,
+    private readonly localStorageService: LocalStorageService,
   ) {}
 
   @Get()
@@ -75,10 +75,12 @@ export class PartnersAdminController {
       throw new BadRequestException(`Unknown brand asset field: ${field}`);
     }
 
-    const result = await this.cloudinaryService.uploadBuffer(
+    const result = await this.localStorageService.uploadBuffer(
       file.buffer,
       'lunara/partner-brands',
       `${id}-${field}-${Date.now()}`,
+      'image',
+      file.mimetype,
     );
     return this.partnersService.setAssetUrl(id, field as AssetField, result.secure_url);
   }

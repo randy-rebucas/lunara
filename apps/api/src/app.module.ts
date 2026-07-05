@@ -3,10 +3,13 @@ import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ConfigModule } from '@nestjs/config';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { join } from 'path';
 import { resolveMonorepoEnvPaths } from './common/config/load-env';
 import { MongooseModule } from '@nestjs/mongoose';
 import { RedisModule } from './common/redis/redis.module';
-import { CloudinaryModule } from './common/cloudinary/cloudinary.module';
+import { StorageModule } from './common/storage/storage.module';
+import { UPLOAD_ROOT } from './common/uploads/upload-paths';
 import { AddressesModule } from './modules/addresses/addresses.module';
 import { BookingModule } from './modules/booking/booking.module';
 import { PartnerModule } from './modules/partner/partner.module';
@@ -48,8 +51,12 @@ import { LaundryTagsModule } from './modules/laundry-tags/laundry-tags.module';
     }),
     ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
+    ServeStaticModule.forRoot({
+      rootPath: join(UPLOAD_ROOT, 'public'),
+      serveRoot: '/api/v1/uploads/public',
+    }),
     EmailModule,
-    CloudinaryModule,
+    StorageModule,
     RedisModule,
     MongooseModule.forRoot(process.env.MONGODB_URI ?? 'mongodb://localhost:27017/lunara'),
     PushModule,

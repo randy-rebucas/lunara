@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { CloudinaryService } from '../../common/cloudinary/cloudinary.service';
+import { LocalStorageService } from '../../common/storage/local-storage.service';
 import { CreatePartnerApplicationDto } from './dto/create-partner-application.dto';
 import {
   PARTNER_APPLICATION_DOCUMENT_LABELS,
@@ -14,14 +14,14 @@ import {
   PartnerApplicationStatus,
 } from './schemas/partner-application.schema';
 
-const CLOUDINARY_FOLDER = 'lunara/partner-application-documents';
+const UPLOAD_FOLDER = 'lunara/partner-application-documents';
 
 @Injectable()
 export class PartnerApplicationsService {
   constructor(
     @InjectModel(PartnerApplication.name)
     private readonly partnerApplicationModel: Model<PartnerApplicationDocument>,
-    private readonly cloudinaryService: CloudinaryService,
+    private readonly localStorageService: LocalStorageService,
   ) {}
 
   async create(dto: CreatePartnerApplicationDto, files: Record<string, Express.Multer.File[]>) {
@@ -48,8 +48,14 @@ export class PartnerApplicationsService {
     for (const type of PARTNER_APPLICATION_DOCUMENT_TYPES) {
       const file = files[type][0];
       const publicId = `${application._id.toString()}-${type}-${Date.now()}`;
-      await this.cloudinaryService.uploadPrivateBuffer(file.buffer, CLOUDINARY_FOLDER, publicId);
-      documents[type] = { publicId, uploadedAt: new Date() };
+      const result = await this.localStorageService.uploadPrivateBuffer(
+        file.buffer,
+        UPLOAD_FOLDER,
+        publicId,
+        'image',
+        file.mimetype,
+      );
+      documents[type] = { publicId: result.public_id, uploadedAt: new Date() };
     }
 
     application.documents = documents;

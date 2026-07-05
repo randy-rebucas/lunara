@@ -18,7 +18,7 @@ import { UserRole } from '@lunara/types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import { CloudinaryService } from '../../common/cloudinary/cloudinary.service';
+import { LocalStorageService } from '../../common/storage/local-storage.service';
 import { taskPhotoPublicPath, remittanceProofPublicPath } from '../../common/uploads/upload-paths';
 import { DeliveryPhotoDto } from './dto/delivery.dto';
 import { CapturePhotoDto, CollectLaundryDto, DropAtShopDto, VerifyCustomerDto, VerifyQrDto } from './dto/pickup.dto';
@@ -62,7 +62,7 @@ export class RidersController {
     private readonly riderSosService: RiderSosService,
     private readonly handoffQrService: HandoffQrService,
     private readonly riderWalletService: RiderWalletService,
-    private readonly cloudinaryService: CloudinaryService,
+    private readonly localStorageService: LocalStorageService,
   ) {}
 
   @Get('pickup-offers')
@@ -177,8 +177,14 @@ export class RidersController {
       throw new BadRequestException('Photo image is required');
     }
     const publicId = `${req.user.sub}-${orderId}-${Date.now()}`;
-    await this.cloudinaryService.uploadPrivateBuffer(file.buffer, 'lunara/task-photos', publicId);
-    return this.pickupService.capturePhoto(orderId, req.user.sub, taskPhotoPublicPath(publicId));
+    const result = await this.localStorageService.uploadPrivateBuffer(
+      file.buffer,
+      'lunara/task-photos',
+      publicId,
+      'image',
+      file.mimetype,
+    );
+    return this.pickupService.capturePhoto(orderId, req.user.sub, taskPhotoPublicPath(result.public_id));
   }
 
   @Post('pickup-tasks/:orderId/generate-receipt')
@@ -248,8 +254,14 @@ export class RidersController {
       throw new BadRequestException('Document image is required');
     }
     const publicId = `${req.user.sub}-${type}-${Date.now()}`;
-    await this.cloudinaryService.uploadPrivateBuffer(file.buffer, 'lunara/rider-documents', publicId);
-    return this.ridersService.uploadDocument(req.user.sub, type, publicId);
+    const result = await this.localStorageService.uploadPrivateBuffer(
+      file.buffer,
+      'lunara/rider-documents',
+      publicId,
+      'image',
+      file.mimetype,
+    );
+    return this.ridersService.uploadDocument(req.user.sub, type, result.public_id);
   }
 
   @Get('notifications')
@@ -380,8 +392,14 @@ export class RidersController {
       throw new BadRequestException('Photo image is required');
     }
     const publicId = `${req.user.sub}-${orderId}-${Date.now()}`;
-    await this.cloudinaryService.uploadPrivateBuffer(file.buffer, 'lunara/task-photos', publicId);
-    return this.deliveryService.capturePhoto(orderId, req.user.sub, taskPhotoPublicPath(publicId));
+    const result = await this.localStorageService.uploadPrivateBuffer(
+      file.buffer,
+      'lunara/task-photos',
+      publicId,
+      'image',
+      file.mimetype,
+    );
+    return this.deliveryService.capturePhoto(orderId, req.user.sub, taskPhotoPublicPath(result.public_id));
   }
 
   @Post('delivery-tasks/:orderId/collect-cash')
@@ -473,8 +491,14 @@ export class RidersController {
     let proofImageUrl: string | undefined;
     if (file) {
       const publicId = `${req.user.sub}-remittance-${Date.now()}`;
-      await this.cloudinaryService.uploadPrivateBuffer(file.buffer, 'lunara/remittance-proofs', publicId);
-      proofImageUrl = remittanceProofPublicPath(publicId);
+      const result = await this.localStorageService.uploadPrivateBuffer(
+        file.buffer,
+        'lunara/remittance-proofs',
+        publicId,
+        'image',
+        file.mimetype,
+      );
+      proofImageUrl = remittanceProofPublicPath(result.public_id);
     }
     return this.riderWalletService.submitRemittance(req.user.sub, proofImageUrl, transactionId);
   }

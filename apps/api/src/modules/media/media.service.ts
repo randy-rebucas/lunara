@@ -1,8 +1,8 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { UserRole } from '@lunara/types';
 import { Model } from 'mongoose';
-import { CloudinaryService } from '../../common/cloudinary/cloudinary.service';
+import { LocalStorageService } from '../../common/storage/local-storage.service';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import {
@@ -13,7 +13,7 @@ import { parseTaskPhotoFilename } from './task-photo-filename';
 
 type MediaCategory = 'rider-documents' | 'task-photos' | 'remittance-proofs';
 
-const CLOUDINARY_FOLDER_BY_CATEGORY: Record<MediaCategory, string> = {
+const FOLDER_BY_CATEGORY: Record<MediaCategory, string> = {
   'rider-documents': 'lunara/rider-documents',
   'task-photos': 'lunara/task-photos',
   'remittance-proofs': 'lunara/remittance-proofs',
@@ -24,15 +24,11 @@ export class MediaService {
   constructor(
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
-    private readonly cloudinaryService: CloudinaryService,
+    private readonly localStorageService: LocalStorageService,
   ) {}
 
-  getSignedUrl(category: MediaCategory, filename: string): string {
-    if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
-      throw new NotFoundException('File not found');
-    }
-    const publicId = `${CLOUDINARY_FOLDER_BY_CATEGORY[category]}/${filename}`;
-    return this.cloudinaryService.getSignedUrl(publicId);
+  resolveFilePath(category: MediaCategory, filename: string): string {
+    return this.localStorageService.resolvePrivatePath(FOLDER_BY_CATEGORY[category], filename);
   }
 
   async assertAccess(

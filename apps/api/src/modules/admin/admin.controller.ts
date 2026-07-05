@@ -56,7 +56,7 @@ import { UpdatePromotionDto } from './dto/update-promotion.dto';
 import { UpdateLaundryAddonDto } from './dto/update-laundry-addon.dto';
 import { UpdateLaundryServiceDto } from './dto/update-laundry-service.dto';
 import { CatalogService } from '../catalog/catalog.service';
-import { CloudinaryService } from '../../common/cloudinary/cloudinary.service';
+import { LocalStorageService } from '../../common/storage/local-storage.service';
 import { PartnerOperationsService } from '../partner/partner-operations.service';
 import { CreateSettlementDto } from '../partner/dto/create-settlement.dto';
 import { PushNotificationService } from '../push/push-notification.service';
@@ -79,7 +79,7 @@ export class AdminController {
     private readonly riderNotificationService: RiderNotificationService,
     private readonly riderWalletService: RiderWalletService,
     private readonly partnerOperationsService: PartnerOperationsService,
-    private readonly cloudinaryService: CloudinaryService,
+    private readonly localStorageService: LocalStorageService,
     private readonly pushService: PushNotificationService,
   ) {}
 
@@ -579,10 +579,12 @@ export class AdminController {
     @UploadedFile() file: Express.Multer.File,
   ) {
     if (!file) throw new BadRequestException('No file uploaded');
-    const result = await this.cloudinaryService.uploadBuffer(
+    const result = await this.localStorageService.uploadBuffer(
       file.buffer,
       'lunara/catalog-addons',
       `addon-${id}`,
+      'image',
+      file.mimetype,
     );
     const data = await this.catalogService.updateAddon(id, { imageUrl: result.secure_url });
     return { success: true, data };

@@ -13,7 +13,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { CloudinaryService } from '../../common/cloudinary/cloudinary.service';
+import { LocalStorageService } from '../../common/storage/local-storage.service';
 import { UpdateCustomerDto } from './dto/customer.dto';
 import { CustomersService } from './customers.service';
 
@@ -24,7 +24,7 @@ const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'i
 export class CustomersController {
   constructor(
     private readonly customersService: CustomersService,
-    private readonly cloudinaryService: CloudinaryService,
+    private readonly localStorageService: LocalStorageService,
   ) {}
 
   @Get('me')
@@ -58,10 +58,12 @@ export class CustomersController {
     if (!file) {
       throw new BadRequestException('Avatar image is required');
     }
-    const result = await this.cloudinaryService.uploadBuffer(
+    const result = await this.localStorageService.uploadBuffer(
       file.buffer,
       'lunara/avatars',
       `${req.user.sub}-${Date.now()}`,
+      'image',
+      file.mimetype,
     );
     return this.customersService.updateAvatar(req.user.sub, result.secure_url);
   }

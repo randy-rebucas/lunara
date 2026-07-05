@@ -16,7 +16,7 @@ export class MediaController {
     @Res() res: Response,
   ) {
     await this.mediaService.assertAccess('rider-documents', filename, req.user);
-    res.redirect(this.mediaService.getSignedUrl('rider-documents', filename));
+    res.sendFile(this.mediaService.resolveFilePath('rider-documents', filename));
   }
 
   @Get('task-photos/:filename')
@@ -26,7 +26,7 @@ export class MediaController {
     @Res() res: Response,
   ) {
     await this.mediaService.assertAccess('task-photos', filename, req.user);
-    res.redirect(this.mediaService.getSignedUrl('task-photos', filename));
+    res.sendFile(this.mediaService.resolveFilePath('task-photos', filename));
   }
 
   @Get('remittance-proofs/:filename')
@@ -36,6 +36,6 @@ export class MediaController {
     @Res() res: Response,
   ) {
     await this.mediaService.assertAccess('remittance-proofs', filename, req.user);
-    res.redirect(this.mediaService.getSignedUrl('remittance-proofs', filename));
+    res.sendFile(this.mediaService.resolveFilePath('remittance-proofs', filename));
   }
 }
