@@ -8,7 +8,7 @@ import { DataPageStatus } from '../../components/data-page-status';
 import { Card, CardBody, SectionPanel } from '../../components/ui/card';
 import { PageHeader } from '../../components/ui/page-header';
 import { useProtectedPage } from '../../hooks/use-protected-page';
-import { isPartnerRole, partnerFetch } from '../../lib/partner-api';
+import { isPartnerRole, partnerFetch, removeShopLogo, uploadShopLogo } from '../../lib/partner-api';
 import type { PartnerPortalSettings, PartnerSettingsData } from '@lunara/types';
 import { usePartnerQuery } from '../../lib/use-partner-query';
 
@@ -81,6 +81,7 @@ export default function PartnerSettingsPage() {
   });
   const [activeTab, setActiveTab] = useState<Tab>('shop');
   const [saving, setSaving] = useState(false);
+  const [logoBusy, setLogoBusy] = useState(false);
   const [payoutDraft, setPayoutDraft] = useState<{
     method: PayoutMethod | '';
     gcashNumber: string;
@@ -127,6 +128,36 @@ export default function PartnerSettingsPage() {
       });
     }
   }, [data, payoutDraft]);
+
+  async function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !data?.canEdit) return;
+    setLogoBusy(true);
+    try {
+      await uploadShopLogo(file);
+      await reload();
+      toast.success('Logo updated');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not upload logo');
+    } finally {
+      setLogoBusy(false);
+    }
+  }
+
+  async function handleLogoRemove() {
+    if (!data?.canEdit) return;
+    setLogoBusy(true);
+    try {
+      await removeShopLogo();
+      await reload();
+      toast.success('Logo removed');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not remove logo');
+    } finally {
+      setLogoBusy(false);
+    }
+  }
 
   async function savePayoutMethod() {
     if (!payoutDraft?.method) return;
@@ -188,11 +219,49 @@ export default function PartnerSettingsPage() {
             {activeTab === 'shop' && (
               <Card>
                 <CardBody>
-                  <h3 className="text-lg font-semibold text-slate-900">{branch.name}</h3>
-                  <p className="mt-1 font-mono text-xs text-primary">{branch.code}</p>
-                  <p className="mt-2 text-sm text-muted">
-                    {branch.line1}, {branch.city}, {branch.province}
-                  </p>
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-slate-50">
+                      {branch.logoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={branch.logoUrl} alt={`${branch.name} logo`} className="h-full w-full object-cover" />
+                      ) : (
+                        <span className="text-xs text-muted">No logo</span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-lg font-semibold text-slate-900">{branch.name}</h3>
+                      <p className="mt-1 font-mono text-xs text-primary">{branch.code}</p>
+                      <p className="mt-2 text-sm text-muted">
+                        {branch.line1}, {branch.city}, {branch.province}
+                      </p>
+                    </div>
+                  </div>
+
+                  {canEdit ? (
+                    <div className="mt-4 flex items-center gap-2 border-t border-border/60 pt-4">
+                      <label className={`btn-outline btn-sm cursor-pointer ${logoBusy ? 'pointer-events-none opacity-60' : ''}`}>
+                        {logoBusy ? 'Uploading…' : branch.logoUrl ? 'Change logo' : 'Upload logo'}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          disabled={logoBusy}
+                          onChange={handleLogoChange}
+                        />
+                      </label>
+                      {branch.logoUrl ? (
+                        <button
+                          type="button"
+                          className="btn-outline btn-sm"
+                          disabled={logoBusy}
+                          onClick={() => void handleLogoRemove()}
+                        >
+                          Remove
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
+
                   <dl className="mt-6">
                     <DetailRow
                       label="Platform status"

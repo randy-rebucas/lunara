@@ -35,6 +35,7 @@ const Icons = {
   queue:        <Icon d="M4 6h16M4 10h16M4 14h16M4 18h16" />,
   intake:       <Icon d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />,
   shelf:        <Icon d="M21 21V3M3 21V3M3 8h18M3 16h18" d2="M8 8v8M13 8v8" />,
+  scan:         <Icon d="M4 7V5a1 1 0 011-1h2M4 17v2a1 1 0 001 1h2m10-14V5a1 1 0 00-1-1h-2m3 14v2a1 1 0 01-1 1h-2M4 12h16" />,
   profile:      <Icon d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />,
   settings:     <Icon d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" d2="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />,
   signout:      <Icon d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />,
@@ -72,6 +73,7 @@ const partnerNavGroups: NavGroup[] = [
     items: [
       { href: '/staff', label: 'Staff team', icon: Icons.staff },
       { href: '/shelf-lookup', label: 'Find on shelf', icon: Icons.shelf },
+      { href: '/scan', label: 'Scan tag', icon: Icons.scan },
       { href: '/inventory', label: 'Inventory', icon: Icons.inventory },
       { href: '/customers', label: 'Customers', icon: Icons.customers },
       { href: '/services', label: 'Services & pricing', icon: Icons.services },
@@ -101,6 +103,7 @@ const staffNavGroups: NavGroup[] = [
       { href: '/orders', label: 'Processing queue', icon: Icons.queue },
       { href: '/orders/incoming', label: 'Shop intake', icon: Icons.intake },
       { href: '/shelf-lookup', label: 'Find on shelf', icon: Icons.shelf },
+      { href: '/scan', label: 'Scan tag', icon: Icons.scan },
     ],
   },
 ];

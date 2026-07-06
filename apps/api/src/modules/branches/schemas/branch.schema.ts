@@ -163,6 +163,10 @@ export class Branch {
   @Prop({ default: true })
   isActive!: boolean;
 
+  /** Shop logo shown in customer/partner-facing UI. Public URL. */
+  @Prop()
+  logoUrl?: string;
+
   /** Platform commission rate on laundry subtotal (0–1). Default 20%. */
   @Prop({ default: 0.20, min: 0, max: 1 })
   commissionRate!: number;

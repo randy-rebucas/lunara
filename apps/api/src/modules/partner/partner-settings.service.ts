@@ -9,6 +9,7 @@ import {
   PartnerPortalSettings,
 } from '../branches/schemas/branch.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import { LocalStorageService } from '../../common/storage/local-storage.service';
 import { resolvePortalBranchId } from './partner-access';
 import { UpdatePartnerSettingsDto } from './dto/update-partner-settings.dto';
 
@@ -21,6 +22,7 @@ export class PartnerSettingsService {
   constructor(
     @InjectModel(Branch.name) private readonly branchModel: Model<BranchDocument>,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+    private readonly localStorageService: LocalStorageService,
   ) {}
 
   private async resolveBranch(userId: string, role: UserRole): Promise<BranchDocument> {
@@ -49,6 +51,7 @@ export class PartnerSettingsService {
       city: branch.city,
       province: branch.province,
       isActive: branch.isActive,
+      logoUrl: branch.logoUrl,
       maxActiveOrders: branch.maxActiveOrders,
       maxWeightCapacityKg: branch.maxWeightCapacityKg,
       dailyQuotaOrders: branch.dailyQuotaOrders,
@@ -99,6 +102,49 @@ export class PartnerSettingsService {
         settings: normalizePortalSettings(branch.toObject().portalSettings),
         canEdit: true,
       },
+    };
+  }
+
+  async updateLogo(userId: string, role: UserRole, file: Express.Multer.File) {
+    if (role !== UserRole.PARTNER && role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Only shop partners can update the shop logo');
+    }
+    const branch = await this.resolveBranch(userId, role);
+    if (role === UserRole.PARTNER && branch.partnerUserId.toString() !== userId) {
+      throw new ForbiddenException("Cannot update another shop's logo");
+    }
+
+    const result = await this.localStorageService.uploadBuffer(
+      file.buffer,
+      'lunara/branch-logos',
+      `${branch._id.toString()}-${Date.now()}`,
+      'image',
+      file.mimetype,
+    );
+    branch.logoUrl = result.secure_url;
+    await branch.save();
+
+    return {
+      success: true,
+      data: { branch: this.formatBranch(branch) },
+    };
+  }
+
+  async removeLogo(userId: string, role: UserRole) {
+    if (role !== UserRole.PARTNER && role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Only shop partners can update the shop logo');
+    }
+    const branch = await this.resolveBranch(userId, role);
+    if (role === UserRole.PARTNER && branch.partnerUserId.toString() !== userId) {
+      throw new ForbiddenException("Cannot update another shop's logo");
+    }
+
+    branch.logoUrl = undefined;
+    await branch.save();
+
+    return {
+      success: true,
+      data: { branch: this.formatBranch(branch) },
     };
   }
 }

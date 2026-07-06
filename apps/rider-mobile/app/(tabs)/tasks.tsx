@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useRiderOperations } from '../../src/context/rider-operations';
 import { EmptyState } from '../../src/components/ui/empty-state';
 import { Screen } from '../../src/components/ui/screen';
@@ -443,6 +443,7 @@ const cardStyles = StyleSheet.create({
 // ── Tasks screen ──────────────────────────────────────────────────────────────
 
 export default function TasksScreen() {
+  const router = useRouter();
   const tabPadding = useTabScreenPadding();
   const { filter: filterParam } = useLocalSearchParams<{ filter?: string }>();
   const initialFilter =
@@ -627,10 +628,21 @@ export default function TasksScreen() {
           <Text style={styles.title}>Tasks</Text>
           <Text style={styles.subtitle}>Filter by assignment stage.</Text>
         </View>
-        <Pressable style={styles.sortBtn} accessibilityRole="button" accessibilityLabel="Sort tasks">
-          <Ionicons name="funnel-outline" size={15} color={colors.primary} />
-          <Text style={styles.sortBtnText}>Sort</Text>
-        </Pressable>
+        <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+          <Pressable
+            style={styles.sortBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Scan a laundry tag"
+            onPress={() => router.push('/scan?mode=lookup_tag')}
+          >
+            <Ionicons name="qr-code-outline" size={15} color={colors.primary} />
+            <Text style={styles.sortBtnText}>Scan tag</Text>
+          </Pressable>
+          <Pressable style={styles.sortBtn} accessibilityRole="button" accessibilityLabel="Sort tasks">
+            <Ionicons name="funnel-outline" size={15} color={colors.primary} />
+            <Text style={styles.sortBtnText}>Sort</Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* ── Filter chips with counts ── */}

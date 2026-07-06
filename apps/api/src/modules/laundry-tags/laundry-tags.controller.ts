@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { UserRole } from '@lunara/types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -27,6 +27,17 @@ export class LaundryTagsController {
     @Req() req: { user: { sub: string; role: UserRole.ADMIN | UserRole.PARTNER | UserRole.STAFF } },
   ) {
     const data = await this.laundryTagsService.listTags(query, req.user);
+    return { success: true, data };
+  }
+
+  @Get('lookup')
+  @Roles(UserRole.ADMIN, UserRole.PARTNER, UserRole.STAFF, UserRole.RIDER, UserRole.CUSTOMER)
+  async lookup(
+    @Query('code') code: string,
+    @Req() req: { user: { sub: string; role: UserRole } },
+  ) {
+    if (!code?.trim()) throw new BadRequestException('code is required');
+    const data = await this.laundryTagsService.lookup(code, req.user);
     return { success: true, data };
   }
 

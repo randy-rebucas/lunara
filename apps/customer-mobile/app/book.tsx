@@ -99,6 +99,7 @@ interface ShopOption {
   distanceLabel: string;
   withinRadius: boolean;
   capacityAvailable: boolean;
+  logoUrl?: string;
   services: ShopServiceOption[];
 }
 
@@ -595,7 +596,19 @@ export default function BookScreen() {
                       accessibilityState={{ selected, disabled }}
                     >
                       <View style={styles.optionTopRow}>
-                        <Text style={styles.optionTitle}>{shop.name}</Text>
+                        <View style={styles.optionTitleRow}>
+                          {shop.logoUrl ? (
+                            <Image
+                              source={{ uri: resolveMediaUrl(shop.logoUrl) }}
+                              style={styles.shopLogo}
+                            />
+                          ) : (
+                            <View style={styles.shopLogoFallback}>
+                              <Ionicons name="storefront-outline" size={18} color={colors.primary} />
+                            </View>
+                          )}
+                          <Text style={styles.optionTitle}>{shop.name}</Text>
+                        </View>
                         {selected ? (
                           <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
                         ) : null}
@@ -721,7 +734,7 @@ export default function BookScreen() {
                   onPress={() =>
                     setForm((f) => ({
                       ...f,
-                      weightKg: Math.max(config?.minWeightKg ?? 1, f.weightKg - 1),
+                      weightKg: Math.max(config?.minWeightKg ?? 5, f.weightKg - 1),
                     }))
                   }
                   accessibilityRole="button"
@@ -746,7 +759,7 @@ export default function BookScreen() {
                 </Pressable>
               </View>
               <Text style={styles.weightRange}>
-                {config?.minWeightKg ?? 1} kg – {config?.maxWeightKg ?? 50} kg
+                {config?.minWeightKg ?? 5} kg – {config?.maxWeightKg ?? 50} kg
               </Text>
             </View>
           )}
@@ -995,7 +1008,17 @@ const styles = StyleSheet.create({
   optionDisabled: { opacity: 0.4 },
   optionPressed: { opacity: 0.9 },
   optionTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  optionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexShrink: 1 },
   optionCheck: { marginLeft: 'auto' },
+  shopLogo: { width: 32, height: 32, borderRadius: radius.sm, backgroundColor: colors.surface },
+  shopLogoFallback: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.sm,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   optionTitle: { fontWeight: '600', fontSize: 16, color: colors.foreground },
   optionSub: { marginTop: spacing.xs, fontSize: 13, color: colors.muted },
   optionPrice: { marginTop: spacing.sm - 2, fontSize: 13, color: colors.primary, fontWeight: '500' },

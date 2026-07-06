@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback } from 'react';
-import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../src/components/ui/card';
 import { DataLoadState } from '../src/components/data-load-state';
 import { NotificationListItem } from '../src/components/notification-list-item';
@@ -9,7 +9,8 @@ import { useNotifications } from '../src/hooks/use-notifications';
 import { colors, radius, spacing, typography } from '../src/theme';
 
 export default function NotificationsScreen() {
-  const { items, loading, refreshing, error, refresh, markRead, load } = useNotifications(50);
+  const { items, loading, refreshing, error, unreadCount, refresh, markRead, markAllRead, load } =
+    useNotifications(50);
 
   useFocusEffect(
     useCallback(() => {
@@ -42,6 +43,19 @@ export default function NotificationsScreen() {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.primary} />
         }
+        ListHeaderComponent={
+          unreadCount > 0 ? (
+            <Pressable
+              onPress={markAllRead}
+              style={({ pressed }) => [styles.markAllRow, pressed && styles.markAllRowPressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Mark all notifications as read"
+            >
+              <Ionicons name="checkmark-done-outline" size={16} color={colors.primary} />
+              <Text style={styles.markAllText}>Mark all read</Text>
+            </Pressable>
+          ) : null
+        }
         ListEmptyComponent={
           <Card style={styles.emptyWrap}>
             <View style={styles.emptyIcon}>
@@ -70,6 +84,17 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   separator: { height: spacing.sm },
+  markAllRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  markAllRowPressed: { opacity: 0.7 },
+  markAllText: { fontSize: 13, fontWeight: '600', color: colors.primary },
   emptyWrap: {
     alignItems: 'center',
     marginTop: spacing.xxxl,

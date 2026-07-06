@@ -34,6 +34,7 @@ export interface PartnerShopBranchSummary {
   city: string;
   province: string;
   isActive: boolean;
+  logoUrl?: string;
   maxActiveOrders: number;
   maxWeightCapacityKg: number;
   dailyQuotaOrders: number;

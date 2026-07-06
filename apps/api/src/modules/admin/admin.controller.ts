@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -407,6 +408,29 @@ export class AdminController {
   @Patch('branches/:id/assigned-rider')
   updateBranchAssignedRider(@Param('id') id: string, @Body() dto: UpdateBranchAssignedRiderDto) {
     return this.branchesService.setAssignedRider(id, dto.riderId);
+  }
+
+  @Post('branches/:id/logo')
+  @UseInterceptors(FileInterceptor('logo', {
+    storage: memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
+      if (!allowed.has(file.mimetype)) {
+        cb(new BadRequestException('Only JPEG, PNG, or WebP images are allowed'), false);
+        return;
+      }
+      cb(null, true);
+    },
+  }))
+  async updateBranchLogo(@Param('id') id: string, @UploadedFile() file?: Express.Multer.File) {
+    if (!file) throw new BadRequestException('Logo image is required');
+    return this.branchesService.setBranchLogo(id, file);
+  }
+
+  @Delete('branches/:id/logo')
+  removeBranchLogo(@Param('id') id: string) {
+    return this.branchesService.clearBranchLogo(id);
   }
 
   @Get('branches/:id/custom-services')

@@ -435,6 +435,19 @@ export default function ProfileScreen() {
               </Pressable>
               <Pressable
                 style={({ pressed }) => [styles.prefRow, styles.prefRowBorder, pressed && styles.prefRowPressed]}
+                onPress={() => router.push('/scan-tag' as Href)}
+                accessibilityRole="button"
+                accessibilityLabel="Scan my laundry tag"
+              >
+                <Ionicons name="qr-code-outline" size={20} color={colors.primary} />
+                <View style={styles.prefCopy}>
+                  <Text style={styles.prefTitle}>Scan my laundry tag</Text>
+                  <Text style={styles.prefHint}>Check which order a tag on your laundry belongs to</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.prefRow, styles.prefRowBorder, pressed && styles.prefRowPressed]}
                 onPress={() => openUrl(privacyUrl)}
                 accessibilityRole="button"
                 accessibilityLabel="Privacy policy"

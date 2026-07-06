@@ -51,6 +51,16 @@ export function useNotifications(limit = 20) {
     [apiFetch, load],
   );
 
+  const markAllRead = useCallback(async () => {
+    const previous = items;
+    setItems((prev) => prev.map((item) => ({ ...item, read: true })));
+    try {
+      await apiFetch('/notifications/read-all', { method: 'PATCH' });
+    } catch {
+      setItems(previous);
+    }
+  }, [apiFetch, items]);
+
   const unreadCount = useMemo(() => items.filter((item) => !item.read).length, [items]);
 
   return {
@@ -62,5 +72,6 @@ export function useNotifications(limit = 20) {
     load,
     refresh,
     markRead,
+    markAllRead,
   };
 }

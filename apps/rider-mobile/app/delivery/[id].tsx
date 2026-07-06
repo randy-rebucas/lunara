@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   DELIVERY_WORKFLOW_STEPS,
   formatCurrency,
@@ -23,6 +23,7 @@ import { loadTaskCache } from '../../src/lib/offline/task-cache';
 import { isOnline } from '../../src/lib/offline/network';
 import { captureTaskPhoto } from '../../src/lib/task-photo';
 import { AuthenticatedImage } from '../../src/components/authenticated-image';
+import { resolveMediaUrl } from '../../src/lib/media-url';
 import { callPhone, promptNavigate } from '../../src/lib/task-contact';
 import type { RiderShopLocation, RiderTaskAddress } from '../../src/lib/rider-task-types';
 import { colors, radius, shadow, spacing, typography } from '../../src/theme';
@@ -36,6 +37,7 @@ interface DeliveryTask {
   orderNumber?: string;
   branchName?: string;
   branchCode?: string;
+  branchLogoUrl?: string;
   shopName?: string;
   estimatedWeightKg?: number;
   specialInstructions?: string;
@@ -73,6 +75,7 @@ function StepCard({
   icon,
   iconBg,
   iconColor,
+  iconImageUri,
   title,
   hint,
   children,
@@ -80,6 +83,7 @@ function StepCard({
   icon: IoniconName;
   iconBg: string;
   iconColor: string;
+  iconImageUri?: string;
   title: string;
   hint?: string;
   children?: React.ReactNode;
@@ -88,7 +92,11 @@ function StepCard({
     <View style={stepStyles.card}>
       <View style={stepStyles.header}>
         <View style={[stepStyles.iconWrap, { backgroundColor: iconBg }]}>
-          <Ionicons name={icon} size={18} color={iconColor} />
+          {iconImageUri ? (
+            <Image source={{ uri: iconImageUri }} style={stepStyles.iconImage} />
+          ) : (
+            <Ionicons name={icon} size={18} color={iconColor} />
+          )}
         </View>
         <View style={stepStyles.headerText}>
           <Text style={stepStyles.title}>{title}</Text>
@@ -123,7 +131,9 @@ const stepStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+    overflow: 'hidden',
   },
+  iconImage: { width: '100%', height: '100%' },
   headerText: { flex: 1, justifyContent: 'center' },
   title: { fontSize: 15, fontWeight: '700', color: colors.foreground },
   hint: { ...typography.caption, marginTop: 2 },
@@ -384,6 +394,7 @@ export default function DeliveryScreen() {
                 icon="storefront-outline"
                 iconBg={colors.secondaryLight}
                 iconColor={colors.secondaryDark}
+                iconImageUri={resolveMediaUrl(task.branchLogoUrl)}
                 title={task.branchName ?? shop.name}
                 hint={[shop.line1, shop.city].filter(Boolean).join(', ')}
               >
@@ -576,6 +587,22 @@ export default function DeliveryScreen() {
               </StepCard>
             )}
 
+            {/* ── Photo proof (persistent) ── */}
+            {d.photoUrl ? (
+              <StepCard
+                icon="image-outline"
+                iconBg={colors.surfaceMuted}
+                iconColor={colors.mutedForeground}
+                title="Delivery photo proof"
+              >
+                <AuthenticatedImage
+                  path={d.photoUrl}
+                  style={styles.photoPreview}
+                  accessibilityLabel="Delivery photo proof"
+                />
+              </StepCard>
+            ) : null}
+
             {/* ── Complete ── */}
             {task.canComplete && (
               <StepCard
@@ -609,22 +636,6 @@ export default function DeliveryScreen() {
             )}
           </>
         )}
-
-        {/* ── Photo proof (persistent) ── */}
-        {d.photoUrl ? (
-          <StepCard
-            icon="image-outline"
-            iconBg={colors.surfaceMuted}
-            iconColor={colors.mutedForeground}
-            title="Delivery photo proof"
-          >
-            <AuthenticatedImage
-              path={d.photoUrl}
-              style={styles.photoPreview}
-              accessibilityLabel="Delivery photo proof"
-            />
-          </StepCard>
-        ) : null}
 
         {/* ── Receipt code ── */}
         {d.receiptCode ? (

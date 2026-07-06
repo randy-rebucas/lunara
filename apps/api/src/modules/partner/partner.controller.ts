@@ -240,6 +240,23 @@ export class PartnerController {
     return this.settingsService.updateSettings(req.user.sub, req.user.role, dto);
   }
 
+  @Post('settings/logo')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  @UseInterceptors(FileInterceptor('logo', processingPhotoUploadOptions))
+  async updateLogo(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('Logo image is required');
+    return this.settingsService.updateLogo(req.user.sub, req.user.role, file);
+  }
+
+  @Delete('settings/logo')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  removeLogo(@Req() req: { user: { sub: string; role: UserRole } }) {
+    return this.settingsService.removeLogo(req.user.sub, req.user.role);
+  }
+
   @Get('notifications')
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
   listNotifications(

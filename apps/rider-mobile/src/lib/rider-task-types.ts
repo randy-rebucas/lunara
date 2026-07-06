@@ -31,6 +31,7 @@ export interface RiderTaskDetailsFields {
   shopName?: string;
   branchName?: string;
   branchCode?: string;
+  branchLogoUrl?: string;
   shopLocation?: RiderShopLocation | null;
   shopPhone?: string;
   shopPhoneMasked?: string;

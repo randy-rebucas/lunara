@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BranchAddressEditor, type BranchAddressValue } from './branch-address-editor';
 import { MetricCell } from './metric-cell';
 import { ShopPricingPanel } from './shop-pricing-panel';
-import { adminFetch } from '../../lib/admin-api';
+import { adminFetch, adminUpload } from '../../lib/admin-api';
 import { formatPeso } from '../../lib/format-peso';
 import { useAdminQuery } from '../../lib/use-admin-query';
 
@@ -33,6 +33,7 @@ interface BranchProfile {
     city: string;
     province: string;
     isActive: boolean;
+    logoUrl?: string;
     maxActiveOrders: number;
     maxWeightCapacityKg: number;
     dailyQuotaOrders: number;
@@ -205,6 +206,7 @@ export function BranchesBoard() {
   });
   const [assignedRiderId, setAssignedRiderId] = useState('');
   const [riderBusy, setRiderBusy] = useState(false);
+  const [logoBusy, setLogoBusy] = useState(false);
 
   const loadNetwork = useCallback(async () => {
     const data = await adminFetch<{
@@ -400,6 +402,42 @@ export function BranchesBoard() {
     }
   }
 
+  async function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !selectedId) return;
+    setLogoBusy(true);
+    setBranchMsg('');
+    try {
+      const formData = new FormData();
+      formData.append('logo', file);
+      await adminUpload(`/admin/branches/${selectedId}/logo`, formData);
+      setBranchMsg('Logo updated.');
+      const refreshed = await adminFetch<BranchProfile>(`/admin/branches/${selectedId}/profile`);
+      setProfile(refreshed);
+    } catch (err) {
+      setBranchMsg(err instanceof Error ? err.message : 'Failed to upload logo');
+    } finally {
+      setLogoBusy(false);
+    }
+  }
+
+  async function handleLogoRemove() {
+    if (!selectedId) return;
+    setLogoBusy(true);
+    setBranchMsg('');
+    try {
+      await adminFetch(`/admin/branches/${selectedId}/logo`, { method: 'DELETE' });
+      setBranchMsg('Logo removed.');
+      const refreshed = await adminFetch<BranchProfile>(`/admin/branches/${selectedId}/profile`);
+      setProfile(refreshed);
+    } catch (err) {
+      setBranchMsg(err instanceof Error ? err.message : 'Failed to remove logo');
+    } finally {
+      setLogoBusy(false);
+    }
+  }
+
   async function updateBranch(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedId) return;
@@ -449,6 +487,12 @@ export function BranchesBoard() {
       setBranchBusy(false);
     }
   }
+
+  const assignedRider = useMemo(() => {
+    const riderId = profile?.branch.assignedRiderId;
+    if (!riderId) return null;
+    return meta?.riders?.find((r) => r.userId === riderId) ?? null;
+  }, [profile, meta]);
 
   const profileMetrics = useMemo(() => {
     if (!profile) return null;
@@ -782,15 +826,53 @@ export function BranchesBoard() {
 
                 {profile ? (
                   <div className="space-y-3">
-                    <div>
-                      <p className="text-code text-primary">{profile.branch.code}</p>
-                      <h3 className="text-xl font-semibold text-slate-900">{profile.branch.name}</h3>
-                      <p className="text-sm text-muted">
-                        {profile.branch.line1}, {profile.branch.city}, {profile.branch.province}
-                      </p>
-                      {!profile.branch.isActive ? (
-                        <span className="badge-warning mt-2">Inactive</span>
-                      ) : null}
+                    <div className="flex items-start gap-4">
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/60 bg-slate-50">
+                        {profile.branch.logoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={profile.branch.logoUrl}
+                            alt={`${profile.branch.name} logo`}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-xs text-muted">No logo</span>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-code text-primary">{profile.branch.code}</p>
+                        <h3 className="text-xl font-semibold text-slate-900">{profile.branch.name}</h3>
+                        <p className="text-sm text-muted">
+                          {profile.branch.line1}, {profile.branch.city}, {profile.branch.province}
+                        </p>
+                        {!profile.branch.isActive ? (
+                          <span className="badge-warning mt-2">Inactive</span>
+                        ) : null}
+                        <div className="mt-2 flex items-center gap-2">
+                          <label
+                            className={`btn-outline btn-sm cursor-pointer ${logoBusy ? 'pointer-events-none opacity-60' : ''}`}
+                          >
+                            {logoBusy ? 'Uploading…' : profile.branch.logoUrl ? 'Change logo' : 'Upload logo'}
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp"
+                              className="hidden"
+                              disabled={logoBusy}
+                              onChange={handleLogoChange}
+                            />
+                          </label>
+                          {profile.branch.logoUrl ? (
+                            <button
+                              type="button"
+                              className="btn-outline btn-sm"
+                              disabled={logoBusy}
+                              onClick={() => void handleLogoRemove()}
+                            >
+                              Remove
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
                     </div>
 
                     {profile.hierarchy.parent ? (
@@ -886,6 +968,18 @@ export function BranchesBoard() {
                         Default rider dispatched for pickups/deliveries at this branch. If they&apos;re
                         offline when a task comes up, the nearest online rider is used instead.
                       </p>
+                      {assignedRider ? (
+                        <p className="mt-2 flex items-center gap-2 text-sm font-medium text-slate-900">
+                          {assignedRider.firstName || assignedRider.lastName
+                            ? `${assignedRider.firstName ?? ''} ${assignedRider.lastName ?? ''}`.trim()
+                            : (assignedRider.email ?? assignedRider.userId)}
+                          <span className={assignedRider.isOnline ? 'badge-accent' : 'badge-warning'}>
+                            {assignedRider.isOnline ? 'Online' : 'Offline'}
+                          </span>
+                        </p>
+                      ) : (
+                        <p className="mt-2 text-sm text-muted">No default rider assigned</p>
+                      )}
                       <div className="mt-3 flex flex-wrap gap-2">
                         <select
                           id="assigned-rider"

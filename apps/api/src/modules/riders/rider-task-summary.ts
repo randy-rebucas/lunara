@@ -108,6 +108,7 @@ export async function buildRiderTaskDetails(
     shopName: shopLocation.name,
     branchCode: order.branchCode ?? branch?.code,
     branchName: order.branchName ?? branch?.name,
+    branchLogoUrl: branch?.logoUrl,
     shopLocation,
     shopPhone: options.includeDialablePhone ? shopPhone : undefined,
     shopPhoneMasked: maskPhone(shopPhone),

@@ -7,7 +7,7 @@ export const BOOKING_DELIVERY_FEE = 50;
 export const BOOKING_FLAT_DELIVERY_FEE = 70;
 /** Lunara's markup on a partner shop's base price per kg. Single source of truth — never hardcode 1.30 elsewhere. */
 export const SHOP_PRICE_MARKUP_MULTIPLIER = 1.3;
-export const BOOKING_MIN_WEIGHT_KG = 1;
+export const BOOKING_MIN_WEIGHT_KG = 5;
 export const BOOKING_MAX_WEIGHT_KG = 50;
 export const BOOKING_DEFAULT_WEIGHT_KG = 5;
 
@@ -98,21 +98,21 @@ export const LAUNDRY_SERVICES: LaundryServiceOption[] = [
     label: 'Wash & Fold',
     description: 'Everyday clothes washed, dried, and folded',
     pricePerKg: 80,
-    minWeightKg: 3,
+    minWeightKg: 5,
   },
   {
     type: BookingType.WASH_DRY_FOLD,
     label: 'Wash, Dry & Fold',
     description: 'Full service including machine dry',
     pricePerKg: 120,
-    minWeightKg: 3,
+    minWeightKg: 5,
   },
   {
     type: BookingType.DRY_CLEANING,
     label: 'Dry Cleaning',
     description: 'Delicates, suits, and formal wear',
     pricePerKg: 200,
-    minWeightKg: 2,
+    minWeightKg: 5,
   },
 ];
 
@@ -318,7 +318,8 @@ export function calculateQuote(
   if (!service) throw new Error('Unknown service type');
 
   const weightKg = clampWeight(input.weightKg);
-  const serviceSubtotal = Math.round(service.pricePerKg * weightKg);
+  const billedWeightKg = Math.max(weightKg, service.minWeightKg);
+  const serviceSubtotal = Math.round(service.pricePerKg * billedWeightKg);
   const catalog = addonOptions ?? BOOKING_ADDONS;
   const addons = input.addonIds
     .map((id) => catalog.find((a) => a.id === id))

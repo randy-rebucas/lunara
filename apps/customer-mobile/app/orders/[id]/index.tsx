@@ -2,7 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Image,
   Linking,
+  Modal,
   Platform,
   Pressable,
   RefreshControl,
@@ -30,6 +32,7 @@ import { OrderTimeline } from '../../../src/components/order-timeline';
 import { HandoffQrCard } from '../../../src/components/handoff-qr-card';
 import { branchTypeLabel } from '../../../src/components/nearest-branches';
 import { formatOrderNumber } from '../../../src/lib/active-order';
+import { resolveMediaUrl } from '../../../src/lib/media-url';
 import { useAuthStore } from '../../../src/store/auth';
 
 interface OrderDetail {
@@ -41,6 +44,7 @@ interface OrderDetail {
   scheduledPickupAt?: string;
   branchName?: string;
   branchCode?: string;
+  branchLogoUrl?: string;
   pickup?: { receiptCode?: string };
   delivery?: { receiptCode?: string; signatureName?: string };
   statusHistory: { status: string; timestamp: string; note?: string }[];
@@ -75,6 +79,7 @@ export default function OrderTrackScreen() {
   const { id, booked } = useLocalSearchParams<{ id: string; booked?: string }>();
   const apiFetch = useAuthStore((s) => s.apiFetch);
   const [order, setOrder] = useState<OrderDetail | null>(null);
+  const [accountName, setAccountName] = useState('');
   const [deliveryUi, setDeliveryUi] = useState<DeliveryUiState | null>(null);
   const [canReview, setCanReview] = useState(false);
   const [hasReview, setHasReview] = useState(false);
@@ -86,6 +91,13 @@ export default function OrderTrackScreen() {
   const [deliveryError, setDeliveryError] = useState('');
   const [loadError, setLoadError] = useState('');
   const [pageLoading, setPageLoading] = useState(true);
+  const [paymentExpanded, setPaymentExpanded] = useState(false);
+  const [branchExpanded, setBranchExpanded] = useState(false);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewError, setReviewError] = useState('');
   const justBooked = booked === '1';
 
   const notificationSeq = useRef(0);
@@ -145,6 +157,12 @@ export default function OrderTrackScreen() {
   }, [load]);
 
   useEffect(() => {
+    apiFetch<{ firstName: string; lastName: string }>('/customers/me')
+      .then((profile) => setAccountName(`${profile.firstName} ${profile.lastName}`.trim()))
+      .catch(() => {});
+  }, [apiFetch]);
+
+  useEffect(() => {
     if (justBooked && !bookedBannerShown.current) {
       bookedBannerShown.current = true;
       pushNotification(
@@ -193,18 +211,58 @@ export default function OrderTrackScreen() {
     }
   }
 
-  async function handleSign() {
+  async function handleSign(nameOverride?: string) {
     if (!id) return;
+    const name = (nameOverride ?? signatureName).trim();
+    if (name.length < 2) {
+      setDeliveryError('Enter your name (min 2 characters) to sign.');
+      return;
+    }
     setDeliveryError('');
     try {
       await apiFetch(`/orders/${id}/delivery/sign`, {
         method: 'POST',
-        body: JSON.stringify({ signatureName }),
+        body: JSON.stringify({ signatureName: name }),
       });
       await load();
       pushNotification('Delivery signed');
     } catch (e) {
       setDeliveryError(e instanceof Error ? e.message : 'Sign failed');
+    }
+  }
+
+  function openReviewModal() {
+    setReviewRating(0);
+    setReviewComment('');
+    setReviewError('');
+    setReviewModalOpen(true);
+  }
+
+  async function handleSubmitReview() {
+    if (!id) return;
+    if (reviewRating < 1) {
+      setReviewError('Select a star rating before submitting.');
+      return;
+    }
+    setReviewSubmitting(true);
+    setReviewError('');
+    try {
+      await apiFetch('/reviews', {
+        method: 'POST',
+        body: JSON.stringify({
+          orderId: id,
+          rating: reviewRating,
+          comment: reviewComment.trim() || undefined,
+        }),
+      });
+      setCanReview(false);
+      setHasReview(true);
+      setReviewModalOpen(false);
+      pushNotification('Thanks for your review!');
+    } catch (e) {
+      setReviewError(e instanceof Error ? e.message : 'Could not submit review');
+    } finally {
+      setReviewSubmitting(false);
     }
   }
 
@@ -234,7 +292,8 @@ export default function OrderTrackScreen() {
   const showPickupQr =
     order.status === OrderStatus.RIDER_ASSIGNED_PICKUP ||
     order.status === OrderStatus.RIDER_ASSIGNED;
-  const showDeliveryQr = order.status === OrderStatus.OUT_FOR_DELIVERY;
+  const showDeliveryQr =
+    order.status === OrderStatus.OUT_FOR_DELIVERY && !deliveryUi?.needsSign;
   const isTerminalCompleted =
     timeline.isTerminal && order.status === OrderStatus.COMPLETED;
   const showLostItemHint =
@@ -316,46 +375,73 @@ export default function OrderTrackScreen() {
 
       {order.paymentMethod ? (
         <Card style={styles.paymentCard}>
-          <View style={styles.cardHeaderRow}>
-            <Ionicons name="wallet-outline" size={16} color={colors.primary} />
-            <Text style={styles.paymentTitle}>Payment</Text>
-          </View>
-          <Text style={styles.paymentLine}>
-            {formatPaymentMethodLabel(order.paymentMethod)}
-            {order.cashTiming ? ` · ${formatCashTimingLabel(order.cashTiming)}` : ''}
-          </Text>
-          {order.paymentStatus ? (
-            <Text style={styles.paymentLine}>
-              {formatPaymentStatusLabel(order.paymentStatus)}
-            </Text>
-          ) : null}
-          {order.paymentReceiptCode ? (
-            <Text style={styles.paymentRef}>Ref {order.paymentReceiptCode}</Text>
+          <Pressable
+            style={styles.toggleHeaderRow}
+            onPress={() => setPaymentExpanded((v) => !v)}
+            accessibilityRole="button"
+            accessibilityLabel={`${paymentExpanded ? 'Collapse' : 'Expand'} payment details`}
+          >
+            <View style={styles.cardHeaderRow}>
+              <Ionicons name="wallet-outline" size={16} color={colors.primary} />
+              <Text style={styles.paymentTitle}>Payment</Text>
+            </View>
+            <Ionicons
+              name={paymentExpanded ? 'chevron-up' : 'chevron-down'}
+              size={16}
+              color={colors.muted}
+            />
+          </Pressable>
+          {paymentExpanded ? (
+            <>
+              <Text style={styles.paymentLine}>
+                {formatPaymentMethodLabel(order.paymentMethod)}
+                {order.cashTiming ? ` · ${formatCashTimingLabel(order.cashTiming)}` : ''}
+              </Text>
+              {order.paymentStatus ? (
+                <Text style={styles.paymentLine}>
+                  {formatPaymentStatusLabel(order.paymentStatus)}
+                </Text>
+              ) : null}
+              {order.paymentReceiptCode ? (
+                <Text style={styles.paymentRef}>Ref {order.paymentReceiptCode}</Text>
+              ) : null}
+            </>
           ) : null}
         </Card>
       ) : null}
 
       {hasBranch && (
         <Card style={styles.branchCard}>
-          <View style={styles.cardHeaderRow}>
-            <Ionicons name="storefront-outline" size={16} color={colors.primaryDark} />
-            <Text style={styles.branchLabel}>Assigned partner branch</Text>
-          </View>
-          <Text style={styles.branchName}>{order.branchName}</Text>
-          {order.branchCode ? <Text style={styles.branchCode}>{order.branchCode}</Text> : null}
-          <Text style={styles.branchHint}>{branchTypeLabel('partner_shop')}</Text>
-        </Card>
-      )}
-
-      {notifications.length > 0 && (
-        <Card style={styles.notifCard}>
-          <Text style={styles.sectionTitle}>Updates</Text>
-          {notifications.slice(0, 5).map((n) => (
-            <View key={n.id} style={styles.notifRow}>
-              <Ionicons name="ellipse" size={6} color={colors.primary} style={styles.notifDot} />
-              <Text style={styles.notifLine}>{n.message}</Text>
+          <Pressable
+            style={styles.toggleHeaderRow}
+            onPress={() => setBranchExpanded((v) => !v)}
+            accessibilityRole="button"
+            accessibilityLabel={`${branchExpanded ? 'Collapse' : 'Expand'} assigned partner branch`}
+          >
+            <View style={styles.cardHeaderRow}>
+              {order.branchLogoUrl ? (
+                <Image
+                  source={{ uri: resolveMediaUrl(order.branchLogoUrl) }}
+                  style={styles.branchLogo}
+                />
+              ) : (
+                <Ionicons name="storefront-outline" size={16} color={colors.primaryDark} />
+              )}
+              <Text style={styles.branchLabel}>Assigned partner branch</Text>
             </View>
-          ))}
+            <Ionicons
+              name={branchExpanded ? 'chevron-up' : 'chevron-down'}
+              size={16}
+              color={colors.primaryDark}
+            />
+          </Pressable>
+          {branchExpanded ? (
+            <>
+              <Text style={styles.branchName}>{order.branchName}</Text>
+              {order.branchCode ? <Text style={styles.branchCode}>{order.branchCode}</Text> : null}
+              <Text style={styles.branchHint}>{branchTypeLabel('partner_shop')}</Text>
+            </>
+          ) : null}
         </Card>
       )}
 
@@ -407,21 +493,49 @@ export default function OrderTrackScreen() {
         </Card>
       )}
 
-      {showDeliveryActions && deliveryUi?.needsSign && (
-        <Card style={styles.actionCard}>
-          <View style={styles.cardHeaderRow}>
-            <Ionicons name="create-outline" size={18} color={colors.primary} />
-            <Text style={styles.actionTitle}>Sign for delivery</Text>
+      <Modal
+        visible={Boolean(showDeliveryActions && deliveryUi?.needsSign)}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {}}
+      >
+        <View style={styles.sheetOverlay}>
+          <View style={styles.sheetPanel}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.cardHeaderRow}>
+              <Ionicons name="create-outline" size={18} color={colors.primary} />
+              <Text style={styles.actionTitle}>Sign for delivery</Text>
+            </View>
+            <Input
+              style={styles.input}
+              placeholder="Your name"
+              value={signatureName}
+              onChangeText={setSignatureName}
+            />
+            <Button label="Sign" onPress={() => handleSign()} style={styles.actionBtn} />
+
+            {accountName ? (
+              <View style={styles.orRow}>
+                <View style={styles.orLine} />
+                <Text style={styles.orText}>Or</Text>
+                <View style={styles.orLine} />
+              </View>
+            ) : null}
+
+            {accountName ? (
+              <Pressable
+                style={styles.tapToSignRow}
+                onPress={() => handleSign(accountName)}
+                accessibilityRole="button"
+                accessibilityLabel={`Tap to sign as ${accountName}`}
+              >
+                <Ionicons name="finger-print-outline" size={16} color={colors.primary} />
+                <Text style={styles.tapToSignText}>Just click to sign as {accountName}</Text>
+              </Pressable>
+            ) : null}
           </View>
-          <Input
-            style={styles.input}
-            placeholder="Your name"
-            value={signatureName}
-            onChangeText={setSignatureName}
-          />
-          <Button label="Sign" onPress={handleSign} style={styles.actionBtn} />
-        </Card>
-      )}
+        </View>
+      </Modal>
 
       {deliveryError ? (
         <View style={styles.errorRow}>
@@ -460,7 +574,7 @@ export default function OrderTrackScreen() {
           <Text style={styles.doneTitle}>All done!</Text>
           <Text style={styles.doneSub}>Thanks for using Lunara.</Text>
           {canReview ? (
-            <Button label="Rate your experience" onPress={() => router.push(`/review/${id}`)} style={styles.doneAction} />
+            <Button label="Rate your experience" onPress={openReviewModal} style={styles.doneAction} />
           ) : null}
           {hasReview && !canReview ? (
             <Pressable onPress={() => router.push(`/review/${id}`)} accessibilityRole="button">
@@ -481,6 +595,69 @@ export default function OrderTrackScreen() {
           />
         </Card>
       )}
+
+      <Modal
+        visible={reviewModalOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setReviewModalOpen(false)}
+      >
+        <View style={styles.sheetOverlay}>
+          <Pressable style={styles.sheetBackdrop} onPress={() => setReviewModalOpen(false)} />
+          <View style={styles.sheetPanel}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.cardHeaderRow}>
+              <Ionicons name="star-outline" size={18} color={colors.primary} />
+              <Text style={styles.actionTitle}>Rate your experience</Text>
+            </View>
+
+            <View style={styles.starsWrap}>
+              <View style={styles.starsRow}>
+                {[1, 2, 3, 4, 5].map((value) => (
+                  <Pressable
+                    key={value}
+                    onPress={() => setReviewRating(value)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${value} star${value > 1 ? 's' : ''}`}
+                    accessibilityState={{ selected: value === reviewRating }}
+                  >
+                    <Ionicons
+                      name={value <= reviewRating ? 'star' : 'star-outline'}
+                      size={36}
+                      color={value <= reviewRating ? '#F59E0B' : colors.border}
+                    />
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+
+            <Input
+              style={styles.input}
+              placeholder="Comments (optional)"
+              value={reviewComment}
+              onChangeText={setReviewComment}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+
+            {reviewError ? (
+              <View style={styles.errorRow}>
+                <Ionicons name="alert-circle-outline" size={14} color={colors.destructive} />
+                <Text style={styles.error}>{reviewError}</Text>
+              </View>
+            ) : null}
+
+            <Button
+              label={reviewSubmitting ? 'Submitting…' : 'Submit review'}
+              onPress={handleSubmitReview}
+              disabled={reviewSubmitting || reviewRating < 1}
+              style={styles.actionBtn}
+            />
+          </View>
+        </View>
+      </Modal>
 
       {showLostItemHint && !isTerminalCompleted ? (
         <Pressable
@@ -550,6 +727,11 @@ const styles = StyleSheet.create({
   progressFill: { height: '100%', backgroundColor: colors.primary },
   progressLabel: { marginTop: spacing.sm - 2, fontSize: 12, color: colors.muted },
   cardHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  toggleHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   pendingCard: {
     marginTop: spacing.lg,
     backgroundColor: colors.warningBg,
@@ -581,13 +763,10 @@ const styles = StyleSheet.create({
     borderColor: colors.primaryBorder,
   },
   branchLabel: { ...typography.label, color: colors.primaryDark },
+  branchLogo: { width: 28, height: 28, borderRadius: radius.sm, backgroundColor: colors.surface },
   branchName: { marginTop: spacing.sm, fontSize: 18, fontWeight: '700', color: colors.slate800 },
   branchCode: { fontFamily: 'monospace', fontSize: 12, color: colors.primary, marginTop: 2 },
   branchHint: { marginTop: spacing.sm - 2, fontSize: 12, color: colors.muted },
-  notifCard: { marginTop: spacing.lg },
-  notifRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
-  notifDot: { marginTop: 1 },
-  notifLine: { flex: 1, fontSize: 13, color: colors.slate700 },
   locationCard: { marginTop: spacing.lg, borderWidth: 0 },
   sectionTitleInline: { ...typography.subheading, fontSize: 15 },
   locationText: { marginTop: spacing.sm, fontSize: 13, color: colors.slate700 },
@@ -602,6 +781,46 @@ const styles = StyleSheet.create({
   actionHint: { marginTop: spacing.xs, fontSize: 13, color: colors.muted },
   input: { marginTop: spacing.md },
   actionBtn: { marginTop: spacing.md },
+  sheetOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+  },
+  sheetBackdrop: { flex: 1 },
+  starsWrap: { alignItems: 'center', marginTop: spacing.md, marginBottom: spacing.sm },
+  starsRow: { flexDirection: 'row', gap: spacing.sm },
+  sheetPanel: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xxl,
+  },
+  orRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  orLine: { flex: 1, height: 1, backgroundColor: colors.border },
+  orText: { fontSize: 12, fontWeight: '600', color: colors.mutedForeground },
+  tapToSignRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+  },
+  tapToSignText: { fontSize: 13, fontWeight: '600', color: colors.primary },
+  sheetHandle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: radius.full,
+    backgroundColor: colors.border,
+    marginBottom: spacing.lg,
+  },
   errorRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.sm },
   error: { color: colors.destructive, fontSize: 13 },
   receiptRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg, flexWrap: 'wrap' },

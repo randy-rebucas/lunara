@@ -41,10 +41,12 @@ export function ProfileAvatar({ name, avatarUrl, uploading, onUpload }: ProfileA
         return;
       }
 
+      // No native crop step: Android's system Photo Picker doesn't support one, and the
+      // legacy picker's crop screen doesn't account for edge-to-edge system bars, leaving
+      // its Done/Cancel buttons hidden underneath them. The avatar is displayed in a fixed
+      // circular frame with cover fill, so an uncropped image still looks correct.
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
         quality: 0.85,
       });
 

@@ -116,11 +116,18 @@ export class OrdersService {
     const paymentsByOrderId = await this.loadLatestOrderPaymentsByOrderId(
       orders.map((o) => o._id),
     );
+    const branchIds = orders.flatMap((o) => (o.branchId ? [o.branchId] : []));
+    const logoUrlsByBranchId = await this.branchesService.getLogoUrlsByIds(branchIds);
 
     return Promise.all(
       orders.map(async (order) => {
         const payment = paymentsByOrderId.get(order._id.toString());
-        const base = this.enrichOrderWithPayment(order, payment);
+        const base = {
+          ...this.enrichOrderWithPayment(order, payment),
+          branchLogoUrl: order.branchId
+            ? logoUrlsByBranchId.get(order.branchId.toString())
+            : undefined,
+        };
 
         if (!this.shouldShowPartnerCoverage(order)) {
           return base;

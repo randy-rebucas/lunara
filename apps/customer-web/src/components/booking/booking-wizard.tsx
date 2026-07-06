@@ -635,7 +635,7 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
           label: s.label,
           description: s.description ?? catalogMatch?.description ?? '',
           pricePerKg: s.customerPricePerKg,
-          minWeightKg: catalogMatch?.minWeightKg ?? 3,
+          minWeightKg: catalogMatch?.minWeightKg ?? 5,
           isCustom: s.isCustom ?? false,
           customServiceId: s.customServiceId,
         };
@@ -886,7 +886,7 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
             </div>
             <input
               type="range"
-              min={config?.minWeightKg ?? 1}
+              min={config?.minWeightKg ?? 5}
               max={config?.maxWeightKg ?? 50}
               value={form.weightKg}
               onChange={(e) => setForm((f) => ({ ...f, weightKg: Number(e.target.value) }))}
@@ -894,7 +894,7 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
               aria-label="Estimated weight in kilograms"
             />
             <div className="mt-2 flex justify-between text-xs text-muted-foreground">
-              <span>{config?.minWeightKg ?? 1} kg</span>
+              <span>{config?.minWeightKg ?? 5} kg</span>
               <span>{config?.maxWeightKg ?? 50} kg</span>
             </div>
             {localQuote && !localQuote.meetsMinimum && (

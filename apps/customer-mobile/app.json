@@ -43,6 +43,12 @@
         {
           "photosPermission": "Lunara uses your photo library so you can set a profile picture."
         }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Lunara uses your camera to scan your laundry tag's QR code."
+        }
       ]
     ],
     "experiments": {

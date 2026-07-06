@@ -15,6 +15,7 @@ import {
   type PartnerCoverageInfo,
 } from '@lunara/utils';
 import { Address, AddressDocument } from '../addresses/schemas/address.schema';
+import { LocalStorageService } from '../../common/storage/local-storage.service';
 import { CatalogService } from '../catalog/catalog.service';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { Rider, RiderDocument } from '../riders/schemas/rider.schema';
@@ -108,6 +109,7 @@ export class BranchesService {
     @InjectModel(Rider.name) private riderModel: Model<RiderDocument>,
     private trackingGateway: TrackingGateway,
     private catalogService: CatalogService,
+    private localStorageService: LocalStorageService,
   ) {}
 
   /** Shop's own price/kg for a service; falls back to the global catalog price when not customized. */
@@ -280,7 +282,7 @@ export class BranchesService {
       label: dto.label,
       description: dto.description,
       pricePerKg: dto.pricePerKg,
-      minWeightKg: dto.minWeightKg ?? 3,
+      minWeightKg: dto.minWeightKg ?? 5,
       sortOrder: dto.sortOrder ?? 0,
     });
     return { success: true, data: { _id: created._id.toString() } };
@@ -394,6 +396,31 @@ export class BranchesService {
     return { success: true, data: { assignedRiderId: branch.assignedRiderId?.toString() ?? null } };
   }
 
+  async setBranchLogo(branchId: string, file: Express.Multer.File) {
+    const branch = await this.branchModel.findById(branchId);
+    if (!branch) throw new NotFoundException('Branch not found');
+
+    const result = await this.localStorageService.uploadBuffer(
+      file.buffer,
+      'lunara/branch-logos',
+      `${branch._id.toString()}-${Date.now()}`,
+      'image',
+      file.mimetype,
+    );
+    branch.logoUrl = result.secure_url;
+    await branch.save();
+    return { success: true, data: { logoUrl: branch.logoUrl } };
+  }
+
+  async clearBranchLogo(branchId: string) {
+    const branch = await this.branchModel.findById(branchId);
+    if (!branch) throw new NotFoundException('Branch not found');
+
+    branch.logoUrl = undefined;
+    await branch.save();
+    return { success: true, data: { logoUrl: null } };
+  }
+
   async listCustomServicesForBranch(branchId: string) {
     return this.customServiceModel
       .find({ branchId: new Types.ObjectId(branchId) })
@@ -465,6 +492,7 @@ export class BranchesService {
           distanceLabel: formatDistanceKm(dist),
           withinRadius: dist <= branch.serviceRadiusKm,
           capacityAvailable: activeOrders < branch.maxActiveOrders,
+          logoUrl: branch.logoUrl,
           services,
           addons,
         };
@@ -1146,6 +1174,13 @@ export class BranchesService {
       activeOrders,
       noteOverride: `Payment confirmed — auto-dispatched to partner shop ${branch.name}`,
     });
+  }
+
+  /** Batch-fetch logoUrl for a set of branch ids, keyed by string id. Used to enrich order responses. */
+  async getLogoUrlsByIds(branchIds: Types.ObjectId[]): Promise<Map<string, string | undefined>> {
+    if (branchIds.length === 0) return new Map();
+    const branches = await this.branchModel.find({ _id: { $in: branchIds } }).select('logoUrl');
+    return new Map(branches.map((b) => [b._id.toString(), b.logoUrl]));
   }
 
   async getBranch(id: string) {

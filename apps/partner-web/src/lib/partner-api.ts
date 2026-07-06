@@ -111,6 +111,39 @@ export async function partnerFetch<T>(path: string, init?: RequestInit): Promise
   return body.data as T;
 }
 
+export async function uploadShopLogo(file: File): Promise<{ id: string; logoUrl?: string }> {
+  const token = getPartnerToken();
+  const formData = new FormData();
+  formData.append('logo', file);
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/partner/settings/logo`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+  } catch {
+    throw new Error('Cannot reach API to upload logo.');
+  }
+
+  const body = await res.json();
+  if (res.status === 401) {
+    clearPartnerToken();
+    if (typeof window !== 'undefined') window.location.href = '/login';
+    throw new Error('Session expired. Please sign in again.');
+  }
+  if (!body.success) throw new Error(parseApiError(body, 'Logo upload failed'));
+  return body.data.branch;
+}
+
+export async function removeShopLogo(): Promise<{ id: string; logoUrl?: string }> {
+  return partnerFetch('/partner/settings/logo', { method: 'DELETE' }).then(
+    (data) => (data as { branch: { id: string; logoUrl?: string } }).branch,
+  );
+}
+
 export async function uploadProcessingPhoto(orderId: string, file: File): Promise<string> {
   const token = getPartnerToken();
   const formData = new FormData();

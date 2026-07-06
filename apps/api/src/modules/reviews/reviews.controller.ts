@@ -20,6 +20,12 @@ export class ReviewsController {
     return this.reviewsService.listNotifications(req.user.sub, Number(limit));
   }
 
+  @Patch('notifications/read-all')
+  @Roles(UserRole.CUSTOMER)
+  markAllRead(@Req() req: { user: { sub: string } }) {
+    return this.reviewsService.markAllNotificationsRead(req.user.sub);
+  }
+
   @Patch('notifications/:id/read')
   @Roles(UserRole.CUSTOMER)
   markRead(@Req() req: { user: { sub: string } }, @Param('id') id: string) {

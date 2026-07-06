@@ -150,6 +150,14 @@ export class ReviewsService {
     return { success: true, data: notification };
   }
 
+  async markAllNotificationsRead(userId: string) {
+    await this.notificationModel.updateMany(
+      { userId: new Types.ObjectId(userId), read: false },
+      { read: true },
+    );
+    return { success: true, data: { ok: true } };
+  }
+
   private serializeReview(review: ReviewDocument) {
     return {
       _id: review._id.toString(),

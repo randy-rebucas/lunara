@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { randomUUID } from 'crypto';
@@ -6,6 +6,8 @@ import { UserRole, type PortalRole } from '@lunara/types';
 import { resolveTagCode } from '@lunara/utils';
 import { Branch, BranchDocument } from '../branches/schemas/branch.schema';
 import { resolvePortalBranchId } from '../partner/partner-access';
+import { Order, OrderDocument } from '../orders/schemas/order.schema';
+import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { LaundryTag, LaundryTagDocument, LaundryTagStatus } from './schemas/laundry-tag.schema';
@@ -21,6 +23,8 @@ export class LaundryTagsService {
     @InjectModel(LaundryTag.name) private tagModel: Model<LaundryTagDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Branch.name) private branchModel: Model<BranchDocument>,
+    @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
+    @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
     private trackingGateway: TrackingGateway,
   ) {}
 
@@ -232,5 +236,76 @@ export class LaundryTagsService {
     const tag = await this.tagModel.findById(tagId);
     if (!tag) throw new NotFoundException('Tag not found');
     return tag;
+  }
+
+  /** Resolves a scanned tag code/QR payload to its current order + owning customer, scoped by role. */
+  async lookup(codeOrPayload: string, actor: { sub: string; role: UserRole }) {
+    const code = resolveTagCode(codeOrPayload);
+    const tag = await this.tagModel.findOne({ code });
+    if (!tag) throw new NotFoundException('Tag not found');
+
+    if (!tag.currentOrderId) {
+      if (actor.role === UserRole.CUSTOMER || actor.role === UserRole.RIDER) {
+        throw new ForbiddenException('This tag is not currently attached to any order');
+      }
+      return { tag: { code: tag.code, status: tag.status }, order: null, customer: null };
+    }
+
+    const order = await this.orderModel.findById(tag.currentOrderId);
+    if (!order) {
+      return { tag: { code: tag.code, status: tag.status }, order: null, customer: null };
+    }
+
+    await this.assertLookupAccess(order, actor);
+
+    const [customerProfile, customerUser] = await Promise.all([
+      this.customerModel.findOne({ userId: order.customerId }).select('firstName lastName'),
+      this.userModel.findById(order.customerId).select('phone'),
+    ]);
+
+    return {
+      tag: { code: tag.code, status: tag.status },
+      order: {
+        id: order._id.toString(),
+        shortCode: order._id.toString().slice(-6).toUpperCase(),
+        status: order.status,
+        branchId: order.branchId?.toString(),
+      },
+      customer: customerProfile
+        ? { firstName: customerProfile.firstName, lastName: customerProfile.lastName, phone: customerUser?.phone }
+        : null,
+    };
+  }
+
+  private async assertLookupAccess(order: OrderDocument, actor: { sub: string; role: UserRole }) {
+    if (actor.role === UserRole.ADMIN) return;
+
+    if (actor.role === UserRole.PARTNER) {
+      const ownedBranchIds = (
+        await this.branchModel.find({ partnerUserId: new Types.ObjectId(actor.sub) }).select('_id').lean()
+      ).map((b) => b._id.toString());
+      if (order.branchId && ownedBranchIds.includes(order.branchId.toString())) return;
+      throw new ForbiddenException('Order is not at one of your branches');
+    }
+
+    if (actor.role === UserRole.STAFF) {
+      const staffBranchId = await resolvePortalBranchId(this.userModel, actor.sub, actor.role);
+      if (staffBranchId && order.branchId?.toString() === staffBranchId.toString()) return;
+      throw new ForbiddenException('Order is not at your branch');
+    }
+
+    if (actor.role === UserRole.RIDER) {
+      const isPickupRider = order.pickupRiderId?.toString() === actor.sub;
+      const isDeliveryRider = order.deliveryRiderId?.toString() === actor.sub;
+      if (isPickupRider || isDeliveryRider) return;
+      throw new ForbiddenException('You are not assigned to this order');
+    }
+
+    if (actor.role === UserRole.CUSTOMER) {
+      if (order.customerId.toString() === actor.sub) return;
+      throw new ForbiddenException('This tag is not linked to one of your orders');
+    }
+
+    throw new ForbiddenException('Not allowed to look up this tag');
   }
 }
