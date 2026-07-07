@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import QRCode from 'react-qr-code';
 import { ShoppingBag, X } from 'lucide-react';
+import { cn } from '@lunara/ui';
 import { appConfig } from '@lunara/config';
 import { fetchOnboardingStatus, getOnboardingPath } from '@lunara/hooks/onboarding';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
@@ -22,6 +23,8 @@ import {
   MarketingHeroGlow,
   MarketingSection,
   MarketingSectionHeader,
+  MarketingSectionIcon,
+  accentClasses,
 } from './marketing-design';
 import { MarketingShell } from './marketing-shell';
 import {
@@ -265,11 +268,15 @@ export function HomePage() {
       {/* ── Social proof strip ── */}
       <section className="bg-slate-900" aria-label="Social proof">
         <div className="marketing-container py-8">
-          <dl className="grid grid-cols-2 gap-6 md:grid-cols-4">
+          <dl className="grid grid-cols-2 divide-y divide-white/10 md:grid-cols-4 md:divide-x md:divide-y-0">
             {SOCIAL_PROOF.map((item) => (
-              <div key={item.label} className="text-center">
-                <dt className="text-2xl font-bold text-white sm:text-3xl">{item.value}</dt>
-                <dd className="mt-1 text-xs text-slate-400">{item.label}</dd>
+              <div key={item.label} className="px-2 py-4 text-center first:pt-0 md:py-0 md:first:pl-0">
+                <dt className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
+                  {item.value}
+                </dt>
+                <dd className="mt-1 text-xs font-medium uppercase tracking-wide text-slate-400">
+                  {item.label}
+                </dd>
               </div>
             ))}
           </dl>
@@ -397,12 +404,16 @@ export function HomePage() {
 
         <div className="card mt-8">
           <div className="card-body text-center sm:text-left">
-            <h3 className="font-semibold text-slate-900">Expanding soon</h3>
+            <MarketingSectionIcon
+              icon={ShoppingBag}
+              title="Expanding soon"
+              className="justify-center sm:justify-start"
+            />
             <ul className="mt-4 flex flex-wrap justify-center gap-2 sm:justify-start">
               {EXPANDING_AREAS.map((city) => (
                 <li
                   key={city}
-                  className="rounded-full bg-surface-muted px-3 py-1.5 text-sm text-slate-700 ring-1 ring-border/60"
+                  className="rounded-full bg-surface px-3.5 py-1.5 text-sm font-medium text-slate-700 shadow-[var(--shadow-card)] ring-1 ring-border/50"
                 >
                   {city}
                 </li>
@@ -427,40 +438,22 @@ export function HomePage() {
         <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {WHY_CHOOSE.map((item) => {
             const Icon = item.icon;
+            const accent = accentClasses(item.accent);
             return (
-              <article key={item.title} className="card flex h-full flex-col">
+              <article
+                key={item.title}
+                className="card flex h-full flex-col hover:shadow-[var(--shadow-elevated)]"
+              >
                 <div className="card-body flex flex-1 flex-col">
                   <div
-                    className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl ${
-                      item.accent === 'primary'
-                        ? 'bg-primary/10'
-                        : item.accent === 'secondary'
-                          ? 'bg-secondary/10'
-                          : 'bg-accent/10'
-                    }`}
+                    className={cn(
+                      'mb-3 flex h-10 w-10 items-center justify-center rounded-xl',
+                      accent.bg,
+                    )}
                   >
-                    <Icon
-                      className={`h-5 w-5 ${
-                        item.accent === 'primary'
-                          ? 'text-primary'
-                          : item.accent === 'secondary'
-                            ? 'text-secondary'
-                            : 'text-accent'
-                      }`}
-                      aria-hidden
-                    />
+                    <Icon className={cn('h-5 w-5', accent.text)} aria-hidden />
                   </div>
-                  <span
-                    className={`w-fit ${
-                      item.accent === 'primary'
-                        ? 'badge-primary'
-                        : item.accent === 'secondary'
-                          ? 'badge-secondary'
-                          : 'badge-accent'
-                    }`}
-                  >
-                    {item.label}
-                  </span>
+                  <span className={cn('w-fit', `badge-${item.accent}`)}>{item.label}</span>
                   <h3 className="mt-3 text-lg font-semibold text-slate-900">{item.title}</h3>
                   <p className="mt-2 flex-1 text-sm leading-relaxed text-muted">{item.description}</p>
                 </div>
@@ -479,7 +472,10 @@ export function HomePage() {
 
         <div className="mt-12 grid gap-6 md:grid-cols-3">
           {PRICING_TIERS.map((tier) => (
-            <div key={tier.service} className="card-elevated flex h-full flex-col overflow-hidden">
+            <div
+              key={tier.service}
+              className="card-elevated flex h-full flex-col overflow-hidden hover:shadow-[var(--shadow-elevated-lg)]"
+            >
               {/* Service image */}
               <div className="relative h-44 w-full">
                 <Image
@@ -492,17 +488,7 @@ export function HomePage() {
                 <div className="absolute inset-0 bg-gradient-to-t from-surface/50 to-transparent" aria-hidden />
               </div>
               <div className="card-body flex flex-1 flex-col">
-                <span
-                  className={`w-fit ${
-                    tier.badgeVariant === 'primary'
-                      ? 'badge-primary'
-                      : tier.badgeVariant === 'secondary'
-                        ? 'badge-secondary'
-                        : 'badge-accent'
-                  }`}
-                >
-                  {tier.badge}
-                </span>
+                <span className={cn('w-fit', `badge-${tier.badgeVariant}`)}>{tier.badge}</span>
                 <h3 className="mt-3 text-lg font-semibold text-slate-900">{tier.service}</h3>
                 <div className="mt-3 flex items-baseline gap-1">
                   <span className="text-3xl font-bold text-primary">{tier.from}</span>

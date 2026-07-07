@@ -8,6 +8,7 @@ import { isValidPhilippineMobile } from '@lunara/utils';
 import { fetchOnboardingStatus, getOnboardingPath } from '@lunara/hooks/onboarding';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { AuthShell } from '../../../components/auth-shell';
+import { FormError } from '../../../components/marketing/marketing-design';
 import { Input } from '../../../components/ui/input';
 
 type OtpStep = 'phone' | 'code';
@@ -85,7 +86,7 @@ export default function LoginPage() {
 
   return (
     <AuthShell>
-      <h1 className="text-2xl font-bold tracking-tight">Sign in</h1>
+      <h1 className="text-2xl font-bold tracking-tight text-slate-900">Sign in</h1>
       <p className="mt-1 text-sm text-muted">Welcome back to your laundry hub</p>
 
       <div className="mt-6 flex gap-2 rounded-lg bg-slate-100 p-1">
@@ -119,9 +120,7 @@ export default function LoginPage() {
             onChange={(e) => setPassword(e.target.value)}
             required
           />
-          {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
-          )}
+          {error && <FormError>{error}</FormError>}
           <Button type="submit" className="w-full" size="lg" disabled={submitting}>
             {submitting ? 'Signing in…' : 'Sign in'}
           </Button>
@@ -136,9 +135,7 @@ export default function LoginPage() {
             inputMode="tel"
             required
           />
-          {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
-          )}
+          {error && <FormError>{error}</FormError>}
           <Button type="submit" className="w-full" size="lg" disabled={submitting}>
             {submitting ? 'Sending…' : 'Send OTP'}
           </Button>
@@ -156,9 +153,7 @@ export default function LoginPage() {
             autoComplete="one-time-code"
             required
           />
-          {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
-          )}
+          {error && <FormError>{error}</FormError>}
           <Button type="submit" className="w-full" size="lg" disabled={submitting || otp.length < 6}>
             {submitting ? 'Verifying…' : 'Verify & sign in'}
           </Button>

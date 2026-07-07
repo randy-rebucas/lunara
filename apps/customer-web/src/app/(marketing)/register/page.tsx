@@ -7,6 +7,7 @@ import { Button } from '@lunara/ui';
 import { fetchOnboardingStatus, getOnboardingPath } from '@lunara/hooks/onboarding';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { AuthShell } from '../../../components/auth-shell';
+import { FormError } from '../../../components/marketing/marketing-design';
 import { Input } from '../../../components/ui/input';
 
 export default function RegisterPage() {
@@ -35,7 +36,7 @@ export default function RegisterPage() {
 
   return (
     <AuthShell>
-      <h1 className="text-2xl font-bold tracking-tight">Create account</h1>
+      <h1 className="text-2xl font-bold tracking-tight text-slate-900">Create account</h1>
       <p className="mt-1 text-sm text-muted">Register with your details to get started</p>
       <form onSubmit={handleSubmit} className="mt-6 space-y-4">
         <div className="grid grid-cols-2 gap-4">
@@ -70,9 +71,7 @@ export default function RegisterPage() {
           onChange={(e) => setForm({ ...form, password: e.target.value })}
           required
         />
-        {error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
-        )}
+        {error && <FormError>{error}</FormError>}
         <Button type="submit" className="w-full" size="lg">
           Register
         </Button>

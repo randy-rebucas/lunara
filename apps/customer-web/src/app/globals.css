@@ -11,6 +11,7 @@
   --font-sans: var(--font-inter), 'Inter', system-ui, sans-serif;
   --shadow-card: 0 1px 3px 0 rgb(15 23 42 / 0.06), 0 1px 2px -1px rgb(15 23 42 / 0.06);
   --shadow-elevated: 0 4px 6px -1px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.06);
+  --shadow-elevated-lg: 0 20px 25px -5px rgb(15 23 42 / 0.1), 0 8px 10px -6px rgb(15 23 42 / 0.06);
   --width-page: 56rem;
   --width-content: 36rem;
 }
@@ -59,11 +60,11 @@
   }
 
   .card {
-    @apply rounded-xl bg-surface shadow-[var(--shadow-card)];
+    @apply rounded-xl bg-surface shadow-[var(--shadow-card)] transition-shadow duration-200;
   }
 
   .card-elevated {
-    @apply rounded-xl bg-surface shadow-[var(--shadow-elevated)];
+    @apply rounded-xl bg-surface shadow-[var(--shadow-elevated-lg)] transition-shadow duration-200;
   }
 
   .card-body {
@@ -103,15 +104,15 @@
   }
 
   .badge-primary {
-    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-primary/10 text-primary;
+    @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold tracking-wide bg-primary/10 text-primary ring-1 ring-primary/15;
   }
 
   .badge-accent {
-    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-accent/10 text-accent;
+    @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold tracking-wide bg-accent/10 text-accent ring-1 ring-accent/15;
   }
 
   .badge-secondary {
-    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-secondary/10 text-secondary;
+    @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold tracking-wide bg-secondary/10 text-secondary ring-1 ring-secondary/15;
   }
 
   .selectable-item {

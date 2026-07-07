@@ -30,7 +30,7 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
         Skip to main content
       </a>
 
-      <header className="sticky top-0 z-30 border-b border-border/40 bg-surface-muted/80 backdrop-blur-md">
+      <header className="sticky top-0 z-30 border-b border-border/40 bg-surface-muted/80 shadow-sm backdrop-blur-md">
         <div className="marketing-container py-4">
           <div className="flex items-center justify-between gap-4">
             <Link href="/" className="flex items-center gap-2.5" onClick={close}>
@@ -138,7 +138,7 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
 
             {/* Product links */}
             <div>
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Product</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-500">Product</h3>
               <ul className="mt-4 space-y-2.5 text-sm">
                 {[
                   { href: '/#how-it-works', label: 'How it works' },
@@ -157,7 +157,7 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
 
             {/* Company links */}
             <div>
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Company</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-500">Company</h3>
               <ul className="mt-4 space-y-2.5 text-sm">
                 {[
                   { href: '/partners', label: 'Partner with us' },
@@ -176,7 +176,7 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
 
             {/* Account links */}
             <div>
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Account</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-500">Account</h3>
               <ul className="mt-4 space-y-2.5 text-sm">
                 {[
                   { href: '/signup', label: 'Sign up' },

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Bike, ListChecks, MapPin, Wallet } from 'lucide-react';
 import { appConfig } from '@lunara/config';
 import { MarketingContentPage } from '../../../components/marketing/marketing-content-page';
 import {
@@ -6,6 +7,8 @@ import {
   MarketingCtaPanel,
   MarketingFeatureCard,
   MarketingInfoCard,
+  MarketingSectionIcon,
+  MarketingStatRow,
 } from '../../../components/marketing/marketing-design';
 import { MarketingActions } from '../../../components/marketing/marketing-actions';
 import { ButtonLink } from '../../../components/ui/button-link';
@@ -51,6 +54,15 @@ export default function RidersPage() {
       badge="For riders"
       title="Drive with Lunara"
       description="Earn on your schedule as a pickup and delivery rider on the Lunara network."
+      heroActions={
+        <MarketingStatRow
+          stats={[
+            { icon: Bike, label: 'Motorcycle, car & bicycle riders' },
+            { icon: MapPin, label: 'Metro Manila & expanding' },
+            { icon: Wallet, label: 'GCash & bank payouts' },
+          ]}
+        />
+      }
     >
       <div className="grid gap-6 lg:grid-cols-2">
         {PERKS.map((item) => (
@@ -58,13 +70,16 @@ export default function RidersPage() {
         ))}
       </div>
 
-      <MarketingInfoCard title="How onboarding works" className="mt-10">
-        <ol className="list-decimal space-y-3 pl-5 text-sm leading-relaxed text-muted">
-          {STEPS.map((step) => (
-            <li key={step}>{step}</li>
-          ))}
-        </ol>
-      </MarketingInfoCard>
+      <div className="mt-10">
+        <MarketingSectionIcon icon={ListChecks} title="How onboarding works" />
+        <MarketingInfoCard className="mt-4">
+          <ol className="list-decimal space-y-3 pl-5 text-sm leading-relaxed text-muted">
+            {STEPS.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
+        </MarketingInfoCard>
+      </div>
 
       <MarketingCtaPanel
         className="mt-10"

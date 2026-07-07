@@ -11,6 +11,8 @@ import {
   MarketingCtaPanel,
   MarketingFeatureCard,
   MarketingHeroGlow,
+  MarketingSectionIcon,
+  MarketingStatRow,
 } from '../../../../components/marketing/marketing-design';
 import { fetchServiceAreaById } from '../../../../components/marketing/home-page-data';
 import { AvatarWithFallback } from '../../../../components/marketing/avatar-card';
@@ -32,23 +34,6 @@ export async function generateMetadata({
     title: `${branch.name} — ${appConfig.name}`,
     description: `Laundry pickup and delivery coverage for ${branch.area}, serviced by ${branch.name}.`,
   };
-}
-
-function SectionHeading({
-  icon: Icon,
-  title,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-}) {
-  return (
-    <div className="flex items-center gap-2.5">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-        <Icon className="h-[18px] w-[18px]" />
-      </span>
-      <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
-    </div>
-  );
 }
 
 export default async function ServiceAreaDetailPage({
@@ -100,24 +85,28 @@ export default async function ServiceAreaDetailPage({
                 Serving {branch.area}. Enter your address when booking to confirm coverage.
               </p>
 
-              <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted">
-                <span className="inline-flex items-center gap-1.5">
-                  <MapPin className="h-4 w-4 text-primary" aria-hidden />
-                  ~{branch.radiusKm} km service radius
-                </span>
-                {hasStaff && (
-                  <span className="inline-flex items-center gap-1.5">
-                    <Users className="h-4 w-4 text-primary" aria-hidden />
-                    {branch.staff!.length} team {branch.staff!.length === 1 ? 'member' : 'members'}
-                  </span>
-                )}
-                {hasSiblings && (
-                  <span className="inline-flex items-center gap-1.5">
-                    <Building2 className="h-4 w-4 text-primary" aria-hidden />
-                    {branch.branches!.length} other {branch.branches!.length === 1 ? 'branch' : 'branches'}
-                  </span>
-                )}
-              </div>
+              <MarketingStatRow
+                className="mt-5"
+                stats={[
+                  { icon: MapPin, label: `~${branch.radiusKm} km service radius` },
+                  ...(hasStaff
+                    ? [
+                        {
+                          icon: Users,
+                          label: `${branch.staff!.length} team ${branch.staff!.length === 1 ? 'member' : 'members'}`,
+                        },
+                      ]
+                    : []),
+                  ...(hasSiblings
+                    ? [
+                        {
+                          icon: Building2,
+                          label: `${branch.branches!.length} other ${branch.branches!.length === 1 ? 'branch' : 'branches'}`,
+                        },
+                      ]
+                    : []),
+                ]}
+              />
 
               <div className="mt-6">
                 <MarketingActions gap="loose">
@@ -141,7 +130,7 @@ export default async function ServiceAreaDetailPage({
           <div className="min-w-0 space-y-10">
             {branch.machines && branch.machines.length > 0 ? (
               <div>
-                <SectionHeading icon={Layers} title="Machines & services" />
+                <MarketingSectionIcon icon={Layers} title="Machines & services" />
                 <div className="card mt-4">
                   <div className="card-body">
                     <ul className="flex flex-wrap gap-2">
@@ -161,7 +150,7 @@ export default async function ServiceAreaDetailPage({
 
             {hasStaff ? (
               <div>
-                <SectionHeading icon={Users} title="Meet the team" />
+                <MarketingSectionIcon icon={Users} title="Meet the team" />
                 <div className="card mt-4">
                   <div className="card-body">
                     <div className="grid grid-cols-2 gap-6 sm:grid-cols-3">
@@ -182,7 +171,7 @@ export default async function ServiceAreaDetailPage({
 
             {hasSiblings ? (
               <div>
-                <SectionHeading icon={Building2} title="Other branches" />
+                <MarketingSectionIcon icon={Building2} title="Other branches" />
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   {branch.branches!.map((sibling) => (
                     <MarketingFeatureCard

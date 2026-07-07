@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Building2, LayoutDashboard, MapPin, Truck } from 'lucide-react';
 import { appConfig } from '@lunara/config';
 import { MarketingContentPage } from '../../../components/marketing/marketing-content-page';
 import {
@@ -6,6 +7,8 @@ import {
   MarketingCtaPanel,
   MarketingFeatureCard,
   MarketingInfoCard,
+  MarketingSectionIcon,
+  MarketingStatRow,
 } from '../../../components/marketing/marketing-design';
 import { MarketingActions } from '../../../components/marketing/marketing-actions';
 import { ButtonLink } from '../../../components/ui/button-link';
@@ -51,6 +54,15 @@ export default function PartnersPage() {
       badge="For laundry shops"
       title="Partner with Lunara"
       description="Grow your laundry business by joining our pickup-and-delivery network."
+      heroActions={
+        <MarketingStatRow
+          stats={[
+            { icon: Building2, label: '50+ partner laundry shops' },
+            { icon: MapPin, label: 'Metro Manila & expanding' },
+            { icon: Truck, label: 'Dispatch & riders handled for you' },
+          ]}
+        />
+      }
     >
       <div className="grid gap-6 lg:grid-cols-2">
         {BENEFITS.map((item) => (
@@ -58,13 +70,16 @@ export default function PartnersPage() {
         ))}
       </div>
 
-      <MarketingInfoCard title="What we look for" className="mt-10">
-        <ul className="list-disc space-y-2 pl-5 text-sm leading-relaxed text-muted">
-          {REQUIREMENTS.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
-      </MarketingInfoCard>
+      <div className="mt-10">
+        <MarketingSectionIcon icon={LayoutDashboard} title="What we look for" />
+        <MarketingInfoCard className="mt-4">
+          <ul className="list-disc space-y-2 pl-5 text-sm leading-relaxed text-muted">
+            {REQUIREMENTS.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </MarketingInfoCard>
+      </div>
 
       <MarketingCtaPanel
         className="mt-10"

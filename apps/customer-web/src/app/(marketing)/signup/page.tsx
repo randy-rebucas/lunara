@@ -8,6 +8,7 @@ import { formatPhone, isValidPhilippineMobile } from '@lunara/utils';
 import { fetchOnboardingStatus, getOnboardingPath } from '@lunara/hooks/onboarding';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { AuthShellWide } from '../../../components/auth-shell';
+import { FormError } from '../../../components/marketing/marketing-design';
 import { OnboardingProgress } from '../../../components/onboarding-progress';
 import { Input } from '../../../components/ui/input';
 
@@ -71,7 +72,7 @@ export default function SignUpPage() {
       <div className="card-elevated">
         <div className="card-body">
           <OnboardingProgress current={step === 'phone' ? 'phone' : 'profile'} />
-          <h1 className="mt-8 text-2xl font-bold tracking-tight">Create your account</h1>
+          <h1 className="mt-8 text-2xl font-bold tracking-tight text-slate-900">Create your account</h1>
           <p className="mt-1 text-sm text-muted">Sign up with your mobile number</p>
 
           {step === 'phone' ? (
@@ -84,9 +85,7 @@ export default function SignUpPage() {
                 autoComplete="tel"
                 inputMode="tel"
               />
-              {error && (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
-              )}
+              {error && <FormError>{error}</FormError>}
               <Button type="submit" className="w-full" size="lg" disabled={submitting}>
                 {submitting ? 'Sending…' : 'Send OTP'}
               </Button>
@@ -105,9 +104,7 @@ export default function SignUpPage() {
                 autoComplete="one-time-code"
                 required
               />
-              {error && (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
-              )}
+              {error && <FormError>{error}</FormError>}
               <Button type="submit" className="w-full" size="lg" disabled={submitting || otp.length < 6}>
                 {submitting ? 'Verifying…' : 'Verify & Create Account'}
               </Button>

@@ -5,7 +5,7 @@ import { Building2, FileText, MapPin, MessageSquare, Store } from 'lucide-react'
 import { resolveApiV1BaseUrl } from '@lunara/hooks';
 import { Button } from '@lunara/ui';
 import { MarketingContentPage } from '../../../../components/marketing/marketing-content-page';
-import { MarketingBackLink } from '../../../../components/marketing/marketing-design';
+import { FormError, MarketingBackLink } from '../../../../components/marketing/marketing-design';
 import { Card, CardBody, CardSectionHeader } from '../../../../components/ui/card';
 import { DocumentUploadField } from '../../../../components/ui/document-upload-field';
 import { FormLabel, Input } from '../../../../components/ui/input';
@@ -364,11 +364,7 @@ export default function PartnerApplyPage() {
               </span>
             </label>
 
-            {error && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                {error}
-              </div>
-            )}
+            {error && <FormError>{error}</FormError>}
 
             <Button type="submit" className="w-full" size="lg" disabled={submitting}>
               {submitting ? 'Submitting…' : 'Submit application'}

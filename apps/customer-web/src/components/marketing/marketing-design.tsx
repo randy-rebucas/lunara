@@ -1,5 +1,25 @@
 import Link from 'next/link';
+import { AlertCircle } from 'lucide-react';
 import { cn } from '@lunara/ui';
+
+export function accentClasses(accent: 'primary' | 'secondary' | 'accent') {
+  if (accent === 'secondary') {
+    return { bg: 'bg-secondary/10', text: 'text-secondary', ring: 'ring-secondary/15' };
+  }
+  if (accent === 'accent') {
+    return { bg: 'bg-accent/10', text: 'text-accent', ring: 'ring-accent/15' };
+  }
+  return { bg: 'bg-primary/10', text: 'text-primary', ring: 'ring-primary/15' };
+}
+
+export function FormError({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-2.5 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+      <span>{children}</span>
+    </div>
+  );
+}
 
 export function MarketingGradientText({ children }: { children: React.ReactNode }) {
   return (
@@ -71,7 +91,7 @@ export function MarketingPageHero({
         {badge ? <span className="badge-primary">{badge}</span> : null}
         <h1
           className={cn(
-            'font-bold tracking-tight text-slate-900',
+            'font-extrabold tracking-tight text-slate-900',
             badge ? 'mt-4' : '',
             centered
               ? 'text-3xl sm:text-4xl lg:text-5xl'
@@ -146,6 +166,55 @@ export function MarketingSectionHeader({
   );
 }
 
+export function MarketingSectionIcon({
+  icon: Icon,
+  title,
+  className,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  className?: string;
+}) {
+  return (
+    <div className={cn('flex items-center gap-2.5', className)}>
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        <Icon className="h-[18px] w-[18px]" />
+      </span>
+      <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+    </div>
+  );
+}
+
+export function MarketingStatRow({
+  stats,
+  align = 'left',
+  className,
+}: {
+  stats: { icon: React.ComponentType<{ className?: string }>; label: string }[];
+  align?: 'left' | 'center';
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        'flex flex-wrap items-center gap-2.5',
+        align === 'center' && 'justify-center',
+        className,
+      )}
+    >
+      {stats.map((stat, index) => (
+        <span
+          key={index}
+          className="inline-flex items-center gap-1.5 rounded-full bg-surface px-3.5 py-1.5 text-sm font-medium text-slate-700 shadow-[var(--shadow-card)] ring-1 ring-border/50"
+        >
+          <stat.icon className="h-4 w-4 text-primary" />
+          {stat.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export function MarketingFeatureCard({
   badge,
   badgeVariant = 'primary',
@@ -174,7 +243,7 @@ export function MarketingFeatureCard({
 
   const cardClassName = cn(
     'card flex h-full flex-col',
-    href && 'block transition hover:border-primary/40 hover:shadow-md',
+    href && 'block hover:shadow-[var(--shadow-elevated)]',
     className,
   );
 
@@ -215,15 +284,15 @@ export function MarketingInfoCard({
   children,
   className,
 }: {
-  title: string;
+  title?: string;
   children: React.ReactNode;
   className?: string;
 }) {
   return (
     <div className={cn('card', className)}>
       <div className="card-body">
-        <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
-        <div className="mt-4">{children}</div>
+        {title ? <h2 className="text-lg font-semibold text-slate-900">{title}</h2> : null}
+        <div className={title ? 'mt-4' : undefined}>{children}</div>
       </div>
     </div>
   );

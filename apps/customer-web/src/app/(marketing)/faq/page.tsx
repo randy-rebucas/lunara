@@ -1,8 +1,13 @@
 import type { Metadata } from 'next';
+import { Clock, HelpCircle, Mail } from 'lucide-react';
 import { appConfig } from '@lunara/config';
 import { FaqList } from '../../../components/marketing/faq-list';
 import { MarketingContentPage } from '../../../components/marketing/marketing-content-page';
-import { MarketingBackLink, MarketingCtaPanel } from '../../../components/marketing/marketing-design';
+import {
+  MarketingBackLink,
+  MarketingCtaPanel,
+  MarketingStatRow,
+} from '../../../components/marketing/marketing-design';
 import { MarketingActions } from '../../../components/marketing/marketing-actions';
 import { ButtonAnchor, ButtonLink } from '../../../components/ui/button-link';
 
@@ -17,6 +22,15 @@ export default function FaqPage() {
       badge="Help center"
       title="Frequently asked questions"
       description="Quick answers about booking, payments, tracking, and support. Jump to a topic below or browse all questions."
+      heroActions={
+        <MarketingStatRow
+          stats={[
+            { icon: HelpCircle, label: 'Answers on booking, payments & tracking' },
+            { icon: Clock, label: 'Support replies within 1 business day' },
+            { icon: Mail, label: `${appConfig.supportEmail}` },
+          ]}
+        />
+      }
     >
       <FaqList />
 
