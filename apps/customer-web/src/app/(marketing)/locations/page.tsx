@@ -34,7 +34,8 @@ export default async function LocationsPage() {
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {serviceAreas.map((branch) => (
           <MarketingFeatureCard
-            key={branch.name}
+            key={branch.id}
+            href={`/service-areas/${branch.id}`}
             badge={branch.province}
             title={branch.name}
             subtitle={branch.city}

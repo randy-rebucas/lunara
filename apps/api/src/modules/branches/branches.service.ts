@@ -630,15 +630,40 @@ export class BranchesService {
     await this.ensureSeeded();
     const branches = await this.branchModel
       .find(this.operationalBranchFilter())
-      .select('name city province serviceRadiusKm')
+      .select('name city province serviceRadiusKm logoUrl machines')
       .sort({ name: 1 });
     return {
       success: true,
-      data: branches.map((b) => ({
-        name: b.name,
-        city: b.city,
-        province: b.province,
-        radiusKm: b.serviceRadiusKm,
+      data: branches.map((b) => this.toPublicBranch(b)),
+    };
+  }
+
+  /** Marketing-safe detail for a single branch — powers the public laundry-partner page. */
+  async getPublicBranchById(id: string) {
+    await this.ensureSeeded();
+    if (!Types.ObjectId.isValid(id)) {
+      throw new NotFoundException('Branch not found');
+    }
+    const branch = await this.branchModel
+      .findOne({ _id: id, ...this.operationalBranchFilter() })
+      .select('name city province serviceRadiusKm logoUrl machines');
+    if (!branch) {
+      throw new NotFoundException('Branch not found');
+    }
+    return { success: true, data: this.toPublicBranch(branch) };
+  }
+
+  private toPublicBranch(b: BranchDocument) {
+    return {
+      id: b._id.toString(),
+      name: b.name,
+      city: b.city,
+      province: b.province,
+      radiusKm: b.serviceRadiusKm,
+      logoUrl: b.logoUrl,
+      machines: (b.machines ?? []).map((m) => ({
+        label: m.label,
+        machineType: m.machineType,
       })),
     };
   }

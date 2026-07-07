@@ -154,6 +154,7 @@ export function MarketingFeatureCard({
   description,
   children,
   className,
+  href,
 }: {
   badge?: string;
   badgeVariant?: 'primary' | 'secondary' | 'accent';
@@ -162,6 +163,7 @@ export function MarketingFeatureCard({
   description?: string;
   children?: React.ReactNode;
   className?: string;
+  href?: string;
 }) {
   const badgeClass =
     badgeVariant === 'secondary'
@@ -170,23 +172,35 @@ export function MarketingFeatureCard({
         ? 'badge-accent'
         : 'badge-primary';
 
-  return (
-    <article className={cn('card flex h-full flex-col', className)}>
-      <div className="card-body flex flex-1 flex-col">
-        {badge ? <span className={cn(badgeClass, 'w-fit')}>{badge}</span> : null}
-        <h3 className={cn('text-lg font-semibold text-slate-900', badge && 'mt-3')}>{title}</h3>
-        {subtitle ? <p className="mt-1 text-sm font-medium text-primary">{subtitle}</p> : null}
-        {description ? (
-          <p
-            className={cn('flex-1 text-sm leading-relaxed text-muted', subtitle ? 'mt-3' : 'mt-2')}
-          >
-            {description}
-          </p>
-        ) : null}
-        {children}
-      </div>
-    </article>
+  const cardClassName = cn(
+    'card flex h-full flex-col',
+    href && 'block transition hover:border-primary/40 hover:shadow-md',
+    className,
   );
+
+  const content = (
+    <div className="card-body flex flex-1 flex-col">
+      {badge ? <span className={cn(badgeClass, 'w-fit')}>{badge}</span> : null}
+      <h3 className={cn('text-lg font-semibold text-slate-900', badge && 'mt-3')}>{title}</h3>
+      {subtitle ? <p className="mt-1 text-sm font-medium text-primary">{subtitle}</p> : null}
+      {description ? (
+        <p className={cn('flex-1 text-sm leading-relaxed text-muted', subtitle ? 'mt-3' : 'mt-2')}>
+          {description}
+        </p>
+      ) : null}
+      {children}
+    </div>
+  );
+
+  if (href) {
+    return (
+      <Link href={href} className={cardClassName}>
+        {content}
+      </Link>
+    );
+  }
+
+  return <article className={cardClassName}>{content}</article>;
 }
 
 const ctaPanelGradients = {

@@ -89,6 +89,7 @@ export const HOW_IT_WORKS: HowItWorksItem[] = [
 
 export const SERVICE_AREAS = [
   {
+    id: 'lunara-makati',
     name: 'Lunara Makati',
     city: 'Makati',
     province: 'Metro Manila',
@@ -96,6 +97,7 @@ export const SERVICE_AREAS = [
     radiusKm: 12,
   },
   {
+    id: 'lunara-quezon-city',
     name: 'Lunara Quezon City',
     city: 'Quezon City',
     province: 'Metro Manila',
@@ -103,6 +105,7 @@ export const SERVICE_AREAS = [
     radiusKm: 14,
   },
   {
+    id: 'lunara-bgc',
     name: 'Lunara BGC',
     city: 'Taguig',
     province: 'Metro Manila',
@@ -111,12 +114,43 @@ export const SERVICE_AREAS = [
   },
 ] as const;
 
+export interface ServiceAreaMachine {
+  label: string;
+  machineType: string;
+}
+
 export interface ServiceArea {
+  id: string;
   name: string;
   city: string;
   province: string;
   area: string;
   radiusKm: number;
+  logoUrl?: string;
+  machines?: ServiceAreaMachine[];
+}
+
+type PublicBranchApiShape = {
+  id: string;
+  name: string;
+  city: string;
+  province: string;
+  radiusKm?: number;
+  logoUrl?: string;
+  machines?: ServiceAreaMachine[];
+};
+
+function toServiceArea(branch: PublicBranchApiShape): ServiceArea {
+  return {
+    id: branch.id,
+    name: branch.name,
+    city: branch.city,
+    province: branch.province,
+    area: `${branch.city}, ${branch.province}`,
+    radiusKm: branch.radiusKm ?? 10,
+    logoUrl: branch.logoUrl,
+    machines: branch.machines,
+  };
 }
 
 /** Fetches live, active branches from the public API; falls back to the static list on any failure. */
@@ -127,16 +161,28 @@ export async function fetchActiveServiceAreas(apiBase: string): Promise<ServiceA
     const body = await res.json();
     const data = body?.data;
     if (!Array.isArray(data) || data.length === 0) return [...SERVICE_AREAS];
-    return data.map((branch: { name: string; city: string; province: string; radiusKm?: number }) => ({
-      name: branch.name,
-      city: branch.city,
-      province: branch.province,
-      area: `${branch.city}, ${branch.province}`,
-      radiusKm: branch.radiusKm ?? 10,
-    }));
+    return data.map((branch: PublicBranchApiShape) => toServiceArea(branch));
   } catch {
     return [...SERVICE_AREAS];
   }
+}
+
+/** Fetches a single branch's public detail; falls back to the static list, then null if not found anywhere. */
+export async function fetchServiceAreaById(
+  apiBase: string,
+  id: string,
+): Promise<ServiceArea | null> {
+  try {
+    const res = await fetch(`${apiBase}/public/branches/${id}`, { next: { revalidate: 60 } });
+    if (res.ok) {
+      const body = await res.json();
+      if (body?.data) return toServiceArea(body.data as PublicBranchApiShape);
+    }
+  } catch {
+    // fall through to static fallback
+  }
+  const fallback = SERVICE_AREAS.find((area) => area.id === id);
+  return fallback ? { ...fallback } : null;
 }
 
 export const EXPANDING_AREAS = [

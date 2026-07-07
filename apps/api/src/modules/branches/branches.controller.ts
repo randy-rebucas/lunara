@@ -14,6 +14,11 @@ export class PublicBranchesController {
   list() {
     return this.branchesService.listPublicBranches();
   }
+
+  @Get(':id')
+  getOne(@Param('id') id: string) {
+    return this.branchesService.getPublicBranchById(id);
+  }
 }
 
 @Controller('branches')
