@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from 'react';
 import type { PartnerStaffMember } from '@lunara/types';
 import { AuthLoading } from '../../components/auth-loading';
 import { DataPageStatus } from '../../components/data-page-status';
+import { StaffProfileModal } from '../../components/staff-profile-modal';
 import { PageHeader } from '../../components/ui/page-header';
 import { useRequirePartner } from '../../hooks/use-protected-page';
 import { partnerFetch } from '../../lib/partner-api';
@@ -24,11 +25,13 @@ export default function StaffTeamPage() {
   const [showForm, setShowForm] = useState(false);
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [editingStaff, setEditingStaff] = useState<PartnerStaffMember | null>(null);
 
   const load = useCallback(async () => {
     return partnerFetch<PartnerStaffMember[]>('/partner/staff');
@@ -69,12 +72,14 @@ export default function StaffTeamPage() {
         body: JSON.stringify({
           email: trimmedEmail,
           phone: phone.trim() || undefined,
+          displayName: displayName.trim() || undefined,
           password,
         }),
       });
       setFormSuccess(`Staff account created for ${trimmedEmail}. They can sign in on this portal.`);
       setEmail('');
       setPhone('');
+      setDisplayName('');
       setPassword('');
       setConfirmPassword('');
       setShowForm(false);
@@ -158,6 +163,22 @@ export default function StaffTeamPage() {
             </div>
           </div>
 
+          <div>
+            <label htmlFor="staff-name" className="text-sm font-medium text-slate-700">
+              Display name <span className="font-normal text-muted">(optional)</span>
+            </label>
+            <input
+              id="staff-name"
+              type="text"
+              autoComplete="off"
+              maxLength={80}
+              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+              placeholder="e.g. Juan Dela Cruz"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+            />
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label htmlFor="staff-password" className="text-sm font-medium text-slate-700">
@@ -228,12 +249,25 @@ export default function StaffTeamPage() {
               <th>Phone</th>
               <th>Member since</th>
               <th>Active jobs</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {(staff ?? []).map((s) => (
               <tr key={s._id}>
-                <td className="font-medium text-slate-900">{s.email ?? s._id}</td>
+                <td className="font-medium text-slate-900">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                      {s.avatarUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={s.avatarUrl} alt={s.displayName ?? s.email} className="h-full w-full object-cover" />
+                      ) : (
+                        (s.displayName ?? s.email ?? '?')[0]?.toUpperCase()
+                      )}
+                    </div>
+                    <span>{s.displayName ?? s.email ?? s._id}</span>
+                  </div>
+                </td>
                 <td>
                   <span className="badge-neutral capitalize">{s.role ?? 'staff'}</span>
                 </td>
@@ -243,6 +277,11 @@ export default function StaffTeamPage() {
                   <span className={s.activeJobs > 3 ? 'badge-warning' : 'badge-neutral'}>
                     {s.activeJobs}
                   </span>
+                </td>
+                <td>
+                  <button type="button" className="btn-outline btn-sm" onClick={() => setEditingStaff(s)}>
+                    Edit profile
+                  </button>
                 </td>
               </tr>
             ))}
@@ -255,6 +294,14 @@ export default function StaffTeamPage() {
           </p>
         )}
       </div>
+
+      {editingStaff && (
+        <StaffProfileModal
+          staff={editingStaff}
+          onClose={() => setEditingStaff(null)}
+          onSaved={() => reload()}
+        />
+      )}
     </div>
   );
 }

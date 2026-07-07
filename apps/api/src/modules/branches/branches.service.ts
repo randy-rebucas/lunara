@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { BookingType, OrderStatus } from '@lunara/types';
+import { BookingType, OrderStatus, UserRole } from '@lunara/types';
 import {
   applyShopMarkup,
   distanceKm,
@@ -21,6 +21,7 @@ import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { Rider, RiderDocument } from '../riders/schemas/rider.schema';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import { UserProfile, UserProfileDocument } from '../users/schemas/user-profile.schema';
 import { Branch, BranchDocument } from './schemas/branch.schema';
 import {
   BranchCustomService,
@@ -107,6 +108,7 @@ export class BranchesService {
     @InjectModel(BranchCustomAddon.name)
     private customAddonModel: Model<BranchCustomAddonDocument>,
     @InjectModel(Rider.name) private riderModel: Model<RiderDocument>,
+    @InjectModel(UserProfile.name) private userProfileModel: Model<UserProfileDocument>,
     private trackingGateway: TrackingGateway,
     private catalogService: CatalogService,
     private localStorageService: LocalStorageService,
@@ -646,11 +648,51 @@ export class BranchesService {
     }
     const branch = await this.branchModel
       .findOne({ _id: id, ...this.operationalBranchFilter() })
-      .select('name city province serviceRadiusKm logoUrl machines');
+      .select('name city province serviceRadiusKm logoUrl machines partnerUserId');
     if (!branch) {
       throw new NotFoundException('Branch not found');
     }
-    return { success: true, data: this.toPublicBranch(branch) };
+
+    const [ownerProfile, staffUsers, siblingBranches] = await Promise.all([
+      this.userProfileModel.findOne({ userId: branch.partnerUserId }).lean(),
+      this.userModel
+        .find({ branchId: branch._id, role: UserRole.STAFF, isActive: true })
+        .select('_id')
+        .lean(),
+      this.branchModel
+        .find({
+          partnerUserId: branch.partnerUserId,
+          _id: { $ne: branch._id },
+          ...this.operationalBranchFilter(),
+        })
+        .select('name city province')
+        .sort({ name: 1 })
+        .lean(),
+    ]);
+
+    const staffProfiles = await this.userProfileModel
+      .find({ userId: { $in: staffUsers.map((s) => s._id) } })
+      .lean();
+
+    return {
+      success: true,
+      data: {
+        ...this.toPublicBranch(branch),
+        owner:
+          ownerProfile?.displayName || ownerProfile?.avatarUrl
+            ? { displayName: ownerProfile.displayName, avatarUrl: ownerProfile.avatarUrl }
+            : null,
+        staff: staffProfiles
+          .filter((p) => p.displayName || p.avatarUrl)
+          .map((p) => ({ displayName: p.displayName, avatarUrl: p.avatarUrl })),
+        branches: siblingBranches.map((b) => ({
+          id: b._id.toString(),
+          name: b.name,
+          city: b.city,
+          province: b.province,
+        })),
+      },
+    };
   }
 
   private toPublicBranch(b: BranchDocument) {

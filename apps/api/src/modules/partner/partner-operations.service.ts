@@ -20,6 +20,7 @@ import {
 } from '@lunara/utils';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import { UserProfile, UserProfileDocument } from '../users/schemas/user-profile.schema';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { RiderAssignmentService } from '../riders/rider-assignment.service';
 import { ShopInventoryDocument, ShopInventoryItem } from './schemas/shop-inventory.schema';
@@ -97,6 +98,7 @@ export class PartnerOperationsService {
     @InjectModel(ShopInventoryItem.name) private inventoryModel: Model<ShopInventoryDocument>,
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
     @InjectModel(PartnerSettlement.name) private settlementModel: Model<PartnerSettlementDocument>,
+    @InjectModel(UserProfile.name) private userProfileModel: Model<UserProfileDocument>,
     private trackingGateway: TrackingGateway,
     private riderAssignmentService: RiderAssignmentService,
     private partnerOrderNotifications: PartnerOrderNotificationService,
@@ -503,13 +505,17 @@ export class PartnerOperationsService {
   private formatStaffMember(
     user: Pick<UserDocument, '_id' | 'email' | 'phone' | 'createdAt'>,
     jobMap: Map<string, number>,
+    profileMap?: Map<string, Pick<UserProfile, 'displayName' | 'avatarUrl'>>,
   ) {
+    const profile = profileMap?.get(user._id.toString());
     return {
       _id: user._id.toString(),
       email: user.email,
       phone: user.phone,
       createdAt: user.createdAt?.toISOString(),
       activeJobs: jobMap.get(user._id.toString()) ?? 0,
+      displayName: profile?.displayName,
+      avatarUrl: profile?.avatarUrl,
     };
   }
 
@@ -521,10 +527,14 @@ export class PartnerOperationsService {
       .sort({ email: 1 });
 
     const jobMap = await this.staffActiveJobCounts(branchId);
+    const profiles = await this.userProfileModel
+      .find({ userId: { $in: staff.map((s) => s._id) } })
+      .lean();
+    const profileMap = new Map(profiles.map((p) => [p.userId.toString(), p]));
 
     return {
       success: true,
-      data: staff.map((s) => this.formatStaffMember(s, jobMap)),
+      data: staff.map((s) => this.formatStaffMember(s, jobMap, profileMap)),
     };
   }
 
@@ -551,9 +561,16 @@ export class PartnerOperationsService {
       isActive: true,
     });
 
+    const displayName = dto.displayName?.trim();
+    let profileMap: Map<string, Pick<UserProfile, 'displayName' | 'avatarUrl'>> | undefined;
+    if (displayName) {
+      const profile = await this.userProfileModel.create({ userId: user._id, displayName });
+      profileMap = new Map([[user._id.toString(), profile]]);
+    }
+
     return {
       success: true,
-      data: this.formatStaffMember(user, new Map()),
+      data: this.formatStaffMember(user, new Map(), profileMap),
     };
   }
 

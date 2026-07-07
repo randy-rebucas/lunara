@@ -6,6 +6,7 @@ import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { Rider, RiderSchema } from '../riders/schemas/rider.schema';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { User, UserSchema } from '../users/schemas/user.schema';
+import { UserProfile, UserProfileSchema } from '../users/schemas/user-profile.schema';
 import { BranchManagementService } from './branch-management.service';
 import { BranchesController, PublicBranchesController } from './branches.controller';
 import { BranchesService } from './branches.service';
@@ -23,6 +24,7 @@ import { BranchCustomAddon, BranchCustomAddonSchema } from './schemas/branch-cus
       { name: BranchCustomService.name, schema: BranchCustomServiceSchema },
       { name: BranchCustomAddon.name, schema: BranchCustomAddonSchema },
       { name: Rider.name, schema: RiderSchema },
+      { name: UserProfile.name, schema: UserProfileSchema },
     ]),
     RealtimeModule,
     CatalogModule,

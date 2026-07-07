@@ -45,7 +45,9 @@ import { ProcessingService } from './processing.service';
 import { ShopReceivingService } from './shop-receiving.service';
 import { PartnerNotificationsService } from './partner-notifications.service';
 import { PartnerSettingsService } from './partner-settings.service';
+import { PartnerProfileService } from './partner-profile.service';
 import { UpdatePartnerSettingsDto } from './dto/update-partner-settings.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import {
   ConfirmShopItemsDto,
   ReceiveLaundryDto,
@@ -75,6 +77,7 @@ export class PartnerController {
     private readonly shopReceivingService: ShopReceivingService,
     private readonly notificationsService: PartnerNotificationsService,
     private readonly settingsService: PartnerSettingsService,
+    private readonly profileService: PartnerProfileService,
     private readonly pickupService: PickupService,
     @InjectModel(LaundryService.name)
     private readonly laundryServiceModel: Model<LaundryServiceDocument>,
@@ -255,6 +258,57 @@ export class PartnerController {
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   removeLogo(@Req() req: { user: { sub: string; role: UserRole } }) {
     return this.settingsService.removeLogo(req.user.sub, req.user.role);
+  }
+
+  @Get('profile')
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
+  getOwnProfile(@Req() req: { user: { sub: string } }) {
+    return this.profileService.getOwnProfile(req.user.sub);
+  }
+
+  @Patch('profile')
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
+  updateOwnProfile(@Req() req: { user: { sub: string } }, @Body() dto: UpdateProfileDto) {
+    return this.profileService.updateOwnProfile(req.user.sub, dto);
+  }
+
+  @Post('profile/avatar')
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
+  @UseInterceptors(FileInterceptor('avatar', processingPhotoUploadOptions))
+  async uploadOwnAvatar(
+    @Req() req: { user: { sub: string } },
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('Avatar image is required');
+    return this.profileService.updateOwnAvatar(req.user.sub, file);
+  }
+
+  @Delete('profile/avatar')
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
+  removeOwnAvatar(@Req() req: { user: { sub: string } }) {
+    return this.profileService.removeOwnAvatar(req.user.sub);
+  }
+
+  @Patch('staff/:staffId/profile')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  updateStaffProfile(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('staffId') staffId: string,
+    @Body() dto: UpdateProfileDto,
+  ) {
+    return this.profileService.updateStaffProfile(req.user.sub, staffId, dto, req.user.role);
+  }
+
+  @Post('staff/:staffId/profile/avatar')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  @UseInterceptors(FileInterceptor('avatar', processingPhotoUploadOptions))
+  async uploadStaffAvatar(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('staffId') staffId: string,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('Avatar image is required');
+    return this.profileService.updateStaffAvatar(req.user.sub, staffId, file, req.user.role);
   }
 
   @Get('notifications')

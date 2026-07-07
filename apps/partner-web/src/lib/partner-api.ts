@@ -1,4 +1,4 @@
-import type { PortalRole, PortalUser } from '@lunara/types';
+import type { PartnerOwnProfile, PortalRole, PortalUser } from '@lunara/types';
 import { UserRole } from '@lunara/types';
 import { resolveApiOrigin, resolveApiV1BaseUrl } from '@lunara/utils';
 import { parseApiError } from './api-error';
@@ -142,6 +142,66 @@ export async function removeShopLogo(): Promise<{ id: string; logoUrl?: string }
   return partnerFetch('/partner/settings/logo', { method: 'DELETE' }).then(
     (data) => (data as { branch: { id: string; logoUrl?: string } }).branch,
   );
+}
+
+export async function getOwnProfile(): Promise<PartnerOwnProfile> {
+  return partnerFetch<PartnerOwnProfile>('/partner/profile');
+}
+
+export async function updateOwnProfile(displayName: string): Promise<PartnerOwnProfile> {
+  return partnerFetch<PartnerOwnProfile>('/partner/profile', {
+    method: 'PATCH',
+    body: JSON.stringify({ displayName }),
+  });
+}
+
+async function uploadAvatar(path: string, file: File): Promise<PartnerOwnProfile> {
+  const token = getPartnerToken();
+  const formData = new FormData();
+  formData.append('avatar', file);
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+  } catch {
+    throw new Error('Cannot reach API to upload avatar.');
+  }
+
+  const body = await res.json();
+  if (res.status === 401) {
+    clearPartnerToken();
+    if (typeof window !== 'undefined') window.location.href = '/login';
+    throw new Error('Session expired. Please sign in again.');
+  }
+  if (!body.success) throw new Error(parseApiError(body, 'Avatar upload failed'));
+  return body.data as PartnerOwnProfile;
+}
+
+export async function uploadOwnAvatar(file: File): Promise<PartnerOwnProfile> {
+  return uploadAvatar('/partner/profile/avatar', file);
+}
+
+export async function removeOwnAvatar(): Promise<PartnerOwnProfile> {
+  return partnerFetch<PartnerOwnProfile>('/partner/profile/avatar', { method: 'DELETE' });
+}
+
+export async function updateStaffProfile(
+  staffId: string,
+  displayName: string,
+): Promise<PartnerOwnProfile> {
+  return partnerFetch<PartnerOwnProfile>(`/partner/staff/${staffId}/profile`, {
+    method: 'PATCH',
+    body: JSON.stringify({ displayName }),
+  });
+}
+
+export async function uploadStaffAvatar(staffId: string, file: File): Promise<PartnerOwnProfile> {
+  return uploadAvatar(`/partner/staff/${staffId}/profile/avatar`, file);
 }
 
 export async function uploadProcessingPhoto(orderId: string, file: File): Promise<string> {

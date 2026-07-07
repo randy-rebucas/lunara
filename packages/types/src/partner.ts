@@ -115,6 +115,13 @@ export interface PartnerStaffMember {
   role?: string;
   createdAt?: string;
   activeJobs: number;
+  displayName?: string;
+  avatarUrl?: string;
+}
+
+export interface PartnerOwnProfile {
+  displayName?: string;
+  avatarUrl?: string;
 }
 
 export interface PartnerInventoryItem {

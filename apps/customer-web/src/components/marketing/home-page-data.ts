@@ -119,6 +119,18 @@ export interface ServiceAreaMachine {
   machineType: string;
 }
 
+export interface ServiceAreaPerson {
+  displayName?: string;
+  avatarUrl?: string;
+}
+
+export interface ServiceAreaSibling {
+  id: string;
+  name: string;
+  city: string;
+  province: string;
+}
+
 export interface ServiceArea {
   id: string;
   name: string;
@@ -128,6 +140,9 @@ export interface ServiceArea {
   radiusKm: number;
   logoUrl?: string;
   machines?: ServiceAreaMachine[];
+  owner?: ServiceAreaPerson | null;
+  staff?: ServiceAreaPerson[];
+  branches?: ServiceAreaSibling[];
 }
 
 type PublicBranchApiShape = {
@@ -138,6 +153,9 @@ type PublicBranchApiShape = {
   radiusKm?: number;
   logoUrl?: string;
   machines?: ServiceAreaMachine[];
+  owner?: ServiceAreaPerson | null;
+  staff?: ServiceAreaPerson[];
+  branches?: ServiceAreaSibling[];
 };
 
 function toServiceArea(branch: PublicBranchApiShape): ServiceArea {
@@ -150,6 +168,9 @@ function toServiceArea(branch: PublicBranchApiShape): ServiceArea {
     radiusKm: branch.radiusKm ?? 10,
     logoUrl: branch.logoUrl,
     machines: branch.machines,
+    owner: branch.owner,
+    staff: branch.staff,
+    branches: branch.branches,
   };
 }
 
