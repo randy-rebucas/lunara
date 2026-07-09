@@ -603,6 +603,7 @@ export class AdminController {
     @UploadedFile() file: Express.Multer.File,
   ) {
     if (!file) throw new BadRequestException('No file uploaded');
+    const previousImageUrl = (await this.catalogService.getAddonById(id))?.imageUrl;
     const result = await this.localStorageService.uploadBuffer(
       file.buffer,
       'lunara/catalog-addons',
@@ -611,6 +612,9 @@ export class AdminController {
       file.mimetype,
     );
     const data = await this.catalogService.updateAddon(id, { imageUrl: result.secure_url });
+    if (previousImageUrl && previousImageUrl !== result.secure_url) {
+      await this.localStorageService.deleteFile('lunara/catalog-addons', previousImageUrl);
+    }
     return { success: true, data };
   }
 }

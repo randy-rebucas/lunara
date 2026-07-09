@@ -57,9 +57,10 @@ export class CustomersService {
     const customer = await this.findByUserId(userId);
     if (!customer) throw new NotFoundException('Customer profile not found');
 
+    const previousAvatarUrl = customer.avatarUrl;
     customer.avatarUrl = avatarUrl;
     await customer.save();
-    return { success: true, data: customer };
+    return { success: true, data: customer, previousAvatarUrl };
   }
 
   async getOnboardingStatus(userId: string) {

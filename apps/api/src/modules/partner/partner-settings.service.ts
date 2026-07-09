@@ -114,6 +114,7 @@ export class PartnerSettingsService {
       throw new ForbiddenException("Cannot update another shop's logo");
     }
 
+    const previousLogoUrl = branch.logoUrl;
     const result = await this.localStorageService.uploadBuffer(
       file.buffer,
       'lunara/branch-logos',
@@ -123,6 +124,7 @@ export class PartnerSettingsService {
     );
     branch.logoUrl = result.secure_url;
     await branch.save();
+    await this.localStorageService.deleteFile('lunara/branch-logos', previousLogoUrl);
 
     return {
       success: true,
@@ -139,8 +141,10 @@ export class PartnerSettingsService {
       throw new ForbiddenException("Cannot update another shop's logo");
     }
 
+    const previousLogoUrl = branch.logoUrl;
     branch.logoUrl = undefined;
     await branch.save();
+    await this.localStorageService.deleteFile('lunara/branch-logos', previousLogoUrl);
 
     return {
       success: true,

@@ -402,6 +402,7 @@ export class BranchesService {
     const branch = await this.branchModel.findById(branchId);
     if (!branch) throw new NotFoundException('Branch not found');
 
+    const previousLogoUrl = branch.logoUrl;
     const result = await this.localStorageService.uploadBuffer(
       file.buffer,
       'lunara/branch-logos',
@@ -411,6 +412,7 @@ export class BranchesService {
     );
     branch.logoUrl = result.secure_url;
     await branch.save();
+    await this.localStorageService.deleteFile('lunara/branch-logos', previousLogoUrl);
     return { success: true, data: { logoUrl: branch.logoUrl } };
   }
 
@@ -418,8 +420,10 @@ export class BranchesService {
     const branch = await this.branchModel.findById(branchId);
     if (!branch) throw new NotFoundException('Branch not found');
 
+    const previousLogoUrl = branch.logoUrl;
     branch.logoUrl = undefined;
     await branch.save();
+    await this.localStorageService.deleteFile('lunara/branch-logos', previousLogoUrl);
     return { success: true, data: { logoUrl: null } };
   }
 

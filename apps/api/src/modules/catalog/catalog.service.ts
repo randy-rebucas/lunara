@@ -309,6 +309,10 @@ export class CatalogService {
 
   }
 
+  async getAddonById(id: string) {
+    return this.laundryAddonModel.findById(id);
+  }
+
 
 
   async updateAddon(

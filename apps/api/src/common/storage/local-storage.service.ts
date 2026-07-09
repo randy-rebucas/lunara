@@ -1,5 +1,5 @@
 import { Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
-import { mkdir, writeFile } from 'fs/promises';
+import { mkdir, unlink, writeFile } from 'fs/promises';
 import { join, resolve } from 'path';
 
 export interface UploadResult {
@@ -63,11 +63,32 @@ export class LocalStorageService {
 
   /** Resolves an absolute path for a private-category file, guarding against path traversal. */
   resolvePrivatePath(folder: string, filename: string): string {
+    return this.resolvePath('private', folder, filename);
+  }
+
+  /**
+   * Deletes a previously uploaded file so replacing/clearing an upload doesn't leak orphaned
+   * files on disk. `filename` may be a bare public_id/filename or a full secure_url returned
+   * by uploadBuffer — both are accepted since callers store either depending on the field.
+   * Missing files are ignored; this is best-effort cleanup, not something that should fail the request.
+   */
+  async deleteFile(folder: string, filename: string | undefined | null, visibility: 'public' | 'private' = 'public'): Promise<void> {
+    if (!filename) return;
+    const bareFilename = filename.includes('/') ? filename.slice(filename.lastIndexOf('/') + 1) : filename;
+    try {
+      const filePath = this.resolvePath(visibility, folder, bareFilename);
+      await unlink(filePath);
+    } catch {
+      // best-effort: ignore missing files or path issues
+    }
+  }
+
+  private resolvePath(visibility: 'public' | 'private', folder: string, filename: string): string {
     if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
       throw new NotFoundException('File not found');
     }
     const category = this.stripFolderPrefix(folder);
-    const dir = resolve(join(this.uploadRoot, 'private', category));
+    const dir = resolve(join(this.uploadRoot, visibility, category));
     const filePath = resolve(join(dir, filename));
     if (!filePath.startsWith(dir)) {
       throw new NotFoundException('File not found');

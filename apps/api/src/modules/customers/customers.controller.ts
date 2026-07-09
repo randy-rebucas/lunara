@@ -65,7 +65,9 @@ export class CustomersController {
       'image',
       file.mimetype,
     );
-    return this.customersService.updateAvatar(req.user.sub, result.secure_url);
+    const { previousAvatarUrl, ...response } = await this.customersService.updateAvatar(req.user.sub, result.secure_url);
+    await this.localStorageService.deleteFile('lunara/avatars', previousAvatarUrl);
+    return response;
   }
 
   @Get('me/onboarding')

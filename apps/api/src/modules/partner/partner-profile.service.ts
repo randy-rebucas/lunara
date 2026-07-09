@@ -38,6 +38,9 @@ export class PartnerProfileService {
   }
 
   async updateOwnAvatar(userId: string, file: Express.Multer.File) {
+    const previousAvatarUrl = (
+      await this.userProfileModel.findOne({ userId: new Types.ObjectId(userId) }).select('avatarUrl').lean()
+    )?.avatarUrl;
     const result = await this.localStorageService.uploadBuffer(
       file.buffer,
       'lunara/user-avatars',
@@ -46,11 +49,16 @@ export class PartnerProfileService {
       file.mimetype,
     );
     const profile = await this.upsertProfile(userId, { avatarUrl: result.secure_url });
+    await this.localStorageService.deleteFile('lunara/user-avatars', previousAvatarUrl);
     return { success: true, data: formatProfile(profile) };
   }
 
   async removeOwnAvatar(userId: string) {
+    const previousAvatarUrl = (
+      await this.userProfileModel.findOne({ userId: new Types.ObjectId(userId) }).select('avatarUrl').lean()
+    )?.avatarUrl;
     const profile = await this.upsertProfile(userId, { avatarUrl: undefined });
+    await this.localStorageService.deleteFile('lunara/user-avatars', previousAvatarUrl);
     return { success: true, data: formatProfile(profile) };
   }
 
@@ -78,6 +86,9 @@ export class PartnerProfileService {
     role: UserRole,
   ) {
     await this.assertOwnsStaff(partnerUserId, staffUserId, role);
+    const previousAvatarUrl = (
+      await this.userProfileModel.findOne({ userId: new Types.ObjectId(staffUserId) }).select('avatarUrl').lean()
+    )?.avatarUrl;
     const result = await this.localStorageService.uploadBuffer(
       file.buffer,
       'lunara/user-avatars',
@@ -86,6 +97,7 @@ export class PartnerProfileService {
       file.mimetype,
     );
     const profile = await this.upsertProfile(staffUserId, { avatarUrl: result.secure_url });
+    await this.localStorageService.deleteFile('lunara/user-avatars', previousAvatarUrl);
     return { success: true, data: formatProfile(profile) };
   }
 

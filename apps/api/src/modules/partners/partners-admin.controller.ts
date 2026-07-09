@@ -82,6 +82,8 @@ export class PartnersAdminController {
       'image',
       file.mimetype,
     );
-    return this.partnersService.setAssetUrl(id, field as AssetField, result.secure_url);
+    const { previousUrl, ...response } = await this.partnersService.setAssetUrl(id, field as AssetField, result.secure_url);
+    await this.localStorageService.deleteFile('lunara/partner-brands', previousUrl);
+    return response;
   }
 }

@@ -74,9 +74,10 @@ export class PartnersService {
 
   async setAssetUrl(id: string, field: 'logoUrl' | 'iconUrl' | 'splashUrl' | 'faviconUrl', url: string) {
     const partner = await this.findById(id);
+    const previousUrl = partner.brandConfig[field];
     partner.brandConfig[field] = url;
     await partner.save();
-    return { success: true, data: partner };
+    return { success: true, data: partner, previousUrl };
   }
 
   async setActive(id: string, isActive: boolean) {
