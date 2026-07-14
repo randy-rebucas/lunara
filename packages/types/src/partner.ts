@@ -8,6 +8,17 @@ export interface PortalUser {
   branchId?: string;
 }
 
+export interface DayOperatingHours {
+  isClosed: boolean;
+  /** 24h "HH:mm", e.g. "08:00" */
+  openTime: string;
+  /** 24h "HH:mm", e.g. "17:00" */
+  closeTime: string;
+}
+
+/** Length 7, index = JS `Date.getDay()` (0 = Sunday … 6 = Saturday). */
+export type OperatingHours = DayOperatingHours[];
+
 export interface PartnerPortalSettings {
   acceptingOrders: boolean;
   autoAcceptIncoming: boolean;
@@ -40,6 +51,7 @@ export interface PartnerShopBranchSummary {
   dailyQuotaOrders: number;
   dailyQuotaWeightKg: number;
   serviceRadiusKm: number;
+  operatingHours: OperatingHours;
 }
 
 export interface PartnerSettingsData {

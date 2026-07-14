@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { BookingType } from '@lunara/types';
+import { DEFAULT_OPERATING_HOURS } from '@lunara/utils';
 import { HydratedDocument, Types } from 'mongoose';
 
 export type BranchDocument = HydratedDocument<Branch>;
@@ -69,6 +70,18 @@ export const DEFAULT_PARTNER_PORTAL_SETTINGS: PartnerPortalSettings = {
   requireWeightVerificationOnReceive: true,
   inventoryEnabled: true,
 };
+
+@Schema({ _id: false })
+export class DayOperatingHours {
+  @Prop({ default: false })
+  isClosed!: boolean;
+
+  @Prop({ default: '08:00' })
+  openTime!: string;
+
+  @Prop({ default: '17:00' })
+  closeTime!: string;
+}
 
 @Schema({ _id: false })
 class BranchMachine {
@@ -189,6 +202,10 @@ export class Branch {
 
   @Prop({ type: PartnerPortalSettings, default: () => ({ ...DEFAULT_PARTNER_PORTAL_SETTINGS }) })
   portalSettings!: PartnerPortalSettings;
+
+  /** Weekly schedule, index = JS `Date.getDay()` (0 = Sunday … 6 = Saturday). Defaults to every day 8AM–5PM. */
+  @Prop({ type: [DayOperatingHours], default: () => DEFAULT_OPERATING_HOURS.map((d) => ({ ...d })) })
+  operatingHours!: DayOperatingHours[];
 
   @Prop({
     type: { type: String, enum: ['Point'], default: 'Point' },

@@ -14,6 +14,7 @@ import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { RiderNotificationService } from './rider-notification.service';
+import { RiderOfferPushService } from '../push/rider-offer-push.service';
 import { Rider, RiderDocument } from './schemas/rider.schema';
 
 function phoneVerificationHint(phone?: string) {
@@ -32,6 +33,7 @@ export class RiderAssignmentService {
     @InjectModel(Branch.name) private branchModel: Model<BranchDocument>,
     private riderNotificationService: RiderNotificationService,
     private trackingGateway: TrackingGateway,
+    private riderOfferPush: RiderOfferPushService,
   ) {}
 
   /**
@@ -61,6 +63,100 @@ export class RiderAssignmentService {
       );
     });
     return { shortCircuitRiderId: null, riders: filtered };
+  }
+
+  /**
+   * Called right after an order becomes accepted at the shop. If the branch has an
+   * assigned/default rider configured and that rider is online, assign them straight
+   * away instead of leaving the order for the suggest/confirm flow. If the default rider
+   * is offline, broadcast the pickup to other online riders instead of silently waiting
+   * on them. Best-effort — a missing branch default or any assignment error just leaves
+   * the order for manual/suggested assignment as before.
+   */
+  async autoAssignPickupRiderIfConfigured(orderId: string): Promise<boolean> {
+    const order = await this.orderModel.findById(orderId);
+    if (!order || !order.branchId || order.pickupRiderId) return false;
+
+    const branch = await this.branchModel.findById(order.branchId);
+    if (!branch?.assignedRiderId) return false;
+
+    const rider = await this.riderModel.findOne({ userId: branch.assignedRiderId });
+    if (!rider?.isOnline) {
+      await this.broadcastPickupOffer(order);
+      return false;
+    }
+
+    try {
+      await this.assignPickupRider(
+        orderId,
+        branch.assignedRiderId.toString(),
+        undefined,
+        'branch_default_rider',
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Marks the order as an open pickup offer and pings online riders — same mechanism as the manual dispatch-search flow. */
+  private async broadcastPickupOffer(order: OrderDocument) {
+    if (!order.pickup) order.pickup = {};
+    if (!order.pickup.offeredAt) {
+      order.pickup.offeredAt = new Date();
+      await order.save();
+    }
+
+    const orderId = order._id.toString();
+    this.trackingGateway.emitPickupOffer({
+      _id: orderId,
+      orderId,
+      bookingType: order.bookingType,
+      status: order.status,
+      branchName: order.branchName,
+    });
+    this.trackingGateway.emitOrderEvent(orderId, 'findingRider', {
+      message: 'Looking for a nearby rider…',
+    });
+    void this.riderOfferPush.notifyOnlineRiders({
+      title: 'New Pickup Assigned',
+      body: `Pickup near ${order.branchName ?? 'laundry shop'} · ${order.bookingType.replace(/_/g, ' ')}`,
+      data: {
+        category: 'assignment',
+        type: 'pickup_offer',
+        orderId,
+      },
+      channelId: 'assignments',
+    });
+  }
+
+  /** Marks the order as an open delivery offer and pings online riders — same mechanism as the manual dispatch-search flow. */
+  private async broadcastDeliveryOffer(order: OrderDocument) {
+    if (!order.delivery) order.delivery = {};
+    if (!order.delivery.offeredAt) {
+      order.delivery.offeredAt = new Date();
+      await order.save();
+    }
+
+    const orderId = order._id.toString();
+    this.trackingGateway.emitDeliveryOffer({
+      _id: orderId,
+      orderId,
+      bookingType: order.bookingType,
+      status: order.status,
+      branchName: order.branchName,
+    });
+    this.trackingGateway.emitOrderEvent(orderId, 'findingDeliveryRider', {
+      message: 'Looking for a rider to deliver your laundry…',
+    });
+    void this.riderOfferPush.notifyOnlineRiders({
+      title: 'New delivery offer',
+      body: `Delivery from ${order.branchName ?? 'shop'} · ${order.bookingType.replace(/_/g, ' ')}`,
+      data: {
+        type: 'delivery_offer',
+        orderId,
+      },
+    });
   }
 
   async suggestPickupRider(orderId: string) {
@@ -178,7 +274,7 @@ export class RiderAssignmentService {
     orderId: string,
     riderUserId: string,
     assignedByUserId?: string,
-    source: 'admin_direct' | 'confirmed_suggestion' = 'admin_direct',
+    source: 'admin_direct' | 'confirmed_suggestion' | 'branch_default_rider' = 'admin_direct',
   ) {
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
@@ -207,7 +303,9 @@ export class RiderAssignmentService {
       note:
         source === 'confirmed_suggestion'
           ? 'Pickup rider assigned (admin confirmed system suggestion)'
-          : 'Pickup rider assigned by Lunara operations',
+          : source === 'branch_default_rider'
+            ? "Pickup rider assigned automatically (shop's default rider)"
+            : 'Pickup rider assigned by Lunara operations',
       updatedBy: assignedByUserId,
     });
     await order.save();
@@ -301,6 +399,25 @@ export class RiderAssignmentService {
     }
     if (order.deliveryRiderId) {
       throw new BadRequestException('Delivery rider already assigned');
+    }
+
+    const branch = order.branchId ? await this.branchModel.findById(order.branchId) : null;
+    if (branch?.assignedRiderId) {
+      const rider = await this.riderModel.findOne({ userId: branch.assignedRiderId });
+      if (rider?.isOnline) {
+        try {
+          return await this.assignDeliveryRider(
+            orderId,
+            branch.assignedRiderId.toString(),
+            undefined,
+            'branch_default_rider',
+          );
+        } catch {
+          // fall through to the manual/suggested dispatch flow below
+        }
+      } else {
+        await this.broadcastDeliveryOffer(order);
+      }
     }
 
     const now = new Date();
@@ -470,7 +587,7 @@ export class RiderAssignmentService {
     orderId: string,
     riderUserId: string,
     assignedByUserId?: string,
-    source: 'admin_direct' | 'confirmed_suggestion' = 'admin_direct',
+    source: 'admin_direct' | 'confirmed_suggestion' | 'branch_default_rider' = 'admin_direct',
   ) {
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
@@ -497,7 +614,9 @@ export class RiderAssignmentService {
       note:
         source === 'confirmed_suggestion'
           ? 'Delivery rider assigned (admin confirmed suggestion)'
-          : 'Delivery rider assigned by Lunara operations',
+          : source === 'branch_default_rider'
+            ? "Delivery rider assigned automatically (shop's default rider)"
+            : 'Delivery rider assigned by Lunara operations',
       updatedBy: assignedByUserId,
     });
     await order.save();

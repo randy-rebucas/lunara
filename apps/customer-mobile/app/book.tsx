@@ -15,7 +15,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BookingType, PaymentMethod } from '@lunara/types';
 import {
-  BOOKING_MACHINE_LOAD_INFO,
   BOOKING_MIN_ORDER_AMOUNT,
   EXPRESS_RETURN_ADDON_ID,
   formatMachineLoadLabel,
@@ -23,6 +22,7 @@ import {
   formatCurrency,
   formatAddressTypeLabel,
   isExpressReturnAllowed,
+  type BagSizeOption,
   type BookingAddonOption,
   type CashTiming,
   type LaundryServiceOption,
@@ -79,15 +79,17 @@ interface BookingConfig {
   services: LaundryServiceOption[];
   addons: BookingAddonOption[];
   minOrderAmount: number;
-  minWeightKg: number;
-  maxWeightKg: number;
+  bagSizes: BagSizeOption[];
 }
 
 interface ShopServiceOption {
   type: BookingType;
   label: string;
+  description?: string;
   basePricePerKg: number;
   customerPricePerKg: number;
+  isCustom?: boolean;
+  customServiceId?: string;
 }
 
 interface ShopOption {
@@ -182,19 +184,37 @@ export default function BookScreen() {
 
   const selectedShop = shopOptions.find((s) => s.branchId === form.branchId);
 
+  const services = useMemo(() => {
+    if (selectedShop) {
+      return selectedShop.services.map((s) => {
+        const catalogMatch = config?.services.find((cs) => cs.type === s.type);
+        return {
+          type: s.type,
+          label: s.label,
+          description: s.description ?? catalogMatch?.description ?? '',
+          pricePerKg: s.customerPricePerKg,
+          minWeightKg: catalogMatch?.minWeightKg ?? 5,
+          isCustom: s.isCustom ?? false,
+          customServiceId: s.customServiceId,
+        };
+      });
+    }
+    return (config?.services ?? []).map((s) => ({ ...s, isCustom: false, customServiceId: undefined }));
+  }, [config, selectedShop]);
+
   const localQuote = useMemo(() => {
-    if (!form.bookingType) return null;
+    if (!form.bookingType || !form.bagSizeId) return null;
     const catalogService = config?.services.find((s) => s.type === form.bookingType);
-    const shopService = selectedShop?.services.find((s) => s.type === form.bookingType);
+    const shopService = form.customServiceId
+      ? selectedShop?.services.find((s) => s.customServiceId === form.customServiceId)
+      : selectedShop?.services.find((s) => s.type === form.bookingType && !s.isCustom);
     const service =
-      catalogService && shopService
-        ? { ...catalogService, pricePerKg: shopService.customerPricePerKg }
-        : catalogService;
+      catalogService && shopService ? { ...catalogService, label: shopService.label } : catalogService;
     try {
       return calculateQuote(
         {
           bookingType: form.bookingType,
-          weightKg: form.weightKg,
+          bagSizeId: form.bagSizeId,
           addonIds: form.addonIds,
         },
         service,
@@ -203,7 +223,15 @@ export default function BookScreen() {
     } catch {
       return null;
     }
-  }, [form.bookingType, form.weightKg, form.addonIds, config?.services, config?.addons, selectedShop]);
+  }, [
+    form.bookingType,
+    form.customServiceId,
+    form.bagSizeId,
+    form.addonIds,
+    config?.services,
+    config?.addons,
+    selectedShop,
+  ]);
 
   const loadAvailability = useCallback(
     async (addressId: string) => {
@@ -289,7 +317,8 @@ export default function BookScreen() {
         body: JSON.stringify({
           bookingType: form.bookingType,
           branchId: form.branchId,
-          weightKg: form.weightKg,
+          ...(form.customServiceId ? { customServiceId: form.customServiceId } : {}),
+          bagSizeId: form.bagSizeId,
           addonIds: form.addonIds,
           ...(form.scheduledPickupAt ? { scheduledPickupAt: form.scheduledPickupAt } : {}),
           ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}),
@@ -358,10 +387,8 @@ export default function BookScreen() {
       setError('Select a pickup slot');
       return;
     }
-    if (step === 'weight' && localQuote && !localQuote.meetsMinimum) {
-      setError(
-        `Minimum order is ${formatCurrency(BOOKING_MIN_ORDER_AMOUNT)}. Increase weight or add add-ons.`,
-      );
+    if (step === 'weight' && !form.bagSizeId) {
+      setError('Choose a bag size');
       return;
     }
     if (step === 'review') {
@@ -409,7 +436,8 @@ export default function BookScreen() {
         body: JSON.stringify({
           bookingType: form.bookingType,
           branchId: form.branchId,
-          weightKg: form.weightKg,
+          ...(form.customServiceId ? { customServiceId: form.customServiceId } : {}),
+          bagSizeId: form.bagSizeId,
           addonIds: form.addonIds,
           pickupAddressId: form.addressId,
           scheduledPickupAt: form.scheduledPickupAt,
@@ -640,30 +668,42 @@ export default function BookScreen() {
                 step="service"
                 title={selectedShop ? `${selectedShop.name} services` : 'Choose service'}
               />
-              {config.services.map((s) => {
-                const selected = form.bookingType === s.type;
-                const shopService = selectedShop?.services.find((sv) => sv.type === s.type);
+              {services.map((s) => {
+                const selected = s.isCustom
+                  ? form.customServiceId === s.customServiceId
+                  : form.bookingType === s.type && !form.customServiceId;
                 return (
                   <Pressable
-                    key={s.type}
+                    key={s.customServiceId ?? s.type}
                     style={({ pressed }) => [
                       styles.option,
                       selected && styles.optionSelected,
                       pressed && styles.optionPressed,
                     ]}
-                    onPress={() => setForm((f) => ({ ...f, bookingType: s.type as BookingType }))}
+                    onPress={() =>
+                      setForm((f) => ({
+                        ...f,
+                        bookingType: s.type as BookingType,
+                        customServiceId: s.customServiceId ?? '',
+                      }))
+                    }
                     accessibilityRole="radio"
                     accessibilityState={{ selected }}
                   >
                     <View style={styles.optionTopRow}>
-                      <Text style={styles.optionTitle}>{s.label}</Text>
+                      <Text style={styles.optionTitle}>
+                        {s.label}
+                        {s.isCustom ? (
+                          <Text style={styles.optionBadge}> · Shop special</Text>
+                        ) : null}
+                      </Text>
                       {selected ? (
                         <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
                       ) : null}
                     </View>
                     <Text style={styles.optionSub}>{s.description}</Text>
                     <Text style={styles.optionPrice}>
-                      {formatCurrency(shopService?.customerPricePerKg ?? s.pricePerKg)} / kg · min {s.minWeightKg} kg
+                      {formatCurrency(s.pricePerKg)} / kg · min {s.minWeightKg} kg
                     </Text>
                   </Pressable>
                 );
@@ -709,58 +749,38 @@ export default function BookScreen() {
 
           {step === 'weight' && (
             <View>
-              <StepHeading step="weight" title="Estimate weight" />
+              <StepHeading step="weight" title="Choose a bag size" />
               <Text style={styles.sub}>
-                We&apos;ll confirm actual weight at pickup. Min order{' '}
+                Same flat price everywhere. We&apos;ll confirm actual weight at pickup. Min order{' '}
                 {formatCurrency(config?.minOrderAmount ?? BOOKING_MIN_ORDER_AMOUNT)}.
               </Text>
-              <View style={styles.loadInfo}>
-                <Text style={styles.loadInfoText}>{BOOKING_MACHINE_LOAD_INFO}</Text>
-                <Text style={styles.loadInfoHighlight}>
-                  Your estimate: {formatMachineLoadLabel(form.weightKg)}
-                </Text>
-              </View>
-              <View style={styles.weightHeader}>
-                <Text style={styles.weightValue}>{form.weightKg} kg</Text>
-                {activeQuote ? (
-                  <Text style={styles.weightService}>
-                    Service: {formatCurrency(activeQuote.serviceSubtotal)}
-                  </Text>
-                ) : null}
-              </View>
-              <View style={styles.weightRow}>
-                <Pressable
-                  style={({ pressed }) => [styles.weightBtnCircle, pressed && styles.weightBtnPressed]}
-                  onPress={() =>
-                    setForm((f) => ({
-                      ...f,
-                      weightKg: Math.max(config?.minWeightKg ?? 5, f.weightKg - 1),
-                    }))
-                  }
-                  accessibilityRole="button"
-                  accessibilityLabel="Decrease weight by 1 kilogram"
-                  hitSlop={4}
-                >
-                  <Ionicons name="remove" size={22} color={colors.primary} />
-                </Pressable>
-                <Pressable
-                  style={({ pressed }) => [styles.weightBtnCircle, pressed && styles.weightBtnPressed]}
-                  onPress={() =>
-                    setForm((f) => ({
-                      ...f,
-                      weightKg: Math.min(config?.maxWeightKg ?? 50, f.weightKg + 1),
-                    }))
-                  }
-                  accessibilityRole="button"
-                  accessibilityLabel="Increase weight by 1 kilogram"
-                  hitSlop={4}
-                >
-                  <Ionicons name="add" size={22} color={colors.primary} />
-                </Pressable>
-              </View>
-              <Text style={styles.weightRange}>
-                {config?.minWeightKg ?? 5} kg – {config?.maxWeightKg ?? 50} kg
-              </Text>
+              {(config?.bagSizes ?? []).map((bag) => {
+                const selected = form.bagSizeId === bag.id;
+                return (
+                  <Pressable
+                    key={bag.id}
+                    style={({ pressed }) => [
+                      styles.option,
+                      selected && styles.optionSelected,
+                      pressed && styles.optionPressed,
+                    ]}
+                    onPress={() => setForm((f) => ({ ...f, bagSizeId: bag.id }))}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected }}
+                  >
+                    <View style={styles.optionTopRow}>
+                      <Text style={styles.optionTitle}>{bag.label}</Text>
+                      {selected ? (
+                        <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                      ) : null}
+                    </View>
+                    <Text style={styles.optionSub}>
+                      Up to {bag.capacityKg} kg · {formatMachineLoadLabel(bag.capacityKg)}
+                    </Text>
+                    <Text style={styles.optionPrice}>{formatCurrency(bag.price)}</Text>
+                  </Pressable>
+                );
+              })}
             </View>
           )}
 
@@ -772,7 +792,6 @@ export default function BookScreen() {
               ) : (
                 addons.map((a) => {
                   const selected = form.addonIds.includes(a.id);
-                  const imageUri = resolveMediaUrl(a.imageUrl);
                   const isExpressReturn = a.id === EXPRESS_RETURN_ADDON_ID;
                   const disabled = isExpressReturn && !expressReturnAllowed;
                   return (
@@ -797,17 +816,13 @@ export default function BookScreen() {
                       accessibilityState={{ checked: selected, disabled }}
                     >
                       <View style={styles.addonCardRow}>
-                        {imageUri ? (
-                          <Image source={{ uri: imageUri }} style={styles.addonImage} />
-                        ) : (
-                          <View style={styles.addonImagePlaceholder}>
-                            <Ionicons
-                              name={ADDON_ICONS[a.id] ?? ADDON_ICON_FALLBACK}
-                              size={22}
-                              color={colors.primary}
-                            />
-                          </View>
-                        )}
+                        <View style={styles.addonImagePlaceholder}>
+                          <Ionicons
+                            name={ADDON_ICONS[a.id] ?? ADDON_ICON_FALLBACK}
+                            size={22}
+                            color={colors.primary}
+                          />
+                        </View>
                         <View style={styles.addonCardBody}>
                           <View style={styles.addonRow}>
                             <Text style={styles.optionTitle}>{a.label}</Text>
@@ -879,7 +894,7 @@ export default function BookScreen() {
               <View style={styles.estimateCard}>
                 <View style={styles.estimateRow}>
                   <Text style={styles.estimateLabel}>
-                    {activeQuote.serviceLabel} × {activeQuote.weightKg} kg
+                    {activeQuote.serviceLabel} — {activeQuote.bagLabel} bag
                   </Text>
                   <Text>{formatCurrency(activeQuote.serviceSubtotal)}</Text>
                 </View>
@@ -927,7 +942,8 @@ export default function BookScreen() {
                   {selectedShop?.name ?? 'Selected shop'}
                 </Text>
                 <Text style={styles.summaryLine}>
-                  <Text style={styles.summaryMuted}>Weight: </Text>~{activeQuote.weightKg} kg
+                  <Text style={styles.summaryMuted}>Bag size: </Text>
+                  {activeQuote.bagLabel} (up to {activeQuote.weightKg} kg)
                 </Text>
                 <Text style={styles.summaryLine}>
                   <Text style={styles.summaryMuted}>Pickup: </Text>
@@ -1020,6 +1036,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   optionTitle: { fontWeight: '600', fontSize: 16, color: colors.foreground },
+  optionBadge: { fontWeight: '600', fontSize: 12, color: colors.accentDark },
   optionSub: { marginTop: spacing.xs, fontSize: 13, color: colors.muted },
   optionPrice: { marginTop: spacing.sm - 2, fontSize: 13, color: colors.primary, fontWeight: '500' },
   optionGps: { marginTop: spacing.sm - 2, fontSize: 12, color: colors.accentDark, fontWeight: '500' },
@@ -1034,12 +1051,6 @@ const styles = StyleSheet.create({
   defaultBadgeText: { fontSize: 10, fontWeight: '700', color: colors.primaryDark },
   addonCardRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   addonCardBody: { flex: 1, minWidth: 0 },
-  addonImage: {
-    width: 48,
-    height: 48,
-    borderRadius: radius.md,
-    backgroundColor: colors.muted,
-  },
   addonImagePlaceholder: {
     width: 48,
     height: 48,

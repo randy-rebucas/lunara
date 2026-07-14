@@ -1,9 +1,10 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Address, AddressSchema } from '../addresses/schemas/address.schema';
 import { CatalogModule } from '../catalog/catalog.module';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { Rider, RiderSchema } from '../riders/schemas/rider.schema';
+import { RidersModule } from '../riders/riders.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { UserProfile, UserProfileSchema } from '../users/schemas/user-profile.schema';
@@ -28,6 +29,7 @@ import { BranchCustomAddon, BranchCustomAddonSchema } from './schemas/branch-cus
     ]),
     RealtimeModule,
     CatalogModule,
+    forwardRef(() => RidersModule),
   ],
   controllers: [BranchesController, PublicBranchesController],
   providers: [BranchesService, BranchManagementService],

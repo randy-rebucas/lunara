@@ -36,6 +36,7 @@ interface OrderDetail {
   total: number;
   bookingType: string;
   estimatedWeightKg?: number;
+  bagSizeLabel?: string;
   scheduledPickupAt: string;
   createdAt?: string;
   pickup?: {
@@ -316,7 +317,11 @@ export default function OrderTrackPage() {
             <h1 className="text-2xl font-bold">Track order</h1>
             <p className="mt-1 capitalize text-slate-600">
               {order.bookingType.replace(/_/g, ' ')} · {formatCurrency(order.total)}
-              {order.estimatedWeightKg ? ` · ~${order.estimatedWeightKg} kg` : ''}
+              {order.bagSizeLabel
+                ? ` · ${order.bagSizeLabel} bag`
+                : order.estimatedWeightKg
+                  ? ` · ~${order.estimatedWeightKg} kg`
+                  : ''}
             </p>
           </div>
           <div className="text-right">

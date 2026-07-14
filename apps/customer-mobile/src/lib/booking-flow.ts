@@ -1,4 +1,5 @@
 import type { BookingType } from '@lunara/types';
+import type { BagSizeId } from '@lunara/utils';
 
 export type BookingStep =
   | 'service'
@@ -15,7 +16,7 @@ export const BOOKING_STEPS: { id: BookingStep; label: string }[] = [
   { id: 'shop', label: 'Shop' },
   { id: 'service', label: 'Service' },
   { id: 'schedule', label: 'Schedule' },
-  { id: 'weight', label: 'Weight' },
+  { id: 'weight', label: 'Bag size' },
   { id: 'addons', label: 'Add-ons' },
   { id: 'review', label: 'Estimate' },
   { id: 'confirm', label: 'Confirm' },
@@ -23,20 +24,22 @@ export const BOOKING_STEPS: { id: BookingStep; label: string }[] = [
 
 export interface BookingFormState {
   bookingType: BookingType | null;
+  customServiceId: string;
   addressId: string;
   branchId: string;
   scheduledPickupAt: string;
-  weightKg: number;
+  bagSizeId: BagSizeId | '';
   addonIds: string[];
   couponCode: string;
 }
 
 export const initialBookingForm: BookingFormState = {
   bookingType: null,
+  customServiceId: '',
   addressId: '',
   branchId: '',
   scheduledPickupAt: '',
-  weightKg: 8,
+  bagSizeId: '',
   addonIds: [],
   couponCode: '',
 };

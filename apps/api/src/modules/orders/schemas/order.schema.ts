@@ -320,8 +320,16 @@ export class Order {
   @Prop()
   scheduledDeliveryAt?: Date;
 
+  /** Nominal weight from the chosen bag's capacity — for dispatch capacity scoring/display, not billing. */
   @Prop()
   estimatedWeightKg?: number;
+
+  /** Flat bag size the customer selected and paid for (see @lunara/utils BAG_SIZES). */
+  @Prop()
+  bagSizeId?: string;
+
+  @Prop()
+  bagSizeLabel?: string;
 
   @Prop({ type: [OrderAddon], default: [] })
   addons!: OrderAddon[];
@@ -353,13 +361,16 @@ export class Order {
   @Prop({ required: true })
   total!: number;
 
-  /** Pre-markup service subtotal (shop's own price × weight), for shop_markup orders only. */
+  /** Partner's payout-side subtotal before Lunara's cut (service portion split by branch.commissionRate,
+   * plus shop-markup add-ons), for 'commission'/'shop_markup' orders only. */
   @Prop()
   baseSubtotal?: number;
 
-  /** How Lunara's cut was computed for this order — missing/legacy orders use branch.commissionRate at settlement. */
-  @Prop({ enum: ['legacy_commission', 'shop_markup'] })
-  pricingModel?: 'legacy_commission' | 'shop_markup';
+  /** How Lunara's cut was computed for this order — missing/legacy orders use branch.commissionRate at settlement.
+   * 'commission': flat bag price split by branch.commissionRate (current model).
+   * 'shop_markup': legacy per-kg orders priced before flat bag pricing. */
+  @Prop({ enum: ['legacy_commission', 'shop_markup', 'commission'] })
+  pricingModel?: 'legacy_commission' | 'shop_markup' | 'commission';
 
   @Prop({ type: [OrderStatusEvent], default: [] })
   statusHistory!: OrderStatusEvent[];

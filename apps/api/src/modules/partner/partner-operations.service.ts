@@ -124,7 +124,10 @@ export class PartnerOperationsService {
     commissionRateByBranchId: Map<string, number>,
     fallbackRate = 0.20,
   ): number {
-    if (order.pricingModel === 'shop_markup' && order.baseSubtotal != null) {
+    if (
+      (order.pricingModel === 'shop_markup' || order.pricingModel === 'commission') &&
+      order.baseSubtotal != null
+    ) {
       return (order.subtotal ?? order.total) - order.baseSubtotal;
     }
     const rate = commissionRateByBranchId.get(order.branchId?.toString() ?? '') ?? fallbackRate;
@@ -319,6 +322,8 @@ export class PartnerOperationsService {
       partnerId: order.partnerId?.toString(),
       branchId: order.branchId?.toString(),
     });
+
+    await this.riderAssignmentService.autoAssignPickupRiderIfConfigured(orderId).catch(() => {});
 
     return { success: true, data: await this.summarizeIncoming(order) };
   }
@@ -764,17 +769,17 @@ export class PartnerOperationsService {
             legacyCommissionSubtotalSum: {
               $sum: {
                 $cond: [
-                  { $eq: ['$pricingModel', 'shop_markup'] },
+                  { $in: ['$pricingModel', ['shop_markup', 'commission']] },
                   0,
                   { $ifNull: ['$subtotal', '$total'] },
                 ],
               },
             },
-            // shop_markup orders already have Lunara's cut baked in as subtotal - baseSubtotal.
+            // shop_markup/commission orders already have Lunara's cut baked in as subtotal - baseSubtotal.
             shopMarkupFeeSum: {
               $sum: {
                 $cond: [
-                  { $eq: ['$pricingModel', 'shop_markup'] },
+                  { $in: ['$pricingModel', ['shop_markup', 'commission']] },
                   { $subtract: [{ $ifNull: ['$subtotal', '$total'] }, { $ifNull: ['$baseSubtotal', 0] }] },
                   0,
                 ],
@@ -1110,10 +1115,13 @@ export class PartnerOperationsService {
     const partnerPayout = totalAmount - lunaraFee;
 
     // Stored commissionRate becomes a display-only weighted average across the legacy-priced
-    // orders in this settlement (shop_markup orders don't have a "rate" at all) — once a
-    // settlement can span branches with different rates, this field is no longer the single
-    // source of truth for the fee; lunaraFee (computed per-order above) always is.
-    const legacyOrders = completedOrders.filter((o) => o.pricingModel !== 'shop_markup');
+    // orders in this settlement (shop_markup/commission orders don't have a "rate" at all, their
+    // fee is baked into baseSubtotal) — once a settlement can span branches with different rates,
+    // this field is no longer the single source of truth for the fee; lunaraFee (computed per-order
+    // above) always is.
+    const legacyOrders = completedOrders.filter(
+      (o) => o.pricingModel !== 'shop_markup' && o.pricingModel !== 'commission',
+    );
     const legacySubtotalSum = legacyOrders.reduce((s, o) => s + (o.subtotal ?? o.total), 0);
     const weightedCommissionRate =
       legacySubtotalSum > 0

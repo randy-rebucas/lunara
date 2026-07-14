@@ -1,15 +1,13 @@
-import { BookingType } from '@lunara/types';
+import { BookingType, type DayOperatingHours, type OperatingHours } from '@lunara/types';
 
 export const BOOKING_MIN_ORDER_AMOUNT = 150;
 /** @deprecated use BOOKING_FLAT_DELIVERY_FEE */
 export const BOOKING_DELIVERY_FEE = 50;
 /** Flat pickup + delivery fee charged on every booking. */
 export const BOOKING_FLAT_DELIVERY_FEE = 70;
-/** Lunara's markup on a partner shop's base price per kg. Single source of truth — never hardcode 1.30 elsewhere. */
+/** Lunara's markup on a partner shop's own add-on prices. Base service pricing is flat bag pricing
+ * (see BAG_SIZES) and no longer uses this — add-ons still do. Single source of truth — never hardcode 1.30 elsewhere. */
 export const SHOP_PRICE_MARKUP_MULTIPLIER = 1.3;
-export const BOOKING_MIN_WEIGHT_KG = 5;
-export const BOOKING_MAX_WEIGHT_KG = 50;
-export const BOOKING_DEFAULT_WEIGHT_KG = 5;
 
 /** Minimum capacity per washing machine load (kg). */
 export const BOOKING_MACHINE_LOAD_MIN_KG = 8;
@@ -31,8 +29,33 @@ export interface LaundryServiceOption {
   type: BookingType;
   label: string;
   description: string;
+  /** @deprecated Base pricing is flat by bag size (see BAG_SIZES), not per kg. Kept for legacy/display reference only. */
   pricePerKg: number;
+  /** @deprecated Base pricing is flat by bag size (see BAG_SIZES), not per kg. Kept for legacy/display reference only. */
   minWeightKg: number;
+}
+
+export type BagSizeId = 'small' | 'medium' | 'large' | 'xl';
+
+export interface BagSizeOption {
+  id: BagSizeId;
+  label: string;
+  /** Nominal capacity in kg — used for machine-load estimates and dispatch capacity scoring, not billing. */
+  capacityKg: number;
+  /** Flat price, same platform-wide regardless of booking type or partner shop. */
+  price: number;
+}
+
+/** Flat, platform-wide bag pricing — replaces per-kg weight-based pricing for all booking types. */
+export const BAG_SIZES: BagSizeOption[] = [
+  { id: 'small', label: 'Small', capacityKg: 5, price: 249 },
+  { id: 'medium', label: 'Medium', capacityKg: 8, price: 349 },
+  { id: 'large', label: 'Large', capacityKg: 12, price: 449 },
+  { id: 'xl', label: 'XL', capacityKg: 15, price: 549 },
+];
+
+export function getBagSize(id: string): BagSizeOption | undefined {
+  return BAG_SIZES.find((b) => b.id === id);
 }
 
 export interface BookingAddonOption {
@@ -70,15 +93,17 @@ export interface AddressInput {
 
 export interface QuoteInput {
   bookingType: BookingType;
-  weightKg: number;
+  bagSizeId: BagSizeId;
   addonIds: string[];
 }
 
 export interface QuoteBreakdown {
   bookingType: BookingType;
   serviceLabel: string;
+  bagSizeId: BagSizeId;
+  bagLabel: string;
+  /** Nominal weight from the bag's capacity — for machine-load estimates and display, not billing. */
   weightKg: number;
-  pricePerKg: number;
   serviceSubtotal: number;
   addons: { id: string; label: string; price: number }[];
   addonsSubtotal: number;
@@ -303,10 +328,6 @@ export function validateAddressFields(address: AddressInput): { valid: boolean; 
   return { valid: true };
 }
 
-export function clampWeight(weightKg: number) {
-  return Math.min(BOOKING_MAX_WEIGHT_KG, Math.max(BOOKING_MIN_WEIGHT_KG, weightKg));
-}
-
 export function calculateQuote(
   input: QuoteInput,
   serviceOverride?: LaundryServiceOption,
@@ -317,9 +338,10 @@ export function calculateQuote(
   const service = serviceOverride ?? getService(input.bookingType);
   if (!service) throw new Error('Unknown service type');
 
-  const weightKg = clampWeight(input.weightKg);
-  const billedWeightKg = Math.max(weightKg, service.minWeightKg);
-  const serviceSubtotal = Math.round(service.pricePerKg * billedWeightKg);
+  const bag = getBagSize(input.bagSizeId);
+  if (!bag) throw new Error('Unknown bag size');
+
+  const serviceSubtotal = bag.price;
   const catalog = addonOptions ?? BOOKING_ADDONS;
   const addons = input.addonIds
     .map((id) => catalog.find((a) => a.id === id))
@@ -334,8 +356,9 @@ export function calculateQuote(
   return {
     bookingType: input.bookingType,
     serviceLabel: service.label,
-    weightKg,
-    pricePerKg: service.pricePerKg,
+    bagSizeId: bag.id,
+    bagLabel: bag.label,
+    weightKg: bag.capacityKg,
     serviceSubtotal,
     addons,
     addonsSubtotal,
@@ -437,6 +460,22 @@ export const PICKUP_WINDOW_START_HOUR = 8;
 /** Last pickup window end hour (5:00 PM) — windows run hourly up to this. */
 export const PICKUP_WINDOW_END_HOUR = 17;
 
+/** Fallback hours (every day, 8AM–5PM) used for branches/days with no configured hours. */
+export const DEFAULT_OPERATING_HOURS: OperatingHours = Array.from({ length: 7 }, () => ({
+  isClosed: false,
+  openTime: '08:00',
+  closeTime: '17:00',
+}));
+
+function parseTimeToHour(time: string): number {
+  const [h, m] = time.split(':').map(Number);
+  return h + (Number.isFinite(m) ? m : 0) / 60;
+}
+
+function resolveDayHours(operatingHours: OperatingHours, dayOfWeek: number): DayOperatingHours {
+  return operatingHours[dayOfWeek] ?? DEFAULT_OPERATING_HOURS[dayOfWeek];
+}
+
 function formatHourLabel(hour: number): string {
   const period = hour >= 12 ? 'PM' : 'AM';
   const displayHour = hour % 12 === 0 ? 12 : hour % 12;
@@ -451,14 +490,24 @@ function buildHourlyPickupWindows(startHour: number, endHour: number) {
   return windows;
 }
 
-export function generatePickupSlots(fromDate: Date = new Date(), days = 7): PickupSlot[] {
+export function generatePickupSlots(
+  fromDate: Date = new Date(),
+  days = 7,
+  operatingHours: OperatingHours = DEFAULT_OPERATING_HOURS,
+): PickupSlot[] {
   const slots: PickupSlot[] = [];
-  const windows = buildHourlyPickupWindows(PICKUP_WINDOW_START_HOUR, PICKUP_WINDOW_END_HOUR);
 
   for (let d = 0; d < days; d++) {
     const day = new Date(fromDate);
     day.setHours(0, 0, 0, 0);
     day.setDate(day.getDate() + d);
+
+    const dayHours = resolveDayHours(operatingHours, day.getDay());
+    if (dayHours.isClosed) continue;
+
+    const startHour = Math.floor(parseTimeToHour(dayHours.openTime));
+    const endHour = Math.ceil(parseTimeToHour(dayHours.closeTime));
+    const windows = buildHourlyPickupWindows(startHour, endHour);
 
     for (const w of windows) {
       const start = new Date(day);

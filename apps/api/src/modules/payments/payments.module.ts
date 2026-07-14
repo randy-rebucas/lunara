@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { BranchesModule } from '../branches/branches.module';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
@@ -19,7 +19,7 @@ import { SettingsModule } from '../settings/settings.module';
     ]),
     WalletsModule,
     RealtimeModule,
-    BranchesModule,
+    forwardRef(() => BranchesModule),
     LedgerModule,
     SettingsModule,
   ],

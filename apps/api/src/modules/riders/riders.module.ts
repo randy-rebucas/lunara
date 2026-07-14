@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Address, AddressSchema } from '../addresses/schemas/address.schema';
 import { Branch, BranchSchema } from '../branches/schemas/branch.schema';
@@ -50,7 +50,7 @@ import { LaundryTagsModule } from '../laundry-tags/laundry-tags.module';
     RealtimeModule,
     ReviewsModule,
     HandoffModule,
-    PaymentsModule,
+    forwardRef(() => PaymentsModule),
     SosModule,
     LedgerModule,
     SettingsModule,

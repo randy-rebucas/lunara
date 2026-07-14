@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@lunara/types": "*",
+    "@lunara/utils": "*",
     "zod": "^3.25.51"
   },
   "devDependencies": {

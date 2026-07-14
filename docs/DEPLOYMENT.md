@@ -342,6 +342,8 @@ eas secret:create --name EXPO_PUBLIC_API_URL --value https://api.lunara.example.
 
 Configure Firebase credentials on the **API** (Render) for background push. See [README — Push notifications](../README.md#push-notifications-firebase--eas).
 
+Per-app deployment guides: [Customer Mobile](./DEPLOYMENT_CUSTOMER_MOBILE.md) · [Rider Mobile](./DEPLOYMENT_RIDER_MOBILE.md)
+
 ---
 
 ## 8. Staging environment (optional)

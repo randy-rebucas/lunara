@@ -1,9 +1,10 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, forwardRef, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { BookingType, OrderStatus, UserRole } from '@lunara/types';
+import { BookingType, OrderStatus, UserRole, type DayOperatingHours, type OperatingHours } from '@lunara/types';
 import {
   applyShopMarkup,
+  DEFAULT_OPERATING_HOURS,
   distanceKm,
   estimateTurnaroundHours,
   formatDistanceKm,
@@ -19,6 +20,7 @@ import { LocalStorageService } from '../../common/storage/local-storage.service'
 import { CatalogService } from '../catalog/catalog.service';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { Rider, RiderDocument } from '../riders/schemas/rider.schema';
+import { RiderAssignmentService } from '../riders/rider-assignment.service';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { UserProfile, UserProfileDocument } from '../users/schemas/user-profile.schema';
@@ -112,6 +114,8 @@ export class BranchesService {
     private trackingGateway: TrackingGateway,
     private catalogService: CatalogService,
     private localStorageService: LocalStorageService,
+    @Inject(forwardRef(() => RiderAssignmentService))
+    private riderAssignmentService: RiderAssignmentService,
   ) {}
 
   /** Shop's own price/kg for a service; falls back to the global catalog price when not customized. */
@@ -570,6 +574,42 @@ export class BranchesService {
     const filter: Record<string, unknown> = { isActive: true, branchType: { $ne: 'hq' as const } };
     if (partnerUserId) filter.partnerUserId = partnerUserId;
     return filter;
+  }
+
+  /**
+   * Customers book before a shop is assigned (managed-network dispatch happens after payment),
+   * so no single branch's hours apply yet. We take the union across every branch currently
+   * accepting orders — a time slot is offered if at least one shop would be open for it.
+   */
+  async getUnionOperatingHours(): Promise<OperatingHours> {
+    const branches = await this.branchModel
+      .find({ ...this.operationalBranchFilter(), 'portalSettings.acceptingOrders': true })
+      .select('operatingHours');
+
+    if (branches.length === 0) return DEFAULT_OPERATING_HOURS;
+
+    const union: DayOperatingHours[] = Array.from({ length: 7 }, () => ({
+      isClosed: true,
+      openTime: '00:00',
+      closeTime: '00:00',
+    }));
+
+    for (const branch of branches) {
+      const hours = branch.operatingHours?.length === 7 ? branch.operatingHours : DEFAULT_OPERATING_HOURS;
+      hours.forEach((day, i) => {
+        if (day.isClosed) return;
+        union[i] = union[i].isClosed
+          ? { isClosed: false, openTime: day.openTime, closeTime: day.closeTime }
+          : {
+              isClosed: false,
+              // "HH:mm" zero-padded strings compare lexicographically like their numeric values.
+              openTime: day.openTime < union[i].openTime ? day.openTime : union[i].openTime,
+              closeTime: day.closeTime > union[i].closeTime ? day.closeTime : union[i].closeTime,
+            };
+      });
+    }
+
+    return union;
   }
 
   async ensureSeeded() {
@@ -1116,6 +1156,17 @@ export class BranchesService {
       timestamp: new Date(),
       note: opts.noteOverride ?? `Shop assigned: ${branch.name} (ETA ${turnaround.label})`,
     });
+
+    const autoAccepted = branch.portalSettings?.autoAcceptIncoming === true;
+    if (autoAccepted) {
+      order.partnerAcceptedAt = new Date();
+      order.statusHistory.push({
+        status: order.status,
+        timestamp: new Date(),
+        note: 'Auto-accepted per shop settings',
+      });
+    }
+
     await order.save();
 
     const orderId = order._id.toString();
@@ -1124,6 +1175,14 @@ export class BranchesService {
       branchId: branch._id.toString(),
       branchName: branch.name,
     });
+    if (autoAccepted) {
+      this.trackingGateway.emitOrderEvent(orderId, 'partnerAccepted', {
+        message: `${branch.name} accepted your order`,
+      });
+      await this.riderAssignmentService
+        .autoAssignPickupRiderIfConfigured(orderId)
+        .catch(() => {});
+    }
     this.trackingGateway.emitDispatchQueueUpdated({
       reason: 'shop_assigned',
       orderId,

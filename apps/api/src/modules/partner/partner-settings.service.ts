@@ -2,6 +2,7 @@ import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/commo
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { UserRole } from '@lunara/types';
+import { DEFAULT_OPERATING_HOURS } from '@lunara/utils';
 import {
   Branch,
   BranchDocument,
@@ -57,6 +58,8 @@ export class PartnerSettingsService {
       dailyQuotaOrders: branch.dailyQuotaOrders,
       dailyQuotaWeightKg: branch.dailyQuotaWeightKg,
       serviceRadiusKm: branch.serviceRadiusKm,
+      operatingHours:
+        branch.operatingHours?.length === 7 ? branch.operatingHours : DEFAULT_OPERATING_HOURS,
     };
   }
 
@@ -83,9 +86,11 @@ export class PartnerSettingsService {
       throw new ForbiddenException("Cannot update another shop's settings");
     }
 
+    const { operatingHours, ...portalPatchRaw } = dto;
+
     // Strip undefined values from dto so unset optional fields don't overwrite existing settings
     const patch = Object.fromEntries(
-      Object.entries(dto).filter(([, v]) => v !== undefined),
+      Object.entries(portalPatchRaw).filter(([, v]) => v !== undefined),
     ) as Partial<PartnerPortalSettings>;
 
     branch.portalSettings = normalizePortalSettings({
@@ -93,6 +98,12 @@ export class PartnerSettingsService {
       ...patch,
     });
     branch.markModified('portalSettings');
+
+    if (operatingHours) {
+      branch.operatingHours = operatingHours;
+      branch.markModified('operatingHours');
+    }
+
     await branch.save();
 
     return {

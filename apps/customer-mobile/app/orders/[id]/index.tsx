@@ -41,6 +41,7 @@ interface OrderDetail {
   total: number;
   bookingType: string;
   estimatedWeightKg?: number;
+  bagSizeLabel?: string;
   scheduledPickupAt?: string;
   branchName?: string;
   branchCode?: string;
@@ -332,7 +333,11 @@ export default function OrderTrackScreen() {
           <Ionicons name="pricetag-outline" size={13} color={colors.mutedForeground} />
           <Text style={styles.meta}>
             {order.bookingType.replace(/_/g, ' ')} · {formatCurrency(order.total)}
-            {order.estimatedWeightKg ? ` · ~${order.estimatedWeightKg} kg` : ''}
+            {order.bagSizeLabel
+              ? ` · ${order.bagSizeLabel} bag`
+              : order.estimatedWeightKg
+                ? ` · ~${order.estimatedWeightKg} kg`
+                : ''}
           </Text>
         </View>
 

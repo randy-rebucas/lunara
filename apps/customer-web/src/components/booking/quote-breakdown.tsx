@@ -39,8 +39,8 @@ export function QuoteBreakdownPanel({
   return (
     <dl className="space-y-2">
       <BreakdownRow
-        label={`${quote.serviceLabel} × ${quote.weightKg} kg`}
-        detail={`${formatCurrency(quote.pricePerKg)} per kg`}
+        label={`${quote.serviceLabel} — ${quote.bagLabel} bag`}
+        detail={`Up to ${quote.weightKg} kg`}
         value={formatCurrency(quote.serviceSubtotal)}
       />
       {quote.addons.map((addon) => (
@@ -61,8 +61,8 @@ export function QuoteBreakdownPanel({
       </div>
       {showMinimumWarning && !quote.meetsMinimum && (
         <p className="text-xs text-amber-800">
-          Below minimum order of {formatCurrency(quote.minimumOrderAmount)}. Increase weight or
-          add-ons to continue.
+          Below minimum order of {formatCurrency(quote.minimumOrderAmount)}. Choose a larger bag
+          or add add-ons to continue.
         </p>
       )}
     </dl>

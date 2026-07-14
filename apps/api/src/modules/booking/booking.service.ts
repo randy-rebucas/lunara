@@ -3,10 +3,10 @@ import { Types } from 'mongoose';
 import { BookingType } from '@lunara/types';
 import {
   applyShopMarkup,
-  BOOKING_MAX_WEIGHT_KG,
+  BAG_SIZES,
   BOOKING_MIN_ORDER_AMOUNT,
-  BOOKING_MIN_WEIGHT_KG,
   calculateQuote,
+  type BagSizeId,
   distanceKm,
   EXPRESS_RETURN_ADDON_ID,
   generatePickupSlots,
@@ -53,8 +53,7 @@ export class BookingService {
           cities: a.cities,
         })),
         minOrderAmount: BOOKING_MIN_ORDER_AMOUNT,
-        minWeightKg: BOOKING_MIN_WEIGHT_KG,
-        maxWeightKg: BOOKING_MAX_WEIGHT_KG,
+        bagSizes: BAG_SIZES,
         deliveryFee: deliveryFees.data.deliveryFee,
       },
     };
@@ -113,7 +112,8 @@ export class BookingService {
 
   async getAvailability(userId: string, addressId: string) {
     const { area } = await this.validateAddressForUser(userId, addressId);
-    const slots = generatePickupSlots(new Date(), PICKUP_SCHEDULE_DAY_COUNT);
+    const operatingHours = await this.branchesService.getUnionOperatingHours();
+    const slots = generatePickupSlots(new Date(), PICKUP_SCHEDULE_DAY_COUNT, operatingHours);
     const partnerCoverage =
       (await this.branchesService.evaluatePartnerCoverageForAddressId(addressId)) ?? {
         hasPartnerNearby: false,
@@ -169,6 +169,8 @@ export class BookingService {
       if (!offered) {
         throw new BadRequestException('This shop does not offer this service');
       }
+      // Only label/description come from the shop's own catalog now — base price is flat bag
+      // pricing (BAG_SIZES), same regardless of booking type or which shop is assigned.
       const resolved = await this.branchesService.resolvePriceableService(
         branch,
         dto.bookingType,
@@ -178,7 +180,6 @@ export class BookingService {
         ...service,
         label: resolved.label ?? service.label,
         description: resolved.description ?? service.description,
-        pricePerKg: applyShopMarkup(resolved.pricePerKg),
       };
       priceableAddons = await this.branchesService.listPriceableAddonOptions(branch);
       priceableAddons = await Promise.all(
@@ -208,7 +209,7 @@ export class BookingService {
     const quote = calculateQuote(
       {
         bookingType: dto.bookingType,
-        weightKg: dto.weightKg,
+        bagSizeId: dto.bagSizeId as BagSizeId,
         addonIds,
       },
       priceableService,
@@ -218,7 +219,7 @@ export class BookingService {
 
     if (!quote.meetsMinimum) {
       throw new BadRequestException(
-        `Minimum order is ₱${BOOKING_MIN_ORDER_AMOUNT}. Add weight or add-ons to continue.`,
+        `Minimum order is ₱${BOOKING_MIN_ORDER_AMOUNT}. Choose a larger bag or add add-ons to continue.`,
       );
     }
 
@@ -244,7 +245,14 @@ export class BookingService {
       address,
       Boolean(partnerContextId),
     );
-    const slot = generatePickupSlots().find((s) => s.startAt === dto.scheduledPickupAt);
+    // Once a shop is chosen, validate against that shop's own hours (stricter and authoritative);
+    // otherwise fall back to the same union-of-active-branches hours getAvailability offered.
+    const operatingHours = dto.branchId
+      ? (await this.branchesService.getActivePartnerShop(dto.branchId)).operatingHours
+      : await this.branchesService.getUnionOperatingHours();
+    const slot = generatePickupSlots(new Date(), PICKUP_SCHEDULE_DAY_COUNT, operatingHours).find(
+      (s) => s.startAt === dto.scheduledPickupAt,
+    );
     if (!slot || !isPickupSlotBookable(slot)) {
       throw new BadRequestException('Selected pickup slot is no longer available');
     }
@@ -252,9 +260,9 @@ export class BookingService {
     const items = [
       {
         serviceType: dto.bookingType,
-        quantity: quote.weightKg,
-        unitPrice: quote.pricePerKg,
-        notes: `Estimated ${quote.weightKg} kg`,
+        quantity: 1,
+        unitPrice: quote.serviceSubtotal,
+        notes: `${quote.bagLabel} bag (up to ${quote.weightKg} kg)`,
       },
       ...quote.addons.map((a) => ({
         serviceType: dto.bookingType,
@@ -269,7 +277,7 @@ export class BookingService {
     let branchName: string | undefined;
     let resolvedPartnerId: string | undefined;
     let baseSubtotal: number | undefined;
-    let pricingModel: 'shop_markup' | undefined;
+    let pricingModel: 'commission' | undefined;
 
     if (partnerContextId) {
       // White-labeled bookings stay within that partner's own branch pool — no customer choice.
@@ -287,23 +295,20 @@ export class BookingService {
       // General customer flow: the shop they picked at booking time is the order's branch.
       // buildQuote() above already required and validated dto.branchId when not white-label.
       const branch = await this.branchesService.getActivePartnerShop(dto.branchId!);
-      const resolved = await this.branchesService.resolvePriceableService(
-        branch,
-        dto.bookingType,
-        dto.customServiceId,
-      );
-      const basePricePerKg = resolved.pricePerKg;
+      // Bag pricing is flat and platform-wide — the partner's payout share of the service
+      // portion is the branch's own commissionRate (add-ons keep their existing shop-markup split).
       const baseAddonsSum = await quote.addons.reduce(async (accPromise, a) => {
         const acc = await accPromise;
         const basePrice = await this.branchesService.resolveBranchAddonPrice(branch, a.id);
         return acc + basePrice;
       }, Promise.resolve(0));
+      const serviceBaseSubtotal = Math.round(quote.serviceSubtotal * (1 - branch.commissionRate));
       branchId = branch._id.toString();
       branchCode = branch.code;
       branchName = branch.name;
       resolvedPartnerId = branch.partnerUserId.toString();
-      baseSubtotal = Math.round(basePricePerKg * quote.weightKg + baseAddonsSum);
-      pricingModel = 'shop_markup';
+      baseSubtotal = Math.round(serviceBaseSubtotal + baseAddonsSum);
+      pricingModel = 'commission';
     }
 
     return {
@@ -315,6 +320,8 @@ export class BookingService {
         scheduledDeliveryAt: undefined,
         couponCode: quote.couponCode,
         estimatedWeightKg: quote.weightKg,
+        bagSizeId: quote.bagSizeId,
+        bagSizeLabel: quote.bagLabel,
         addons: quote.addons,
         subtotal: quote.subtotal,
         deliveryFee: quote.deliveryFee,

@@ -9,7 +9,7 @@ import { Card, CardBody, SectionPanel } from '../../components/ui/card';
 import { PageHeader } from '../../components/ui/page-header';
 import { useProtectedPage } from '../../hooks/use-protected-page';
 import { isPartnerRole, partnerFetch, removeShopLogo, uploadShopLogo } from '../../lib/partner-api';
-import type { PartnerPortalSettings, PartnerSettingsData } from '@lunara/types';
+import type { DayOperatingHours, OperatingHours, PartnerPortalSettings, PartnerSettingsData } from '@lunara/types';
 import { usePartnerQuery } from '../../lib/use-partner-query';
 
 function SettingToggle({
@@ -60,7 +60,7 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
 }
 
 type PayoutMethod = 'gcash' | 'maya' | 'bank' | 'counter';
-type Tab = 'shop' | 'preferences' | 'payout';
+type Tab = 'shop' | 'hours' | 'preferences' | 'payout';
 
 const PAYOUT_METHOD_LABELS: Record<PayoutMethod, string> = {
   gcash: 'GCash',
@@ -71,8 +71,20 @@ const PAYOUT_METHOD_LABELS: Record<PayoutMethod, string> = {
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'shop', label: 'Shop' },
+  { id: 'hours', label: 'Hours' },
   { id: 'preferences', label: 'Preferences' },
   { id: 'payout', label: 'Payout' },
+];
+
+/** Display order Mon–Sun; each entry's `dayIndex` maps back to `OperatingHours` (JS `Date.getDay()`). */
+const WEEKDAY_ROWS: { dayIndex: number; label: string }[] = [
+  { dayIndex: 1, label: 'Monday' },
+  { dayIndex: 2, label: 'Tuesday' },
+  { dayIndex: 3, label: 'Wednesday' },
+  { dayIndex: 4, label: 'Thursday' },
+  { dayIndex: 5, label: 'Friday' },
+  { dayIndex: 6, label: 'Saturday' },
+  { dayIndex: 0, label: 'Sunday' },
 ];
 
 export default function PartnerSettingsPage() {
@@ -82,6 +94,7 @@ export default function PartnerSettingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>('shop');
   const [saving, setSaving] = useState(false);
   const [logoBusy, setLogoBusy] = useState(false);
+  const [hoursDraft, setHoursDraft] = useState<OperatingHours | null>(null);
   const [payoutDraft, setPayoutDraft] = useState<{
     method: PayoutMethod | '';
     gcashNumber: string;
@@ -128,6 +141,39 @@ export default function PartnerSettingsPage() {
       });
     }
   }, [data, payoutDraft]);
+
+  useEffect(() => {
+    if (data && hoursDraft === null) {
+      setHoursDraft(data.branch.operatingHours);
+    }
+  }, [data, hoursDraft]);
+
+  function updateHoursDraftDay(dayIndex: number, patch: Partial<DayOperatingHours>) {
+    setHoursDraft((prev) => {
+      if (!prev) return prev;
+      const next = [...prev];
+      next[dayIndex] = { ...next[dayIndex], ...patch };
+      return next;
+    });
+  }
+
+  async function saveHours() {
+    if (!hoursDraft) return;
+    setSaving(true);
+    try {
+      await partnerFetch<PartnerSettingsData>('/partner/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({ operatingHours: hoursDraft }),
+      });
+      await reload();
+      toast.success('Operating hours saved');
+      setHoursDraft(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not save operating hours');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -285,6 +331,70 @@ export default function PartnerSettingsPage() {
                   </dl>
                 </CardBody>
               </Card>
+            )}
+
+            {/* Hours tab */}
+            {activeTab === 'hours' && (
+              <SectionPanel
+                title="Operating hours"
+                description="Customers can only book pickup times while at least one shop is open. Closed days won't offer any pickup slots for that day."
+              >
+                {hoursDraft ? (
+                  <div className="divide-y divide-border/60 px-6 py-2 sm:px-8">
+                    {WEEKDAY_ROWS.map(({ dayIndex, label }) => {
+                      const day = hoursDraft[dayIndex];
+                      return (
+                        <div key={dayIndex} className="flex flex-wrap items-center gap-3 py-3">
+                          <span className="w-28 shrink-0 text-sm font-medium text-slate-900">{label}</span>
+                          <label className="flex items-center gap-2 text-sm text-muted">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-border text-primary focus:ring-primary/30"
+                              checked={!day.isClosed}
+                              disabled={!canEdit || saving}
+                              onChange={(e) => updateHoursDraftDay(dayIndex, { isClosed: !e.target.checked })}
+                            />
+                            Open
+                          </label>
+                          {!day.isClosed ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="time"
+                                className="rounded-lg border px-2 py-1 text-sm"
+                                value={day.openTime}
+                                disabled={!canEdit || saving}
+                                onChange={(e) => updateHoursDraftDay(dayIndex, { openTime: e.target.value })}
+                              />
+                              <span className="text-sm text-muted">to</span>
+                              <input
+                                type="time"
+                                className="rounded-lg border px-2 py-1 text-sm"
+                                value={day.closeTime}
+                                disabled={!canEdit || saving}
+                                onChange={(e) => updateHoursDraftDay(dayIndex, { closeTime: e.target.value })}
+                              />
+                            </div>
+                          ) : (
+                            <span className="text-sm text-muted">Closed</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {canEdit ? (
+                      <div className="pb-2 pt-4">
+                        <button
+                          type="button"
+                          className="btn-primary btn-sm"
+                          disabled={saving}
+                          onClick={() => void saveHours()}
+                        >
+                          {saving ? 'Saving…' : 'Save hours'}
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </SectionPanel>
             )}
 
             {/* Preferences tab */}

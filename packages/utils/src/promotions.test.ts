@@ -17,7 +17,7 @@ import {
 
 const baseQuote = calculateQuote({
   bookingType: BookingType.WASH_FOLD,
-  weightKg: 5,
+  bagSizeId: 'small',
   addonIds: [],
 });
 
@@ -71,8 +71,8 @@ describe('promotions', () => {
       discountType: 'percent',
       discountValue: 10,
     });
-    assert.equal(discounted.discount, 40);
-    assert.equal(discounted.total, baseQuote.subtotal + baseQuote.deliveryFee - 40);
+    assert.equal(discounted.discount, 25);
+    assert.equal(discounted.total, baseQuote.subtotal + baseQuote.deliveryFee - 25);
     assert.equal(discounted.couponCode, 'WELCOME10');
     assert.equal(discounted.promotionTitle, 'Welcome discount');
   });

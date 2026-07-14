@@ -1,14 +1,8 @@
 import { BookingType } from '@lunara/types';
-import {
-  IsArray,
-  IsDateString,
-  IsEnum,
-  IsNumber,
-  IsOptional,
-  IsString,
-  Max,
-  Min,
-} from 'class-validator';
+import { BAG_SIZES } from '@lunara/utils';
+import { IsArray, IsDateString, IsEnum, IsIn, IsOptional, IsString } from 'class-validator';
+
+const BAG_SIZE_IDS = BAG_SIZES.map((b) => b.id);
 
 export class BookingQuoteDto {
   @IsEnum(BookingType)
@@ -24,10 +18,9 @@ export class BookingQuoteDto {
   @IsString()
   customServiceId?: string;
 
-  @IsNumber()
-  @Min(1)
-  @Max(50)
-  weightKg!: number;
+  /** Flat platform-wide bag size — see @lunara/utils BAG_SIZES. */
+  @IsIn(BAG_SIZE_IDS)
+  bagSizeId!: string;
 
   @IsOptional()
   @IsArray()

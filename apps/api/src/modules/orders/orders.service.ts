@@ -39,6 +39,8 @@ export interface BookingOrderPayload {
   scheduledDeliveryAt?: string;
   couponCode?: string;
   estimatedWeightKg: number;
+  bagSizeId?: string;
+  bagSizeLabel?: string;
   addons: { id: string; label: string; price: number }[];
   subtotal: number;
   deliveryFee: number;
@@ -49,7 +51,7 @@ export interface BookingOrderPayload {
   branchName?: string;
   partnerId?: string;
   baseSubtotal?: number;
-  pricingModel?: 'shop_markup';
+  pricingModel?: 'shop_markup' | 'commission';
 }
 
 @Injectable()
@@ -185,6 +187,8 @@ export class OrdersService {
         ? new Date(payload.scheduledDeliveryAt)
         : undefined,
       estimatedWeightKg: payload.estimatedWeightKg,
+      bagSizeId: payload.bagSizeId,
+      bagSizeLabel: payload.bagSizeLabel,
       addons: payload.addons,
       status: OrderStatus.PENDING,
       subtotal: payload.subtotal,

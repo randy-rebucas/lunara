@@ -8,12 +8,11 @@ import { Button } from '@lunara/ui';
 import { ButtonLink } from '../ui/button-link';
 import { buttonResponsiveClass } from '../ui/button-layout';
 import {
-  BOOKING_MACHINE_LOAD_INFO,
   BOOKING_MIN_ORDER_AMOUNT,
   formatMachineLoadLabel,
   calculateQuote,
   formatCurrency,
-  resolveMediaUrl,
+  type BagSizeOption,
   type BookingAddonOption,
   type LaundryServiceOption,
   type PartnerCoverageInfo,
@@ -54,8 +53,7 @@ interface BookingConfig {
   services: LaundryServiceOption[];
   addons: BookingAddonOption[];
   minOrderAmount: number;
-  minWeightKg: number;
-  maxWeightKg: number;
+  bagSizes: BagSizeOption[];
   deliveryFee: number;
 }
 
@@ -244,9 +242,9 @@ function canProceedStep(
         )
       );
     case 'weight':
-      return Boolean(localQuote?.meetsMinimum);
+      return Boolean(form.bagSizeId);
     case 'addons':
-      return true;
+      return Boolean(localQuote?.meetsMinimum);
     case 'review':
       return Boolean(localQuote?.meetsMinimum);
     default:
@@ -389,24 +387,18 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
   const selectedShop = shopOptions.find((s) => s.branchId === form.branchId);
 
   const localQuote = useMemo(() => {
-    if (!form.bookingType) return null;
+    if (!form.bookingType || !form.bagSizeId) return null;
     const catalogService = config?.services.find((s) => s.type === form.bookingType);
     const shopService = form.customServiceId
       ? selectedShop?.services.find((s) => s.customServiceId === form.customServiceId)
       : selectedShop?.services.find((s) => s.type === form.bookingType && !s.isCustom);
     const service =
-      catalogService && shopService
-        ? {
-            ...catalogService,
-            label: shopService.label,
-            pricePerKg: shopService.customerPricePerKg,
-          }
-        : catalogService;
+      catalogService && shopService ? { ...catalogService, label: shopService.label } : catalogService;
     try {
       return calculateQuote(
         {
           bookingType: form.bookingType,
-          weightKg: form.weightKg,
+          bagSizeId: form.bagSizeId,
           addonIds: form.addonIds,
         },
         service,
@@ -415,7 +407,7 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
     } catch {
       return null;
     }
-  }, [form.bookingType, form.customServiceId, form.weightKg, form.addonIds, config, selectedShop]);
+  }, [form.bookingType, form.customServiceId, form.bagSizeId, form.addonIds, config, selectedShop]);
 
   const loadAvailability = useCallback(
     async (addressId: string) => {
@@ -515,7 +507,7 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
         bookingType: form.bookingType,
         branchId: form.branchId,
         ...(form.customServiceId ? { customServiceId: form.customServiceId } : {}),
-        weightKg: form.weightKg,
+        bagSizeId: form.bagSizeId,
         addonIds: form.addonIds,
         ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}),
       },
@@ -558,7 +550,7 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
       else if (step === 'schedule') setError('Select a pickup time');
       else if (step === 'weight') {
         setError(
-          `Minimum order is ${formatCurrency(BOOKING_MIN_ORDER_AMOUNT)}. Increase weight or add add-ons.`,
+          `Minimum order is ${formatCurrency(BOOKING_MIN_ORDER_AMOUNT)}. Choose a bag size to continue.`,
         );
       }
       return;
@@ -611,7 +603,7 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
         bookingType: form.bookingType,
         branchId: form.branchId,
         ...(form.customServiceId ? { customServiceId: form.customServiceId } : {}),
-        weightKg: form.weightKg,
+        bagSizeId: form.bagSizeId,
         addonIds: form.addonIds,
         pickupAddressId: form.addressId,
         scheduledPickupAt: form.scheduledPickupAt,
@@ -858,50 +850,34 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
       {step === 'weight' && (
         <section>
           <StepHeader
-            title="Estimate weight"
-            description={`We'll confirm actual weight at pickup. Minimum order ${formatCurrency(config?.minOrderAmount ?? BOOKING_MIN_ORDER_AMOUNT)}.`}
+            title="Choose a bag size"
+            description="Same flat price everywhere — pick the bag that fits your load. We'll confirm actual weight at pickup."
           />
-          <div className="mb-4 rounded-lg bg-primary/5 p-4 text-sm leading-relaxed text-slate-700 ring-1 ring-primary/15">
-            <p>{BOOKING_MACHINE_LOAD_INFO}</p>
-            <p className="mt-2 font-medium text-slate-900">
-              Your estimate: {formatMachineLoadLabel(form.weightKg)}
-            </p>
-          </div>
-          <div className="panel">
-            <div className="flex items-end justify-between gap-4">
-              <div>
-                <p className="text-sm font-medium text-muted">Estimated weight</p>
-                <p className="mt-1 text-4xl font-bold tracking-tight text-primary">
-                  {form.weightKg} kg
-                </p>
-              </div>
-              {activeQuote && (
-                <div className="text-right">
-                  <p className="text-xs text-muted">Service subtotal</p>
-                  <p className="text-lg font-semibold text-slate-900">
-                    {formatCurrency(activeQuote.serviceSubtotal)}
-                  </p>
-                </div>
-              )}
-            </div>
-            <input
-              type="range"
-              min={config?.minWeightKg ?? 5}
-              max={config?.maxWeightKg ?? 50}
-              value={form.weightKg}
-              onChange={(e) => setForm((f) => ({ ...f, weightKg: Number(e.target.value) }))}
-              className="mt-6 w-full accent-primary"
-              aria-label="Estimated weight in kilograms"
-            />
-            <div className="mt-2 flex justify-between text-xs text-muted-foreground">
-              <span>{config?.minWeightKg ?? 5} kg</span>
-              <span>{config?.maxWeightKg ?? 50} kg</span>
-            </div>
-            {localQuote && !localQuote.meetsMinimum && (
-              <p className="mt-4 text-sm text-red-600">
-                Below minimum order of {formatCurrency(localQuote.minimumOrderAmount)}.
-              </p>
-            )}
+          <div className="list-stack">
+            {(config?.bagSizes ?? []).map((bag) => {
+              const selected = form.bagSizeId === bag.id;
+              return (
+                <button
+                  key={bag.id}
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, bagSizeId: bag.id }))}
+                  className={`panel w-full text-left transition-colors ${
+                    selected ? 'ring-2 ring-primary' : 'hover:bg-slate-50'
+                  }`}
+                  aria-pressed={selected}
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-base font-semibold text-slate-900">{bag.label}</p>
+                      <p className="mt-1 text-sm text-muted">
+                        Up to {bag.capacityKg} kg · {formatMachineLoadLabel(bag.capacityKg)}
+                      </p>
+                    </div>
+                    <p className="text-xl font-bold text-primary">{formatCurrency(bag.price)}</p>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </section>
       )}
@@ -912,13 +888,18 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
             title="Add-ons"
             description="Optional extras to enhance your laundry service."
           />
+          {localQuote && !localQuote.meetsMinimum && (
+            <p className="mb-3 text-sm text-red-600">
+              Below minimum order of {formatCurrency(localQuote.minimumOrderAmount)}. Add an
+              add-on to continue.
+            </p>
+          )}
           {addons.length === 0 ? (
             <div className="panel text-sm text-muted">No add-ons available right now.</div>
           ) : (
             <div className="list-stack">
               {addons.map((a) => {
                 const selected = form.addonIds.includes(a.id);
-                const addonImage = resolveMediaUrl(a.imageUrl, process.env.NEXT_PUBLIC_API_URL);
                 return (
                   <SelectableOption
                     key={a.id}
@@ -932,28 +913,19 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
                       }))
                     }
                   >
-                    <div className="flex items-start gap-3">
-                      {addonImage ? (
-                        <img
-                          src={addonImage}
-                          alt=""
-                          className="h-12 w-12 shrink-0 rounded-lg bg-slate-50 object-cover ring-1 ring-border/40"
-                        />
-                      ) : null}
-                      <div className="min-w-0 flex-1">
-                        <div className="flex justify-between gap-4">
-                          <span className="font-medium text-slate-900">
-                            {a.label}
-                            {a.isCustom && (
-                              <span className="badge-accent ml-2 text-xs">Shop special</span>
-                            )}
-                          </span>
-                          <span className="shrink-0 font-medium text-primary">
-                            +{formatCurrency(a.price)}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-sm text-muted">{a.description}</p>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex justify-between gap-4">
+                        <span className="font-medium text-slate-900">
+                          {a.label}
+                          {a.isCustom && (
+                            <span className="badge-accent ml-2 text-xs">Shop special</span>
+                          )}
+                        </span>
+                        <span className="shrink-0 font-medium text-primary">
+                          +{formatCurrency(a.price)}
+                        </span>
                       </div>
+                      <p className="mt-1 text-sm text-muted">{a.description}</p>
                     </div>
                   </SelectableOption>
                 );
@@ -999,7 +971,7 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
                 label="Pickup"
                 value={selectedSlot?.label ?? 'Selected slot'}
               />
-              <SummaryRow label="Weight" value={`~${activeQuote.weightKg} kg`} />
+              <SummaryRow label="Bag size" value={`${activeQuote.bagLabel} (up to ${activeQuote.weightKg} kg)`} />
               {activeQuote.addons.length > 0 && (
                 <SummaryRow
                   label="Add-ons"

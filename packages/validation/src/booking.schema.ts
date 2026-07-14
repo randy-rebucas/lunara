@@ -1,9 +1,12 @@
 import { BookingType } from '@lunara/types';
+import { BAG_SIZES } from '@lunara/utils';
 import { z } from 'zod';
+
+const BAG_SIZE_IDS = BAG_SIZES.map((b) => b.id) as [string, ...string[]];
 
 export const bookingQuoteSchema = z.object({
   bookingType: z.nativeEnum(BookingType),
-  weightKg: z.number().min(1).max(50),
+  bagSizeId: z.enum(BAG_SIZE_IDS),
   addonIds: z.array(z.string()).optional(),
   couponCode: z.string().trim().min(1).max(32).optional(),
 });
