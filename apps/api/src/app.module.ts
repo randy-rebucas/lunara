@@ -6,6 +6,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { resolveMonorepoEnvPaths } from './common/config/load-env';
+import { getMongoUri, mongoConnectionOptions } from './common/config/database-config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { RedisModule } from './common/redis/redis.module';
 import { StorageModule } from './common/storage/storage.module';
@@ -58,7 +59,7 @@ import { LaundryTagsModule } from './modules/laundry-tags/laundry-tags.module';
     EmailModule,
     StorageModule,
     RedisModule,
-    MongooseModule.forRoot(process.env.MONGODB_URI ?? 'mongodb://localhost:27017/lunara'),
+    MongooseModule.forRoot(getMongoUri(), mongoConnectionOptions),
     PushModule,
     HealthModule,
     AuthModule,

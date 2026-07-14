@@ -1,8 +1,9 @@
 import type { PartnerOwnProfile, PortalRole, PortalUser } from '@lunara/types';
 import { UserRole } from '@lunara/types';
-import { resolveApiOrigin, resolveApiV1BaseUrl } from '@lunara/utils';
+import { assertApiUrlConfigured, resolveApiOrigin, resolveApiV1BaseUrl } from '@lunara/utils';
 import { parseApiError } from './api-error';
 
+assertApiUrlConfigured(process.env.NEXT_PUBLIC_API_URL, 'partner-web');
 const API_URL = resolveApiV1BaseUrl(process.env.NEXT_PUBLIC_API_URL);
 const STORAGE_KEY = 'lunara_portal_token';
 const USER_KEY = 'lunara_portal_user';

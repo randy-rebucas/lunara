@@ -299,7 +299,7 @@ export class Order {
   @Prop({ type: Types.ObjectId })
   deliveryRiderId?: Types.ObjectId;
 
-  @Prop({ required: true, enum: OrderStatus, default: OrderStatus.PENDING })
+  @Prop({ required: true, enum: OrderStatus, default: OrderStatus.PENDING, index: true })
   status!: OrderStatus;
 
   @Prop({ required: true, enum: BookingType })

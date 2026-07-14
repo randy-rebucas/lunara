@@ -12,7 +12,9 @@ import React, {
 import type { AuthTokens, User } from '@lunara/types';
 import { formatPhone } from '@lunara/utils';
 import { createApiClient } from './api-client';
-import { resolveApiV1BaseUrl } from './api-url';
+import { assertApiUrlConfigured, resolveApiV1BaseUrl } from './api-url';
+
+assertApiUrlConfigured(process.env.NEXT_PUBLIC_API_URL, 'customer-web');
 
 function parseAuthError(body: unknown, fallback: string): string {
   if (!body || typeof body !== 'object') return fallback;

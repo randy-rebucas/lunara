@@ -1,3 +1,18 @@
+/**
+ * Throws when a production build has no API URL configured, instead of silently falling back
+ * to localhost — a missing NEXT_PUBLIC_API_URL/EXPO_PUBLIC_API_URL in a production build would
+ * otherwise ship a build that "succeeds" but talks to nothing.
+ */
+export function assertApiUrlConfigured(raw: string | undefined, context: string): void {
+  if (process.env.NODE_ENV !== 'production') return;
+  if (!raw?.trim()) {
+    throw new Error(
+      `${context}: no API URL is configured for this production build (env var is empty/missing). ` +
+        'Refusing to silently fall back to localhost.',
+    );
+  }
+}
+
 /** Nest API base including global prefix `/api/v1`. */
 export function resolveApiV1BaseUrl(raw?: string): string {
   const base = (raw?.trim() || 'http://localhost:3001').replace(/\/+$/, '');

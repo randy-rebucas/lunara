@@ -1,4 +1,5 @@
 import { Body, Controller, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { AuthService } from './auth.service';
 import {
@@ -14,16 +15,23 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 const COOKIE_NAME = 'portal_token';
 const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 
+// Tighter than the global 120/min default — these routes are brute-force/credential-stuffing/
+// OTP-spam targets, so they get a much smaller budget per IP.
+const AUTH_THROTTLE = { default: { limit: 10, ttl: 60_000 } };
+const OTP_THROTTLE = { default: { limit: 5, ttl: 60_000 } };
+
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
+  @Throttle(AUTH_THROTTLE)
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
 
   @Post('login')
+  @Throttle(AUTH_THROTTLE)
   async login(
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) res: Response,
@@ -43,16 +51,19 @@ export class AuthController {
   }
 
   @Post('otp/request')
+  @Throttle(OTP_THROTTLE)
   requestOtp(@Body() dto: OtpRequestDto) {
     return this.authService.requestOtp(dto.phone);
   }
 
   @Post('forgot-password')
+  @Throttle(OTP_THROTTLE)
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto.email);
   }
 
   @Post('reset-password')
+  @Throttle(AUTH_THROTTLE)
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
   }

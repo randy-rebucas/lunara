@@ -20,7 +20,7 @@ export class Payment {
   @Prop({ required: true, enum: PaymentMethod })
   method!: PaymentMethod;
 
-  @Prop({ required: true, enum: PaymentStatus, default: PaymentStatus.PENDING })
+  @Prop({ required: true, enum: PaymentStatus, default: PaymentStatus.PENDING, index: true })
   status!: PaymentStatus;
 
   @Prop({ required: true })

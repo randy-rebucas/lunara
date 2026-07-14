@@ -1,6 +1,7 @@
-import { resolveApiV1BaseUrl } from '@lunara/utils';
+import { assertApiUrlConfigured, resolveApiV1BaseUrl } from '@lunara/utils';
 import type { AuthTokens, User } from '@lunara/types';
 
+assertApiUrlConfigured(process.env.NEXT_PUBLIC_API_URL, 'admin-web');
 const API_URL = resolveApiV1BaseUrl(process.env.NEXT_PUBLIC_API_URL);
 const STORAGE_KEY = 'lunara_admin_auth';
 const SESSION_COOKIE = 'lunara_admin_session';

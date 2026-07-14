@@ -1,8 +1,17 @@
-import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  ArgumentsHost,
+  Catch,
+  ExceptionFilter,
+  HttpException,
+  HttpStatus,
+  Logger,
+} from '@nestjs/common';
 import type { Response } from 'express';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger('ExceptionFilter');
+
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
@@ -24,7 +33,14 @@ export class HttpExceptionFilter implements ExceptionFilter {
         }
       }
     } else if (exception instanceof Error) {
-      message = exception.message;
+      // Non-HttpException errors (e.g. raw Mongoose/driver failures) can contain internal
+      // detail (connection strings, field/collection names) that shouldn't reach clients in
+      // production — log the real message server-side and return a generic one instead.
+      if (process.env.NODE_ENV === 'production') {
+        this.logger.error(exception.message, exception.stack);
+      } else {
+        message = exception.message;
+      }
     }
 
     response.status(status).json({
