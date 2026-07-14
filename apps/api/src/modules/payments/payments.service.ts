@@ -228,7 +228,10 @@ export class PaymentsService {
         `Payment for order ${orderId}`,
       );
       try {
-        await this.markOrderPaid(payment, order, `wallet-${payment._id}`);
+        payment.status = PaymentStatus.PAID;
+        payment.paidAt = new Date();
+        payment.externalId = `wallet-${payment._id}`;
+        await this.markOrderPaid(payment, order);
       } catch (err) {
         await this.ledgerService.reverse(
           `payment:${payment._id.toString()}`,
@@ -469,22 +472,28 @@ export class PaymentsService {
   private async fulfillPayment(payment: PaymentDocument, externalId?: string) {
     if (payment.status === PaymentStatus.PAID) return;
 
-    if (payment.purpose === 'wallet_topup') {
-      await this.markWalletTopupPaid(payment, externalId);
+    // Atomically claim this payment before any side effects — closes the race where two
+    // near-simultaneous webhook/poll deliveries for the same payment both read status !== PAID
+    // and both proceed into wallet-credit / order-dispatch logic. Whichever request's update
+    // actually lands first wins; the other gets null back and no-ops.
+    const claimed = await this.paymentModel.findOneAndUpdate(
+      { _id: payment._id, status: { $ne: PaymentStatus.PAID } },
+      { status: PaymentStatus.PAID, paidAt: new Date(), ...(externalId ? { externalId } : {}) },
+      { new: true },
+    );
+    if (!claimed) return;
+
+    if (claimed.purpose === 'wallet_topup') {
+      await this.markWalletTopupPaid(claimed);
       return;
     }
 
-    const order = await this.orderModel.findById(payment.orderId);
+    const order = await this.orderModel.findById(claimed.orderId);
     if (!order) throw new NotFoundException('Order not found');
-    await this.markOrderPaid(payment, order, externalId);
+    await this.markOrderPaid(claimed, order);
   }
 
-  private async markWalletTopupPaid(payment: PaymentDocument, externalId?: string) {
-    payment.status = PaymentStatus.PAID;
-    payment.paidAt = new Date();
-    if (externalId) payment.externalId = externalId;
-    await payment.save();
-
+  private async markWalletTopupPaid(payment: PaymentDocument) {
     await this.walletsService.credit(
       payment.userId.toString(),
       payment.amount,
@@ -514,14 +523,7 @@ export class PaymentsService {
     );
   }
 
-  private async markOrderPaid(
-    payment: PaymentDocument,
-    order: OrderDocument,
-    externalId?: string,
-  ) {
-    payment.status = PaymentStatus.PAID;
-    payment.paidAt = new Date();
-    if (externalId) payment.externalId = externalId;
+  private async markOrderPaid(payment: PaymentDocument, order: OrderDocument) {
     if (!payment.receiptCode) {
       payment.receiptCode = generatePaymentReceiptCode(
         order._id.toString(),
@@ -660,20 +662,28 @@ export class PaymentsService {
       return payment;
     }
 
-    payment.status = PaymentStatus.PAID;
-    payment.paidAt = new Date();
-    payment.cashCollectedBy = new Types.ObjectId(riderUserId);
-    payment.externalId = `cash-${stage}-${payment._id}`;
-    await payment.save();
+    // Atomic claim (filter re-asserts status !== PAID) instead of check-then-save, so two
+    // near-simultaneous taps can't both pass the check above and both fire the side effects below.
+    const claimed = await this.paymentModel.findOneAndUpdate(
+      { _id: payment._id, status: { $ne: PaymentStatus.PAID } },
+      {
+        status: PaymentStatus.PAID,
+        paidAt: new Date(),
+        cashCollectedBy: new Types.ObjectId(riderUserId),
+        externalId: `cash-${stage}-${payment._id}`,
+      },
+      { new: true },
+    );
+    if (!claimed) return payment;
 
     this.trackingGateway.emitOrderEvent(orderId, 'paymentReceived', {
       message: 'Cash payment received',
-      amount: payment.amount,
+      amount: claimed.amount,
       method: PaymentMethod.CASH,
-      receiptCode: payment.receiptCode,
+      receiptCode: claimed.receiptCode,
     });
 
-    return payment;
+    return claimed;
   }
 
   serializePayment(payment: PaymentDocument) {

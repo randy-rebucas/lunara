@@ -8,6 +8,10 @@ import {
   PromotionRedemption,
   PromotionRedemptionSchema,
 } from './schemas/promotion-redemption.schema';
+import {
+  PromotionUsageCounter,
+  PromotionUsageCounterSchema,
+} from './schemas/promotion-usage-counter.schema';
 import { PromotionsService } from './promotions.service';
 
 @Module({
@@ -16,6 +20,7 @@ import { PromotionsService } from './promotions.service';
       { name: Promotion.name, schema: PromotionSchema },
       { name: CustomerPromo.name, schema: CustomerPromoSchema },
       { name: PromotionRedemption.name, schema: PromotionRedemptionSchema },
+      { name: PromotionUsageCounter.name, schema: PromotionUsageCounterSchema },
       { name: Order.name, schema: OrderSchema },
       { name: User.name, schema: UserSchema },
     ]),

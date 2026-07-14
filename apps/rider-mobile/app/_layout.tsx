@@ -3,8 +3,10 @@ import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthLoadingScreen } from '../src/components/auth-loading';
+import { ForceUpdateScreen } from '../src/components/force-update-screen';
 import { PushNotificationsBootstrap } from '../src/components/push-notifications-bootstrap';
 import { RiderOperationsProvider } from '../src/context/rider-operations';
+import { useAppVersionGate } from '../src/hooks/use-app-version-gate';
 import { colors } from '../src/theme';
 import { useAuthStore } from '../src/store/auth';
 
@@ -36,6 +38,7 @@ export default function RootLayout() {
   const hydrate = useAuthStore((s) => s.hydrate);
   const isLoading = useAuthStore((s) => s.isLoading);
   const tokens = useAuthStore((s) => s.tokens);
+  const { checking: checkingVersion, updateRequired, storeUrl } = useAppVersionGate();
 
   useEffect(() => {
     hydrate();
@@ -55,7 +58,8 @@ export default function RootLayout() {
     }
   }, [isLoading, tokens, segments, router]);
 
-  if (isLoading) return <AuthLoadingScreen />;
+  if (checkingVersion || isLoading) return <AuthLoadingScreen />;
+  if (updateRequired) return <ForceUpdateScreen storeUrl={storeUrl} />;
 
   return (
     <SafeAreaProvider>

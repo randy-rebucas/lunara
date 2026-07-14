@@ -47,16 +47,10 @@ export class WalletsService {
     }
 
     const ref = `topup-dev-${userId}-${Date.now()}`;
-    const wallet = await this.findOrCreate(userId);
-    wallet.balance += amount;
-    await wallet.save();
-    await this.transactionModel.create({
-      walletId: wallet._id,
-      type: 'credit',
-      amount,
-      reference: ref,
-      description: 'Wallet top-up (dev)',
-    });
+    // Reuses the same atomic $inc + reference-idempotent credit() used for real top-ups, instead
+    // of `wallet.balance += amount; wallet.save()` — that fetch-mutate-save form can lose an
+    // update if two credits/debits for this wallet land concurrently.
+    const wallet = await this.credit(userId, amount, ref, 'Wallet top-up (dev)');
     await this.ledgerService.post(ref, 'wallet_topup', userId, [
       {
         accountType: 'platform_cash',

@@ -20,6 +20,12 @@ export class Customer {
   @Prop({ default: 0 })
   loyaltyPoints!: number;
 
+  @Prop({ unique: true, sparse: true, index: true })
+  referralCode?: string;
+
+  @Prop({ type: Types.ObjectId })
+  referredBy?: Types.ObjectId;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

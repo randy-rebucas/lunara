@@ -58,6 +58,34 @@ export class PlatformSettings {
   @Prop({ required: true, default: 35 })
   riderDeliveryFee!: number;
 
+  /** Lowest customer-mobile version allowed to run. '0.0.0' disables force-update enforcement. */
+  @Prop({ required: true, default: '0.0.0' })
+  customerMinAppVersion!: string;
+
+  /** Version shown to customers as "latest" in the update prompt copy. */
+  @Prop({ default: '' })
+  customerLatestAppVersion!: string;
+
+  @Prop({ default: '' })
+  customerIosStoreUrl!: string;
+
+  @Prop({ default: '' })
+  customerAndroidStoreUrl!: string;
+
+  /** Lowest rider-mobile version allowed to run. '0.0.0' disables force-update enforcement. */
+  @Prop({ required: true, default: '0.0.0' })
+  riderMinAppVersion!: string;
+
+  /** Version shown to riders as "latest" in the update prompt copy. */
+  @Prop({ default: '' })
+  riderLatestAppVersion!: string;
+
+  @Prop({ default: '' })
+  riderIosStoreUrl!: string;
+
+  @Prop({ default: '' })
+  riderAndroidStoreUrl!: string;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

@@ -50,6 +50,7 @@ interface AuthContextValue {
     password?: string;
     firstName: string;
     lastName: string;
+    referralCode?: string;
   }) => Promise<void>;
   requestOtp: (phone: string) => Promise<{ phone: string }>;
   logout: () => Promise<void>;
@@ -228,6 +229,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       password?: string;
       firstName: string;
       lastName: string;
+      referralCode?: string;
     }) => {
       const res = await fetch(`${getApiUrl()}/auth/register`, {
         method: 'POST',

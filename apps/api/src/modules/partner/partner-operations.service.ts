@@ -134,6 +134,67 @@ export class PartnerOperationsService {
     return Math.round((order.subtotal ?? order.total) * rate);
   }
 
+  /**
+   * Called by refunds.service.ts when a refunded order was already paid out in a
+   * PartnerSettlement. The partner was already paid their share and the platform already
+   * recognized its commission on this order — refunding the customer doesn't undo either of
+   * those on its own, so this reverses both and records the clawback on the settlement for
+   * admins to net against the partner's next payout (see LEDGER.md "No settlement reversal").
+   */
+  async recordSettlementClawback(order: OrderDocument, refundAmount: number) {
+    if (!order.settlementId || refundAmount <= 0) return;
+
+    const settlement = await this.settlementModel.findById(order.settlementId);
+    if (!settlement) return;
+
+    const branch = order.branchId ? await this.branchModel.findById(order.branchId) : null;
+    const commissionRateByBranchId = branch
+      ? this.commissionRateMap([branch])
+      : new Map<string, number>();
+    const feeShare = Math.min(
+      this.computeOrderFee(order, commissionRateByBranchId),
+      refundAmount,
+    );
+    const payoutShare = refundAmount - feeShare;
+
+    await this.settlementModel.updateOne(
+      { _id: settlement._id },
+      { $inc: { clawbackTotal: refundAmount, clawbackOrderCount: 1 } },
+    );
+
+    const entries = [] as Parameters<LedgerService['post']>[3];
+    if (feeShare > 0) {
+      entries.push({
+        accountType: 'platform_revenue' as const,
+        direction: 'debit' as const,
+        amount: feeShare,
+        description: `Commission reversed — order ${order._id.toString().slice(-6)} refunded after settlement ${settlement._id.toString().slice(-6)}`,
+      });
+    }
+    if (payoutShare > 0) {
+      entries.push({
+        accountType: 'cash_out' as const,
+        direction: 'debit' as const,
+        amount: payoutShare,
+        description: `Partner payout owed back — order ${order._id.toString().slice(-6)} refunded after settlement ${settlement._id.toString().slice(-6)}`,
+      });
+    }
+    if (entries.length > 0) {
+      entries.push({
+        accountType: 'refund_expense' as const,
+        direction: 'credit' as const,
+        amount: feeShare + payoutShare,
+        description: `Post-settlement refund clawback for order ${order._id.toString().slice(-6)}`,
+      });
+      await this.ledgerService.post(
+        `settlement-clawback:${order._id.toString()}`,
+        'settlement_clawback',
+        order._id.toString(),
+        entries,
+      );
+    }
+  }
+
   /** All branches a user manages orders/revenue for: every branch under a partner's account, or the one representative branch shown to admins by default. */
   private async resolvePartnerBranches(userId: string, role: UserRole): Promise<BranchDocument[]> {
     if (role === UserRole.ADMIN) {
@@ -1072,16 +1133,28 @@ export class PartnerOperationsService {
     if (branches.length === 0) throw new NotFoundException('Partner branch not found');
     const commissionRateByBranchId = this.commissionRateMap(branches);
 
-    const completedOrders = await this.orderModel.find({
-      _id: { $in: dto.orderIds.map((id) => new Types.ObjectId(id)) },
-      branchId: { $in: branches.map((b) => b._id) },
-      status: { $in: COMPLETED_STATUSES },
-      settlementId: { $exists: false },
-    });
+    // Pre-generate the settlement id and use it to atomically *claim* the selected orders before
+    // computing any totals. The updateMany's filter re-asserts settlementId is still unset, so two
+    // concurrent createSettlement calls with overlapping order IDs can each only claim the orders
+    // still unclaimed at the moment their write lands — MongoDB serializes per-document writes, so
+    // the same order can never end up stamped into two settlements (the previous find-then-updateMany
+    // form had no such guard and could double-pay the same orders).
+    const settlementId = new Types.ObjectId();
+    const claim = await this.orderModel.updateMany(
+      {
+        _id: { $in: dto.orderIds.map((id) => new Types.ObjectId(id)) },
+        branchId: { $in: branches.map((b) => b._id) },
+        status: { $in: COMPLETED_STATUSES },
+        settlementId: { $exists: false },
+      },
+      { $set: { settlementId } },
+    );
 
-    if (completedOrders.length === 0) {
+    if (claim.modifiedCount === 0) {
       throw new BadRequestException('No valid unsettled orders found for the selected IDs');
     }
+
+    const completedOrders = await this.orderModel.find({ settlementId });
 
     // Derive period from the selected orders' completion timestamps
     const timestamps = completedOrders.map((o) => o.updatedAt?.getTime() ?? o.createdAt?.getTime() ?? Date.now());
@@ -1131,27 +1204,34 @@ export class PartnerOperationsService {
           }, 0) / legacySubtotalSum
         : 0.2;
 
-    const settlement = await this.settlementModel.create({
-      partnerId: new Types.ObjectId(partnerId),
-      periodStart: start,
-      periodEnd: end,
-      totalOrders: completedOrders.length,
-      cashOrders,
-      digitalOrders,
-      totalAmount,
-      lunaraFee,
-      partnerPayout,
-      commissionRate: weightedCommissionRate,
-      status: 'paid',
-      paidAt: new Date(),
-      paidBy: new Types.ObjectId(adminUserId),
-      adminNote: dto.adminNote,
-    });
-
-    await this.orderModel.updateMany(
-      { _id: { $in: completedOrders.map((o) => o._id) } },
-      { $set: { settlementId: settlement._id } },
-    );
+    let settlement;
+    try {
+      settlement = await this.settlementModel.create({
+        _id: settlementId,
+        partnerId: new Types.ObjectId(partnerId),
+        periodStart: start,
+        periodEnd: end,
+        totalOrders: completedOrders.length,
+        cashOrders,
+        digitalOrders,
+        totalAmount,
+        lunaraFee,
+        partnerPayout,
+        commissionRate: weightedCommissionRate,
+        status: 'paid',
+        paidAt: new Date(),
+        paidBy: new Types.ObjectId(adminUserId),
+        adminNote: dto.adminNote,
+      });
+    } catch (err) {
+      // Release the claimed orders so they aren't stuck referencing a settlement that was never
+      // actually created.
+      await this.orderModel.updateMany(
+        { settlementId },
+        { $unset: { settlementId: 1 } },
+      );
+      throw err;
+    }
 
     await this.ledgerService.post(
       `settlement:${settlement._id.toString()}`,

@@ -18,7 +18,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { DeliveryService } from '../riders/delivery.service';
 import { HandoffQrService } from '../handoff/handoff-qr.service';
 import { CustomerSignDeliveryDto, CustomerVerifyDeliveryDto } from './dto/delivery.dto';
-import { AssignRiderDto, CreateOrderDto, UpdateOrderStatusDto } from './dto/order.dto';
+import { AssignRiderDto, UpdateOrderStatusDto } from './dto/order.dto';
 import { OrdersService } from './orders.service';
 
 @Controller('orders')
@@ -29,12 +29,6 @@ export class OrdersController {
     private readonly deliveryService: DeliveryService,
     private readonly handoffQrService: HandoffQrService,
   ) {}
-
-  @Post()
-  @Roles(UserRole.CUSTOMER)
-  create(@Req() req: { user: { sub: string } }, @Body() dto: CreateOrderDto) {
-    return this.ordersService.create(req.user.sub, dto);
-  }
 
   @Get('queue')
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)

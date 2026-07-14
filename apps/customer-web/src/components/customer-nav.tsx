@@ -13,6 +13,7 @@ const navLinks = [
   { href: '/book', label: 'Book' },
   { href: '/orders', label: 'Orders' },
   { href: '/wallet', label: 'Wallet' },
+  { href: '/rewards', label: 'Rewards' },
   { href: '/support', label: 'Support' },
   { href: '/refunds', label: 'Refunds' },
 ];

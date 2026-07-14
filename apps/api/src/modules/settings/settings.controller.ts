@@ -6,6 +6,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { UpdateDeliveryFeeDto } from './dto/update-delivery-fee.dto';
 import { UpdateAutomationSettingsDto } from './dto/update-automation-settings.dto';
 import { UpdateRiderFeesDto } from './dto/update-rider-fees.dto';
+import { UpdateAppVersionSettingsDto } from './dto/update-app-version-settings.dto';
 import { SettingsService } from './settings.service';
 
 @Controller('admin/settings')
@@ -42,5 +43,15 @@ export class SettingsController {
   @Patch('rider-fees')
   updateRiderFees(@Body() dto: UpdateRiderFeesDto) {
     return this.settingsService.updateRiderFeeSettings(dto);
+  }
+
+  @Get('app-version')
+  getAppVersionSettings() {
+    return this.settingsService.getAppVersionSettings();
+  }
+
+  @Patch('app-version')
+  updateAppVersionSettings(@Body() dto: UpdateAppVersionSettingsDto) {
+    return this.settingsService.updateAppVersionSettings(dto);
   }
 }

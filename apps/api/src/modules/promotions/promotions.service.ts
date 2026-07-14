@@ -20,6 +20,10 @@ import {
   PromotionRedemption,
   PromotionRedemptionDocument,
 } from './schemas/promotion-redemption.schema';
+import {
+  PromotionUsageCounter,
+  PromotionUsageCounterDocument,
+} from './schemas/promotion-usage-counter.schema';
 import { DEFAULT_PROMOTIONS } from './promotions.seed';
 
 const COMPLETED_ORDER_STATUSES = [OrderStatus.DELIVERED, OrderStatus.COMPLETED];
@@ -41,6 +45,8 @@ export class PromotionsService implements OnModuleInit {
     @InjectModel(CustomerPromo.name) private customerPromoModel: Model<CustomerPromoDocument>,
     @InjectModel(PromotionRedemption.name)
     private promotionRedemptionModel: Model<PromotionRedemptionDocument>,
+    @InjectModel(PromotionUsageCounter.name)
+    private usageCounterModel: Model<PromotionUsageCounterDocument>,
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
   ) {}
@@ -240,22 +246,55 @@ export class PromotionsService implements OnModuleInit {
       userId: new Types.ObjectId(userId),
     });
     if (personal) {
-      if (!personal.redeemedAt) {
-        personal.redeemedAt = new Date();
-        personal.orderId = new Types.ObjectId(orderId);
-        await personal.save();
-      }
+      // Atomic claim: `redeemedAt: null` in the filter (not a fetch-then-check-then-save) so two
+      // concurrent orders using the same one-time personal promo can't both pass the check before
+      // either write lands — only the first to hit this line wins the update.
+      await this.customerPromoModel.updateOne(
+        { _id: personal._id, redeemedAt: null },
+        { redeemedAt: new Date(), orderId: new Types.ObjectId(orderId) },
+      );
       return;
     }
 
     const promotion = await this.promotionModel.findOne({ code: normalized });
     if (!promotion) return;
 
-    await this.promotionRedemptionModel.create({
-      userId: new Types.ObjectId(userId),
-      promotionId: promotion._id,
-      orderId: new Types.ObjectId(orderId),
-    });
+    const userObjectId = new Types.ObjectId(userId);
+
+    if (promotion.maxUsesPerCustomer != null) {
+      // Atomic per-customer cap claim — see PromotionUsageCounter for why counting
+      // PromotionRedemption rows and then inserting isn't safe under concurrency.
+      try {
+        await this.usageCounterModel.findOneAndUpdate(
+          { userId: userObjectId, promotionId: promotion._id, count: { $lt: promotion.maxUsesPerCustomer } },
+          { $inc: { count: 1 } },
+          { upsert: true },
+        );
+      } catch (err) {
+        if (this.isDuplicateKeyError(err)) {
+          // The counter doc already exists and is at (or past) its cap — the upsert couldn't
+          // match it (count $lt failed) and couldn't insert a new one either (unique index).
+          throw new BadRequestException('This promo code has already reached its usage limit');
+        }
+        throw err;
+      }
+    }
+
+    // Guards a retried call for the same order from double-inserting (unique orderId+promotionId
+    // index) — the maxUsesPerCustomer cap itself was already claimed atomically above.
+    try {
+      await this.promotionRedemptionModel.create({
+        userId: userObjectId,
+        promotionId: promotion._id,
+        orderId: new Types.ObjectId(orderId),
+      });
+    } catch (err) {
+      if (!this.isDuplicateKeyError(err)) throw err;
+    }
+  }
+
+  private isDuplicateKeyError(err: unknown): boolean {
+    return typeof err === 'object' && err !== null && (err as { code?: number }).code === 11000;
   }
 
   private serializeDealFromPromotion(p: PromotionDocument) {

@@ -15,6 +15,7 @@ import { NotificationDispatchService } from '../push/notification-dispatch.servi
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { WalletsService } from '../wallets/wallets.service';
 import { LedgerService } from '../ledger/ledger.service';
+import { PartnerOperationsService } from '../partner/partner-operations.service';
 import { EmailService } from '../../common/email/email.service';
 import { CreateRefundDto } from './dto/create-refund.dto';
 import { RefundReviewAction, ReviewRefundDto } from './dto/review-refund.dto';
@@ -60,6 +61,7 @@ export class RefundsService {
     private notificationDispatch: NotificationDispatchService,
     private ledgerService: LedgerService,
     private emailService: EmailService,
+    private partnerOperationsService: PartnerOperationsService,
   ) {}
 
   async createRequest(customerId: string, dto: CreateRefundDto) {
@@ -255,13 +257,28 @@ export class RefundsService {
         break;
       }
 
-      case RefundReviewAction.APPROVE:
+      case RefundReviewAction.APPROVE: {
         if (!refund.orderVerifiedAt) {
           throw new BadRequestException('Verify the order before approving');
         }
+        const approvedAmount = dto.approvedAmount ?? refund.requestedAmount;
+        if (approvedAmount <= 0) {
+          throw new BadRequestException('Approved amount must be greater than zero');
+        }
+        // Bound to what was actually paid, not just the originally requested amount — an admin
+        // could otherwise approve more than the customer ever paid for this order.
+        const payment = refund.paymentId
+          ? await this.paymentModel.findById(refund.paymentId)
+          : null;
+        const maxRefundable = payment?.amount ?? refund.requestedAmount;
+        if (approvedAmount > maxRefundable) {
+          throw new BadRequestException(
+            `Approved amount cannot exceed the amount paid (₱${maxRefundable})`,
+          );
+        }
         refund.status = RefundStatus.APPROVED;
         refund.stage = RefundStage.DECISION;
-        refund.approvedAmount = dto.approvedAmount ?? refund.requestedAmount;
+        refund.approvedAmount = approvedAmount;
         if (dto.adminNote) refund.adminNote = dto.adminNote;
         pushTimeline(
           'decision',
@@ -269,6 +286,7 @@ export class RefundsService {
           dto.adminNote,
         );
         break;
+      }
 
       case RefundReviewAction.REJECT:
         refund.status = RefundStatus.REJECTED;
@@ -277,20 +295,40 @@ export class RefundsService {
         pushTimeline('decision', 'Refund rejected', refund.rejectionReason);
         break;
 
-      case RefundReviewAction.PROCESS:
-        if (refund.status !== RefundStatus.APPROVED) {
+      case RefundReviewAction.PROCESS: {
+        // Atomically claim the APPROVED -> PROCESSED transition so two concurrent PROCESS calls
+        // (double-click, retried request) can't both pass a stale in-memory status check and both
+        // call executeRefund. The wallet/ledger layers are independently idempotent by reference,
+        // but this closes the race at the source instead of relying solely on that backstop.
+        const processedAt = new Date();
+        const claimed = await this.refundModel.findOneAndUpdate(
+          { _id: refund._id, status: RefundStatus.APPROVED },
+          { status: RefundStatus.PROCESSED, processedAt },
+          { new: false },
+        );
+        if (!claimed) {
           throw new BadRequestException('Approve the refund before processing');
         }
-        await this.executeRefund(refund);
+        try {
+          await this.executeRefund(refund);
+        } catch (err) {
+          // Roll back the claim so the refund isn't stuck "processed" with no money moved.
+          await this.refundModel.updateOne(
+            { _id: refund._id },
+            { status: RefundStatus.APPROVED, $unset: { processedAt: 1 } },
+          );
+          throw err;
+        }
         refund.status = RefundStatus.PROCESSED;
         refund.stage = RefundStage.PROCESSED;
-        refund.processedAt = new Date();
+        refund.processedAt = processedAt;
         pushTimeline(
           'processed',
           `₱${refund.approvedAmount} refunded to wallet`,
           dto.adminNote,
         );
         break;
+      }
 
       case RefundReviewAction.NOTIFY:
         await this.notifyCustomer(refund);
@@ -375,6 +413,10 @@ export class RefundsService {
         note: `Refund processed — ₱${amount}`,
       });
       await order.save();
+    }
+
+    if (order.settlementId) {
+      await this.partnerOperationsService.recordSettlementClawback(order, amount);
     }
 
     this.trackingGateway.emitOrderEvent(order._id.toString(), 'refundProcessed', {

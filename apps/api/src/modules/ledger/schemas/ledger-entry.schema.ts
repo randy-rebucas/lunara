@@ -48,10 +48,20 @@ export class LedgerEntry {
   /** What real-world record this line documents, for traceability. */
   @Prop({
     required: true,
-    enum: ['settlement', 'remittance', 'withdrawal', 'rider_earning', 'payment', 'refund', 'wallet_topup'],
+    enum: [
+      'settlement',
+      'settlement_clawback',
+      'remittance',
+      'withdrawal',
+      'rider_earning',
+      'payment',
+      'refund',
+      'wallet_topup',
+    ],
   })
   sourceType!:
     | 'settlement'
+    | 'settlement_clawback'
     | 'remittance'
     | 'withdrawal'
     | 'rider_earning'

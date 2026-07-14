@@ -51,6 +51,17 @@ export class PartnerSettlement {
   @Prop()
   adminNote?: string;
 
+  /**
+   * Running total of refunds issued (post-settlement) against orders that were part of this
+   * settlement — i.e. money the partner was already paid for but the customer got back. Doesn't
+   * move any cash on its own; surfaced so admins can deduct it from the partner's next payout.
+   */
+  @Prop({ default: 0 })
+  clawbackTotal!: number;
+
+  @Prop({ default: 0 })
+  clawbackOrderCount!: number;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

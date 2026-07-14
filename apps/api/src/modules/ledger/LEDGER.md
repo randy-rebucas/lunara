@@ -55,6 +55,7 @@ await ledgerService.post(transactionRef, sourceType, sourceId, [
 | Refund request approved | `refunds.service.ts:executeRefund` | Dr `order_revenue_clearing` / Cr `customer_wallet_liability` |
 | Order cancelled with a refundable payment | `orders.service.ts:cancelByCustomer` | Dr `order_revenue_clearing` / Cr `customer_wallet_liability` |
 | Lost-item compensation credited | `support.service.ts` (`InvestigateAction.COMPENSATE`) | Dr `refund_expense` / Cr `customer_wallet_liability` |
+| Order refunded after its settlement was already paid | `partner-operations.service.ts:recordSettlementClawback` (called from `refunds.service.ts:executeRefund`) | Dr `platform_revenue` + `cash_out` / Cr `refund_expense` |
 
 ## Reconciliation
 
@@ -74,12 +75,6 @@ posting:
 
 ## Known gaps (not yet implemented)
 
-- **No settlement reversal.** If an order is refunded after it was already
-  included in a `PartnerSettlement`, the settlement's `partner_payable` /
-  `platform_revenue` credit is never reversed — `order_revenue_clearing` will
-  go negative for that amount, which the trial balance will surface, but
-  nothing auto-corrects it. Needs an admin-driven "settlement correction"
-  flow before this is relied on for real money movement.
 - **No actual fund transfer.** `partner_payable` and `rider_payable` are
   accounting liabilities only — paying them down still requires a manual
   bank transfer / GCash send outside the app. There's no integration with

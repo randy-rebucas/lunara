@@ -19,3 +19,7 @@ export class PromotionRedemption {
 
 export const PromotionRedemptionSchema = SchemaFactory.createForClass(PromotionRedemption);
 PromotionRedemptionSchema.index({ userId: 1, promotionId: 1 });
+// One redemption row per order+promotion — guards a retried recordRedemption call for the same
+// order from ever inserting a second row (the maxUsesPerCustomer cap itself is enforced
+// atomically by PromotionUsageCounter, not by counting rows in this collection).
+PromotionRedemptionSchema.index({ orderId: 1, promotionId: 1 }, { unique: true });

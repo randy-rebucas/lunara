@@ -5,6 +5,7 @@ import { PlatformSettings, PlatformSettingsDocument } from './schemas/platform-s
 import { UpdateDeliveryFeeDto } from './dto/update-delivery-fee.dto';
 import { UpdateAutomationSettingsDto } from './dto/update-automation-settings.dto';
 import { UpdateRiderFeesDto } from './dto/update-rider-fees.dto';
+import { UpdateAppVersionSettingsDto } from './dto/update-app-version-settings.dto';
 
 @Injectable()
 export class SettingsService {
@@ -108,6 +109,54 @@ export class SettingsService {
     }
     await settings.save();
     return { success: true, data: this.automationFields(settings) };
+  }
+
+  private appVersionFields(settings: PlatformSettingsDocument) {
+    return {
+      customerMinAppVersion: settings.customerMinAppVersion,
+      customerLatestAppVersion: settings.customerLatestAppVersion,
+      customerIosStoreUrl: settings.customerIosStoreUrl,
+      customerAndroidStoreUrl: settings.customerAndroidStoreUrl,
+      riderMinAppVersion: settings.riderMinAppVersion,
+      riderLatestAppVersion: settings.riderLatestAppVersion,
+      riderIosStoreUrl: settings.riderIosStoreUrl,
+      riderAndroidStoreUrl: settings.riderAndroidStoreUrl,
+    };
+  }
+
+  async getAppVersionSettings() {
+    const settings = await this.getOrCreateSettings();
+    return { success: true, data: this.appVersionFields(settings) };
+  }
+
+  async updateAppVersionSettings(dto: UpdateAppVersionSettingsDto) {
+    const settings = await this.getOrCreateSettings();
+    for (const [key, value] of Object.entries(dto)) {
+      if (value !== undefined) {
+        (settings as unknown as Record<string, unknown>)[key] = value;
+      }
+    }
+    await settings.save();
+    return { success: true, data: this.appVersionFields(settings) };
+  }
+
+  /** Public, unauthenticated lookup used by the mobile apps' launch-time version gate. */
+  async getAppVersionForApp(app: 'customer' | 'rider') {
+    const settings = await this.getOrCreateSettings();
+    if (app === 'customer') {
+      return {
+        minVersion: settings.customerMinAppVersion,
+        latestVersion: settings.customerLatestAppVersion,
+        iosStoreUrl: settings.customerIosStoreUrl,
+        androidStoreUrl: settings.customerAndroidStoreUrl,
+      };
+    }
+    return {
+      minVersion: settings.riderMinAppVersion,
+      latestVersion: settings.riderLatestAppVersion,
+      iosStoreUrl: settings.riderIosStoreUrl,
+      androidStoreUrl: settings.riderAndroidStoreUrl,
+    };
   }
 
   /** Whether a given automation toggle is currently enabled. Used by services to gate auto-decisions. */

@@ -32,6 +32,19 @@ export function buildDealSharePayload(deal: Deal, appUrl: string, appName = 'Lun
   };
 }
 
+export function buildReferralSharePayload(
+  referralCode: string,
+  appUrl: string,
+  appName = 'Lunara',
+): SharePayload {
+  const url = `${appUrl.replace(/\/$/, '')}/register?ref=${encodeURIComponent(referralCode)}`;
+  return {
+    title: `Join me on ${appName}`,
+    message: `Sign up on ${appName} with my code ${referralCode} — we both earn 100 loyalty points when you complete your first order!`,
+    url,
+  };
+}
+
 export function buildOrderSharePayload(
   orderId: string,
   statusLabel: string,

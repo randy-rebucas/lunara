@@ -10,9 +10,13 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthLoadingScreen } from '../src/components/auth-loading';
 
+import { ForceUpdateScreen } from '../src/components/force-update-screen';
+
 import { CustomerTrackingSync } from '../src/components/customer-tracking-sync';
 
 import { PushNotificationsBootstrap } from '../src/components/push-notifications-bootstrap';
+
+import { useAppVersionGate } from '../src/hooks/use-app-version-gate';
 
 import {
 
@@ -96,6 +100,8 @@ export default function RootLayout() {
 
   const apiFetch = useAuthStore((s) => s.apiFetch);
 
+  const { checking: checkingVersion, updateRequired, storeUrl } = useAppVersionGate();
+
   function handleHeaderBack() {
     if (router.canGoBack()) {
       router.back();
@@ -172,7 +178,7 @@ export default function RootLayout() {
 
 
 
-  if (isLoading) {
+  if (checkingVersion || isLoading) {
 
     return (
 
@@ -181,6 +187,22 @@ export default function RootLayout() {
         <StatusBar style="dark" />
 
         <AuthLoadingScreen />
+
+      </SafeAreaProvider>
+
+    );
+
+  }
+
+  if (updateRequired) {
+
+    return (
+
+      <SafeAreaProvider>
+
+        <StatusBar style="dark" />
+
+        <ForceUpdateScreen storeUrl={storeUrl} />
 
       </SafeAreaProvider>
 

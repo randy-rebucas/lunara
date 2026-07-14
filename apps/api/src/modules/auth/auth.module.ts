@@ -4,6 +4,7 @@ import { PassportModule } from '@nestjs/passport';
 import { MongooseModule } from '@nestjs/mongoose';
 import { CustomersModule } from '../customers/customers.module';
 import { PromotionsModule } from '../promotions/promotions.module';
+import { RewardsModule } from '../rewards/rewards.module';
 import { UsersModule } from '../users/users.module';
 import { getJwtSecret } from '../../common/config/jwt-config';
 import { AuthController } from './auth.controller';
@@ -19,6 +20,7 @@ import { User, UserSchema } from '../users/schemas/user.schema';
     UsersModule,
     CustomersModule,
     PromotionsModule,
+    RewardsModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
       secret: getJwtSecret(),

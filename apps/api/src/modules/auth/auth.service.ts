@@ -29,6 +29,7 @@ import { getJwtRefreshSecret } from '../../common/config/jwt-config';
 
 import { CustomersService } from '../customers/customers.service';
 import { PromotionsService } from '../promotions/promotions.service';
+import { RewardsService } from '../rewards/rewards.service';
 
 import { User, UserDocument } from '../users/schemas/user.schema';
 
@@ -56,6 +57,7 @@ export class AuthService {
 
     private customersService: CustomersService,
     private promotionsService: PromotionsService,
+    private rewardsService: RewardsService,
 
   ) {}
 
@@ -101,8 +103,16 @@ export class AuthService {
 
     if (role === UserRole.CUSTOMER) {
 
-      await this.customersService.create(user._id.toString(), dto.firstName, dto.lastName);
+      const customer = await this.customersService.create(user._id.toString(), dto.firstName, dto.lastName);
       await this.promotionsService.grantSignupPromo(user._id.toString());
+
+      if (dto.referralCode) {
+        const referrer = await this.rewardsService.resolveReferrerByCode(dto.referralCode);
+        if (referrer && referrer.userId.toString() !== user._id.toString()) {
+          customer.referredBy = referrer._id;
+          await customer.save();
+        }
+      }
 
     }
 

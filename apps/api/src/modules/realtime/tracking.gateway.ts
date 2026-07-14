@@ -27,6 +27,7 @@ import { PartnerOrderNotificationService } from '../push/partner-order-notificat
 export class TrackingGateway implements OnGatewayConnection {
   private readonly logger = new Logger(TrackingGateway.name);
   private readonly customerIdByOrderId = new Map<string, string>();
+  private static readonly MAX_CACHED_CUSTOMER_IDS = 10_000;
 
   @WebSocketServer()
   server!: Server;
@@ -218,6 +219,10 @@ export class TrackingGateway implements OnGatewayConnection {
     const order = await this.orderModel.findById(orderId).select('customerId').lean();
     const customerId = order?.customerId?.toString();
     if (customerId) {
+      if (this.customerIdByOrderId.size >= TrackingGateway.MAX_CACHED_CUSTOMER_IDS) {
+        const oldestKey = this.customerIdByOrderId.keys().next().value;
+        if (oldestKey !== undefined) this.customerIdByOrderId.delete(oldestKey);
+      }
       this.customerIdByOrderId.set(orderId, customerId);
     }
     return customerId;

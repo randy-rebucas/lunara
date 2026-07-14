@@ -1,81 +1,113 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button } from '../src/components/ui/button';
 import { Card } from '../src/components/ui/card';
 import { DataLoadState } from '../src/components/data-load-state';
 import { KeyboardSafeScrollView } from '../src/components/ui/keyboard-safe-scroll-view';
-import { useHomeDashboard } from '../src/hooks/use-home-dashboard';
+import { useAuthStore } from '../src/store/auth';
 import { colors, radius, spacing, typography } from '../src/theme';
 
-const REWARDS_CATALOG = [
-  {
-    title: 'Free pickup',
-    points: 200,
-    desc: 'Get free pickup on your next order',
-    icon: 'cube-outline' as const,
-    color: colors.primary,
-    bg: colors.primaryLight,
-  },
-  {
-    title: 'Free delivery',
-    points: 150,
-    desc: 'Get free delivery on your next order',
-    icon: 'bicycle-outline' as const,
-    color: colors.secondary,
-    bg: colors.secondaryLight,
-  },
-  {
-    title: '10% discount',
-    points: 300,
-    desc: 'Get 10% off on your next order',
-    icon: 'pricetag-outline' as const,
-    color: colors.accentDark,
-    bg: colors.accentLight,
-  },
-  {
-    title: '20% discount',
-    points: 500,
-    desc: 'Get 20% off on your next order',
-    icon: 'pricetag' as const,
-    color: '#D97706',
-    bg: '#FEF3C7',
-  },
-  {
-    title: 'Free wash & fold (3 kg)',
-    points: 800,
-    desc: 'Enjoy free wash & fold up to 3 kg',
-    icon: 'water-outline' as const,
-    color: '#DB2777',
-    bg: '#FCE7F3',
-  },
-] as const;
+interface RewardsCatalogItem {
+  id: string;
+  title: string;
+  description: string;
+  points: number;
+  discountType: 'percent' | 'fixed';
+  discountValue: number;
+}
 
-const TIERS = [
-  { name: 'Moon', icon: 'moon' as const, min: 0 },
-  { name: 'Star', icon: 'star' as const, min: 500 },
-  { name: 'Comet', icon: 'sparkles' as const, min: 1500 },
-  { name: 'Galaxy', icon: 'planet' as const, min: 3000 },
-] as const;
+interface RewardsTransaction {
+  type: 'credit' | 'debit';
+  amount: number;
+  description: string;
+  createdAt: string;
+}
 
-function getTierProgress(points: number) {
-  let currentIndex = 0;
-  for (let i = 0; i < TIERS.length; i++) {
-    if (points >= TIERS[i].min) currentIndex = i;
-  }
-  const current = TIERS[currentIndex];
-  const next = TIERS[currentIndex + 1];
-  if (!next) {
-    return { current, next: null, progress: 1, remaining: 0, floor: current.min, ceiling: current.min };
-  }
-  const span = next.min - current.min;
-  const progress = span > 0 ? Math.min(1, Math.max(0, (points - current.min) / span)) : 1;
-  return { current, next, progress, remaining: Math.max(0, next.min - points), floor: current.min, ceiling: next.min };
+interface RewardsBalance {
+  balance: number;
+  tier: string;
+  nextTier: string | null;
+  pointsToNextTier: number;
+  transactions: RewardsTransaction[];
+}
+
+const CATALOG_STYLE: Record<
+  string,
+  { icon: keyof typeof Ionicons.glyphMap; color: string; bg: string }
+> = {
+  'free-pickup': { icon: 'cube-outline', color: colors.primary, bg: colors.primaryLight },
+  'free-delivery': { icon: 'bicycle-outline', color: colors.secondary, bg: colors.secondaryLight },
+  'discount-10': { icon: 'pricetag-outline', color: colors.accentDark, bg: colors.accentLight },
+  'discount-20': { icon: 'pricetag', color: '#D97706', bg: '#FEF3C7' },
+  'free-wash-fold-3kg': { icon: 'water-outline', color: '#DB2777', bg: '#FCE7F3' },
+};
+const DEFAULT_ITEM_STYLE = { icon: 'gift-outline' as const, color: colors.primary, bg: colors.primaryLight };
+
+const TIER_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  Moon: 'moon',
+  Star: 'star',
+  Comet: 'sparkles',
+  Galaxy: 'planet',
+};
+
+function formatTransactionDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export default function RewardsScreen() {
-  const { profile, loading, error, refresh } = useHomeDashboard();
-  const points = profile?.loyaltyPoints ?? 0;
-  const tier = getTierProgress(points);
+  const apiFetch = useAuthStore((s) => s.apiFetch);
+  const [rewards, setRewards] = useState<RewardsBalance | null>(null);
+  const [catalog, setCatalog] = useState<RewardsCatalogItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [redeemingId, setRedeemingId] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+
+  const load = useCallback(async () => {
+    setError('');
+    try {
+      const [balance, items] = await Promise.all([
+        apiFetch<RewardsBalance>('/rewards/me'),
+        apiFetch<RewardsCatalogItem[]>('/rewards/catalog'),
+      ]);
+      setRewards(balance);
+      setCatalog(Array.isArray(items) ? items : []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load rewards');
+    } finally {
+      setLoading(false);
+    }
+  }, [apiFetch]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function redeem(item: RewardsCatalogItem) {
+    setRedeemingId(item.id);
+    try {
+      const result = await apiFetch<{ voucher: { code: string }; balance: number }>('/rewards/redeem', {
+        method: 'POST',
+        body: JSON.stringify({ catalogItemId: item.id }),
+      });
+      Alert.alert(
+        'Reward redeemed!',
+        `Use code ${result.voucher.code} on your next order to get "${item.title}".`,
+      );
+      await load();
+    } catch (e) {
+      Alert.alert('Could not redeem', e instanceof Error ? e.message : 'Please try again.');
+    } finally {
+      setRedeemingId(null);
+    }
+  }
+
+  const points = rewards?.balance ?? 0;
+  const progress =
+    rewards?.nextTier && rewards.pointsToNextTier + points > 0
+      ? Math.min(1, Math.max(0, points / (rewards.pointsToNextTier + points)))
+      : 1;
 
   return (
     <KeyboardSafeScrollView
@@ -97,19 +129,14 @@ export default function RewardsScreen() {
         </View>
       </View>
 
-      <DataLoadState
-        loading={loading}
-        error={error}
-        loadingMessage="Loading rewards…"
-        onRetry={refresh}
-      />
+      <DataLoadState loading={loading} error={error} loadingMessage="Loading rewards…" onRetry={load} />
 
-      {!loading && !error ? (
+      {!loading && !error && rewards ? (
         <>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="View loyalty points details"
-            onPress={() => Alert.alert('Loyalty points', 'Detailed point history is coming soon.')}
+            onPress={() => setShowHistory((v) => !v)}
           >
             {({ pressed }) => (
               <Card style={[styles.pointsCard, pressed && styles.pressedCard]}>
@@ -123,33 +150,58 @@ export default function RewardsScreen() {
                     <Text style={styles.pointsHint}>100 pts per successful referral</Text>
                   </View>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
+                <Ionicons name={showHistory ? 'chevron-up' : 'chevron-forward'} size={18} color={colors.mutedForeground} />
               </Card>
             )}
           </Pressable>
 
+          {showHistory ? (
+            <Card style={styles.historyCard}>
+              {rewards.transactions.length === 0 ? (
+                <Text style={styles.historyEmpty}>No point activity yet.</Text>
+              ) : (
+                rewards.transactions.map((tx, i) => (
+                  <View key={i} style={styles.historyRow}>
+                    <View style={styles.historyTextCol}>
+                      <Text style={styles.historyDesc}>{tx.description}</Text>
+                      <Text style={styles.historyDate}>{formatTransactionDate(tx.createdAt)}</Text>
+                    </View>
+                    <Text style={[styles.historyAmount, tx.type === 'debit' && styles.historyAmountDebit]}>
+                      {tx.type === 'credit' ? '+' : '-'}
+                      {tx.amount} pts
+                    </Text>
+                  </View>
+                ))
+              )}
+            </Card>
+          ) : null}
+
           <Card style={styles.tierCard}>
             <View style={styles.tierRow}>
               <View style={styles.tierIcon}>
-                <Ionicons name={tier.current.icon} size={18} color={colors.primary} />
+                <Ionicons name={TIER_ICONS[rewards.tier] ?? 'star'} size={18} color={colors.primary} />
               </View>
               <View style={styles.tierTextCol}>
-                <Text style={styles.tierTitle}>Your tier: {tier.current.name}</Text>
+                <Text style={styles.tierTitle}>Your tier: {rewards.tier}</Text>
                 <Text style={styles.tierHint}>
-                  {tier.next
-                    ? `Earn ${tier.remaining} more points to reach ${tier.next.name} tier`
+                  {rewards.nextTier
+                    ? `Earn ${rewards.pointsToNextTier} more points to reach ${rewards.nextTier} tier`
                     : 'You’ve reached the highest tier'}
                 </Text>
               </View>
               <View style={styles.tierBadge}>
-                <Ionicons name={tier.next?.icon ?? tier.current.icon} size={16} color={colors.primary} />
+                <Ionicons
+                  name={TIER_ICONS[rewards.nextTier ?? rewards.tier] ?? 'star'}
+                  size={16}
+                  color={colors.primary}
+                />
               </View>
             </View>
             <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${tier.progress * 100}%` }]} />
+              <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
             </View>
             <Text style={styles.progressLabel}>
-              {points} / {tier.next ? tier.ceiling : tier.floor} pts
+              {points} pts{rewards.nextTier ? ` / ${points + rewards.pointsToNextTier} pts` : ''}
             </Text>
           </Card>
 
@@ -163,7 +215,7 @@ export default function RewardsScreen() {
               onPress={() =>
                 Alert.alert(
                   'How rewards work',
-                  'Earn points on completed orders, referrals, and promotions. Once you hit the points threshold for a reward, tap Redeem to use it on your next order.',
+                  'Earn points on completed orders, referrals, and promotions. Once you hit the points threshold for a reward, tap Redeem to get a voucher code for your next order.',
                 )
               }
             >
@@ -173,28 +225,28 @@ export default function RewardsScreen() {
           </View>
 
           <View style={styles.catalog}>
-            {REWARDS_CATALOG.map((item) => {
+            {catalog.map((item) => {
+              const style = CATALOG_STYLE[item.id] ?? DEFAULT_ITEM_STYLE;
               const canRedeem = points >= item.points;
               const toGo = item.points - points;
               return (
-                <Card key={item.title} style={styles.rewardRow}>
-                  <View style={[styles.rewardIcon, { backgroundColor: item.bg }]}>
-                    <Ionicons name={item.icon} size={20} color={item.color} />
+                <Card key={item.id} style={styles.rewardRow}>
+                  <View style={[styles.rewardIcon, { backgroundColor: style.bg }]}>
+                    <Ionicons name={style.icon} size={20} color={style.color} />
                   </View>
                   <View style={styles.rewardCopy}>
                     <Text style={styles.rewardTitle}>{item.title}</Text>
-                    <Text style={[styles.rewardPoints, { color: item.color }]}>{item.points} pts</Text>
-                    <Text style={styles.rewardDesc}>{item.desc}</Text>
+                    <Text style={[styles.rewardPoints, { color: style.color }]}>{item.points} pts</Text>
+                    <Text style={styles.rewardDesc}>{item.description}</Text>
                   </View>
                   <View style={styles.rewardStatusCol}>
                     {canRedeem ? (
                       <Button
-                        label="Redeem"
+                        label={redeemingId === item.id ? 'Redeeming…' : 'Redeem'}
                         variant="primary"
                         size="sm"
-                        onPress={() =>
-                          Alert.alert('Redeem reward', `Redeeming "${item.title}" is coming soon.`)
-                        }
+                        disabled={redeemingId !== null}
+                        onPress={() => redeem(item)}
                       />
                     ) : (
                       <View style={styles.lockedPill}>
@@ -264,6 +316,19 @@ const styles = StyleSheet.create({
   pointsValue: { fontSize: 34, fontWeight: '800', color: colors.primary, marginTop: 2 },
   pointsHintPill: { marginTop: spacing.xs },
   pointsHint: { ...typography.caption, color: colors.primaryDark },
+  historyCard: { marginBottom: spacing.lg, gap: spacing.sm },
+  historyEmpty: { ...typography.bodySm, color: colors.mutedForeground },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.xs,
+  },
+  historyTextCol: { flex: 1, paddingRight: spacing.sm },
+  historyDesc: { fontSize: 13, fontWeight: '600', color: colors.foreground },
+  historyDate: { ...typography.caption, marginTop: 2 },
+  historyAmount: { fontSize: 13, fontWeight: '700', color: colors.accentDark },
+  historyAmountDebit: { color: colors.mutedForeground },
   tierCard: { marginBottom: spacing.xl },
   tierRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
   tierIcon: {

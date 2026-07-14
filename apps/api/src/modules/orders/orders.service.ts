@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { OrderStatus, PaymentMethod, PaymentStatus, UserRole } from '@lunara/types';
+import { BookingType, OrderStatus, PaymentMethod, PaymentStatus, UserRole } from '@lunara/types';
 import {
   buildPartnerCoverageNotice,
   canTransitionOrderStatus,
@@ -18,7 +18,8 @@ import { RiderAssignmentService } from '../riders/rider-assignment.service';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { WalletsService } from '../wallets/wallets.service';
 import { LedgerService } from '../ledger/ledger.service';
-import { AssignRiderDto, CreateOrderDto, UpdateOrderStatusDto } from './dto/order.dto';
+import { RewardsService } from '../rewards/rewards.service';
+import { AssignRiderDto, UpdateOrderStatusDto } from './dto/order.dto';
 import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
 import {
   buildOrderPaymentSummary,
@@ -30,9 +31,16 @@ import { User, UserDocument } from '../users/schemas/user.schema';
 import { assertOrderPortalAccess, resolvePortalBranchId } from '../partner/partner-access';
 import { Order, OrderDocument } from './schemas/order.schema';
 
+export interface BookingOrderItem {
+  serviceType: BookingType;
+  quantity: number;
+  unitPrice: number;
+  notes?: string;
+}
+
 export interface BookingOrderPayload {
-  bookingType: CreateOrderDto['bookingType'];
-  items: CreateOrderDto['items'];
+  bookingType: BookingType;
+  items: BookingOrderItem[];
   pickupAddressId: string;
   deliveryAddressId: string;
   scheduledPickupAt: string;
@@ -67,7 +75,26 @@ export class OrdersService {
     private promotionsService: PromotionsService,
     private ledgerService: LedgerService,
     private laundryTagsService: LaundryTagsService,
+    private rewardsService: RewardsService,
   ) {}
+
+  private readonly COMPLETED_ORDER_STATUSES = [OrderStatus.COMPLETED, OrderStatus.DELIVERED];
+
+  private async awardPointsForCompletedOrder(order: OrderDocument) {
+    const customerId = order.customerId.toString();
+
+    await this.rewardsService.creditForOrderCompletion(order._id.toString(), customerId);
+
+    const priorCompletedOrders = await this.orderModel.countDocuments({
+      customerId: order.customerId,
+      status: { $in: this.COMPLETED_ORDER_STATUSES },
+      _id: { $ne: order._id },
+    });
+    await this.rewardsService.maybeCreditReferralForFirstOrder(
+      customerId,
+      priorCompletedOrders === 0,
+    );
+  }
 
   private isBranchAssigned(order: OrderDocument) {
     return Boolean(order.branchId || order.branchName);
@@ -144,31 +171,6 @@ export class OrdersService {
         return { ...base, partnerCoverage: coverage };
       }),
     );
-  }
-
-  async create(customerId: string, dto: CreateOrderDto) {
-    const subtotal = dto.items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
-    const deliveryFee = 50;
-    const discount = 0;
-    const total = subtotal + deliveryFee - discount;
-
-    const order = await this.orderModel.create({
-      customerId: new Types.ObjectId(customerId),
-      bookingType: dto.bookingType,
-      items: dto.items,
-      pickupAddressId: dto.pickupAddressId,
-      deliveryAddressId: dto.deliveryAddressId,
-      scheduledPickupAt: new Date(dto.scheduledPickupAt),
-      scheduledDeliveryAt: dto.scheduledDeliveryAt ? new Date(dto.scheduledDeliveryAt) : undefined,
-      status: OrderStatus.PENDING,
-      subtotal,
-      deliveryFee,
-      discount,
-      total,
-      statusHistory: [{ status: OrderStatus.PENDING, timestamp: new Date() }],
-    });
-
-    return { success: true, data: order };
   }
 
   async createFromBooking(customerId: string, payload: BookingOrderPayload) {
@@ -426,6 +428,10 @@ export class OrdersService {
 
     this.trackingGateway.emitOrderStatus(order._id.toString(), nextStatus);
 
+    if (this.COMPLETED_ORDER_STATUSES.includes(nextStatus)) {
+      await this.awardPointsForCompletedOrder(order);
+    }
+
     const updated = await this.orderModel.findById(id);
     return { success: true, data: updated };
   }
@@ -477,6 +483,7 @@ export class OrdersService {
     await this.laundryTagsService.releaseFromOrder(id, 'delivered');
 
     this.trackingGateway.emitOrderStatus(order._id.toString(), OrderStatus.COMPLETED);
+    await this.awardPointsForCompletedOrder(order);
 
     return { success: true, data: await this.orderModel.findById(id) };
   }

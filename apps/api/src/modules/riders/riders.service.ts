@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -49,6 +50,8 @@ import { buildRiderTaskDetails } from './rider-task-summary';
 
 @Injectable()
 export class RidersService {
+  private readonly logger = new Logger(RidersService.name);
+
   constructor(
     @InjectModel(Rider.name) private riderModel: Model<RiderDocument>,
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
@@ -113,6 +116,45 @@ export class RidersService {
       rider.earningsDayKey = key;
       rider.todayEarnings = 0;
     }
+  }
+
+  /**
+   * Atomically applies an earning to totalEarnings/todayEarnings/recentEarnings via a pipeline
+   * update, instead of `rider.totalEarnings += amount; rider.save()`. The fetch-mutate-save form
+   * lost updates under concurrency (two orders completing around the same time for one rider) —
+   * on this optimistically-versioned document that surfaced as an outright VersionError, silently
+   * dropping the earning for the losing request rather than merely drifting the balance.
+   */
+  private async applyEarningAtomically(
+    userId: string,
+    amount: number,
+    entry: { type: RiderEarningType; amount: number; orderId?: Types.ObjectId; note?: string; earnedAt: Date },
+  ) {
+    const key = this.todayKey();
+    const rider = await this.riderModel.findOneAndUpdate(
+      { userId: new Types.ObjectId(userId) },
+      [
+        {
+          $set: {
+            totalEarnings: { $add: [{ $ifNull: ['$totalEarnings', 0] }, amount] },
+            todayEarnings: {
+              $cond: [
+                { $eq: ['$earningsDayKey', key] },
+                { $add: [{ $ifNull: ['$todayEarnings', 0] }, amount] },
+                amount,
+              ],
+            },
+            earningsDayKey: key,
+            recentEarnings: {
+              $slice: [{ $concatArrays: [[entry], { $ifNull: ['$recentEarnings', []] }] }, 50],
+            },
+          },
+        },
+      ],
+      { new: true },
+    );
+    if (!rider) throw new NotFoundException('Rider not found');
+    return rider;
   }
 
   async findOrCreate(userId: string) {
@@ -195,23 +237,23 @@ export class RidersService {
     const fees = await this.settingsService.getRiderFeeAmounts();
     const amount = riderEarningAmount(type, type === 'pickup' ? fees.pickup : fees.delivery);
 
-    rider.totalEarnings += amount;
-    this.ensureTodayBucket(rider);
-    rider.todayEarnings += amount;
-    rider.recentEarnings = [
-      {
-        type,
-        amount,
-        orderId: new Types.ObjectId(orderId),
-        earnedAt: new Date(),
-      },
-      ...rider.recentEarnings,
-    ].slice(0, 50);
-    await rider.save();
+    const updated = await this.applyEarningAtomically(userId, amount, {
+      type,
+      amount,
+      orderId: new Types.ObjectId(orderId),
+      earnedAt: new Date(),
+    });
 
-    void this.riderWalletService
-      .creditFromTask(userId, orderId, type, amount)
-      .catch(() => {});
+    // Awaited (not fire-and-forget): totalEarnings/todayEarnings above are already saved, so a
+    // silently-dropped wallet credit here would leave the Earnings screen and Wallet screen
+    // permanently disagreeing about how much the rider has actually earned.
+    try {
+      await this.riderWalletService.creditFromTask(userId, orderId, type, amount);
+    } catch (err) {
+      this.logger.error(
+        `Wallet credit failed for rider ${userId}, order ${orderId} (${type}, ${amount}): ${(err as Error).message}`,
+      );
+    }
 
     void this.riderNotificationService
       .notifyEarningsCredited(userId, orderId, type, amount)
@@ -240,8 +282,8 @@ export class RidersService {
 
     return {
       amount,
-      totalEarnings: rider.totalEarnings,
-      todayEarnings: rider.todayEarnings,
+      totalEarnings: updated.totalEarnings,
+      todayEarnings: updated.todayEarnings,
     };
   }
 
@@ -262,23 +304,21 @@ export class RidersService {
     const description = note?.trim() ? `${label}: ${note.trim()}` : label;
     const expenseAccount = type === 'wage' ? 'rider_wage_expense' : 'rider_payout_expense';
 
-    rider.totalEarnings += amount;
-    this.ensureTodayBucket(rider);
-    rider.todayEarnings += amount;
-    rider.recentEarnings = [
-      {
-        type,
-        amount,
-        note: note?.trim() || undefined,
-        earnedAt: new Date(),
-      },
-      ...rider.recentEarnings,
-    ].slice(0, 50);
-    await rider.save();
+    const updated = await this.applyEarningAtomically(userId, amount, {
+      type,
+      amount,
+      ...(note?.trim() ? { note: note.trim() } : {}),
+      earnedAt: new Date(),
+    });
 
-    void this.riderWalletService
-      .creditEarning(userId, { referenceId, type, amount, description })
-      .catch(() => {});
+    // Awaited (not fire-and-forget) — see creditEarning() above for why.
+    try {
+      await this.riderWalletService.creditEarning(userId, { referenceId, type, amount, description });
+    } catch (err) {
+      this.logger.error(
+        `Wallet credit failed for rider ${userId}, manual earning ${referenceId} (${type}, ${amount}): ${(err as Error).message}`,
+      );
+    }
 
     void this.riderNotificationService
       .notifyEarningsCredited(userId, referenceId, type, amount, note)
@@ -307,8 +347,8 @@ export class RidersService {
 
     return {
       amount,
-      totalEarnings: rider.totalEarnings,
-      todayEarnings: rider.todayEarnings,
+      totalEarnings: updated.totalEarnings,
+      todayEarnings: updated.todayEarnings,
     };
   }
 

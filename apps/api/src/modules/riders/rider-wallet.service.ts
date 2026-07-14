@@ -94,6 +94,11 @@ export class RiderWalletService {
     return new Types.ObjectId(userId);
   }
 
+  /** Mongo duplicate-key error (E11000) — used to detect a concurrent/retried write losing the unique-index race. */
+  private isDuplicateKeyError(err: unknown): boolean {
+    return typeof err === 'object' && err !== null && (err as { code?: number }).code === 11000;
+  }
+
   async findOrCreateRider(userId: string) {
     let rider = await this.riderModel.findOne({ userId: this.riderObjectId(userId) });
     if (!rider) {
@@ -249,33 +254,42 @@ export class RiderWalletService {
       description: string;
     },
   ) {
-    const rider = await this.findOrCreateRider(userId);
+    await this.findOrCreateRider(userId);
+    const riderUserId = this.riderObjectId(userId);
     const reference = taskEarningReference(input.referenceId, input.type);
 
-    const existing = await this.transactionModel.findOne({
-      riderUserId: this.riderObjectId(userId),
-      reference,
-    });
-    if (existing) {
-      return {
-        walletBalance: rider.walletBalance,
-        credited: false,
-      };
+    // Create the transaction row first and let the unique (riderUserId, reference) index be the
+    // idempotency gate — a duplicate insert fails atomically, so two concurrent calls for the same
+    // task can never both credit the balance. Only the winner proceeds to increment walletBalance.
+    try {
+      await this.transactionModel.create({
+        riderUserId,
+        type: 'credit',
+        amount: input.amount,
+        reference,
+        description: input.description,
+      });
+    } catch (err) {
+      if (this.isDuplicateKeyError(err)) {
+        const rider = await this.riderModel.findOne({ userId: riderUserId });
+        return {
+          walletBalance: rider?.walletBalance ?? 0,
+          credited: false,
+        };
+      }
+      throw err;
     }
 
-    rider.walletBalance += input.amount;
-    await rider.save();
-
-    await this.transactionModel.create({
-      riderUserId: rider.userId,
-      type: 'credit',
-      amount: input.amount,
-      reference,
-      description: input.description,
-    });
+    // $inc is an atomic increment at the DB level — unlike `rider.walletBalance += x; rider.save()`,
+    // it can't lose an update when two credits/debits for the same rider land concurrently.
+    const rider = await this.riderModel.findOneAndUpdate(
+      { userId: riderUserId },
+      { $inc: { walletBalance: input.amount } },
+      { new: true },
+    );
 
     return {
-      walletBalance: rider.walletBalance,
+      walletBalance: rider?.walletBalance ?? 0,
       credited: true,
     };
   }
@@ -408,14 +422,28 @@ export class RiderWalletService {
       throw new BadRequestException('Rider no longer has sufficient withdrawable balance');
     }
 
-    rider.walletBalance -= withdrawal.amount;
-    await rider.save();
+    // Atomically claim the withdrawal (only if still pending) before touching the wallet, so two
+    // concurrent approve calls for the same withdrawal can't both pass the status check above and
+    // both decrement the balance.
+    const claimed = await this.withdrawalModel.findOneAndUpdate(
+      { _id: withdrawal._id, status: RIDER_WITHDRAWAL_STATUS.PENDING },
+      {
+        status: RIDER_WITHDRAWAL_STATUS.PAID,
+        adminNote,
+        processedBy: new Types.ObjectId(adminUserId),
+        processedAt: new Date(),
+      },
+      { new: true },
+    );
+    if (!claimed) {
+      throw new BadRequestException('Withdrawal is not pending');
+    }
 
-    withdrawal.status = RIDER_WITHDRAWAL_STATUS.PAID;
-    withdrawal.adminNote = adminNote;
-    withdrawal.processedBy = new Types.ObjectId(adminUserId);
-    withdrawal.processedAt = new Date();
-    await withdrawal.save();
+    // $inc is atomic — can't lose an update if a credit/debit for the same rider lands concurrently.
+    await this.riderModel.updateOne(
+      { userId: withdrawal.riderUserId },
+      { $inc: { walletBalance: -withdrawal.amount } },
+    );
 
     await this.transactionModel.create({
       riderUserId: withdrawal.riderUserId,
@@ -447,7 +475,7 @@ export class RiderWalletService {
       ],
     );
 
-    return { success: true, data: this.serializeWithdrawal(withdrawal) };
+    return { success: true, data: this.serializeWithdrawal(claimed) };
   }
 
   async rejectWithdrawal(withdrawalId: string, adminUserId: string, adminNote?: string) {
@@ -500,17 +528,10 @@ export class RiderWalletService {
     stage: 'pickup' | 'delivery',
   ) {
     const earningType: RiderEarningType = stage === 'pickup' ? 'pickup' : 'delivery';
+    const riderObjectId = new Types.ObjectId(riderUserId);
+    const orderObjectId = new Types.ObjectId(orderId);
 
-    // Check idempotency via unique index on (riderUserId, orderId, stage)
-    const existing = await this.remittanceModel.findOne({
-      riderUserId: new Types.ObjectId(riderUserId),
-      orderId: new Types.ObjectId(orderId),
-      stage,
-    });
-    if (existing) return { alreadyNetted: true, remittance: this.serializeRemittance(existing) };
-
-    // Fetched once, up front: needed both to gate the fee lookup below (employees don't earn a
-    // per-task fee) and for the wallet debit later — reused rather than querying twice.
+    // Fetched once, up front: needed for the fee lookup below (employees don't earn a per-task fee).
     const rider = await this.findOrCreateRider(riderUserId);
 
     // The fee is a fixed constant (not looked up from a wallet transaction) so this doesn't
@@ -529,34 +550,52 @@ export class RiderWalletService {
     const netRemittance = Math.max(0, cashAmount - earningOffset);
     const nettingRef = `netting:${stage}:${orderId}`;
 
-    // Not clamped to 0: this fires before creditEarning() has added the matching task fee to
-    // the wallet (collectCash happens mid-task; creditEarning runs once the task is marked
-    // complete), so the balance may dip briefly negative here and self-correct moments later.
-    // Clamping to 0 would silently donate the rider a phantom credit whenever their balance is
-    // currently below the fee amount.
-    rider.walletBalance -= earningOffset;
-    await rider.save();
+    // Create the remittance record first and let its unique (riderUserId, orderId, stage) index be
+    // the idempotency gate — a duplicate insert fails atomically, so two concurrent calls for the
+    // same order+stage can never both debit the wallet.
+    let remittance: RiderCashRemittanceDocument;
+    try {
+      remittance = await this.remittanceModel.create({
+        riderUserId: riderObjectId,
+        orderId: orderObjectId,
+        paymentId: new Types.ObjectId(paymentId),
+        stage,
+        cashAmount,
+        earningOffset,
+        netRemittance,
+        status: 'pending',
+      });
+    } catch (err) {
+      if (this.isDuplicateKeyError(err)) {
+        const existing = await this.remittanceModel.findOne({
+          riderUserId: riderObjectId,
+          orderId: orderObjectId,
+          stage,
+        });
+        return { alreadyNetted: true, remittance: this.serializeRemittance(existing!) };
+      }
+      throw err;
+    }
 
     if (earningOffset > 0) {
+      // Not clamped to 0: this fires before creditEarning() has added the matching task fee to
+      // the wallet (collectCash happens mid-task; creditEarning runs once the task is marked
+      // complete), so the balance may dip briefly negative here and self-correct moments later.
+      // Clamping to 0 would silently donate the rider a phantom credit whenever their balance is
+      // currently below the fee amount. $inc is atomic, so this can't race with a concurrent
+      // credit/debit for the same rider the way a fetch-mutate-save would.
+      await this.riderModel.updateOne(
+        { userId: riderObjectId },
+        { $inc: { walletBalance: -earningOffset } },
+      );
       await this.transactionModel.create({
-        riderUserId: new Types.ObjectId(riderUserId),
+        riderUserId: riderObjectId,
         type: 'netting',
         amount: earningOffset,
         reference: nettingRef,
         description: `Fee offset against cash collected at ${stage} · order ${orderId.slice(-6)}`,
       });
     }
-
-    const remittance = await this.remittanceModel.create({
-      riderUserId: new Types.ObjectId(riderUserId),
-      orderId: new Types.ObjectId(orderId),
-      paymentId: new Types.ObjectId(paymentId),
-      stage,
-      cashAmount,
-      earningOffset,
-      netRemittance,
-      status: 'pending',
-    });
 
     if (netRemittance > 0) {
       await this.ledgerService.post(

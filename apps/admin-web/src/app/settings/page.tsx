@@ -29,6 +29,17 @@ interface RiderFeeSettings {
   riderDeliveryFee: number;
 }
 
+interface AppVersionSettings {
+  customerMinAppVersion: string;
+  customerLatestAppVersion: string;
+  customerIosStoreUrl: string;
+  customerAndroidStoreUrl: string;
+  riderMinAppVersion: string;
+  riderLatestAppVersion: string;
+  riderIosStoreUrl: string;
+  riderAndroidStoreUrl: string;
+}
+
 interface BranchCoverageRow {
   _id: string;
   code: string;
@@ -195,6 +206,99 @@ function RiderFeesSection() {
             onClick={() => void save()}
           >
             {saving ? 'Saving…' : 'Save rider fees'}
+          </button>
+          {saved ? <span className="badge-accent text-xs">Saved</span> : null}
+        </div>
+      </div>
+    </SectionPanel>
+  );
+}
+
+function AppVersionSection() {
+  const load = useCallback(() => adminFetch<AppVersionSettings>('/admin/settings/app-version'), []);
+  const { data, loading, error, reload } = useAdminQuery(load, []);
+  const [form, setForm] = useState<AppVersionSettings | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState('');
+
+  useEffect(() => {
+    if (data) setForm(data);
+  }, [data]);
+
+  async function save() {
+    if (!form) return;
+    setSaving(true);
+    setSaveError('');
+    try {
+      await adminFetch('/admin/settings/app-version', {
+        method: 'PATCH',
+        body: JSON.stringify(form),
+      });
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 2000);
+      await reload();
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'Failed to save app version settings');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function field(key: keyof AppVersionSettings, label: string, placeholder: string) {
+    return (
+      <label className="block">
+        <span className="text-sm font-medium text-slate-900">{label}</span>
+        <input
+          type="text"
+          placeholder={placeholder}
+          className="input-field mt-1.5"
+          value={form?.[key] ?? ''}
+          onChange={(e) => setForm((f) => (f ? { ...f, [key]: e.target.value } : f))}
+        />
+      </label>
+    );
+  }
+
+  return (
+    <SectionPanel
+      title="Mobile app version"
+      description="Force customers/riders on outdated app builds to update. Leave minimum version at 0.0.0 to disable enforcement for that app."
+    >
+      <div className="border-b border-border/60 px-6 py-4 sm:px-8">
+        {loading && !form ? <p className="text-sm text-muted">Loading…</p> : null}
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {form ? (
+          <div className="space-y-6">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">Customer app</p>
+              <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                {field('customerMinAppVersion', 'Minimum required version', '0.0.0')}
+                {field('customerLatestAppVersion', 'Latest version', '1.1.2')}
+                {field('customerIosStoreUrl', 'iOS App Store URL', 'https://apps.apple.com/app/id...')}
+                {field('customerAndroidStoreUrl', 'Android Play Store URL', 'https://play.google.com/store/apps/details?id=...')}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">Rider app</p>
+              <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                {field('riderMinAppVersion', 'Minimum required version', '0.0.0')}
+                {field('riderLatestAppVersion', 'Latest version', '1.1.2')}
+                {field('riderIosStoreUrl', 'iOS App Store URL', 'https://apps.apple.com/app/id...')}
+                {field('riderAndroidStoreUrl', 'Android Play Store URL', 'https://play.google.com/store/apps/details?id=...')}
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {saveError ? <p className="mt-3 text-sm text-destructive">{saveError}</p> : null}
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            type="button"
+            className="btn-primary btn-sm"
+            disabled={saving || !form}
+            onClick={() => void save()}
+          >
+            {saving ? 'Saving…' : 'Save app version settings'}
           </button>
           {saved ? <span className="badge-accent text-xs">Saved</span> : null}
         </div>
@@ -464,6 +568,8 @@ export default function AdminSettingsPage() {
           <DeliveryFeeSection />
 
           <RiderFeesSection />
+
+          <AppVersionSection />
 
           <ServiceCoverageSection />
 

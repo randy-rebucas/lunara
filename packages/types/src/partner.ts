@@ -88,6 +88,7 @@ export interface PartnerOrderSummary {
   branchName?: string;
   branchId?: string;
   currentStepLabel?: string;
+  assignedStaffId?: string;
   assignedStaffEmail?: string;
   partnerAcceptedAt?: string;
   canAccept?: boolean;

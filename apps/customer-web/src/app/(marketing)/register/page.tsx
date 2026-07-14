@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { Button } from '@lunara/ui';
 import { fetchOnboardingStatus, getOnboardingPath } from '@lunara/hooks/onboarding';
@@ -13,6 +13,8 @@ import { Input } from '../../../components/ui/input';
 export default function RegisterPage() {
   const { register, api } = useAuthContext();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const referralCode = searchParams.get('ref') ?? undefined;
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
@@ -26,7 +28,7 @@ export default function RegisterPage() {
     e.preventDefault();
     setError('');
     try {
-      await register(form);
+      await register({ ...form, referralCode });
       const status = await fetchOnboardingStatus(api);
       router.push(getOnboardingPath(status));
     } catch (err) {

@@ -19,6 +19,10 @@ export class RegisterDto {
 
   @IsString()
   lastName!: string;
+
+  @IsOptional()
+  @IsString()
+  referralCode?: string;
 }
 
 export class LoginDto {
