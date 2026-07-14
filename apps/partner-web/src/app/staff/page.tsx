@@ -11,6 +11,14 @@ import { useRequirePartner } from '../../hooks/use-protected-page';
 import { partnerFetch } from '../../lib/partner-api';
 import { usePartnerQuery } from '../../lib/use-partner-query';
 
+interface BranchOption {
+  _id: string;
+  code: string;
+  name: string;
+  branchType: string;
+  city: string;
+}
+
 function formatMemberSince(createdAt?: string) {
   if (!createdAt) return '—';
   return new Date(createdAt).toLocaleDateString(undefined, {
@@ -32,12 +40,22 @@ export default function StaffTeamPage() {
   const [formSuccess, setFormSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [editingStaff, setEditingStaff] = useState<PartnerStaffMember | null>(null);
+  const [branchId, setBranchId] = useState('');
+  const [reassigningId, setReassigningId] = useState<string | null>(null);
+  const [reassignError, setReassignError] = useState('');
 
   const load = useCallback(async () => {
     return partnerFetch<PartnerStaffMember[]>('/partner/staff');
   }, []);
 
   const { data: staff, loading, error, reload } = usePartnerQuery(load, []);
+
+  const loadBranches = useCallback(async () => {
+    return partnerFetch<BranchOption[]>('/partner/branches');
+  }, []);
+
+  const { data: branches } = usePartnerQuery(loadBranches, []);
+  const hasMultipleBranches = (branches?.length ?? 0) > 1;
 
   const stats = useMemo(() => {
     const members = staff ?? [];
@@ -64,6 +82,10 @@ export default function StaffTeamPage() {
       setFormError('Passwords do not match.');
       return;
     }
+    if (hasMultipleBranches && !branchId) {
+      setFormError('Choose which branch this staff member belongs to.');
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -74,6 +96,7 @@ export default function StaffTeamPage() {
           phone: phone.trim() || undefined,
           displayName: displayName.trim() || undefined,
           password,
+          branchId: branchId || undefined,
         }),
       });
       setFormSuccess(`Staff account created for ${trimmedEmail}. They can sign in on this portal.`);
@@ -81,6 +104,7 @@ export default function StaffTeamPage() {
       setPhone('');
       setDisplayName('');
       setPassword('');
+      setBranchId('');
       setConfirmPassword('');
       setShowForm(false);
       await reload();
@@ -88,6 +112,22 @@ export default function StaffTeamPage() {
       setFormError(err instanceof Error ? err.message : 'Could not create staff account');
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function reassignBranch(staffId: string, targetBranchId: string) {
+    setReassignError('');
+    setReassigningId(staffId);
+    try {
+      await partnerFetch(`/partner/staff/${staffId}/branch`, {
+        method: 'PATCH',
+        body: JSON.stringify({ branchId: targetBranchId }),
+      });
+      await reload();
+    } catch (err) {
+      setReassignError(err instanceof Error ? err.message : 'Could not reassign branch');
+    } finally {
+      setReassigningId(null);
     }
   }
 
@@ -179,6 +219,28 @@ export default function StaffTeamPage() {
             />
           </div>
 
+          {hasMultipleBranches && (
+            <div>
+              <label htmlFor="staff-branch" className="text-sm font-medium text-slate-700">
+                Branch
+              </label>
+              <select
+                id="staff-branch"
+                required
+                className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                value={branchId}
+                onChange={(e) => setBranchId(e.target.value)}
+              >
+                <option value="">Select a branch…</option>
+                {(branches ?? []).map((b) => (
+                  <option key={b._id} value={b._id}>
+                    {b.name} ({b.code})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label htmlFor="staff-password" className="text-sm font-medium text-slate-700">
@@ -239,6 +301,8 @@ export default function StaffTeamPage() {
         <DataPageStatus loading={loading} error={error} loadingMessage="Loading staff…" />
       </div>
 
+      {reassignError && <div className="alert-error mt-2">{reassignError}</div>}
+
       <div className="section-panel mt-6 overflow-hidden">
         <div className="overflow-x-auto">
         <table className="data-table">
@@ -246,6 +310,7 @@ export default function StaffTeamPage() {
             <tr>
               <th>Staff</th>
               <th>Role</th>
+              {hasMultipleBranches && <th>Branch</th>}
               <th>Phone</th>
               <th>Member since</th>
               <th>Active jobs</th>
@@ -271,6 +336,23 @@ export default function StaffTeamPage() {
                 <td>
                   <span className="badge-neutral capitalize">{s.role ?? 'staff'}</span>
                 </td>
+                {hasMultipleBranches && (
+                  <td>
+                    <select
+                      className="rounded-lg border px-2 py-1 text-xs"
+                      value={s.branchId ?? ''}
+                      disabled={reassigningId === s._id}
+                      onChange={(e) => e.target.value && reassignBranch(s._id, e.target.value)}
+                    >
+                      {!s.branchId && <option value="">Unassigned</option>}
+                      {(branches ?? []).map((b) => (
+                        <option key={b._id} value={b._id}>
+                          {b.name} ({b.code})
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                )}
                 <td className="text-muted">{s.phone ?? '—'}</td>
                 <td className="text-muted">{formatMemberSince(s.createdAt)}</td>
                 <td>

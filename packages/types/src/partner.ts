@@ -130,6 +130,9 @@ export interface PartnerStaffMember {
   activeJobs: number;
   displayName?: string;
   avatarUrl?: string;
+  branchId?: string;
+  branchName?: string;
+  branchCode?: string;
 }
 
 export interface PartnerOwnProfile {

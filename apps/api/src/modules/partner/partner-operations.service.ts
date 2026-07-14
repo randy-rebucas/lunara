@@ -34,6 +34,7 @@ import {
   DEFAULT_PARTNER_PORTAL_SETTINGS,
 } from '../branches/schemas/branch.schema';
 import { CreateStaffDto } from './dto/create-staff.dto';
+import { AssignStaffBranchDto } from './dto/assign-staff-branch.dto';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
 import { applyStaffBranchFilter, resolvePortalBranchId } from './partner-access';
 import { PartnerOrderNotificationService } from '../push/partner-order-notification.service';
@@ -554,12 +555,36 @@ export class PartnerOperationsService {
     return branch._id;
   }
 
-  private async staffActiveJobCounts(branchId?: Types.ObjectId) {
+  /** All branches owned by this partner user. Empty for non-PARTNER roles (ADMIN has no owned branches). */
+  private async listOwnedBranchIds(userId: string, role: UserRole): Promise<Types.ObjectId[]> {
+    if (role !== UserRole.PARTNER) return [];
+    const branches = await this.branchModel
+      .find({ partnerUserId: new Types.ObjectId(userId) })
+      .select('_id');
+    return branches.map((b) => b._id);
+  }
+
+  /** Throws if `branchId` isn't a branch owned by this partner user (mirrors BranchesService.assertBranchOwnedByPartner). */
+  private async resolveOwnedBranchId(
+    userId: string,
+    role: UserRole,
+    branchId: string,
+  ): Promise<Types.ObjectId> {
+    const branch = await this.branchModel.findById(branchId);
+    if (!branch) throw new NotFoundException('Branch not found');
+    if (role === UserRole.PARTNER && branch.partnerUserId.toString() !== userId) {
+      throw new NotFoundException('Branch not found');
+    }
+    return branch._id;
+  }
+
+  private async staffActiveJobCounts(branchId?: Types.ObjectId, branchIds?: Types.ObjectId[]) {
     const match: Record<string, unknown> = {
       'laundryProcessing.assignedStaffId': { $exists: true, $ne: null },
       status: { $nin: [OrderStatus.COMPLETED, OrderStatus.CANCELLED, OrderStatus.REFUNDED] },
     };
     if (branchId) match.branchId = branchId;
+    else if (branchIds) match.branchId = { $in: branchIds };
 
     const activeJobs = await this.orderModel.aggregate([
       { $match: match },
@@ -569,11 +594,13 @@ export class PartnerOperationsService {
   }
 
   private formatStaffMember(
-    user: Pick<UserDocument, '_id' | 'email' | 'phone' | 'createdAt'>,
+    user: Pick<UserDocument, '_id' | 'email' | 'phone' | 'createdAt' | 'branchId'>,
     jobMap: Map<string, number>,
     profileMap?: Map<string, Pick<UserProfile, 'displayName' | 'avatarUrl'>>,
+    branchMap?: Map<string, { name: string; code: string }>,
   ) {
     const profile = profileMap?.get(user._id.toString());
+    const branch = branchMap?.get(user.branchId?.toString() ?? '');
     return {
       _id: user._id.toString(),
       email: user.email,
@@ -582,30 +609,47 @@ export class PartnerOperationsService {
       activeJobs: jobMap.get(user._id.toString()) ?? 0,
       displayName: profile?.displayName,
       avatarUrl: profile?.avatarUrl,
+      branchId: user.branchId?.toString(),
+      branchName: branch?.name,
+      branchCode: branch?.code,
     };
   }
 
   async listStaff(userId: string, role: UserRole) {
-    const branchId = await this.resolvePartnerBranchId(userId, role);
+    const ownedBranchIds = await this.listOwnedBranchIds(userId, role);
+    const branchFilter =
+      role === UserRole.PARTNER ? { $in: ownedBranchIds } : await this.resolvePartnerBranchId(userId, role);
     const staff = await this.userModel
-      .find({ role: UserRole.STAFF, isActive: true, branchId })
-      .select('email phone createdAt')
+      .find({ role: UserRole.STAFF, isActive: true, branchId: branchFilter })
+      .select('email phone createdAt branchId')
       .sort({ email: 1 });
 
-    const jobMap = await this.staffActiveJobCounts(branchId);
+    const branchIdsForJobs = role === UserRole.PARTNER ? ownedBranchIds : undefined;
+    const jobMap = await this.staffActiveJobCounts(
+      role === UserRole.PARTNER ? undefined : (branchFilter as Types.ObjectId),
+      branchIdsForJobs,
+    );
     const profiles = await this.userProfileModel
       .find({ userId: { $in: staff.map((s) => s._id) } })
       .lean();
     const profileMap = new Map(profiles.map((p) => [p.userId.toString(), p]));
 
+    let branchMap: Map<string, { name: string; code: string }> | undefined;
+    if (role === UserRole.PARTNER) {
+      const branches = await this.branchModel.find({ _id: { $in: ownedBranchIds } }).select('name code');
+      branchMap = new Map(branches.map((b) => [b._id.toString(), { name: b.name, code: b.code }]));
+    }
+
     return {
       success: true,
-      data: staff.map((s) => this.formatStaffMember(s, jobMap, profileMap)),
+      data: staff.map((s) => this.formatStaffMember(s, jobMap, profileMap, branchMap)),
     };
   }
 
   async createStaff(userId: string, role: UserRole, dto: CreateStaffDto) {
-    const branchId = await this.resolvePartnerBranchId(userId, role);
+    const branchId = dto.branchId
+      ? await this.resolveOwnedBranchId(userId, role, dto.branchId)
+      : await this.resolvePartnerBranchId(userId, role);
     const email = dto.email.trim().toLowerCase();
     const phone = dto.phone?.trim();
 
@@ -634,9 +678,47 @@ export class PartnerOperationsService {
       profileMap = new Map([[user._id.toString(), profile]]);
     }
 
+    const branch = await this.branchModel.findById(branchId).select('name code');
+    const branchMap = branch
+      ? new Map([[branch._id.toString(), { name: branch.name, code: branch.code }]])
+      : undefined;
+
     return {
       success: true,
-      data: this.formatStaffMember(user, new Map(), profileMap),
+      data: this.formatStaffMember(user, new Map(), profileMap, branchMap),
+    };
+  }
+
+  async reassignStaffBranch(
+    userId: string,
+    role: UserRole,
+    staffId: string,
+    dto: AssignStaffBranchDto,
+  ) {
+    const targetBranchId = await this.resolveOwnedBranchId(userId, role, dto.branchId);
+    const ownedBranchIds = await this.listOwnedBranchIds(userId, role);
+
+    const staff = await this.userModel.findOne({
+      _id: staffId,
+      role: UserRole.STAFF,
+      ...(role === UserRole.PARTNER ? { branchId: { $in: ownedBranchIds } } : {}),
+    });
+    if (!staff) throw new NotFoundException('Staff member not found');
+
+    staff.branchId = targetBranchId;
+    await staff.save();
+
+    const branch = await this.branchModel.findById(targetBranchId).select('name code');
+    const branchMap = branch
+      ? new Map([[branch._id.toString(), { name: branch.name, code: branch.code }]])
+      : undefined;
+    const jobMap = await this.staffActiveJobCounts(targetBranchId);
+    const profile = await this.userProfileModel.findOne({ userId: staff._id }).lean();
+    const profileMap = profile ? new Map([[staff._id.toString(), profile]]) : undefined;
+
+    return {
+      success: true,
+      data: this.formatStaffMember(staff, jobMap, profileMap, branchMap),
     };
   }
 

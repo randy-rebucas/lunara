@@ -38,6 +38,7 @@ import { UpdateBranchCustomAddonDto } from '../branches/dto/update-branch-custom
 import { UpdateBranchHiddenCatalogDto } from '../branches/dto/update-branch-hidden-catalog.dto';
 import { AssignStaffDto } from './dto/assign-staff.dto';
 import { CreateStaffDto } from './dto/create-staff.dto';
+import { AssignStaffBranchDto } from './dto/assign-staff-branch.dto';
 import { AdvanceProcessingDto, MoveProcessingStepDto, SetShelfSlotDto } from './dto/processing.dto';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
 import { PartnerOperationsService } from './partner-operations.service';
@@ -393,6 +394,16 @@ export class PartnerController {
     @Body() dto: CreateStaffDto,
   ) {
     return this.operationsService.createStaff(req.user.sub, req.user.role, dto);
+  }
+
+  @Patch('staff/:staffId/branch')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  reassignStaffBranch(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('staffId') staffId: string,
+    @Body() dto: AssignStaffBranchDto,
+  ) {
+    return this.operationsService.reassignStaffBranch(req.user.sub, req.user.role, staffId, dto);
   }
 
   @Post('orders/:orderId/assign-staff')

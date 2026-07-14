@@ -17,4 +17,8 @@ export class CreateStaffDto {
   @IsString()
   @MaxLength(80)
   displayName?: string;
+
+  @IsOptional()
+  @IsString()
+  branchId?: string;
 }
