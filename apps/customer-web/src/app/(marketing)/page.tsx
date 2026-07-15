@@ -1,13 +1,34 @@
 import type { Metadata } from 'next';
-import { appConfig } from '@lunara/config';
 import { HomePage } from '../../components/marketing/home-page';
+import { SERVICE_AREAS } from '../../components/marketing/home-page-data';
+import {
+  DEFAULT_DESCRIPTION,
+  DEFAULT_TITLE,
+  JsonLd,
+  buildPageMetadata,
+  laundryServiceJsonLd,
+  mobileAppJsonLd,
+  organizationJsonLd,
+  webSiteJsonLd,
+} from '../../lib/seo';
 
-export const metadata: Metadata = {
-  title: `${appConfig.name} — Laundry pickup & delivery`,
-  description:
-    'Book door-to-door laundry in Metro Manila. Download the app, schedule pickup, track orders live, and pay with GCash, card, wallet, or cash.',
-};
+export const metadata: Metadata = buildPageMetadata({
+  title: DEFAULT_TITLE,
+  description: DEFAULT_DESCRIPTION,
+  path: '/',
+  absoluteTitle: true,
+});
 
 export default function MarketingHomePage() {
-  return <HomePage />;
+  const cities = [...new Set(SERVICE_AREAS.map((area) => area.city))];
+
+  return (
+    <>
+      <JsonLd data={organizationJsonLd()} />
+      <JsonLd data={webSiteJsonLd()} />
+      <JsonLd data={laundryServiceJsonLd(cities)} />
+      <JsonLd data={mobileAppJsonLd()} />
+      <HomePage />
+    </>
+  );
 }

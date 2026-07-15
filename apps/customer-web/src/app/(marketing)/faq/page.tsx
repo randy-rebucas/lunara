@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import { Clock, HelpCircle, Mail } from 'lucide-react';
 import { appConfig } from '@lunara/config';
+import { FAQ_CATEGORIES } from '../../../components/marketing/faq-data';
 import { FaqList } from '../../../components/marketing/faq-list';
+import { JsonLd, buildPageMetadata, faqPageJsonLd } from '../../../lib/seo';
 import { MarketingContentPage } from '../../../components/marketing/marketing-content-page';
 import {
   MarketingBackLink,
@@ -11,14 +13,17 @@ import {
 import { MarketingActions } from '../../../components/marketing/marketing-actions';
 import { ButtonAnchor, ButtonLink } from '../../../components/ui/button-link';
 
-export const metadata: Metadata = {
-  title: `FAQ — ${appConfig.name}`,
-  description: `Common questions about booking laundry pickup and delivery with ${appConfig.name}.`,
-};
+export const metadata: Metadata = buildPageMetadata({
+  title: 'FAQ',
+  description: `Common questions about booking laundry pickup and delivery with ${appConfig.name} — scheduling, payments, tracking, and support.`,
+  path: '/faq',
+});
 
 export default function FaqPage() {
   return (
-    <MarketingContentPage
+    <>
+      <JsonLd data={faqPageJsonLd(FAQ_CATEGORIES.flatMap((category) => category.items))} />
+      <MarketingContentPage
       badge="Help center"
       title="Frequently asked questions"
       description="Quick answers about booking, payments, tracking, and support. Jump to a topic below or browse all questions."
@@ -64,6 +69,7 @@ export default function FaqPage() {
       </MarketingCtaPanel>
 
       <MarketingBackLink />
-    </MarketingContentPage>
+      </MarketingContentPage>
+    </>
   );
 }

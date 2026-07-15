@@ -18,11 +18,13 @@ import {
 } from '../../../components/marketing/home-page-data';
 import { MarketingActions } from '../../../components/marketing/marketing-actions';
 import { ButtonLink } from '../../../components/ui/button-link';
+import { buildPageMetadata } from '../../../lib/seo';
 
-export const metadata: Metadata = {
-  title: `Service areas — ${appConfig.name}`,
-  description: `See where ${appConfig.name} offers laundry pickup and delivery in Metro Manila.`,
-};
+export const metadata: Metadata = buildPageMetadata({
+  title: 'Laundry service areas in Metro Manila',
+  description: `See where ${appConfig.name} offers laundry pickup and delivery in Metro Manila — live branches, coverage radius, and expanding areas.`,
+  path: '/locations',
+});
 
 export default async function LocationsPage() {
   const apiBase = resolveApiV1BaseUrl(process.env.NEXT_PUBLIC_API_URL);

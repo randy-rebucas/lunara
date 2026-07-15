@@ -18,6 +18,7 @@ import { fetchServiceAreaById } from '../../../../components/marketing/home-page
 import { AvatarWithFallback } from '../../../../components/marketing/avatar-card';
 import { MarketingActions } from '../../../../components/marketing/marketing-actions';
 import { ButtonLink } from '../../../../components/ui/button-link';
+import { JsonLd, buildPageMetadata, serviceAreaJsonLd } from '../../../../lib/seo';
 
 export async function generateMetadata({
   params,
@@ -28,12 +29,14 @@ export async function generateMetadata({
   const apiBase = resolveApiV1BaseUrl(process.env.NEXT_PUBLIC_API_URL);
   const branch = await fetchServiceAreaById(apiBase, id);
   if (!branch) {
-    return { title: `Laundry partner — ${appConfig.name}` };
+    return { title: 'Laundry partner' };
   }
-  return {
-    title: `${branch.name} — ${appConfig.name}`,
-    description: `Laundry pickup and delivery coverage for ${branch.area}, serviced by ${branch.name}.`,
-  };
+  return buildPageMetadata({
+    title: `${branch.name} — laundry pickup & delivery in ${branch.city}`,
+    description: `Laundry pickup and delivery coverage for ${branch.area}, serviced by ${branch.name}. Book online with ${appConfig.name}.`,
+    path: `/service-areas/${branch.id}`,
+    absoluteTitle: true,
+  });
 }
 
 export default async function ServiceAreaDetailPage({
@@ -56,6 +59,7 @@ export default async function ServiceAreaDetailPage({
 
   return (
     <MarketingShell>
+      <JsonLd data={serviceAreaJsonLd(branch)} />
       {/* ── Hero ── */}
       <section className="relative overflow-hidden border-b border-border/40 bg-surface/60">
         <MarketingHeroGlow />

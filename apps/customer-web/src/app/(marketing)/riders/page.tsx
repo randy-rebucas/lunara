@@ -12,11 +12,14 @@ import {
 } from '../../../components/marketing/marketing-design';
 import { MarketingActions } from '../../../components/marketing/marketing-actions';
 import { ButtonLink } from '../../../components/ui/button-link';
+import { buildPageMetadata } from '../../../lib/seo';
 
-export const metadata: Metadata = {
-  title: `Drive with ${appConfig.name}`,
+export const metadata: Metadata = buildPageMetadata({
+  title: `Drive with ${appConfig.name} — laundry delivery rider jobs`,
   description: `Join ${appConfig.name} as a pickup and delivery rider. Flexible shifts, clear tasks, and earnings tracking in the Lunara Rider app.`,
-};
+  path: '/riders',
+  absoluteTitle: true,
+});
 
 const PERKS = [
   {

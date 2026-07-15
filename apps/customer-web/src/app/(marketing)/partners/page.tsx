@@ -12,11 +12,14 @@ import {
 } from '../../../components/marketing/marketing-design';
 import { MarketingActions } from '../../../components/marketing/marketing-actions';
 import { ButtonLink } from '../../../components/ui/button-link';
+import { buildPageMetadata } from '../../../lib/seo';
 
-export const metadata: Metadata = {
-  title: `Partner with ${appConfig.name}`,
+export const metadata: Metadata = buildPageMetadata({
+  title: `Partner with ${appConfig.name} — grow your laundry shop`,
   description: `Join the ${appConfig.name} network as a laundry partner. Reach more customers with pickup and delivery operations handled for you.`,
-};
+  path: '/partners',
+  absoluteTitle: true,
+});
 
 const BENEFITS = [
   {

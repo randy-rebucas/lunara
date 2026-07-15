@@ -195,7 +195,8 @@ export function HomePage() {
     fetchActiveServiceAreas(apiBase).then(setServiceAreas);
   }, []);
 
-  if (isLoading) return <AuthLoading />;
+  // Render marketing content during the auth check so crawlers and first paint
+  // get the real page; only swap to the loader once we know we're redirecting.
   if (isAuthenticated) return <AuthLoading message="Redirecting…" />;
 
   return (

@@ -2,11 +2,13 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { appConfig } from '@lunara/config';
 import { PublicShell } from '../../../components/public-shell';
+import { buildPageMetadata } from '../../../lib/seo';
 
-export const metadata: Metadata = {
-  title: `Privacy Policy — ${appConfig.name}`,
+export const metadata: Metadata = buildPageMetadata({
+  title: 'Privacy Policy',
   description: `How ${appConfig.name} collects, uses, and protects your personal information.`,
-};
+  path: '/privacy',
+});
 
 const LAST_UPDATED = 'June 8, 2026';
 
