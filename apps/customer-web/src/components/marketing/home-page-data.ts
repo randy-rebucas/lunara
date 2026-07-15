@@ -1,91 +1,128 @@
 import type { LucideIcon } from 'lucide-react';
 import {
-  CalendarCheck,
+  BadgePercent,
   Bike,
-  Layers,
-  PackageCheck,
-  MapPin,
-  CircleDollarSign,
-  Navigation,
+  CalendarCheck,
+  Clock,
   CreditCard,
+  Home,
+  MapPin,
+  Navigation,
+  Package,
   ShieldCheck,
-  Wallet,
+  Star,
+  Store,
+  Timer,
+  Truck,
+  Users,
+  WashingMachine,
 } from 'lucide-react';
+import { FAQ_CATEGORIES, type FaqItem } from './faq-data';
 
-export const HERO_STATS = [
-  { value: '3 min', label: 'Average booking time' },
-  { value: 'Live', label: 'Order tracking' },
-  { value: '4+', label: 'Payment options' },
+export const TRUST_CHIPS = [
+  { icon: Truck, title: 'Free pickup', subtitle: 'for first-time users' },
+  { icon: Clock, title: 'Same-day', subtitle: 'service available' },
+  { icon: ShieldCheck, title: 'Trusted', subtitle: 'laundry partners' },
+  { icon: CreditCard, title: 'Secure', subtitle: 'payments' },
 ] as const;
 
-export const SOCIAL_PROOF = [
-  { value: '1,000+', label: 'Orders completed' },
-  { value: '50+', label: 'Partner laundry shops' },
-  { value: '3', label: 'Metro Manila areas' },
-  { value: '4.8★', label: 'Play Store rating' },
+export const STATS = [
+  { icon: Users, value: '1,000+', label: 'Orders completed' },
+  { icon: Store, value: '50+', label: 'Partner laundry shops' },
+  { icon: MapPin, value: '3', label: 'Metro Manila areas' },
+  { icon: Star, value: '4.8★', label: 'Play Store rating' },
 ] as const;
 
-// Unsplash base helper — keeps URLs DRY and easy to swap
-const u = (id: string, w = 800, h = 500) =>
-  `https://images.unsplash.com/photo-${id}?w=${w}&h=${h}&q=80&auto=format&fit=crop`;
-
-export const HERO_IMAGE = {
-  src: u('1582735689369-4fe89db7114c', 900, 560),
-  alt: 'Neatly folded clean laundry',
+export type FeatureItem = {
+  title: string;
+  description: string;
+  icon: LucideIcon;
+  accent: 'primary' | 'secondary' | 'accent';
 };
 
-export const HERO_BANNER_IMAGE = {
-  src: u('1517677208171-0bc6725a3e60', 1920, 1080),
-  alt: 'Rows of washing machines in a bright commercial laundromat',
-};
+export const FEATURES: FeatureItem[] = [
+  {
+    title: 'Pickup & delivery',
+    description: 'No need to leave your house. We pick up and deliver to your doorstep.',
+    icon: Bike,
+    accent: 'primary',
+  },
+  {
+    title: 'Live order tracking',
+    description: 'Track your laundry in real time from pickup to delivery.',
+    icon: Navigation,
+    accent: 'secondary',
+  },
+  {
+    title: 'Secure payments',
+    description: 'Pay safely with cash, GCash, card, or your Lunara wallet.',
+    icon: ShieldCheck,
+    accent: 'accent',
+  },
+  {
+    title: 'Professional partners',
+    description: 'We work with verified laundry shops to ensure quality service.',
+    icon: WashingMachine,
+    accent: 'primary',
+  },
+  {
+    title: 'Affordable pricing',
+    description: 'Transparent pricing with no hidden fees, confirmed before checkout.',
+    icon: BadgePercent,
+    accent: 'secondary',
+  },
+  {
+    title: 'Fast turnaround',
+    description: 'Same-day or next-day options to fit your busy schedule.',
+    icon: Timer,
+    accent: 'accent',
+  },
+];
 
 export type HowItWorksItem = {
   step: string;
   title: string;
   description: string;
   icon: LucideIcon;
-  image: string;
-  imageAlt: string;
 };
 
 export const HOW_IT_WORKS: HowItWorksItem[] = [
   {
     step: '1',
-    title: 'Book a pickup',
-    description:
-      'Choose wash, dry clean, or express service. Pick a time slot and confirm your order with a clear price breakdown.',
+    title: 'Book pickup',
+    description: 'Choose your service, date, and time — with a clear price upfront.',
     icon: CalendarCheck,
-    image: u('1563013544-824ae1b704d3', 640, 360),
-    imageAlt: 'Person booking a laundry pickup online on a laptop',
   },
   {
     step: '2',
-    title: 'Rider collects',
-    description:
-      'A Lunara rider picks up from your home or office. Pin your address for accurate routing and handoff.',
+    title: 'Laundry collected',
+    description: 'A Lunara rider picks up your laundry from your home or office.',
     icon: Bike,
-    image: 'https://images.pexels.com/photos/7363090/pexels-photo-7363090.jpeg?auto=compress&cs=tinysrgb&w=640&h=360&fit=crop',
-    imageAlt: 'Lunara rider collecting a laundry bag from a home doorstep',
   },
   {
     step: '3',
-    title: 'Partner processes',
-    description:
-      'Trusted laundry partners wash, dry, and fold your clothes. Track every step from shop to dispatch.',
-    icon: Layers,
-    image: u('1610557892470-55d9e80c0bce', 640, 360),
-    imageAlt: 'Clothes being washed inside a professional washing machine',
+    title: 'Professionally cleaned',
+    description: 'Trusted partners carefully wash, dry, and fold your clothes.',
+    icon: WashingMachine,
   },
   {
     step: '4',
-    title: 'Delivered fresh',
-    description:
-      'Get laundry returned to your door. Pay your way — GCash, card, wallet, or cash — and rate your experience.',
-    icon: PackageCheck,
-    image: 'https://images.pexels.com/photos/1884579/pexels-photo-1884579.jpeg?auto=compress&cs=tinysrgb&w=640&h=360&fit=crop',
-    imageAlt: 'Neatly folded fresh clothes on shelves ready for delivery',
+    title: 'Delivered back home',
+    description: 'We deliver it fresh and clean to your door — pay your way.',
+    icon: Home,
   },
 ];
+
+export const PARTNER_BENEFITS = [
+  'More bookings',
+  'Rider network',
+  'Customer app',
+  'Admin dashboard',
+  'Analytics & reports',
+  'Digital payments',
+  'Marketing support',
+  'Operations support',
+] as const;
 
 export const SERVICE_AREAS = [
   {
@@ -213,59 +250,6 @@ export const EXPANDING_AREAS = [
   'Cebu Metro',
 ] as const;
 
-export type WhyChooseItem = {
-  label: string;
-  title: string;
-  description: string;
-  accent: 'primary' | 'secondary' | 'accent';
-  icon: LucideIcon;
-};
-
-export const WHY_CHOOSE: WhyChooseItem[] = [
-  {
-    label: 'Convenience',
-    title: 'Door-to-door convenience',
-    description: 'No laundromat trips. Schedule pickup and delivery around your day.',
-    accent: 'primary',
-    icon: MapPin,
-  },
-  {
-    label: 'Pricing',
-    title: 'Transparent pricing',
-    description: 'See service rates, add-ons, and delivery fees before you confirm.',
-    accent: 'secondary',
-    icon: CircleDollarSign,
-  },
-  {
-    label: 'Tracking',
-    title: 'Live order tracking',
-    description: 'Follow pickup, shop processing, and delivery in real time on web or mobile.',
-    accent: 'accent',
-    icon: Navigation,
-  },
-  {
-    label: 'Payments',
-    title: 'Flexible payments',
-    description: 'GCash, card, Lunara wallet, or cash on pickup or delivery.',
-    accent: 'primary',
-    icon: CreditCard,
-  },
-  {
-    label: 'Partners',
-    title: 'Trusted partner network',
-    description: 'Vetted laundry shops with quality standards and operations support.',
-    accent: 'secondary',
-    icon: ShieldCheck,
-  },
-  {
-    label: 'Rewards',
-    title: 'Promos & wallet',
-    description: 'Apply deals at checkout, top up your wallet, and manage refunds in one place.',
-    accent: 'accent',
-    icon: Wallet,
-  },
-];
-
 export const CUSTOMER_REVIEWS = [
   {
     name: 'Maria C.',
@@ -294,6 +278,87 @@ export const CUSTOMER_REVIEWS = [
       'Used the mobile app and web — both work great. Wallet top-up and GCash checkout made paying easy.',
     avatarColor: 'accent' as const,
   },
+  {
+    name: 'Paolo D.',
+    initials: 'PD',
+    location: 'Salcedo Village',
+    rating: 5,
+    quote:
+      'I work night shifts, so the flexible pickup windows are a lifesaver. Dropped off my laundry bag and it was back the next day.',
+    avatarColor: 'primary' as const,
+  },
+  {
+    name: 'Kristine V.',
+    initials: 'KV',
+    location: 'Kamuning',
+    rating: 4,
+    quote:
+      'Great service overall. One pickup got rescheduled, but support messaged me right away and the rider arrived in the new window.',
+    avatarColor: 'secondary' as const,
+  },
+  {
+    name: 'Miguel S.',
+    initials: 'MS',
+    location: 'McKinley Hill',
+    rating: 5,
+    quote:
+      'The live map tracking is my favorite part. I always know exactly when the rider is arriving — no more waiting around.',
+    avatarColor: 'accent' as const,
+  },
+  {
+    name: 'Denise L.',
+    initials: 'DL',
+    location: 'Legazpi Village',
+    rating: 5,
+    quote:
+      'Sent in office uniforms and delicate blouses. Everything came back pressed, bagged, and smelling fresh. Very professional.',
+    avatarColor: 'primary' as const,
+  },
+  {
+    name: 'Carlo M.',
+    initials: 'CM',
+    location: 'Timog',
+    rating: 5,
+    quote:
+      'Express wash saved me before a business trip — picked up in the morning, delivered clean by mid-afternoon.',
+    avatarColor: 'secondary' as const,
+  },
+  {
+    name: 'Bianca F.',
+    initials: 'BF',
+    location: 'Bonifacio Global City',
+    rating: 5,
+    quote:
+      'As a mom of three, laundry used to eat my whole weekend. Now it is two taps on my phone. Worth every peso.',
+    avatarColor: 'accent' as const,
+  },
+  {
+    name: 'Rafael G.',
+    initials: 'RG',
+    location: 'South Triangle',
+    rating: 4,
+    quote:
+      'Solid and consistent. Prices are fair and the app shows the breakdown before you confirm, so there are no surprises.',
+    avatarColor: 'primary' as const,
+  },
+  {
+    name: 'Joyce A.',
+    initials: 'JA',
+    location: 'Makati CBD',
+    rating: 5,
+    quote:
+      'The refer-a-friend credits stack up fast. I have paid for two full loads with rewards alone.',
+    avatarColor: 'secondary' as const,
+  },
+  {
+    name: 'Nathan P.',
+    initials: 'NP',
+    location: 'Taguig',
+    rating: 5,
+    quote:
+      'Comforters and bedsheets used to be a hassle at the laundromat. Lunara picks them up, and they come back like new.',
+    avatarColor: 'accent' as const,
+  },
 ] as const;
 
 export const PRICING_TIERS = [
@@ -301,30 +366,40 @@ export const PRICING_TIERS = [
     service: 'Wash & Fold',
     badge: 'Most popular',
     badgeVariant: 'primary' as const,
+    icon: Package,
     from: '₱280',
     unit: 'per 4 kg load',
     highlights: ['Sorted & folded', 'Same-day available', 'GCash / card accepted'],
-    image: u('1545173168-9f1947eebb7f', 640, 300),
-    imageAlt: 'Stack of clean neatly folded laundry',
   },
   {
     service: 'Dry Cleaning',
     badge: 'Delicates',
     badgeVariant: 'secondary' as const,
+    icon: ShieldCheck,
     from: '₱120',
     unit: 'per garment',
     highlights: ['Suits, dresses & blazers', 'Careful handling', 'Pressed & bagged'],
-    image: u('1489274495757-95c7c837b101', 640, 300),
-    imageAlt: 'Pressed suits and garments on hangers ready for dry cleaning pickup',
   },
   {
     service: 'Express Wash',
     badge: '4-hour turnaround',
     badgeVariant: 'accent' as const,
+    icon: Timer,
     from: '₱350',
     unit: 'per 4 kg load',
     highlights: ['Priority processing', 'Pick-up & delivery', 'CBD areas only'],
-    image: u('1582735689369-4fe89db7114c', 640, 300),
-    imageAlt: 'Clean laundry basket ready for express delivery',
   },
 ] as const;
+
+const HOME_FAQ_IDS = [
+  'book-pickup',
+  'pickup-lead-time',
+  'track-order',
+  'service-areas',
+  'weight-estimate',
+] as const;
+
+/** Handpicked FAQ teaser for the homepage, sourced from the canonical FAQ data. */
+export const HOME_FAQS: FaqItem[] = FAQ_CATEGORIES.flatMap((category) => category.items).filter(
+  (item) => (HOME_FAQ_IDS as readonly string[]).includes(item.id),
+);

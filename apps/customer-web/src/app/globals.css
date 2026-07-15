@@ -2,6 +2,8 @@
 @import '@lunara/ui/globals.css';
 
 @theme {
+  /* Customer-web marketing default is royal blue; tenant branding still overrides via --lunara-primary */
+  --color-primary: var(--lunara-primary, #2563eb);
   --color-surface: #ffffff;
   --color-surface-muted: #f8fafc;
   --color-border: #e2e8f0;
@@ -36,9 +38,20 @@
   .laundry-bg {
     background-color: var(--color-surface-muted);
     background-image:
-      radial-gradient(circle at 15% 85%, rgb(79 70 229 / 0.05) 0%, transparent 45%),
-      radial-gradient(circle at 85% 15%, rgb(6 182 212 / 0.06) 0%, transparent 45%),
-      radial-gradient(circle at 50% 40%, rgb(34 197 94 / 0.03) 0%, transparent 50%);
+      radial-gradient(circle at 15% 85%, rgb(37 99 235 / 0.05) 0%, transparent 45%),
+      radial-gradient(circle at 85% 15%, rgb(59 130 246 / 0.07) 0%, transparent 45%),
+      radial-gradient(circle at 50% 40%, rgb(6 182 212 / 0.04) 0%, transparent 50%);
+  }
+
+  /* Soap-bubble decoration for hero / banners */
+  .bubble {
+    @apply pointer-events-none absolute rounded-full;
+    background:
+      radial-gradient(circle at 30% 30%, rgb(255 255 255 / 0.9) 0%, rgb(255 255 255 / 0.15) 35%, transparent 60%),
+      radial-gradient(circle at 70% 70%, rgb(147 197 253 / 0.35) 0%, transparent 55%);
+    box-shadow:
+      inset 0 0 12px rgb(191 219 254 / 0.55),
+      0 4px 16px rgb(37 99 235 / 0.08);
   }
 
   /* Canonical page width — matches home page header/main shell */

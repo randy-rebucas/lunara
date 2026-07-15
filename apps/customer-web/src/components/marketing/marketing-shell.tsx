@@ -9,11 +9,11 @@ import { ButtonLink } from '../ui/button-link';
 
 const NAV_LINKS = [
   { href: '/#how-it-works', label: 'How it works' },
+  { href: '/#features', label: 'Features' },
+  { href: '/#pricing', label: 'Pricing' },
   { href: '/#service-areas', label: 'Service areas' },
-  { href: '/locations', label: 'Locations' },
   { href: '/faq', label: 'FAQ' },
   { href: '/partners', label: 'Partners' },
-  { href: '/riders', label: 'Riders' },
 ] as const;
 
 export function MarketingShell({ children }: { children: React.ReactNode }) {
@@ -51,17 +51,8 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
               <Link href="/login" className="link-primary hidden text-sm sm:inline">
                 Sign in
               </Link>
-              <ButtonLink
-                href="/signup"
-                variant="outline"
-                size="sm"
-                layout="inline"
-                className="hidden sm:inline-flex"
-              >
-                Book pickup
-              </ButtonLink>
               <ButtonLink href="/signup" size="sm" layout="inline" className="hidden sm:inline-flex">
-                Get started
+                Book now
               </ButtonLink>
 
               {/* Hamburger — mobile only */}
@@ -111,23 +102,25 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
 
       <main id="main-content" className="flex-1">{children}</main>
 
-      <footer className="border-t border-border/60 bg-surface-muted/60">
+      <footer className="bg-primary text-white">
         <div className="marketing-container py-12">
-          <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1.2fr]">
             {/* Brand col */}
-            <div className="sm:col-span-2 lg:col-span-1">
+            <div>
               <div className="flex items-center gap-2.5">
-                <BrandMark variant="customer" compact size="sm" />
-                <span className="text-sm font-semibold text-slate-900">{appConfig.name}</span>
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white p-1">
+                  <BrandMark variant="customer" compact size="sm" />
+                </span>
+                <span className="font-bold tracking-tight">{appConfig.name}</span>
               </div>
-              <p className="mt-3 max-w-xs text-sm leading-relaxed text-muted-foreground">
+              <p className="mt-3 max-w-xs text-sm leading-relaxed text-white/70">
                 {appConfig.tagline}
               </p>
               <a
                 href="https://play.google.com/store/apps/details?id=com.lunara.customer"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800"
+                className="mt-5 inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800"
               >
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
                   <path d="M3.18 23.76a2 2 0 0 0 2.85-.06l.06-.07 9.74-9.73-2.6-2.6L3.18 23.76zM20.47 10.7l-2.5-1.44-2.91 2.91 2.91 2.9 2.52-1.45a1.43 1.43 0 0 0 0-2.92zM2 2.45A1.42 1.42 0 0 0 1.5 3.5v17a1.42 1.42 0 0 0 .5 1.06l.07.06 9.56-9.56v-.22L2.07 2.38 2 2.45zm10.27 10.6L3.18.24A2 2 0 0 0 .33.18L13.23 13.05l-1-2z" />
@@ -136,63 +129,80 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
               </a>
             </div>
 
-            {/* Product links */}
+            {/* Customer links */}
             <div>
-              <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-500">Product</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-white/60">Customer</h3>
               <ul className="mt-4 space-y-2.5 text-sm">
                 {[
                   { href: '/#how-it-works', label: 'How it works' },
-                  { href: '/#service-areas', label: 'Service areas' },
+                  { href: '/#pricing', label: 'Pricing' },
                   { href: '/locations', label: 'Locations' },
                   { href: '/faq', label: 'FAQ' },
-                ].map((l) => (
-                  <li key={l.href}>
-                    <Link href={l.href} className="text-muted transition-colors hover:text-primary">
-                      {l.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Company links */}
-            <div>
-              <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-500">Company</h3>
-              <ul className="mt-4 space-y-2.5 text-sm">
-                {[
-                  { href: '/partners', label: 'Partner with us' },
-                  { href: '/riders', label: 'Become a rider' },
-                  { href: '/privacy', label: 'Privacy policy' },
-                  { href: '/terms', label: 'Terms of service' },
-                ].map((l) => (
-                  <li key={l.href}>
-                    <Link href={l.href} className="text-muted transition-colors hover:text-primary">
-                      {l.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Account links */}
-            <div>
-              <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-500">Account</h3>
-              <ul className="mt-4 space-y-2.5 text-sm">
-                {[
-                  { href: '/signup', label: 'Sign up' },
                   { href: '/login', label: 'Sign in' },
                 ].map((l) => (
                   <li key={l.href}>
-                    <Link href={l.href} className="text-muted transition-colors hover:text-primary">
+                    <Link href={l.href} className="text-white/80 transition-colors hover:text-white">
                       {l.label}
                     </Link>
                   </li>
                 ))}
+              </ul>
+            </div>
+
+            {/* Business links */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-white/60">Business</h3>
+              <ul className="mt-4 space-y-2.5 text-sm">
+                {[
+                  { href: '/partners', label: 'Become a partner' },
+                  { href: '/partners/apply', label: 'Partner application' },
+                  { href: '/riders', label: 'Become a rider' },
+                  { href: '/riders/apply', label: 'Rider application' },
+                ].map((l) => (
+                  <li key={l.href}>
+                    <Link href={l.href} className="text-white/80 transition-colors hover:text-white">
+                      {l.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* CTA col */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-white/60">
+                Get started
+              </h3>
+              <div className="mt-4 flex flex-col gap-2.5">
+                <Link
+                  href="/signup"
+                  className="inline-flex items-center justify-center rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-primary transition hover:bg-blue-50"
+                >
+                  Book a pickup
+                </Link>
+                <Link
+                  href="/partners"
+                  className="inline-flex items-center justify-center rounded-lg px-5 py-2.5 text-sm font-semibold text-white ring-1 ring-white/40 transition hover:bg-white/10"
+                >
+                  Partner with us
+                </Link>
+              </div>
+              <ul className="mt-5 space-y-2 text-xs text-white/70">
+                <li>
+                  <Link href="/privacy" className="transition-colors hover:text-white">
+                    Privacy policy
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/terms" className="transition-colors hover:text-white">
+                    Terms of service
+                  </Link>
+                </li>
               </ul>
             </div>
           </div>
 
-          <div className="mt-10 border-t border-border/40 pt-6 text-center text-xs text-muted-foreground">
+          <div className="mt-10 border-t border-white/15 pt-6 text-center text-xs text-white/70">
             © {new Date().getFullYear()} {appConfig.name}. Laundry pickup &amp; delivery, simplified.
           </div>
         </div>
