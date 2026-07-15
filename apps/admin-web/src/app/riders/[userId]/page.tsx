@@ -19,6 +19,7 @@ interface CashRemittance {
   cashAmount: number;
   earningOffset: number;
   netRemittance: number;
+  remittanceMode: 'net_of_fee' | 'full_amount';
   status: string;
   submittedAt?: string;
   remittedAt?: string;
@@ -696,7 +697,8 @@ export default function RiderProfileReviewPage() {
                         <th>Stage</th>
                         <th className="text-right">Cash collected</th>
                         <th className="text-right">Offset</th>
-                        <th className="text-right">Net to remit</th>
+                        <th className="text-right">Amount to receive</th>
+                        <th>Mode</th>
                         <th>Submitted</th>
                         <th>Ref no.</th>
                         <th>Proof</th>
@@ -716,7 +718,12 @@ export default function RiderProfileReviewPage() {
                             {r.earningOffset > 0 ? `−${formatPeso(r.earningOffset)}` : '—'}
                           </td>
                           <td className="text-right font-semibold">
-                            {formatPeso(r.netRemittance)}
+                            {formatPeso(r.remittanceMode === 'full_amount' ? r.cashAmount : r.netRemittance)}
+                          </td>
+                          <td>
+                            <span className={r.remittanceMode === 'full_amount' ? 'badge-primary' : 'badge-neutral'}>
+                              {r.remittanceMode === 'full_amount' ? 'Full amount' : 'Kept fee'}
+                            </span>
                           </td>
                           <td className="text-muted">
                             {r.submittedAt ? new Date(r.submittedAt).toLocaleDateString() : '—'}

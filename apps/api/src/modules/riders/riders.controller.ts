@@ -486,6 +486,7 @@ export class RidersController {
   async submitRemittance(
     @Req() req: { user: { sub: string } },
     @Body('transactionId') transactionId?: string,
+    @Body('mode') mode?: 'net_of_fee' | 'full_amount',
     @UploadedFile() file?: Express.Multer.File,
   ) {
     let proofImageUrl: string | undefined;
@@ -500,7 +501,7 @@ export class RidersController {
       );
       proofImageUrl = remittanceProofPublicPath(result.public_id);
     }
-    return this.riderWalletService.submitRemittance(req.user.sub, proofImageUrl, transactionId);
+    return this.riderWalletService.submitRemittance(req.user.sub, proofImageUrl, transactionId, mode);
   }
 
   @Post('wallet/withdraw')

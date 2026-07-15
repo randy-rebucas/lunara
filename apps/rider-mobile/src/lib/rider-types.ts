@@ -229,6 +229,7 @@ export interface CashRemittanceItem {
   cashAmount: number;
   earningOffset: number;
   netRemittance: number;
+  remittanceMode: 'net_of_fee' | 'full_amount';
   status: 'pending' | 'submitted' | 'remitted';
   submittedAt?: string;
   remittedAt?: string;

@@ -623,28 +623,91 @@ export class RiderWalletService {
     return { alreadyNetted: false, remittance: this.serializeRemittance(remittance) };
   }
 
-  async submitRemittance(riderUserId: string, proofImageUrl?: string, transactionId?: string) {
+  async submitRemittance(
+    riderUserId: string,
+    proofImageUrl?: string,
+    transactionId?: string,
+    mode: 'net_of_fee' | 'full_amount' = 'net_of_fee',
+  ) {
+    if (mode !== 'net_of_fee' && mode !== 'full_amount') {
+      throw new BadRequestException('Invalid remittance mode');
+    }
+    const riderObjectId = new Types.ObjectId(riderUserId);
     const items = await this.remittanceModel.find({
-      riderUserId: new Types.ObjectId(riderUserId),
+      riderUserId: riderObjectId,
       status: 'pending',
     });
     if (items.length === 0) throw new NotFoundException('No pending cash remittances to submit');
+
+    // Declared here rather than at collection, because collection happens mid-task before the
+    // rider knows whether they'll keep the fee in cash or hand it all over — netEarningsAgainstCash
+    // always assumes 'net_of_fee' as a placeholder. If the rider now says otherwise, true up the
+    // wallet debit and the receivable/clearing entries it posted so the books match what's actually
+    // changing hands.
+    if (mode === 'full_amount') {
+      for (const item of items) {
+        if (item.earningOffset <= 0) continue;
+
+        // Give back the fee that was tentatively deducted from the wallet at collection time —
+        // the rider is now remitting it in cash instead of keeping it.
+        await this.riderModel.updateOne(
+          { userId: riderObjectId },
+          { $inc: { walletBalance: item.earningOffset } },
+        );
+        await this.transactionModel.create({
+          riderUserId: riderObjectId,
+          type: 'release',
+          amount: item.earningOffset,
+          reference: `netting-reversal:${item.stage}:${item.orderId.toString()}`,
+          description: `Fee netting reversed — remitting full cash for order ${item.orderId.toString().slice(-6)}`,
+        });
+
+        // Top up the collection-time posting (which only booked netRemittance) so the receivable
+        // and clearing accounts reflect the full cashAmount now expected back.
+        await this.ledgerService.post(
+          `remittance-topup:${item._id.toString()}`,
+          'remittance',
+          item._id.toString(),
+          [
+            {
+              accountType: 'rider_remittance_receivable',
+              accountSubject: riderUserId,
+              direction: 'debit',
+              amount: item.earningOffset,
+              description: `Full-amount remittance declared — receivable topped up for order ${item.orderId.toString().slice(-6)}`,
+            },
+            {
+              accountType: 'order_revenue_clearing',
+              direction: 'credit',
+              amount: item.earningOffset,
+              description: `Order revenue recognized from cash collection top-up (order ${item.orderId.toString().slice(-6)})`,
+            },
+          ],
+        );
+      }
+    }
 
     await this.remittanceModel.updateMany(
       { _id: { $in: items.map((i) => i._id) } },
       {
         status: 'submitted',
         submittedAt: new Date(),
+        remittanceMode: mode,
         ...(proofImageUrl && { proofImageUrl }),
         ...(transactionId && { transactionId }),
       },
+    );
+
+    const totalRemitted = items.reduce(
+      (s, r) => s + (mode === 'full_amount' ? r.cashAmount : r.netRemittance),
+      0,
     );
 
     return {
       success: true,
       data: {
         submittedCount: items.length,
-        totalNetRemittance: items.reduce((s, r) => s + r.netRemittance, 0),
+        totalNetRemittance: totalRemitted,
       },
     };
   }
@@ -697,7 +760,11 @@ export class RiderWalletService {
     );
 
     for (const item of items) {
-      if (item.netRemittance <= 0) continue;
+      // net_of_fee: receivable was posted at collection for netRemittance only.
+      // full_amount: submitRemittance() already topped up the receivable by earningOffset, so the
+      // full cashAmount is what's outstanding and what's actually being handed over now.
+      const amountReceived = item.remittanceMode === 'full_amount' ? item.cashAmount : item.netRemittance;
+      if (amountReceived <= 0) continue;
       await this.ledgerService.post(
         `remittance:${item._id.toString()}`,
         'remittance',
@@ -706,21 +773,24 @@ export class RiderWalletService {
           {
             accountType: 'platform_cash',
             direction: 'debit',
-            amount: item.netRemittance,
+            amount: amountReceived,
             description: `Cash remittance received from rider ${item.riderUserId.toString()} (order ${item.orderId.toString().slice(-6)})`,
           },
           {
             accountType: 'rider_remittance_receivable',
             accountSubject: item.riderUserId.toString(),
             direction: 'credit',
-            amount: item.netRemittance,
+            amount: amountReceived,
             description: `Remittance receivable cleared for rider ${item.riderUserId.toString()}`,
           },
         ],
       );
     }
 
-    const totalVerified = items.reduce((s, r) => s + r.netRemittance, 0);
+    const totalVerified = items.reduce(
+      (s, r) => s + (r.remittanceMode === 'full_amount' ? r.cashAmount : r.netRemittance),
+      0,
+    );
     return {
       success: true,
       data: { verifiedCount: items.length, totalNetRemittance: totalVerified },
@@ -759,6 +829,7 @@ export class RiderWalletService {
       cashAmount: r.cashAmount,
       earningOffset: r.earningOffset,
       netRemittance: r.netRemittance,
+      remittanceMode: r.remittanceMode,
       status: r.status,
       submittedAt: r.submittedAt?.toISOString(),
       remittedAt: r.remittedAt?.toISOString(),

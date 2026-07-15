@@ -200,6 +200,7 @@ export default function WalletScreen() {
   const [submittingRemittance, setSubmittingRemittance] = useState(false);
   const [proofImageUri, setProofImageUri] = useState<string | null>(null);
   const [remittanceTransactionId, setRemittanceTransactionId] = useState('');
+  const [remittanceMode, setRemittanceMode] = useState<'net_of_fee' | 'full_amount'>('net_of_fee');
 
   const [method, setMethod] = useState<RiderPayoutMethod>('gcash');
   const [gcashNumber, setGcashNumber] = useState('');
@@ -310,9 +311,13 @@ export default function WalletScreen() {
   }
 
   async function submitRemittance() {
+    const modeMessage =
+      remittanceMode === 'full_amount'
+        ? 'You are handing over the FULL cash amount, including your fee — your fee will be paid out separately.'
+        : 'You are keeping your fee and handing over the remaining net amount.';
     Alert.alert(
       'Confirm remittance',
-      'This tells Lunara admin you have handed over the cash. Make sure you have already given the money before confirming.',
+      `This tells Lunara admin you have handed over the cash. ${modeMessage} Make sure you have already given the money before confirming.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -336,12 +341,14 @@ export default function WalletScreen() {
               if (remittanceTransactionId.trim()) {
                 formData.append('transactionId', remittanceTransactionId.trim());
               }
+              formData.append('mode', remittanceMode);
               const res = await riderUpload<{ submittedCount: number; totalNetRemittance: number }>(
                 '/riders/remit-cash',
                 formData,
               );
               setProofImageUri(null);
               setRemittanceTransactionId('');
+              setRemittanceMode('net_of_fee');
               Alert.alert(
                 'Remittance submitted',
                 `${res.submittedCount} order${res.submittedCount !== 1 ? 's' : ''} · ${formatCurrency(res.totalNetRemittance)} — waiting for admin confirmation.`,
@@ -553,9 +560,46 @@ export default function WalletScreen() {
               <View style={styles.remitDivider} />
               <View style={styles.remitSummaryCol}>
                 <Text style={styles.remitLabel}>HAND OVER</Text>
-                <Text style={[styles.remitValue, { color: colors.accentDark }]}>{formatCurrency(cashSummary.pendingRemittance.totalNetRemittance)}</Text>
+                <Text style={[styles.remitValue, { color: colors.accentDark }]}>
+                  {formatCurrency(
+                    remittanceMode === 'full_amount'
+                      ? cashSummary.pendingRemittance.totalCashCollected
+                      : cashSummary.pendingRemittance.totalNetRemittance,
+                  )}
+                </Text>
               </View>
             </View>
+
+            {/* Remittance mode picker */}
+            {pendingItems.length > 0 ? (
+              <>
+                <Text style={styles.proofLabel}>HOW ARE YOU REMITTING?</Text>
+                <View style={styles.modeToggleRow}>
+                  <Pressable
+                    style={[styles.modeOption, remittanceMode === 'net_of_fee' && styles.modeOptionActive]}
+                    onPress={() => setRemittanceMode('net_of_fee')}
+                  >
+                    <Text style={[styles.modeOptionTitle, remittanceMode === 'net_of_fee' && styles.modeOptionTitleActive]}>
+                      I'm keeping my fee
+                    </Text>
+                    <Text style={styles.modeOptionSub}>
+                      Hand over {formatCurrency(cashSummary.pendingRemittance.totalNetRemittance)} now
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.modeOption, remittanceMode === 'full_amount' && styles.modeOptionActive]}
+                    onPress={() => setRemittanceMode('full_amount')}
+                  >
+                    <Text style={[styles.modeOptionTitle, remittanceMode === 'full_amount' && styles.modeOptionTitleActive]}>
+                      I'm remitting everything
+                    </Text>
+                    <Text style={styles.modeOptionSub}>
+                      Hand over {formatCurrency(cashSummary.pendingRemittance.totalCashCollected)} · get fee at settlement
+                    </Text>
+                  </Pressable>
+                </View>
+              </>
+            ) : null}
 
             {/* Item rows */}
             {cashSummary.pendingRemittance.items.map((item) => (
@@ -889,6 +933,27 @@ const styles = StyleSheet.create({
 
   proofLabel: { ...typography.label },
   hint: { ...typography.bodySm },
+  modeToggleRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  modeOption: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.surface,
+  },
+  modeOptionActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
+  },
+  modeOptionTitle: { fontSize: 13, fontWeight: '700', color: colors.foreground },
+  modeOptionTitleActive: { color: colors.primary },
+  modeOptionSub: { fontSize: 11, color: colors.mutedForeground, marginTop: 2 },
   proofInput: {
     borderWidth: 1,
     borderColor: colors.border,

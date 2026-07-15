@@ -115,6 +115,17 @@ export class RiderCashRemittance {
   @Prop({ required: true, enum: ['pending', 'submitted', 'remitted'], default: 'pending', index: true })
   status!: 'pending' | 'submitted' | 'remitted';
 
+  /**
+   * Declared at submission time, when the rider actually knows what they're handing over.
+   * 'net_of_fee' (default): rider kept earningOffset in cash, hands over netRemittance — matches
+   * the wallet debit already applied at collection.
+   * 'full_amount': rider is handing over the entire cashAmount and taking their fee through
+   * rider_payable/withdrawal instead — submitRemittance() reverses the earlier wallet netting and
+   * tops up the ledger so the full cashAmount is tracked as receivable/remitted.
+   */
+  @Prop({ enum: ['net_of_fee', 'full_amount'], default: 'net_of_fee' })
+  remittanceMode!: 'net_of_fee' | 'full_amount';
+
   @Prop()
   submittedAt?: Date;
 
