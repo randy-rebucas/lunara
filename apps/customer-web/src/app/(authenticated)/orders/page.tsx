@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { OrderStatus } from '@lunara/types';
 import { Button } from '@lunara/ui';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
+import { ButtonLink } from '../../../components/ui/button-link';
 import {
   buildCustomerTimeline,
   formatCurrency,
@@ -146,6 +147,10 @@ export default function OrdersPage() {
     return false;
   }
 
+  function canReorder(order: OrderSummary) {
+    return order.status === OrderStatus.DELIVERED || order.status === OrderStatus.COMPLETED;
+  }
+
   const sentinelRef = useInfiniteScroll({
     onLoadMore: loadMore,
     hasMore,
@@ -241,6 +246,16 @@ export default function OrdersPage() {
                             : 'Deleting…'
                           : cancelLabel}
                       </Button>
+                    )}
+                    {canReorder(o) && (
+                      <ButtonLink
+                        href={`/book?reorder=${o._id}`}
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0"
+                      >
+                        Book again
+                      </ButtonLink>
                     )}
                   </div>
                 </CardBody>

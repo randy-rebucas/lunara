@@ -491,6 +491,7 @@ export class BranchesService {
         const [lng, lat] = branch.location.coordinates;
         const dist = distanceKm(customerCoords, [lng, lat]);
         const activeOrders = await this.countActiveOrders(branch._id);
+        const todaysOrders = await this.countTodaysOrders(branch._id);
         const services = await this.serializeShopPricing(branch);
         const addons = await this.serializeShopAddonPricing(branch);
         return {
@@ -501,7 +502,8 @@ export class BranchesService {
           distanceKm: Math.round(dist * 10) / 10,
           distanceLabel: formatDistanceKm(dist),
           withinRadius: dist <= branch.serviceRadiusKm,
-          capacityAvailable: activeOrders < branch.maxActiveOrders,
+          capacityAvailable:
+            activeOrders < branch.maxActiveOrders && todaysOrders < branch.dailyQuotaOrders,
           logoUrl: branch.logoUrl,
           services,
           addons,
@@ -779,12 +781,15 @@ export class BranchesService {
         const [lng, lat] = branch.location.coordinates;
         const dist = distanceKm(customerCoords, [lng, lat]);
         const activeOrders = await this.countActiveOrders(branch._id);
-        const capacityAvailable = activeOrders < branch.maxActiveOrders;
+        const todaysOrders = await this.countTodaysOrders(branch._id);
+        const capacityAvailable =
+          activeOrders < branch.maxActiveOrders && todaysOrders < branch.dailyQuotaOrders;
         const withinRadius = dist <= branch.serviceRadiusKm;
         return {
           branch,
           distanceKm: dist,
           activeOrders,
+          todaysOrders,
           capacityAvailable,
           withinRadius,
         };
@@ -804,6 +809,8 @@ export class BranchesService {
         distanceLabel: formatDistanceKm(r.distanceKm),
         activeOrders: r.activeOrders,
         maxActiveOrders: r.branch.maxActiveOrders,
+        todaysOrders: r.todaysOrders,
+        dailyQuotaOrders: r.branch.dailyQuotaOrders,
         capacityAvailable: r.capacityAvailable,
         withinRadius: r.withinRadius,
         isNearest: false,
@@ -1225,6 +1232,13 @@ export class BranchesService {
       );
     }
 
+    const todaysOrders = await this.countTodaysOrders(branch._id);
+    if (todaysOrders >= branch.dailyQuotaOrders) {
+      throw new BadRequestException(
+        `${branch.name} has reached its daily order limit (${todaysOrders}/${branch.dailyQuotaOrders})`,
+      );
+    }
+
     const turnaround = await this.applyShopAssignment(order, branch, {
       dispatchedByUserId: adminUserId,
       activeOrders,
@@ -1271,14 +1285,21 @@ export class BranchesService {
       order.estimatedWeightKg ?? 5,
     );
 
-    const top = evaluation.branchEvaluations[0];
-    if (!top || !top.availability.acceptingOrders) return null;
+    // Automated dispatch must only land on algorithmically-qualified branches (see
+    // isQualityQualified) — capacity alone isn't enough when no human is picking the shop.
+    const top = evaluation.branchEvaluations.find(
+      (b) => b.availability.acceptingOrders && b.qualified,
+    );
+    if (!top) return null;
 
     const branch = await this.branchModel.findById(top.branchId);
     if (!branch) return null;
 
     const activeOrders = await this.countActiveOrders(branch._id);
     if (activeOrders >= branch.maxActiveOrders) return null;
+
+    const todaysOrders = await this.countTodaysOrders(branch._id);
+    if (todaysOrders >= branch.dailyQuotaOrders) return null;
 
     const turnaround = await this.applyShopAssignment(order, branch, {
       activeOrders,
@@ -1334,6 +1355,18 @@ export class BranchesService {
     });
   }
 
+  /** Orders assigned to this branch since local midnight — enforces the fixed daily quota
+   * independently of maxActiveOrders (a branch can free up concurrent slots by completing
+   * orders while still having hit its real daily ceiling). */
+  private async countTodaysOrders(branchId: Types.ObjectId) {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    return this.orderModel.countDocuments({
+      branchId,
+      dispatchedAt: { $gte: startOfDay },
+    });
+  }
+
   private async sumBranchWeightLoadKgInternal(branchId: Types.ObjectId) {
     const rows = await this.orderModel.aggregate([
       {
@@ -1367,9 +1400,14 @@ export class BranchesService {
     const rows = await Promise.all(
       branches.map(async (b) => {
         const currentLoadKg = await this.sumBranchWeightLoadKgInternal(b._id);
+        const todaysOrders = await this.countTodaysOrders(b._id);
         const capacityKg = b.maxWeightCapacityKg ?? 200;
         const utilizationPercent =
           capacityKg > 0 ? Math.min(100, Math.round((currentLoadKg / capacityKg) * 100)) : 0;
+        const dailyOrderUtilizationPercent =
+          b.dailyQuotaOrders > 0
+            ? Math.min(100, Math.round((todaysOrders / b.dailyQuotaOrders) * 100))
+            : 0;
         return {
           branchId: b._id.toString(),
           shop: b.name,
@@ -1378,6 +1416,10 @@ export class BranchesService {
           capacityKg,
           currentLoadKg,
           utilizationPercent,
+          todaysOrders,
+          dailyQuotaOrders: b.dailyQuotaOrders,
+          dailyOrderUtilizationPercent,
+          isAtDailyQuota: todaysOrders >= b.dailyQuotaOrders,
           headroomKg: Math.max(0, Math.round((capacityKg - currentLoadKg) * 10) / 10),
           isOverCapacity: currentLoadKg >= capacityKg,
         };
@@ -1388,6 +1430,7 @@ export class BranchesService {
 
   private async serializeBranchWithCapacity(branch: BranchDocument) {
     const activeOrders = await this.countActiveOrders(branch._id);
+    const todaysOrders = await this.countTodaysOrders(branch._id);
     const currentLoadKg = await this.sumBranchWeightLoadKgInternal(branch._id);
     const capacityKg = branch.maxWeightCapacityKg ?? 200;
     return {
@@ -1410,7 +1453,10 @@ export class BranchesService {
       currentLoadKg,
       serviceRadiusKm: branch.serviceRadiusKm,
       activeOrders,
-      capacityAvailable: activeOrders < branch.maxActiveOrders,
+      todaysOrders,
+      capacityAvailable:
+        activeOrders < branch.maxActiveOrders && todaysOrders < branch.dailyQuotaOrders,
+      dailyQuotaAvailable: todaysOrders < branch.dailyQuotaOrders,
       weightCapacityAvailable: currentLoadKg < capacityKg,
       location: {
         longitude: branch.location.coordinates[0],

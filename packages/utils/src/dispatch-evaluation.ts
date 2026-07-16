@@ -45,11 +45,26 @@ export interface BranchDispatchEvaluation {
   capacity: BranchCapacityEvaluation;
   performance: BranchPerformanceEvaluation;
   availability: BranchAvailabilityEvaluation;
+  /** Whether this branch meets the minimum quality bar for algorithmic auto-dispatch — see
+   * isQualityQualified(). Branches with no order history yet are provisionally qualified.
+   * Purely informational for capacity/manual-selection purposes — never folds into `availability`. */
+  qualified: boolean;
   estimatedTurnaroundHours: number;
   estimatedTurnaroundLabel: string;
   recommendationScore: number;
   rank: number;
   isRecommended: boolean;
+}
+
+/** Minimum performance score (see scoreBranchPerformance) for a branch to be eligible for
+ * algorithmic auto-dispatch (Lunara picking the shop on the customer's behalf). Does not apply
+ * to manual customer shop selection or admin manual dispatch — only to automated assignment. */
+export const MIN_AUTO_DISPATCH_QUALITY_SCORE = 60;
+
+/** A branch with no completed-order history yet is provisionally qualified — new partners must
+ * be able to receive their first auto-dispatched orders rather than being locked out forever. */
+export function isQualityQualified(score: number, completedOrders30d: number): boolean {
+  return completedOrders30d === 0 || score >= MIN_AUTO_DISPATCH_QUALITY_SCORE;
 }
 
 const BASE_TURNAROUND_HOURS: Record<string, number> = {
@@ -224,6 +239,7 @@ export function rankBranchesForDispatch(
       capacity,
       performance: b.performance,
       availability,
+      qualified: isQualityQualified(b.performance.score, b.performance.completedOrders30d),
       estimatedTurnaroundHours: turnaround.hours,
       estimatedTurnaroundLabel: turnaround.label,
       recommendationScore,

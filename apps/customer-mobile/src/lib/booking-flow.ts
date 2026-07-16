@@ -27,6 +27,8 @@ export interface BookingFormState {
   customServiceId: string;
   addressId: string;
   branchId: string;
+  /** When true, branchId is left blank and the shop is picked network-wide by Lunara at booking time. */
+  autoDispatch: boolean;
   scheduledPickupAt: string;
   bagSizeId: BagSizeId | '';
   addonIds: string[];
@@ -38,6 +40,7 @@ export const initialBookingForm: BookingFormState = {
   customServiceId: '',
   addressId: '',
   branchId: '',
+  autoDispatch: false,
   scheduledPickupAt: '',
   bagSizeId: '',
   addonIds: [],

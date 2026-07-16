@@ -2,13 +2,39 @@
 
 ## Overview
 
-Lunara charges a percentage-based commission on the laundry subtotal of every completed order. This fee is deducted when admin creates a settlement for a partner — the partner receives the gross revenue minus Lunara's cut.
+Lunara's sole revenue mechanism is commission on the laundry subtotal of every completed order — delivery fees pass straight through to fund rider payouts and are never part of Lunara's cut. Two pricing models exist side by side; which one an order uses determines *how* the cut is computed, but the settlement math (`totalAmount − lunaraFee = partnerPayout`) is the same either way.
 
 ```
 Gross revenue (order totals for period)
-− Lunara fee  (subtotal × commissionRate per order)
+− Lunara fee  (computed per order — see "Two pricing models" below)
 = Partner payout
 ```
+
+There is no subscription, ads, or other monetization — commission is it.
+
+---
+
+## Two pricing models
+
+`computeOrderFee()` (`apps/api/src/modules/partner/partner-operations.service.ts:117-136`) branches on the order's `pricingModel`:
+
+### 1. Legacy commission model
+Used when an order has no `pricingModel` set, or it's explicitly `'legacy_commission'` (i.e. every order created before the shop-markup flow shipped). The fee is computed at settlement time as a percentage of `subtotal`:
+
+```
+lunaraFee = Math.round(order.subtotal × branch.commissionRate)
+```
+
+This is the model documented in detail below — rate storage, admin editing, snapshotting, etc.
+
+### 2. Shop-markup model
+Used when `pricingModel === 'shop_markup'` or `'commission'` **and** `order.baseSubtotal` is set. Here the customer is charged a markup **up front, at booking time** — `basePrice × 1.30` — so Lunara's cut is already baked into the price the customer paid. Settlement doesn't re-apply `commissionRate` on top of it; it just backs the fee out of the difference:
+
+```
+lunaraFee = order.subtotal − order.baseSubtotal
+```
+
+Because a partner can own several branches with different commission rates, `computeOrderFee()` always looks up the rate per-order (via a `branchId → commissionRate` map) rather than assuming one flat rate for the whole settlement — this matters for the legacy model; the shop-markup model doesn't need a rate lookup at all since the cut is already embedded in the price.
 
 ---
 
@@ -178,6 +204,8 @@ The partner revenue page (`apps/partner-web/src/app/revenue/page.tsx`) renders t
 | `apps/admin-web/src/app/partners/settlements/page.tsx` | Admin settlement management |
 | `apps/admin-web/src/components/datacenter/branches-board.tsx` | Admin commission-rate editor (branch edit panel) |
 | `packages/types/src/partner.ts` | `PartnerSettlement`, `PartnerOrderDetail` interfaces |
+| `apps/api/src/modules/ledger/LEDGER.md` | Double-entry account definitions and posting rules |
+| `apps/api/src/modules/ledger` | `LedgerService.post()` and trial-balance reconciliation |
 
 ---
 
@@ -204,3 +232,34 @@ Settlement record:
 ```
 
 > Note: the fee is computed on `subtotal` (laundry amount only), not on the delivery fee. Delivery fees pass through to Lunara to cover rider costs.
+
+---
+
+## Ledger accounting (double-entry)
+
+Every step above also posts to the append-only ledger (`apps/api/src/modules/ledger`), so commission recognition can be reconciled against real money movement instead of trusted from status fields alone. Full account list and posting rules: `apps/api/src/modules/ledger/LEDGER.md`.
+
+**Order lifecycle → revenue recognition:**
+
+```
+1. Order paid (PayMongo or wallet)
+     Dr platform_cash / customer_wallet_liability
+     Cr order_revenue_clearing          ← revenue recognized but not yet settled
+
+2. Rider collects cash at pickup/delivery (cash orders only)
+     Dr rider_remittance_receivable
+     Cr order_revenue_clearing
+
+3. Admin creates a partner settlement (this is when Lunara's cut is booked)
+     Dr order_revenue_clearing
+     Cr partner_payable                 ← what Lunara owes the partner
+     Cr platform_revenue                ← Lunara's commission, finally recognized
+
+4. Refund on an order already settled (clawback)
+     Dr platform_revenue + cash_out
+     Cr refund_expense
+```
+
+`platform_revenue` is the one account that represents actual Lunara income — it's only credited at settlement (step 3), never at order payment time. `order_revenue_clearing` should trend toward zero on a healthy system; a growing balance means orders are paid but not yet settled, or refunds are outpacing settlement.
+
+Check current recognized revenue and clearing drift via `GET /admin/ledger/trial-balance`.

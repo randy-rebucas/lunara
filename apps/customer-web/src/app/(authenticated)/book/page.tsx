@@ -10,6 +10,7 @@ import { PageHeader } from '../../../components/ui/page-header';
 export default function BookPage() {
   const searchParams = useSearchParams();
   const initialCouponCode = searchParams.get('code') ?? undefined;
+  const reorderOrderId = searchParams.get('reorder') ?? undefined;
   const { isLoading, ready } = useProtectedPage({ requireOnboarding: true });
 
   if (isLoading || !ready) {
@@ -22,7 +23,7 @@ export default function BookPage() {
         title="Book laundry"
         description="Schedule pickup, check partner coverage for your area, and get a price estimate"
       />
-      <BookingWizard initialCouponCode={initialCouponCode} />
+      <BookingWizard initialCouponCode={initialCouponCode} reorderOrderId={reorderOrderId} />
     </PageShell>
   );
 }

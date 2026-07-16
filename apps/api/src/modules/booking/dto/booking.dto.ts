@@ -8,7 +8,9 @@ export class BookingQuoteDto {
   @IsEnum(BookingType)
   bookingType!: BookingType;
 
-  /** Required for the general customer shop-selection flow; omitted for white-labeled partner bookings. */
+  /** General customer flow: the shop the customer picked. Omit to let Lunara auto-dispatch to the
+   * top-ranked available shop network-wide ("Let Lunara pick a shop for you"). Always omitted for
+   * white-labeled partner bookings, which resolve within that partner's own branch pool instead. */
   @IsOptional()
   @IsString()
   branchId?: string;

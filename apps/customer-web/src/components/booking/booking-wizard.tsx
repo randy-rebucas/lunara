@@ -12,6 +12,7 @@ import {
   formatMachineLoadLabel,
   calculateQuote,
   formatCurrency,
+  type BagSizeId,
   type BagSizeOption,
   type BookingAddonOption,
   type LaundryServiceOption,
@@ -38,6 +39,16 @@ import { QuoteBreakdownPanel } from './quote-breakdown';
 
 interface BookingWizardProps {
   initialCouponCode?: string;
+  reorderOrderId?: string;
+}
+
+interface ReorderSourceOrder {
+  _id: string;
+  branchId?: string;
+  bookingType: BookingType;
+  bagSizeId?: string;
+  addons?: { id: string }[];
+  pickupAddressId?: string;
 }
 
 interface AddressOption {
@@ -233,7 +244,7 @@ function canProceedStep(
     case 'address':
       return Boolean(form.addressId) && addresses.length > 0;
     case 'shop':
-      return Boolean(form.branchId);
+      return Boolean(form.branchId) || form.autoDispatch;
     case 'schedule':
       return (
         Boolean(form.scheduledPickupAt) &&
@@ -337,7 +348,7 @@ function WizardActions({
   );
 }
 
-export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
+export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWizardProps = {}) {
   const { api } = useAuthContext();
   const router = useRouter();
   const [step, setStep] = useState<BookingStep>('address');
@@ -362,6 +373,9 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
   const [shopsLoading, setShopsLoading] = useState(false);
   const [partnerCoverage, setPartnerCoverage] = useState<PartnerCoverageInfo | null>(null);
   const [coverageAddressId, setCoverageAddressId] = useState('');
+  const [reorderNotice, setReorderNotice] = useState('');
+  const reorderAppliedRef = useRef(false);
+  const pendingRebookBranchRef = useRef<string | null>(null);
   const selectedAddressIdRef = useRef(form.addressId);
 
   useEffect(() => {
@@ -383,6 +397,54 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
   useEffect(() => {
     selectedAddressIdRef.current = form.addressId;
   }, [form.addressId]);
+
+  // "Book again" from order history: prefill the same shop, service, bag size, and add-ons once
+  // addresses have loaded (needed to check the order's old pickup address is still valid).
+  useEffect(() => {
+    if (!reorderOrderId || reorderAppliedRef.current || addresses.length === 0) return;
+    reorderAppliedRef.current = true;
+    api
+      .get<ReorderSourceOrder>(`/orders/${reorderOrderId}`)
+      .then((res) => {
+        const order = res.data;
+        const addressStillValid = addresses.some((a) => a._id === order.pickupAddressId);
+        setForm((f) => ({
+          ...f,
+          bookingType: order.bookingType,
+          bagSizeId: (order.bagSizeId as BagSizeId | undefined) ?? f.bagSizeId,
+          addonIds: order.addons?.map((a) => a.id) ?? [],
+          addressId: addressStillValid && order.pickupAddressId ? order.pickupAddressId : f.addressId,
+          branchId: order.branchId ?? '',
+          autoDispatch: false,
+        }));
+        if (order.branchId) pendingRebookBranchRef.current = order.branchId;
+        if (!addressStillValid) {
+          setReorderNotice(
+            "We prefilled your last order, but its pickup address is no longer available — please choose one.",
+          );
+        }
+      })
+      .catch(() =>
+        setReorderNotice('Could not load your previous order. Please build a new booking.'),
+      );
+  }, [reorderOrderId, addresses, api]);
+
+  // Once shops for the (re-)resolved address have loaded, confirm the rebooked shop is still
+  // available before letting the customer skip past the shop step with a stale selection.
+  useEffect(() => {
+    if (!pendingRebookBranchRef.current || shopsLoading) return;
+    const rebookBranchId = pendingRebookBranchRef.current;
+    pendingRebookBranchRef.current = null;
+    const stillAvailable = shopOptions.some(
+      (s) => s.branchId === rebookBranchId && s.withinRadius && s.capacityAvailable,
+    );
+    if (!stillAvailable) {
+      setForm((f) => (f.branchId === rebookBranchId ? { ...f, branchId: '' } : f));
+      setReorderNotice(
+        "Your previous shop isn't available right now — choose another or let Lunara pick one for you.",
+      );
+    }
+  }, [shopOptions, shopsLoading]);
 
   const selectedShop = shopOptions.find((s) => s.branchId === form.branchId);
 
@@ -500,12 +562,12 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
   }, [form.addressId, hasRealPartnerCoverage, loadShops]);
 
   async function refreshServerQuote(couponCode = form.couponCode) {
-    if (!form.bookingType || !form.addressId || !form.branchId) return null;
+    if (!form.bookingType || !form.addressId || (!form.branchId && !form.autoDispatch)) return null;
     const res = await api.post<QuoteBreakdown>(
       `/booking/quote?addressId=${encodeURIComponent(form.addressId)}`,
       {
         bookingType: form.bookingType,
-        branchId: form.branchId,
+        ...(form.branchId ? { branchId: form.branchId } : {}),
         ...(form.customServiceId ? { customServiceId: form.customServiceId } : {}),
         bagSizeId: form.bagSizeId,
         addonIds: form.addonIds,
@@ -601,7 +663,7 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
       await refreshServerQuote(form.couponCode);
       const res = await api.post<{ _id: string; total: number }>('/booking/orders', {
         bookingType: form.bookingType,
-        branchId: form.branchId,
+        ...(form.branchId ? { branchId: form.branchId } : {}),
         ...(form.customServiceId ? { customServiceId: form.customServiceId } : {}),
         bagSizeId: form.bagSizeId,
         addonIds: form.addonIds,
@@ -694,9 +756,16 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
                 <SelectableOption
                   key={a._id}
                   selected={form.addressId === a._id}
-                  onClick={() =>
-                    setForm((f) => ({ ...f, addressId: a._id, branchId: '', scheduledPickupAt: '' }))
-                  }
+                  onClick={() => {
+                    setReorderNotice('');
+                    setForm((f) => ({
+                      ...f,
+                      addressId: a._id,
+                      branchId: '',
+                      autoDispatch: false,
+                      scheduledPickupAt: '',
+                    }));
+                  }}
                 >
                   <p className="font-medium text-slate-900">{a.label}</p>
                   <p className="mt-1 text-sm text-muted">
@@ -724,6 +793,24 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
             title="Choose a laundry shop"
             description="Pick the partner shop you'd like to book with. Prices shown are what you'll pay."
           />
+          {reorderNotice && <p className="mb-4 text-xs text-amber-700">{reorderNotice}</p>}
+          {!shopsLoading && shopOptions.length > 0 && (
+            <div className="list-stack mb-4">
+              <SelectableOption
+                selected={form.autoDispatch}
+                onClick={() => {
+                  setReorderNotice('');
+                  setForm((f) => ({ ...f, autoDispatch: true, branchId: '' }));
+                }}
+              >
+                <p className="font-medium text-slate-900">Let Lunara pick a shop for you</p>
+                <p className="mt-1 text-sm text-muted">
+                  We&apos;ll dispatch to the best available shop nearby — useful when your usual
+                  shops are full.
+                </p>
+              </SelectableOption>
+            </div>
+          )}
           {shopsLoading ? (
             <div className="panel text-sm text-muted">Finding nearby shops…</div>
           ) : shopOptions.length === 0 ? (
@@ -741,9 +828,12 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
                 return (
                   <SelectableOption
                     key={shop.branchId}
-                    selected={form.branchId === shop.branchId}
+                    selected={!form.autoDispatch && form.branchId === shop.branchId}
                     disabled={disabled}
-                    onClick={() => setForm((f) => ({ ...f, branchId: shop.branchId }))}
+                    onClick={() => {
+                      setReorderNotice('');
+                      setForm((f) => ({ ...f, branchId: shop.branchId, autoDispatch: false }));
+                    }}
                   >
                     <p className="font-medium text-slate-900">{shop.name}</p>
                     <p className="mt-1 text-sm text-muted">
@@ -965,7 +1055,10 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
           <div className="panel">
             <dl className="space-y-3 text-sm">
               <SummaryRow label="Service" value={activeQuote.serviceLabel} />
-              <SummaryRow label="Shop" value={selectedShop?.name ?? 'Selected shop'} />
+              <SummaryRow
+                label="Shop"
+                value={form.autoDispatch ? "Lunara's pick (best available)" : selectedShop?.name ?? 'Selected shop'}
+              />
               <SummaryRow label="Address" value={selectedAddress?.label ?? 'Selected address'} />
               <SummaryRow
                 label="Pickup"
@@ -994,7 +1087,9 @@ export function BookingWizard({ initialCouponCode }: BookingWizardProps = {}) {
             </dl>
           </div>
           <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-            Your order goes straight to {selectedShop?.name ?? 'your selected shop'} after payment.
+            {form.autoDispatch
+              ? 'After payment, Lunara dispatches your order to the best available shop nearby.'
+              : `Your order goes straight to ${selectedShop?.name ?? 'your selected shop'} after payment.`}{' '}
             Pickup riders are notified once dispatched. Final amount may adjust after weigh-in.
           </p>
         </section>

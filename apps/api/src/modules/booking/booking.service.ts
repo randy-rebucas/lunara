@@ -9,6 +9,7 @@ import {
   type BagSizeId,
   distanceKm,
   EXPRESS_RETURN_ADDON_ID,
+  getBagSize,
   generatePickupSlots,
   isExpressReturnAllowed,
   isPickupSlotBookable,
@@ -153,9 +154,17 @@ export class BookingService {
 
     let priceableService = service;
     let priceableAddons = await this.catalogService.listActiveAddons();
+    let resolvedBranchId: string | undefined;
     if (!isWhiteLabel) {
-      if (!dto.branchId) throw new BadRequestException('Select a laundry shop first');
-      const branch = await this.branchesService.getActivePartnerShop(dto.branchId);
+      let branchId = dto.branchId;
+      if (!branchId) {
+        // "Let Lunara dispatch" — customer didn't pick a shop, so pick the top-ranked
+        // available branch network-wide instead of blocking checkout.
+        const bag = getBagSize(dto.bagSizeId);
+        branchId = await this.resolveNetworkBranch(address, dto.bookingType, bag?.capacityKg ?? 5);
+      }
+      const branch = await this.branchesService.getActivePartnerShop(branchId);
+      resolvedBranchId = branch._id.toString();
       const [branchLng, branchLat] = branch.location.coordinates;
       const customerCoords = resolveCoordinates(address.city, address.latitude, address.longitude);
       const dist = distanceKm(customerCoords, [branchLng, branchLat]);
@@ -223,7 +232,8 @@ export class BookingService {
       );
     }
 
-    return this.promotionsService.applyCouponToQuote(quote, dto.couponCode, userId);
+    const finalQuote = await this.promotionsService.applyCouponToQuote(quote, dto.couponCode, userId);
+    return { ...finalQuote, resolvedBranchId };
   }
 
   async quote(userId: string, addressId: string, dto: BookingQuoteDto) {
@@ -245,10 +255,11 @@ export class BookingService {
       address,
       Boolean(partnerContextId),
     );
-    // Once a shop is chosen, validate against that shop's own hours (stricter and authoritative);
-    // otherwise fall back to the same union-of-active-branches hours getAvailability offered.
-    const operatingHours = dto.branchId
-      ? (await this.branchesService.getActivePartnerShop(dto.branchId)).operatingHours
+    // Once a shop is chosen (customer-picked or Lunara-dispatched above), validate against that
+    // shop's own hours (stricter and authoritative); otherwise fall back to the same
+    // union-of-active-branches hours getAvailability offered (white-labeled flow).
+    const operatingHours = quote.resolvedBranchId
+      ? (await this.branchesService.getActivePartnerShop(quote.resolvedBranchId)).operatingHours
       : await this.branchesService.getUnionOperatingHours();
     const slot = generatePickupSlots(new Date(), PICKUP_SCHEDULE_DAY_COUNT, operatingHours).find(
       (s) => s.startAt === dto.scheduledPickupAt,
@@ -292,9 +303,9 @@ export class BookingService {
       branchName = partnerBranch.name;
       resolvedPartnerId = partnerContextId;
     } else {
-      // General customer flow: the shop they picked at booking time is the order's branch.
-      // buildQuote() above already required and validated dto.branchId when not white-label.
-      const branch = await this.branchesService.getActivePartnerShop(dto.branchId!);
+      // General customer flow: buildQuote() above already resolved the branch — either the one
+      // the customer picked, or (when branchId was omitted) the top-ranked network-dispatched shop.
+      const branch = await this.branchesService.getActivePartnerShop(quote.resolvedBranchId!);
       // Bag pricing is flat and platform-wide — the partner's payout share of the service
       // portion is the branch's own commissionRate (add-ons keep their existing shop-markup split).
       const baseAddonsSum = await quote.addons.reduce(async (accPromise, a) => {
@@ -354,7 +365,11 @@ export class BookingService {
       new Types.ObjectId(partnerContextId),
     );
 
-    const eligible = evaluation.branchEvaluations.find((b) => b.availability.acceptingOrders);
+    // Lunara is choosing on the customer's behalf here, so only algorithmically-qualified
+    // branches are eligible — capacity alone isn't enough (see isQualityQualified).
+    const eligible = evaluation.branchEvaluations.find(
+      (b) => b.availability.acceptingOrders && b.qualified,
+    );
     if (!eligible) {
       throw new BadRequestException(
         'This laundry partner is fully booked right now. Please try again later.',
@@ -362,5 +377,34 @@ export class BookingService {
     }
 
     return { branchId: eligible.branchId, code: eligible.code, name: eligible.name };
+  }
+
+  /**
+   * "Let Lunara dispatch" — for the general customer flow, picks the top-ranked available
+   * branch across the whole network (not scoped to one partner) instead of requiring the
+   * customer to pick a specific shop. Mirrors resolvePartnerBranch, but network-wide.
+   */
+  private async resolveNetworkBranch(
+    address: { line1?: string; city: string; province: string; latitude?: number; longitude?: number },
+    bookingType: BookingType,
+    estimatedWeightKg: number,
+  ) {
+    const evaluation = await this.branchesService.buildDispatchEvaluations(
+      { ...address, line1: address.line1 ?? '' },
+      bookingType,
+      estimatedWeightKg,
+    );
+
+    // Lunara is choosing the shop here, not the customer, so it must meet the quality bar too.
+    const eligible = evaluation.branchEvaluations.find(
+      (b) => b.availability.acceptingOrders && b.qualified,
+    );
+    if (!eligible) {
+      throw new BadRequestException(
+        'All nearby laundry shops are fully booked right now. Please try again later.',
+      );
+    }
+
+    return eligible.branchId;
   }
 }

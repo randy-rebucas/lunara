@@ -22,6 +22,7 @@ import {
   formatCurrency,
   formatAddressTypeLabel,
   isExpressReturnAllowed,
+  type BagSizeId,
   type BagSizeOption,
   type BookingAddonOption,
   type CashTiming,
@@ -46,6 +47,15 @@ import {
   type BookingStep,
 } from '../src/lib/booking-flow';
 import { useAuthStore } from '../src/store/auth';
+
+interface ReorderSourceOrder {
+  _id: string;
+  branchId?: string;
+  bookingType: BookingType;
+  bagSizeId?: string;
+  addons?: { id: string }[];
+  pickupAddressId?: string;
+}
 
 interface AddressOption {
   _id: string;
@@ -128,9 +138,10 @@ export default function BookScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const navigation = useNavigation();
-  const { service: serviceParam, code: codeParam } = useLocalSearchParams<{
+  const { service: serviceParam, code: codeParam, reorder: reorderParam } = useLocalSearchParams<{
     service?: string;
     code?: string;
+    reorder?: string;
   }>();
   const apiFetch = useAuthStore((s) => s.apiFetch);
   const [step, setStep] = useState<BookingStep>('address');
@@ -163,6 +174,9 @@ export default function BookScreen() {
   const [addressesError, setAddressesError] = useState('');
   const [availabilityError, setAvailabilityError] = useState('');
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [reorderNotice, setReorderNotice] = useState('');
+  const reorderAppliedRef = useRef(false);
+  const pendingRebookBranchRef = useRef<string | null>(null);
 
   useEffect(() => {
     setConfigLoading(true);
@@ -174,13 +188,59 @@ export default function BookScreen() {
       .then((list) => {
         setAddresses(list);
         const defaultAddress = list.find((a) => a.isDefault) ?? list[0];
-        if (defaultAddress) setForm((f) => ({ ...f, addressId: defaultAddress._id }));
+        if (defaultAddress && !reorderParam) setForm((f) => ({ ...f, addressId: defaultAddress._id }));
         setAddressesError('');
       })
       .catch((e) =>
         setAddressesError(e instanceof Error ? e.message : 'Could not load addresses'),
       );
-  }, [apiFetch]);
+  }, [apiFetch, reorderParam]);
+
+  // "Reorder" from order history: prefill the same shop, service, bag size, and add-ons once
+  // addresses have loaded (needed to check the order's old pickup address is still valid).
+  useEffect(() => {
+    if (!reorderParam || reorderAppliedRef.current || addresses.length === 0) return;
+    reorderAppliedRef.current = true;
+    apiFetch<ReorderSourceOrder>(`/orders/${reorderParam}`)
+      .then((order) => {
+        const addressStillValid = addresses.some((a) => a._id === order.pickupAddressId);
+        setForm((f) => ({
+          ...f,
+          bookingType: order.bookingType,
+          bagSizeId: (order.bagSizeId as BagSizeId | undefined) ?? f.bagSizeId,
+          addonIds: order.addons?.map((a) => a.id) ?? [],
+          addressId: addressStillValid && order.pickupAddressId ? order.pickupAddressId : f.addressId,
+          branchId: order.branchId ?? '',
+          autoDispatch: false,
+        }));
+        if (order.branchId) pendingRebookBranchRef.current = order.branchId;
+        if (!addressStillValid) {
+          setReorderNotice(
+            "We prefilled your last order, but its pickup address is no longer available — please choose one.",
+          );
+        }
+      })
+      .catch(() =>
+        setReorderNotice('Could not load your previous order. Please build a new booking.'),
+      );
+  }, [reorderParam, addresses, apiFetch]);
+
+  // Once shops for the (re-)resolved address have loaded, confirm the rebooked shop is still
+  // available before letting the customer skip past the shop step with a stale selection.
+  useEffect(() => {
+    if (!pendingRebookBranchRef.current || shopsLoading) return;
+    const rebookBranchId = pendingRebookBranchRef.current;
+    pendingRebookBranchRef.current = null;
+    const stillAvailable = shopOptions.some(
+      (s) => s.branchId === rebookBranchId && s.withinRadius && s.capacityAvailable,
+    );
+    if (!stillAvailable) {
+      setForm((f) => (f.branchId === rebookBranchId ? { ...f, branchId: '' } : f));
+      setReorderNotice(
+        "Your previous shop isn't available right now — choose another or let Lunara pick one for you.",
+      );
+    }
+  }, [shopOptions, shopsLoading]);
 
   const selectedShop = shopOptions.find((s) => s.branchId === form.branchId);
 
@@ -309,14 +369,14 @@ export default function BookScreen() {
   }, [expressReturnAllowed]);
 
   async function refreshQuote(couponCode = form.couponCode) {
-    if (!form.bookingType || !form.addressId || !form.branchId) return null;
+    if (!form.bookingType || !form.addressId || (!form.branchId && !form.autoDispatch)) return null;
     const q = await apiFetch<QuoteBreakdown>(
       `/booking/quote?addressId=${encodeURIComponent(form.addressId)}`,
       {
         method: 'POST',
         body: JSON.stringify({
           bookingType: form.bookingType,
-          branchId: form.branchId,
+          ...(form.branchId ? { branchId: form.branchId } : {}),
           ...(form.customServiceId ? { customServiceId: form.customServiceId } : {}),
           bagSizeId: form.bagSizeId,
           addonIds: form.addonIds,
@@ -379,8 +439,8 @@ export default function BookScreen() {
         return;
       }
     }
-    if (step === 'shop' && !form.branchId) {
-      setError('Select a laundry shop');
+    if (step === 'shop' && !form.branchId && !form.autoDispatch) {
+      setError('Select a laundry shop or let Lunara pick one for you');
       return;
     }
     if (step === 'schedule' && !form.scheduledPickupAt) {
@@ -425,7 +485,13 @@ export default function BookScreen() {
   }, [step]);
 
   async function placeOrder() {
-    if (!form.bookingType || !form.addressId || !form.branchId || !form.scheduledPickupAt) return;
+    if (
+      !form.bookingType ||
+      !form.addressId ||
+      (!form.branchId && !form.autoDispatch) ||
+      !form.scheduledPickupAt
+    )
+      return;
     if (placingOrderRef.current) return;
     placingOrderRef.current = true;
     setLoading(true);
@@ -435,7 +501,7 @@ export default function BookScreen() {
         method: 'POST',
         body: JSON.stringify({
           bookingType: form.bookingType,
-          branchId: form.branchId,
+          ...(form.branchId ? { branchId: form.branchId } : {}),
           ...(form.customServiceId ? { customServiceId: form.customServiceId } : {}),
           bagSizeId: form.bagSizeId,
           addonIds: form.addonIds,
@@ -561,7 +627,13 @@ export default function BookScreen() {
                       pressed && styles.optionPressed,
                     ]}
                     onPress={() =>
-                      setForm((f) => ({ ...f, addressId: a._id, branchId: '', scheduledPickupAt: '' }))
+                      setForm((f) => ({
+                        ...f,
+                        addressId: a._id,
+                        branchId: '',
+                        autoDispatch: false,
+                        scheduledPickupAt: '',
+                      }))
                     }
                     accessibilityRole="radio"
                     accessibilityState={{ selected }}
@@ -597,13 +669,44 @@ export default function BookScreen() {
           {step === 'shop' && (
             <View>
               <StepHeading step="shop" title="Choose a laundry shop" />
+              {reorderNotice ? <Text style={styles.optionGpsMissing}>{reorderNotice}</Text> : null}
+              {!shopsLoading && shopOptions.length > 0 ? (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.option,
+                    form.autoDispatch && styles.optionSelected,
+                    pressed && styles.optionPressed,
+                  ]}
+                  onPress={() => {
+                    setReorderNotice('');
+                    setForm((f) => ({ ...f, autoDispatch: true, branchId: '' }));
+                  }}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: form.autoDispatch }}
+                >
+                  <View style={styles.optionTopRow}>
+                    <View style={styles.optionTitleRow}>
+                      <View style={styles.shopLogoFallback}>
+                        <Ionicons name="flash-outline" size={18} color={colors.primary} />
+                      </View>
+                      <Text style={styles.optionTitle}>Let Lunara pick a shop for you</Text>
+                    </View>
+                    {form.autoDispatch ? (
+                      <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                    ) : null}
+                  </View>
+                  <Text style={styles.optionSub}>
+                    We'll dispatch to the best available shop nearby — useful when your usual shops are full.
+                  </Text>
+                </Pressable>
+              ) : null}
               {shopsLoading ? (
                 <Text style={styles.sub}>Finding nearby shops…</Text>
               ) : shopOptions.length === 0 ? (
                 <Text style={styles.sub}>No partner shops are available near this address yet.</Text>
               ) : (
                 shopOptions.map((shop) => {
-                  const selected = form.branchId === shop.branchId;
+                  const selected = !form.autoDispatch && form.branchId === shop.branchId;
                   const cheapest = shop.services.reduce<ShopServiceOption | null>(
                     (min, s) => (!min || s.customerPricePerKg < min.customerPricePerKg ? s : min),
                     null,
@@ -619,7 +722,10 @@ export default function BookScreen() {
                         disabled && styles.optionDisabled,
                         pressed && !disabled && styles.optionPressed,
                       ]}
-                      onPress={() => setForm((f) => ({ ...f, branchId: shop.branchId }))}
+                      onPress={() => {
+                        setReorderNotice('');
+                        setForm((f) => ({ ...f, branchId: shop.branchId, autoDispatch: false }));
+                      }}
                       accessibilityRole="radio"
                       accessibilityState={{ selected, disabled }}
                     >
@@ -939,7 +1045,7 @@ export default function BookScreen() {
                 </Text>
                 <Text style={styles.summaryLine}>
                   <Text style={styles.summaryMuted}>Shop: </Text>
-                  {selectedShop?.name ?? 'Selected shop'}
+                  {form.autoDispatch ? "Lunara's pick (best available)" : selectedShop?.name ?? 'Selected shop'}
                 </Text>
                 <Text style={styles.summaryLine}>
                   <Text style={styles.summaryMuted}>Bag size: </Text>
@@ -955,9 +1061,10 @@ export default function BookScreen() {
                 </Text>
               </View>
               <Text style={styles.confirmNote}>
-                Your order goes straight to {selectedShop?.name ?? 'your selected shop'} after
-                payment. Pickup riders are notified once dispatched. Final amount may adjust after
-                weigh-in.
+                {form.autoDispatch
+                  ? "After payment, Lunara dispatches your order to the best available shop nearby."
+                  : `Your order goes straight to ${selectedShop?.name ?? 'your selected shop'} after payment.`}{' '}
+                Pickup riders are notified once dispatched. Final amount may adjust after weigh-in.
               </Text>
               <PaymentMethodPicker
                 method={paymentMethod}
