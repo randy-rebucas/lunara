@@ -19,7 +19,7 @@ import {
   type RiderEarningType,
 } from '@lunara/utils';
 import { riderDocumentPublicPath } from '../../common/uploads/upload-paths';
-import { LocalStorageService } from '../../common/storage/local-storage.service';
+import { CloudinaryStorageService } from '../../common/storage/cloudinary-storage.service';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { Address, AddressDocument } from '../addresses/schemas/address.schema';
 import { Branch, BranchDocument } from '../branches/schemas/branch.schema';
@@ -65,7 +65,7 @@ export class RidersService {
     private riderWalletService: RiderWalletService,
     private ledgerService: LedgerService,
     private settingsService: SettingsService,
-    private localStorageService: LocalStorageService,
+    private cloudinaryStorageService: CloudinaryStorageService,
   ) {}
 
   async listNotifications(userId: string, limit = 20) {
@@ -626,7 +626,7 @@ export class RidersService {
     rider.documents = nextDocuments;
     await rider.save();
     if (previousDocument) {
-      await this.localStorageService.deleteFile('lunara/rider-documents', previousDocument.fileUrl, 'private');
+      await this.cloudinaryStorageService.deleteFile('lunara/rider-documents', previousDocument.fileUrl, 'private');
     }
 
     return this.getMe(userId);

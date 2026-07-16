@@ -10,14 +10,12 @@ import { assertProductionJwtSecrets } from './common/config/jwt-config';
 import { assertProductionCorsOrigins, getAllowedOrigins } from './common/config/cors-config';
 import { assertProductionPaymentConfig } from './common/config/payment-config';
 import { assertProductionMongoUri } from './common/config/database-config';
-import { warnIfUploadStorageNotPersistent } from './common/storage/storage-durability-check';
 
 async function bootstrap() {
   assertProductionJwtSecrets();
   assertProductionCorsOrigins();
   assertProductionPaymentConfig();
   assertProductionMongoUri();
-  warnIfUploadStorageNotPersistent();
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     rawBody: true,

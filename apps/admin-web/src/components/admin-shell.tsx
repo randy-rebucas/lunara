@@ -29,6 +29,7 @@ const Icons: Record<string, React.ReactNode> = {
   // People
   users:          <Icon d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />,
   riders:         <Icon d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />,
+  applications:   <Icon d="M9 12h6m-6 4h4m1-16H7a2 2 0 00-2 2v16a2 2 0 002 2h10a2 2 0 002-2V8z" d2="M13 2v6h6" />,
   // Network
   branches:       <Icon d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" d2="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />,
   shops:          <Icon d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />,
@@ -72,6 +73,7 @@ const nav: NavItem[] = [
   { section: 'People' },
   { href: '/users',         label: 'Users',          icon: Icons.users },
   { href: '/riders',        label: 'Riders',         icon: Icons.riders },
+  { href: '/applications',  label: 'Applications',   icon: Icons.applications },
 
   { section: 'Network' },
   { href: '/branches',      label: 'Branches',       icon: Icons.branches },

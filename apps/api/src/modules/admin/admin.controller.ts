@@ -57,7 +57,7 @@ import { UpdatePromotionDto } from './dto/update-promotion.dto';
 import { UpdateLaundryAddonDto } from './dto/update-laundry-addon.dto';
 import { UpdateLaundryServiceDto } from './dto/update-laundry-service.dto';
 import { CatalogService } from '../catalog/catalog.service';
-import { LocalStorageService } from '../../common/storage/local-storage.service';
+import { CloudinaryStorageService } from '../../common/storage/cloudinary-storage.service';
 import { PartnerOperationsService } from '../partner/partner-operations.service';
 import { CreateSettlementDto } from '../partner/dto/create-settlement.dto';
 import { PushNotificationService } from '../push/push-notification.service';
@@ -80,7 +80,7 @@ export class AdminController {
     private readonly riderNotificationService: RiderNotificationService,
     private readonly riderWalletService: RiderWalletService,
     private readonly partnerOperationsService: PartnerOperationsService,
-    private readonly localStorageService: LocalStorageService,
+    private readonly cloudinaryStorageService: CloudinaryStorageService,
     private readonly pushService: PushNotificationService,
   ) {}
 
@@ -604,7 +604,7 @@ export class AdminController {
   ) {
     if (!file) throw new BadRequestException('No file uploaded');
     const previousImageUrl = (await this.catalogService.getAddonById(id))?.imageUrl;
-    const result = await this.localStorageService.uploadBuffer(
+    const result = await this.cloudinaryStorageService.uploadBuffer(
       file.buffer,
       'lunara/catalog-addons',
       `addon-${id}`,
@@ -613,7 +613,7 @@ export class AdminController {
     );
     const data = await this.catalogService.updateAddon(id, { imageUrl: result.secure_url });
     if (previousImageUrl && previousImageUrl !== result.secure_url) {
-      await this.localStorageService.deleteFile('lunara/catalog-addons', previousImageUrl);
+      await this.cloudinaryStorageService.deleteFile('lunara/catalog-addons', previousImageUrl);
     }
     return { success: true, data };
   }

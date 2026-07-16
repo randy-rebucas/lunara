@@ -21,7 +21,7 @@ import { UserRole } from '@lunara/types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import { LocalStorageService } from '../../common/storage/local-storage.service';
+import { CloudinaryStorageService } from '../../common/storage/cloudinary-storage.service';
 import { taskPhotoPublicPath } from '../../common/uploads/upload-paths';
 import { Types } from 'mongoose';
 import { PickupService } from '../riders/pickup.service';
@@ -88,7 +88,7 @@ export class PartnerController {
     private readonly userModel: Model<UserDocument>,
     @InjectModel('Order')
     private readonly orderModel: Model<Record<string, unknown>>,
-    private readonly localStorageService: LocalStorageService,
+    private readonly cloudinaryStorageService: CloudinaryStorageService,
     private readonly branchesService: BranchesService,
   ) {}
 
@@ -562,7 +562,7 @@ export class PartnerController {
       throw new BadRequestException('Photo image is required');
     }
     const publicId = `${req.user.sub}-${orderId}-${Date.now()}`;
-    const result = await this.localStorageService.uploadPrivateBuffer(
+    const result = await this.cloudinaryStorageService.uploadPrivateBuffer(
       file.buffer,
       'lunara/task-photos',
       publicId,

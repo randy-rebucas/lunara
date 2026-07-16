@@ -1,7 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { LocalStorageService } from '../../common/storage/local-storage.service';
+import { CloudinaryStorageService } from '../../common/storage/cloudinary-storage.service';
+import { partnerApplicationDocumentPublicPath } from '../../common/uploads/upload-paths';
 import { CreatePartnerApplicationDto } from './dto/create-partner-application.dto';
 import {
   PARTNER_APPLICATION_DOCUMENT_LABELS,
@@ -21,7 +22,7 @@ export class PartnerApplicationsService {
   constructor(
     @InjectModel(PartnerApplication.name)
     private readonly partnerApplicationModel: Model<PartnerApplicationDocument>,
-    private readonly localStorageService: LocalStorageService,
+    private readonly cloudinaryStorageService: CloudinaryStorageService,
   ) {}
 
   async create(dto: CreatePartnerApplicationDto, files: Record<string, Express.Multer.File[]>) {
@@ -48,7 +49,7 @@ export class PartnerApplicationsService {
     for (const type of PARTNER_APPLICATION_DOCUMENT_TYPES) {
       const file = files[type][0];
       const publicId = `${application._id.toString()}-${type}-${Date.now()}`;
-      const result = await this.localStorageService.uploadPrivateBuffer(
+      const result = await this.cloudinaryStorageService.uploadPrivateBuffer(
         file.buffer,
         UPLOAD_FOLDER,
         publicId,
@@ -75,6 +76,12 @@ export class PartnerApplicationsService {
     return { success: true, data: items.map((item) => this.serialize(item)) };
   }
 
+  async findOne(id: string) {
+    const application = await this.partnerApplicationModel.findById(id);
+    if (!application) throw new NotFoundException('Application not found');
+    return { success: true, data: this.serialize(application) };
+  }
+
   async updateStatus(id: string, status: PartnerApplicationStatus) {
     const application = await this.partnerApplicationModel.findByIdAndUpdate(
       id,
@@ -86,6 +93,15 @@ export class PartnerApplicationsService {
   }
 
   private serialize(application: PartnerApplicationDocument) {
+    const documents = Object.fromEntries(
+      Object.entries(application.documents ?? {}).map(([type, record]) => [
+        type,
+        record
+          ? { ...record, fileUrl: partnerApplicationDocumentPublicPath(record.publicId) }
+          : record,
+      ]),
+    );
+
     return {
       _id: application._id.toString(),
       businessName: application.businessName,
@@ -95,7 +111,7 @@ export class PartnerApplicationsService {
       businessType: application.businessType,
       address: application.address,
       operations: application.operations,
-      documents: application.documents,
+      documents,
       declarationAccepted: application.declarationAccepted,
       message: application.message,
       status: application.status,

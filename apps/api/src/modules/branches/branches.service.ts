@@ -16,7 +16,7 @@ import {
   type PartnerCoverageInfo,
 } from '@lunara/utils';
 import { Address, AddressDocument } from '../addresses/schemas/address.schema';
-import { LocalStorageService } from '../../common/storage/local-storage.service';
+import { CloudinaryStorageService } from '../../common/storage/cloudinary-storage.service';
 import { CatalogService } from '../catalog/catalog.service';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { Rider, RiderDocument } from '../riders/schemas/rider.schema';
@@ -113,7 +113,7 @@ export class BranchesService {
     @InjectModel(UserProfile.name) private userProfileModel: Model<UserProfileDocument>,
     private trackingGateway: TrackingGateway,
     private catalogService: CatalogService,
-    private localStorageService: LocalStorageService,
+    private cloudinaryStorageService: CloudinaryStorageService,
     @Inject(forwardRef(() => RiderAssignmentService))
     private riderAssignmentService: RiderAssignmentService,
   ) {}
@@ -407,7 +407,7 @@ export class BranchesService {
     if (!branch) throw new NotFoundException('Branch not found');
 
     const previousLogoUrl = branch.logoUrl;
-    const result = await this.localStorageService.uploadBuffer(
+    const result = await this.cloudinaryStorageService.uploadBuffer(
       file.buffer,
       'lunara/branch-logos',
       `${branch._id.toString()}-${Date.now()}`,
@@ -416,7 +416,7 @@ export class BranchesService {
     );
     branch.logoUrl = result.secure_url;
     await branch.save();
-    await this.localStorageService.deleteFile('lunara/branch-logos', previousLogoUrl);
+    await this.cloudinaryStorageService.deleteFile('lunara/branch-logos', previousLogoUrl);
     return { success: true, data: { logoUrl: branch.logoUrl } };
   }
 
@@ -427,7 +427,7 @@ export class BranchesService {
     const previousLogoUrl = branch.logoUrl;
     branch.logoUrl = undefined;
     await branch.save();
-    await this.localStorageService.deleteFile('lunara/branch-logos', previousLogoUrl);
+    await this.cloudinaryStorageService.deleteFile('lunara/branch-logos', previousLogoUrl);
     return { success: true, data: { logoUrl: null } };
   }
 

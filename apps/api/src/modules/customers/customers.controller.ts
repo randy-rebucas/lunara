@@ -13,7 +13,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { LocalStorageService } from '../../common/storage/local-storage.service';
+import { CloudinaryStorageService } from '../../common/storage/cloudinary-storage.service';
 import { UpdateCustomerDto } from './dto/customer.dto';
 import { CustomersService } from './customers.service';
 
@@ -24,7 +24,7 @@ const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'i
 export class CustomersController {
   constructor(
     private readonly customersService: CustomersService,
-    private readonly localStorageService: LocalStorageService,
+    private readonly cloudinaryStorageService: CloudinaryStorageService,
   ) {}
 
   @Get('me')
@@ -58,7 +58,7 @@ export class CustomersController {
     if (!file) {
       throw new BadRequestException('Avatar image is required');
     }
-    const result = await this.localStorageService.uploadBuffer(
+    const result = await this.cloudinaryStorageService.uploadBuffer(
       file.buffer,
       'lunara/avatars',
       `${req.user.sub}-${Date.now()}`,
@@ -66,7 +66,7 @@ export class CustomersController {
       file.mimetype,
     );
     const { previousAvatarUrl, ...response } = await this.customersService.updateAvatar(req.user.sub, result.secure_url);
-    await this.localStorageService.deleteFile('lunara/avatars', previousAvatarUrl);
+    await this.cloudinaryStorageService.deleteFile('lunara/avatars', previousAvatarUrl);
     return response;
   }
 

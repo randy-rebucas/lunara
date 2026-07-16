@@ -18,7 +18,7 @@ import { UserRole } from '@lunara/types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import { LocalStorageService } from '../../common/storage/local-storage.service';
+import { CloudinaryStorageService } from '../../common/storage/cloudinary-storage.service';
 import { taskPhotoPublicPath, remittanceProofPublicPath } from '../../common/uploads/upload-paths';
 import { DeliveryPhotoDto } from './dto/delivery.dto';
 import { CapturePhotoDto, CollectLaundryDto, DropAtShopDto, VerifyCustomerDto, VerifyQrDto } from './dto/pickup.dto';
@@ -62,7 +62,7 @@ export class RidersController {
     private readonly riderSosService: RiderSosService,
     private readonly handoffQrService: HandoffQrService,
     private readonly riderWalletService: RiderWalletService,
-    private readonly localStorageService: LocalStorageService,
+    private readonly cloudinaryStorageService: CloudinaryStorageService,
   ) {}
 
   @Get('pickup-offers')
@@ -177,7 +177,7 @@ export class RidersController {
       throw new BadRequestException('Photo image is required');
     }
     const publicId = `${req.user.sub}-${orderId}-${Date.now()}`;
-    const result = await this.localStorageService.uploadPrivateBuffer(
+    const result = await this.cloudinaryStorageService.uploadPrivateBuffer(
       file.buffer,
       'lunara/task-photos',
       publicId,
@@ -254,7 +254,7 @@ export class RidersController {
       throw new BadRequestException('Document image is required');
     }
     const publicId = `${req.user.sub}-${type}-${Date.now()}`;
-    const result = await this.localStorageService.uploadPrivateBuffer(
+    const result = await this.cloudinaryStorageService.uploadPrivateBuffer(
       file.buffer,
       'lunara/rider-documents',
       publicId,
@@ -392,7 +392,7 @@ export class RidersController {
       throw new BadRequestException('Photo image is required');
     }
     const publicId = `${req.user.sub}-${orderId}-${Date.now()}`;
-    const result = await this.localStorageService.uploadPrivateBuffer(
+    const result = await this.cloudinaryStorageService.uploadPrivateBuffer(
       file.buffer,
       'lunara/task-photos',
       publicId,
@@ -492,7 +492,7 @@ export class RidersController {
     let proofImageUrl: string | undefined;
     if (file) {
       const publicId = `${req.user.sub}-remittance-${Date.now()}`;
-      const result = await this.localStorageService.uploadPrivateBuffer(
+      const result = await this.cloudinaryStorageService.uploadPrivateBuffer(
         file.buffer,
         'lunara/remittance-proofs',
         publicId,

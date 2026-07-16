@@ -5,7 +5,7 @@ import { UserRole } from '@lunara/types';
 import { Branch, BranchDocument } from '../branches/schemas/branch.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { UserProfile, UserProfileDocument } from '../users/schemas/user-profile.schema';
-import { LocalStorageService } from '../../common/storage/local-storage.service';
+import { CloudinaryStorageService } from '../../common/storage/cloudinary-storage.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 
 function formatProfile(profile?: Pick<UserProfile, 'displayName' | 'avatarUrl'> | null) {
@@ -21,7 +21,7 @@ export class PartnerProfileService {
     @InjectModel(UserProfile.name) private readonly userProfileModel: Model<UserProfileDocument>,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(Branch.name) private readonly branchModel: Model<BranchDocument>,
-    private readonly localStorageService: LocalStorageService,
+    private readonly cloudinaryStorageService: CloudinaryStorageService,
   ) {}
 
   async getOwnProfile(userId: string) {
@@ -41,7 +41,7 @@ export class PartnerProfileService {
     const previousAvatarUrl = (
       await this.userProfileModel.findOne({ userId: new Types.ObjectId(userId) }).select('avatarUrl').lean()
     )?.avatarUrl;
-    const result = await this.localStorageService.uploadBuffer(
+    const result = await this.cloudinaryStorageService.uploadBuffer(
       file.buffer,
       'lunara/user-avatars',
       `${userId}-${Date.now()}`,
@@ -49,7 +49,7 @@ export class PartnerProfileService {
       file.mimetype,
     );
     const profile = await this.upsertProfile(userId, { avatarUrl: result.secure_url });
-    await this.localStorageService.deleteFile('lunara/user-avatars', previousAvatarUrl);
+    await this.cloudinaryStorageService.deleteFile('lunara/user-avatars', previousAvatarUrl);
     return { success: true, data: formatProfile(profile) };
   }
 
@@ -58,7 +58,7 @@ export class PartnerProfileService {
       await this.userProfileModel.findOne({ userId: new Types.ObjectId(userId) }).select('avatarUrl').lean()
     )?.avatarUrl;
     const profile = await this.upsertProfile(userId, { avatarUrl: undefined });
-    await this.localStorageService.deleteFile('lunara/user-avatars', previousAvatarUrl);
+    await this.cloudinaryStorageService.deleteFile('lunara/user-avatars', previousAvatarUrl);
     return { success: true, data: formatProfile(profile) };
   }
 
@@ -89,7 +89,7 @@ export class PartnerProfileService {
     const previousAvatarUrl = (
       await this.userProfileModel.findOne({ userId: new Types.ObjectId(staffUserId) }).select('avatarUrl').lean()
     )?.avatarUrl;
-    const result = await this.localStorageService.uploadBuffer(
+    const result = await this.cloudinaryStorageService.uploadBuffer(
       file.buffer,
       'lunara/user-avatars',
       `${staffUserId}-${Date.now()}`,
@@ -97,7 +97,7 @@ export class PartnerProfileService {
       file.mimetype,
     );
     const profile = await this.upsertProfile(staffUserId, { avatarUrl: result.secure_url });
-    await this.localStorageService.deleteFile('lunara/user-avatars', previousAvatarUrl);
+    await this.cloudinaryStorageService.deleteFile('lunara/user-avatars', previousAvatarUrl);
     return { success: true, data: formatProfile(profile) };
   }
 

@@ -1,8 +1,8 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { UserRole } from '@lunara/types';
 import { Model } from 'mongoose';
-import { LocalStorageService } from '../../common/storage/local-storage.service';
+import { CloudinaryStorageService } from '../../common/storage/cloudinary-storage.service';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import {
@@ -11,24 +11,40 @@ import {
 } from '../partner/partner-access';
 import { parseTaskPhotoFilename } from './task-photo-filename';
 
-type MediaCategory = 'rider-documents' | 'task-photos' | 'remittance-proofs';
+type MediaCategory =
+  | 'rider-documents'
+  | 'task-photos'
+  | 'remittance-proofs'
+  | 'rider-application-documents'
+  | 'partner-application-documents';
 
 const FOLDER_BY_CATEGORY: Record<MediaCategory, string> = {
   'rider-documents': 'lunara/rider-documents',
   'task-photos': 'lunara/task-photos',
   'remittance-proofs': 'lunara/remittance-proofs',
+  'rider-application-documents': 'lunara/rider-application-documents',
+  'partner-application-documents': 'lunara/partner-application-documents',
 };
+
+const ADMIN_ONLY_CATEGORIES: ReadonlySet<MediaCategory> = new Set([
+  'rider-application-documents',
+  'partner-application-documents',
+]);
 
 @Injectable()
 export class MediaService {
   constructor(
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
-    private readonly localStorageService: LocalStorageService,
+    private readonly cloudinaryStorageService: CloudinaryStorageService,
   ) {}
 
-  resolveFilePath(category: MediaCategory, filename: string): string {
-    return this.localStorageService.resolvePrivatePath(FOLDER_BY_CATEGORY[category], filename);
+  getSignedUrl(category: MediaCategory, filename: string): string {
+    if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      throw new NotFoundException('File not found');
+    }
+    const publicId = `${FOLDER_BY_CATEGORY[category]}/${filename}`;
+    return this.cloudinaryStorageService.getSignedUrl(publicId);
   }
 
   async assertAccess(
@@ -37,6 +53,11 @@ export class MediaService {
     user: { sub: string; role: UserRole },
   ) {
     if (user.role === UserRole.ADMIN) return;
+
+    if (ADMIN_ONLY_CATEGORIES.has(category)) {
+      if (user.role === UserRole.STAFF) return;
+      throw new ForbiddenException('Access denied');
+    }
 
     if (category === 'rider-documents' || category === 'remittance-proofs') {
       this.assertOwnerPrefixAccess(filename, user);

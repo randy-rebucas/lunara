@@ -65,6 +65,13 @@ export class PartnerApplicationsController {
     return this.partnerApplicationsService.list(status);
   }
 
+  @Get(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  findOne(@Param('id') id: string) {
+    return this.partnerApplicationsService.findOne(id);
+  }
+
   @Patch(':id/status')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.STAFF)

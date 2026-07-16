@@ -16,7 +16,7 @@ export class MediaController {
     @Res() res: Response,
   ) {
     await this.mediaService.assertAccess('rider-documents', filename, req.user);
-    res.sendFile(this.mediaService.resolveFilePath('rider-documents', filename));
+    res.redirect(this.mediaService.getSignedUrl('rider-documents', filename));
   }
 
   @Get('task-photos/:filename')
@@ -26,7 +26,7 @@ export class MediaController {
     @Res() res: Response,
   ) {
     await this.mediaService.assertAccess('task-photos', filename, req.user);
-    res.sendFile(this.mediaService.resolveFilePath('task-photos', filename));
+    res.redirect(this.mediaService.getSignedUrl('task-photos', filename));
   }
 
   @Get('remittance-proofs/:filename')
@@ -36,6 +36,26 @@ export class MediaController {
     @Res() res: Response,
   ) {
     await this.mediaService.assertAccess('remittance-proofs', filename, req.user);
-    res.sendFile(this.mediaService.resolveFilePath('remittance-proofs', filename));
+    res.redirect(this.mediaService.getSignedUrl('remittance-proofs', filename));
+  }
+
+  @Get('rider-application-documents/:filename')
+  async getRiderApplicationDocument(
+    @Param('filename') filename: string,
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Res() res: Response,
+  ) {
+    await this.mediaService.assertAccess('rider-application-documents', filename, req.user);
+    res.redirect(this.mediaService.getSignedUrl('rider-application-documents', filename));
+  }
+
+  @Get('partner-application-documents/:filename')
+  async getPartnerApplicationDocument(
+    @Param('filename') filename: string,
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Res() res: Response,
+  ) {
+    await this.mediaService.assertAccess('partner-application-documents', filename, req.user);
+    res.redirect(this.mediaService.getSignedUrl('partner-application-documents', filename));
   }
 }

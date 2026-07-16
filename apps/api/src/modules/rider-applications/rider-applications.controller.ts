@@ -65,6 +65,13 @@ export class RiderApplicationsController {
     return this.riderApplicationsService.list(status);
   }
 
+  @Get(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  findOne(@Param('id') id: string) {
+    return this.riderApplicationsService.findOne(id);
+  }
+
   @Patch(':id/status')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.STAFF)
