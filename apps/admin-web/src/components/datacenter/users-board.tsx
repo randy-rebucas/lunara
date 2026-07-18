@@ -613,7 +613,7 @@ export function UsersBoard() {
                         </Link>
                       ) : null}
                       {selected.role === 'partner' ? (
-                        <Link href="/shops" className="btn-outline btn-sm w-full text-center">
+                        <Link href="/partners" className="btn-outline btn-sm w-full text-center">
                           Open partner shops
                         </Link>
                       ) : null}

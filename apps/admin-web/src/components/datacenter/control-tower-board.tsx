@@ -499,7 +499,7 @@ export function ControlTowerBoard() {
               value={pulse.totalBranches.toLocaleString()}
               sub="on the network"
               tone="violet"
-              href="/shops"
+              href="/partners"
             />
             <StatTile
               label="Pickup on-time"
@@ -629,7 +629,7 @@ export function ControlTowerBoard() {
             </section>
 
             <section className="dc-panel xl:col-span-3">
-              <PanelHeader title="Top shops" sub="Completed revenue today" action={{ href: '/shops', label: 'View all' }} />
+              <PanelHeader title="Top shops" sub="Completed revenue today" action={{ href: '/partners', label: 'View all' }} />
               {pulse.topShopsToday.length === 0 ? (
                 <p className="dc-panel-empty text-sm text-muted">No completed orders yet today.</p>
               ) : (

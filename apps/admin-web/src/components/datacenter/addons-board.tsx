@@ -3,7 +3,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { resolveMediaUrl } from '@lunara/utils';
 import { filterBySearch, ListControls } from '../list-controls';
-import { MetricCell } from './metric-cell';
 import { adminFetch, adminUpload } from '../../lib/admin-api';
 import { formatPeso } from '../../lib/format-peso';
 import { useAdminQuery } from '../../lib/use-admin-query';
@@ -43,6 +42,48 @@ function deriveAddonState(items: LaundryAddonRow[]): AddonState {
 
 function resolveAddonImage(url?: string) {
   return resolveMediaUrl(url, process.env.NEXT_PUBLIC_API_URL);
+}
+
+// ── Stat tiles ─────────────────────────────────────────────────────────────
+const TILE_TONES = {
+  primary: 'bg-primary/[0.04] ring-primary/15',
+  accent: 'bg-accent/[0.04] ring-accent/20',
+  secondary: 'bg-secondary/[0.04] ring-secondary/15',
+  amber: 'bg-amber-500/[0.04] ring-amber-500/20',
+} as const;
+
+function StatTile({
+  label,
+  value,
+  sub,
+  tone,
+  onClick,
+  active,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  tone: keyof typeof TILE_TONES;
+  onClick?: () => void;
+  active?: boolean;
+}) {
+  const cls = `rounded-xl p-4 text-left ring-1 transition-all ${TILE_TONES[tone]} ${
+    active ? 'ring-2 ring-primary/40' : ''
+  }`;
+  const inner = (
+    <>
+      <p className="text-xs font-medium text-muted">{label}</p>
+      <p className="dc-value mt-1">{value}</p>
+      {sub ? <p className="dc-sublabel mt-0.5">{sub}</p> : null}
+    </>
+  );
+  return onClick ? (
+    <button type="button" onClick={onClick} className={`${cls} hover:shadow-[var(--shadow-elevated)]`}>
+      {inner}
+    </button>
+  ) : (
+    <div className={cls}>{inner}</div>
+  );
 }
 
 export function AddonsBoard() {
@@ -234,42 +275,40 @@ export function AddonsBoard() {
             ) : null}
           </div>
 
-          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-            <MetricCell
-              label="Active add-ons"
-              value={activeCount}
-              highlight={activeCount > 0 ? 'accent' : 'warning'}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <StatTile
+              label="Catalog size"
+              value={addons.length.toLocaleString()}
+              sub="booking extras"
+              tone="primary"
+              onClick={() => setStatusFilter('all')}
+              active={statusFilter === 'all'}
             />
-            <MetricCell label="Inactive" value={inactiveCount} />
-            <MetricCell label="Catalog size" value={addons.length} sub="booking extras" />
+            <StatTile
+              label="Active add-ons"
+              value={activeCount.toLocaleString()}
+              tone={activeCount > 0 ? 'accent' : 'amber'}
+              onClick={() => setStatusFilter('active')}
+              active={statusFilter === 'active'}
+            />
+            <StatTile
+              label="Inactive"
+              value={inactiveCount.toLocaleString()}
+              tone="secondary"
+              onClick={() => setStatusFilter('inactive')}
+              active={statusFilter === 'inactive'}
+            />
           </div>
 
-          <div className="flex flex-wrap items-end gap-4">
-            <div>
-              <label htmlFor="addon-status-filter" className="form-label">
-                Status
-              </label>
-              <select
-                id="addon-status-filter"
-                className="input-field"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}
-              >
-                <option value="all">All</option>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-              </select>
-            </div>
-            <ListControls
-              search={search}
-              onSearchChange={setSearch}
-              searchPlaceholder="Slug, label, description…"
-              limit={limit}
-              onLimitChange={setLimit}
-              total={addons.length}
-              filtered={filteredAddons.length}
-            />
-          </div>
+          <ListControls
+            search={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Slug, label, description…"
+            limit={limit}
+            onLimitChange={setLimit}
+            total={addons.length}
+            filtered={filteredAddons.length}
+          />
 
           <section className="dc-panel">
             <div className="dc-panel-header">

@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { useCallback, useMemo, useState } from 'react';
+import { filterBySearch, ListControls } from '../list-controls';
 import { NoteModal } from '../note-modal';
-import { MetricCell } from './metric-cell';
 import { adminFetch } from '../../lib/admin-api';
 import { formatPeso } from '../../lib/format-peso';
 import { maskPayoutDetails } from '../../lib/mask-pii';
@@ -23,25 +23,21 @@ interface WithdrawalRow {
   bankAccountName?: string;
   bankAccountNumber?: string;
   adminNote?: string;
+  processedAt?: string;
   createdAt: string;
 }
 
+interface WithdrawalCounts {
+  pending: number;
+  pendingAmount: number;
+  paid: number;
+  paidAmount: number;
+  rejected: number;
+  total: number;
+}
+
 type PayoutState = 'nominal' | 'attention';
-type StatusFilter = '' | 'pending' | 'paid' | 'rejected';
-
-const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
-  { value: 'pending', label: 'Pending' },
-  { value: 'paid', label: 'Paid' },
-  { value: 'rejected', label: 'Rejected' },
-  { value: '', label: 'All' },
-];
-
-const QUICK_ACTIONS = [
-  { href: '/', label: 'Ops center' },
-  { href: '/riders', label: 'Riders' },
-  { href: '/dispatch', label: 'Dispatch' },
-  { href: '/orders', label: 'Orders' },
-] as const;
+type StatusTab = 'all' | 'pending' | 'paid' | 'rejected';
 
 const payoutCopy: Record<PayoutState, { label: string; detail: string; dot: string; bar: string }> = {
   nominal: {
@@ -65,10 +61,80 @@ function statusBadgeClass(status: string) {
   return 'badge-neutral';
 }
 
+function formatDateTime(iso?: string) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+// ── Small blocks ───────────────────────────────────────────────────────────
+const TILE_TONES = {
+  primary: 'bg-primary/[0.04] ring-primary/15',
+  accent: 'bg-accent/[0.04] ring-accent/20',
+  secondary: 'bg-secondary/[0.04] ring-secondary/15',
+  amber: 'bg-amber-500/[0.04] ring-amber-500/20',
+  violet: 'bg-violet-500/[0.04] ring-violet-500/20',
+  rose: 'bg-rose-500/[0.04] ring-rose-500/20',
+} as const;
+
+function StatTile({
+  label,
+  value,
+  sub,
+  tone,
+  onClick,
+  active,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  tone: keyof typeof TILE_TONES;
+  onClick?: () => void;
+  active?: boolean;
+}) {
+  const cls = `rounded-xl p-4 text-left ring-1 transition-all ${TILE_TONES[tone]} ${
+    active ? 'ring-2 ring-primary/40' : ''
+  }`;
+  const inner = (
+    <>
+      <p className="text-xs font-medium text-muted">{label}</p>
+      <p className="dc-value mt-1">{value}</p>
+      {sub ? <p className="dc-sublabel mt-0.5">{sub}</p> : null}
+    </>
+  );
+  return onClick ? (
+    <button type="button" onClick={onClick} className={`${cls} hover:shadow-[var(--shadow-elevated)]`}>
+      {inner}
+    </button>
+  ) : (
+    <div className={cls}>{inner}</div>
+  );
+}
+
+function RailSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="border-t border-border/60 px-5 py-4 first:border-0">
+      <p className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-muted">{title}</p>
+      <div className="space-y-2">{children}</div>
+    </div>
+  );
+}
+
+function RailRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-3 text-sm">
+      <span className="shrink-0 text-muted">{label}</span>
+      <span className="min-w-0 text-right font-medium text-slate-900">{value}</span>
+    </div>
+  );
+}
+
 export function WithdrawalsBoard() {
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('pending');
+  const [statusTab, setStatusTab] = useState<StatusTab>('all');
+  const [search, setSearch] = useState('');
+  const [limit, setLimit] = useState(50);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [actionId, setActionId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
   const [pendingAction, setPendingAction] = useState<{
     id: string;
     action: 'approve' | 'reject';
@@ -77,44 +143,74 @@ export function WithdrawalsBoard() {
   const [actionError, setActionError] = useState('');
 
   const load = useCallback(async () => {
-    const q = statusFilter ? `?status=${statusFilter}` : '';
-    const [rows, pendingRows] = await Promise.all([
-      adminFetch<WithdrawalRow[]>(`/admin/riders/withdrawals${q}`),
-      adminFetch<WithdrawalRow[]>('/admin/riders/withdrawals?status=pending'),
-    ]);
+    const data = await adminFetch<{ items: WithdrawalRow[]; counts: WithdrawalCounts }>(
+      '/admin/riders/withdrawals',
+    );
     setLastUpdated(new Date());
-    return { rows, pendingRows };
-  }, [statusFilter]);
+    return data;
+  }, []);
 
-  const { data, loading, error, reload } = useAdminQuery(load, [statusFilter]);
+  const { data, loading, error, reload } = useAdminQuery(load, []);
 
-  const rows = useMemo(() => data?.rows ?? [], [data?.rows]);
-  const pendingRows = useMemo(() => data?.pendingRows ?? [], [data?.pendingRows]);
-  const pendingCount = pendingRows.length;
-  const totalPending = useMemo(
-    () => pendingRows.reduce((sum, r) => sum + r.amount, 0),
-    [pendingRows],
+  const items = useMemo(() => data?.items ?? [], [data?.items]);
+  const counts = useMemo(
+    () =>
+      data?.counts ?? { pending: 0, pendingAmount: 0, paid: 0, paidAmount: 0, rejected: 0, total: 0 },
+    [data?.counts],
   );
-  const largestPending = useMemo(
-    () => (pendingRows.length > 0 ? Math.max(...pendingRows.map((r) => r.amount)) : 0),
-    [pendingRows],
+
+  const tabFiltered = useMemo(() => {
+    if (statusTab === 'all') return items;
+    return items.filter((r) => r.status === statusTab);
+  }, [items, statusTab]);
+
+  const filteredItems = useMemo(() => {
+    return filterBySearch(tabFiltered, search, [
+      (r) => r.riderName,
+      (r) => r.methodLabel,
+      (r) => r.status,
+      (r) => maskPayoutDetails(r),
+    ]).slice(0, limit);
+  }, [tabFiltered, search, limit]);
+
+  const selected = useMemo(
+    () => (selectedId ? (items.find((r) => r._id === selectedId) ?? null) : null),
+    [items, selectedId],
   );
-  const gcashCount = pendingRows.filter((r) => r.method === 'gcash').length;
-  const payoutState: PayoutState = pendingCount > 0 ? 'attention' : 'nominal';
+
+  const largestPending = useMemo(() => {
+    const pending = items.filter((r) => r.status === 'pending');
+    return pending.length > 0 ? Math.max(...pending.map((r) => r.amount)) : 0;
+  }, [items]);
+
+  const payoutState: PayoutState = counts.pending > 0 ? 'attention' : 'nominal';
   const copy = payoutCopy[payoutState];
-  const showActions = statusFilter === 'pending';
 
   const updatedLabel = lastUpdated
-    ? lastUpdated.toLocaleTimeString(undefined, {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      })
+    ? lastUpdated.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : '—';
+
+  const STATUS_TABS: { id: StatusTab; label: string; count: number }[] = [
+    { id: 'all', label: 'All requests', count: items.length },
+    { id: 'pending', label: 'Pending', count: items.filter((r) => r.status === 'pending').length },
+    { id: 'paid', label: 'Paid', count: items.filter((r) => r.status === 'paid').length },
+    { id: 'rejected', label: 'Rejected', count: items.filter((r) => r.status === 'rejected').length },
+  ];
+
+  function selectTab(next: StatusTab) {
+    setStatusTab(next);
+    setSelectedId(null);
+  }
+
+  function startAction(id: string, action: 'approve' | 'reject') {
+    setPendingAction({ id, action });
+    setNote('');
+    setActionError('');
+  }
 
   async function submitReview() {
     if (!pendingAction) return;
-    setActionId(pendingAction.id);
+    setActionBusy(true);
     setActionError('');
     try {
       await adminFetch(`/admin/riders/withdrawals/${pendingAction.id}/${pendingAction.action}`, {
@@ -127,7 +223,7 @@ export function WithdrawalsBoard() {
     } catch (e) {
       setActionError(e instanceof Error ? e.message : 'Action failed');
     } finally {
-      setActionId(null);
+      setActionBusy(false);
     }
   }
 
@@ -175,7 +271,6 @@ export function WithdrawalsBoard() {
           {error}
         </div>
       ) : null}
-
       {actionError ? (
         <div className="alert-error mb-4" role="alert">
           {actionError}
@@ -193,198 +288,270 @@ export function WithdrawalsBoard() {
       ) : null}
 
       {data ? (
-        <div className="space-y-3">
+        <div className="space-y-4">
+          {/* ── Queue state banner ───────────────────────────────── */}
           <div className={`flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 ${copy.bar}`}>
             <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${copy.dot}`} aria-hidden />
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-slate-900">{copy.label}</p>
               <p className="text-xs text-muted">{copy.detail}</p>
             </div>
-            {pendingCount > 0 ? (
+            {counts.pending > 0 ? (
               <button
                 type="button"
                 className="badge-warning px-3 py-1 text-xs font-semibold tabular-nums"
-                onClick={() => setStatusFilter('pending')}
+                onClick={() => selectTab('pending')}
               >
-                {pendingCount} pending
+                {counts.pending} pending
               </button>
             ) : null}
           </div>
 
-          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-            <MetricCell
-              label="Pending requests"
-              value={pendingCount}
-              highlight={pendingCount > 0 ? 'warning' : undefined}
+          {/* ── Stat tiles ───────────────────────────────────────── */}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+            <StatTile
+              label="Total requests"
+              value={counts.total.toLocaleString()}
+              sub="all time"
+              tone="primary"
+              onClick={() => selectTab('all')}
+              active={statusTab === 'all'}
             />
-            <MetricCell
-              label="Total pending"
-              value={formatPeso(totalPending)}
-              highlight={totalPending > 0 ? 'primary' : undefined}
+            <StatTile
+              label="Pending"
+              value={counts.pending.toLocaleString()}
+              sub="awaiting review"
+              tone={counts.pending > 0 ? 'amber' : 'secondary'}
+              onClick={() => selectTab('pending')}
+              active={statusTab === 'pending'}
             />
-            <MetricCell
-              label="Largest request"
-              value={largestPending > 0 ? formatPeso(largestPending) : '—'}
+            <StatTile
+              label="Pending value"
+              value={formatPeso(counts.pendingAmount, true)}
+              sub="to be paid out"
+              tone="violet"
             />
-            <MetricCell
-              label="GCash requests"
-              value={gcashCount}
-              sub={pendingCount > 0 ? `of ${pendingCount} pending` : undefined}
+            <StatTile
+              label="Largest pending"
+              value={largestPending > 0 ? formatPeso(largestPending, true) : '—'}
+              tone="secondary"
+            />
+            <StatTile
+              label="Paid out"
+              value={formatPeso(counts.paidAmount, true)}
+              sub={`${counts.paid.toLocaleString()} request${counts.paid === 1 ? '' : 's'}`}
+              tone="accent"
+              onClick={() => selectTab('paid')}
+              active={statusTab === 'paid'}
+            />
+            <StatTile
+              label="Rejected"
+              value={counts.rejected.toLocaleString()}
+              sub="all time"
+              tone={counts.rejected > 0 ? 'rose' : 'secondary'}
+              onClick={() => selectTab('rejected')}
+              active={statusTab === 'rejected'}
             />
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {QUICK_ACTIONS.map((a) => (
-              <Link
-                key={a.href}
-                href={a.href}
-                className="rounded-md border border-border/80 bg-surface px-3 py-1.5 dc-chip transition-colors hover:border-primary/40 hover:text-primary"
+          <div className="grid gap-4 xl:grid-cols-12 xl:items-start">
+            {/* ── Payout queue ── */}
+            <section className="dc-panel min-w-0 xl:col-span-8">
+              <div
+                className="overflow-x-auto overflow-y-hidden border-b border-border/60 px-3"
+                role="tablist"
+                aria-label="Withdrawal status"
               >
-                {a.label}
-              </Link>
-            ))}
+                <div className="flex min-w-max gap-1">
+                  {STATUS_TABS.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={statusTab === t.id}
+                      onClick={() => selectTab(t.id)}
+                      className={`-mb-px inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3.5 py-3 text-sm font-medium transition-colors ${
+                        statusTab === t.id
+                          ? 'border-primary text-primary'
+                          : 'border-transparent text-muted hover:text-slate-900'
+                      }`}
+                    >
+                      {t.label}
+                      <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[0.6875rem] font-semibold tabular-nums text-slate-600">
+                        {t.count.toLocaleString()}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="px-4 pb-1">
+                <ListControls
+                  search={search}
+                  onSearchChange={setSearch}
+                  searchPlaceholder="Rider, method, payout details…"
+                  limit={limit}
+                  onLimitChange={setLimit}
+                  total={tabFiltered.length}
+                  filtered={filteredItems.length}
+                />
+              </div>
+
+              {filteredItems.length === 0 ? (
+                <div className="dc-panel-empty">
+                  <p className="font-medium text-slate-900">
+                    {search || statusTab !== 'all' ? 'No withdrawals match' : 'No withdrawal requests'}
+                  </p>
+                  <p className="mt-1 text-sm text-muted">
+                    {search || statusTab !== 'all'
+                      ? 'Try another filter or search term.'
+                      : 'New rider payout requests will appear here for approval.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="data-table min-w-[760px]">
+                    <caption className="sr-only">Rider withdrawal requests</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Rider</th>
+                        <th scope="col" className="text-right">Amount</th>
+                        <th scope="col">Method</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Requested</th>
+                        <th scope="col">Processed</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredItems.map((row) => {
+                        const isSelected = selectedId === row._id;
+                        return (
+                          <tr
+                            key={row._id}
+                            onClick={() => setSelectedId((prev) => (prev === row._id ? null : row._id))}
+                            aria-selected={isSelected}
+                            className={`cursor-pointer ${
+                              isSelected
+                                ? 'bg-primary/5 hover:bg-primary/5'
+                                : row.status === 'pending'
+                                  ? 'bg-amber-50/40'
+                                  : ''
+                            }`}
+                          >
+                            <td>
+                              <p className="font-medium text-slate-900">{row.riderName}</p>
+                              <p
+                                className="max-w-[13rem] truncate text-code text-xs text-muted"
+                                title={maskPayoutDetails(row)}
+                              >
+                                {maskPayoutDetails(row)}
+                              </p>
+                            </td>
+                            <td className="text-right font-medium tabular-nums">{formatPeso(row.amount)}</td>
+                            <td>
+                              <span className="badge-neutral">{row.methodLabel}</span>
+                            </td>
+                            <td>
+                              <span className={statusBadgeClass(row.status)}>{row.statusLabel}</span>
+                            </td>
+                            <td className="whitespace-nowrap text-xs text-muted tabular-nums">
+                              {formatDateTime(row.createdAt)}
+                            </td>
+                            <td className="whitespace-nowrap text-xs text-muted tabular-nums">
+                              {formatDateTime(row.processedAt)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            {/* ── Detail rail ── */}
+            <div className="xl:col-span-4">
+              {!selected ? (
+                <section className="dc-panel">
+                  <div className="dc-panel-header">
+                    <h2 className="text-sm font-semibold text-slate-900">Withdrawal detail</h2>
+                  </div>
+                  <p className="px-5 py-8 text-center text-sm text-muted">
+                    Select a request row to review it here.
+                  </p>
+                </section>
+              ) : (
+                <section className="dc-panel">
+                  <div className="dc-panel-header flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className={statusBadgeClass(selected.status)}>{selected.statusLabel}</span>
+                      <p className="mt-1.5 truncate text-sm font-semibold text-slate-900">
+                        {selected.riderName}
+                      </p>
+                      <p className="text-lg font-bold tabular-nums text-slate-900">
+                        {formatPeso(selected.amount)}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-ghost btn-sm shrink-0"
+                      aria-label="Close detail panel"
+                      onClick={() => setSelectedId(null)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <RailSection title="Payout">
+                    <RailRow label="Method" value={selected.methodLabel} />
+                    <RailRow
+                      label="Details"
+                      value={<span className="text-code break-all text-xs">{maskPayoutDetails(selected)}</span>}
+                    />
+                    <RailRow label="Requested on" value={formatDateTime(selected.createdAt)} />
+                    {selected.processedAt ? (
+                      <RailRow label="Processed on" value={formatDateTime(selected.processedAt)} />
+                    ) : null}
+                  </RailSection>
+
+                  {selected.adminNote ? (
+                    <RailSection title="Admin note">
+                      <p className="text-sm leading-relaxed text-slate-700">{selected.adminNote}</p>
+                    </RailSection>
+                  ) : null}
+
+                  {selected.status === 'pending' ? (
+                    <div className="flex flex-wrap gap-2 border-t border-border/60 px-5 py-4">
+                      <button
+                        type="button"
+                        className="btn-outline btn-sm flex-1"
+                        disabled={actionBusy}
+                        onClick={() => startAction(selected._id, 'reject')}
+                      >
+                        Reject
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-primary btn-sm flex-1"
+                        disabled={actionBusy}
+                        onClick={() => startAction(selected._id, 'approve')}
+                      >
+                        Approve
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="border-t border-border/60 px-5 py-4">
+                      <Link href="/riders" className="btn-outline btn-sm block text-center">
+                        View rider fleet
+                      </Link>
+                    </div>
+                  )}
+                </section>
+              )}
+            </div>
           </div>
 
-          <section className="dc-panel">
-            <div className="dc-panel-header flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-900">Status filter</h2>
-                <p className="text-xs text-muted">
-                  {rows.length} request{rows.length === 1 ? '' : 's'} in current view
-                </p>
-              </div>
-            </div>
-            <div className="dc-panel-body pt-1">
-              <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by status">
-                {STATUS_FILTERS.map((f) => (
-                  <button
-                    key={f.value || 'all'}
-                    type="button"
-                    onClick={() => setStatusFilter(f.value)}
-                    className={statusFilter === f.value ? 'filter-chip-active' : 'filter-chip'}
-                    aria-pressed={statusFilter === f.value}
-                  >
-                    {f.label}
-                    {f.value === 'pending' && pendingCount > 0 ? ` (${pendingCount})` : ''}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          <section className="dc-panel" id="withdrawal-queue">
-            <div className="dc-panel-header flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-900">
-                  {showActions ? 'Payout queue' : 'Withdrawal history'}
-                </h2>
-                <p className="text-xs text-muted">
-                  {rows.length === 0
-                    ? 'No requests in this view'
-                    : `${rows.length} request${rows.length === 1 ? '' : 's'}`}
-                </p>
-              </div>
-            </div>
-
-            {rows.length === 0 ? (
-              <div className="dc-panel-empty">
-                <p className="font-medium text-slate-900">
-                  {statusFilter === 'pending' ? 'No pending withdrawals' : 'No withdrawals found'}
-                </p>
-                <p className="mt-1 text-sm text-muted">
-                  {statusFilter === 'pending'
-                    ? 'New rider payout requests will appear here for approval.'
-                    : 'Try another status filter.'}
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="data-table min-w-[880px]">
-                  <caption className="sr-only">Rider withdrawal requests</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Rider</th>
-                      <th scope="col" className="text-right">
-                        Amount
-                      </th>
-                      <th scope="col">Method</th>
-                      <th scope="col">Payout details</th>
-                      <th scope="col">Status</th>
-                      <th scope="col">Requested</th>
-                      {!showActions ? <th scope="col">Note</th> : null}
-                      {showActions ? (
-                        <th scope="col">
-                          <span className="sr-only">Actions</span>
-                        </th>
-                      ) : null}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((row) => (
-                      <tr key={row._id}>
-                        <td className="font-medium">{row.riderName}</td>
-                        <td className="text-right font-medium tabular-nums">{formatPeso(row.amount)}</td>
-                        <td>
-                          <span className="badge-neutral">{row.methodLabel}</span>
-                        </td>
-                        <td
-                          className="max-w-[14rem] truncate text-code text-muted"
-                          title={maskPayoutDetails(row)}
-                        >
-                          {maskPayoutDetails(row)}
-                        </td>
-                        <td>
-                          <span className={statusBadgeClass(row.status)}>{row.statusLabel}</span>
-                        </td>
-                        <td className="whitespace-nowrap text-sm text-muted tabular-nums">
-                          {new Date(row.createdAt).toLocaleString('en-PH', {
-                            dateStyle: 'medium',
-                            timeStyle: 'short',
-                          })}
-                        </td>
-                        {!showActions ? (
-                          <td className="max-w-[12rem] truncate text-sm text-muted" title={row.adminNote}>
-                            {row.adminNote ?? '—'}
-                          </td>
-                        ) : null}
-                        {showActions ? (
-                          <td>
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                className="btn-primary btn-sm"
-                                disabled={actionId === row._id}
-                                onClick={() => {
-                                  setPendingAction({ id: row._id, action: 'approve' });
-                                  setNote('');
-                                  setActionError('');
-                                }}
-                              >
-                                Approve
-                              </button>
-                              <button
-                                type="button"
-                                className="btn-outline btn-sm"
-                                disabled={actionId === row._id}
-                                onClick={() => {
-                                  setPendingAction({ id: row._id, action: 'reject' });
-                                  setNote('');
-                                  setActionError('');
-                                }}
-                              >
-                                Reject
-                              </button>
-                            </div>
-                          </td>
-                        ) : null}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-
+          {/* ── Payout policy ────────────────────────────────────── */}
           <section className="dc-panel">
             <div className="dc-panel-header">
               <h2 className="text-sm font-semibold text-slate-900">Payout policy</h2>
@@ -414,7 +581,7 @@ export function WithdrawalsBoard() {
           setPendingAction(null);
           setNote('');
         }}
-        busy={!!actionId}
+        busy={actionBusy}
       />
     </div>
   );

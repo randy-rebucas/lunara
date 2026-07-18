@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { UserRole } from '@lunara/types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -22,6 +22,22 @@ export class LedgerController {
   @Get('reconciliation')
   async getReconciliation() {
     const data = await this.ledgerService.getReconciliation();
+    return { success: true, data };
+  }
+
+  /** Accounting overview: monthly P&L/cash-flow trend and recent posted journal entries. */
+  @Get('accounting-overview')
+  async getAccountingOverview() {
+    const data = await this.ledgerService.getAccountingOverview();
+    return { success: true, data };
+  }
+
+  /** Per-transaction reconciliation rows (payments, payouts, refunds) with match status vs the ledger. */
+  @Get('reconciliation/transactions')
+  async getReconciliationTransactions(@Query('limit') limit?: string) {
+    const data = await this.ledgerService.getReconciliationTransactions(
+      limit ? Math.min(1000, Math.max(1, Number(limit) || 300)) : 300,
+    );
     return { success: true, data };
   }
 }

@@ -18,14 +18,29 @@ export class AuditLogController {
     @Query('search') search?: string,
     @Query('actorEmail') actorEmail?: string,
     @Query('action') action?: string,
+    @Query('method') method?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
-    return this.auditLogService.list({ page: Number(page), limit: Number(limit), search, actorEmail, action, from, to });
+    return this.auditLogService.list({
+      page: Number(page),
+      limit: Number(limit),
+      search,
+      actorEmail,
+      action,
+      method,
+      from,
+      to,
+    });
   }
 
   @Get('actions')
   listActions() {
     return this.auditLogService.listActions();
+  }
+
+  @Get('methods')
+  listMethods() {
+    return this.auditLogService.listMethods();
   }
 }

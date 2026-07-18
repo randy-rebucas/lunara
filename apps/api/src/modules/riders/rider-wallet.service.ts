@@ -383,22 +383,40 @@ export class RiderWalletService {
     const filter: Record<string, unknown> = {};
     if (status) filter.status = status;
 
-    const items = await this.withdrawalModel.find(filter).sort({ createdAt: -1 }).limit(100);
+    const [items, statusAgg] = await Promise.all([
+      this.withdrawalModel.find(filter).sort({ createdAt: -1 }).limit(100),
+      this.withdrawalModel.aggregate<{ _id: string; count: number; amount: number }>([
+        { $group: { _id: '$status', count: { $sum: 1 }, amount: { $sum: '$amount' } } },
+      ]),
+    ]);
     const riderIds = [...new Set(items.map((item) => item.riderUserId.toString()))];
     const riders = await this.riderModel.find({ userId: { $in: riderIds.map((id) => new Types.ObjectId(id)) } });
     const riderByUserId = new Map(riders.map((r) => [r.userId.toString(), r]));
 
+    const byStatus = new Map(statusAgg.map((s) => [s._id, s]));
+    const counts = {
+      pending: byStatus.get('pending')?.count ?? 0,
+      pendingAmount: byStatus.get('pending')?.amount ?? 0,
+      paid: byStatus.get('paid')?.count ?? 0,
+      paidAmount: byStatus.get('paid')?.amount ?? 0,
+      rejected: byStatus.get('rejected')?.count ?? 0,
+      total: statusAgg.reduce((s, r) => s + r.count, 0),
+    };
+
     return {
       success: true,
-      data: items.map((item) => {
-        const rider = riderByUserId.get(item.riderUserId.toString());
-        return {
-          ...this.serializeWithdrawal(item),
-          riderName: rider
-            ? `${rider.firstName ?? ''} ${rider.lastName ?? ''}`.trim() || item.riderUserId.toString()
-            : item.riderUserId.toString(),
-        };
-      }),
+      data: {
+        items: items.map((item) => {
+          const rider = riderByUserId.get(item.riderUserId.toString());
+          return {
+            ...this.serializeWithdrawal(item),
+            riderName: rider
+              ? `${rider.firstName ?? ''} ${rider.lastName ?? ''}`.trim() || item.riderUserId.toString()
+              : item.riderUserId.toString(),
+          };
+        }),
+        counts,
+      },
     };
   }
 

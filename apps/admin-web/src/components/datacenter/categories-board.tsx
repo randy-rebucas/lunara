@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
-import { MetricCell } from './metric-cell';
 import { adminFetch } from '../../lib/admin-api';
 import { useAdminQuery } from '../../lib/use-admin-query';
 
@@ -20,6 +19,34 @@ interface CategoryGroup {
   type: string;
   services: LaundryServiceRow[];
   activeCount: number;
+}
+
+// ── Stat tiles ─────────────────────────────────────────────────────────────
+const TILE_TONES = {
+  primary: 'bg-primary/[0.04] ring-primary/15',
+  accent: 'bg-accent/[0.04] ring-accent/20',
+  secondary: 'bg-secondary/[0.04] ring-secondary/15',
+  amber: 'bg-amber-500/[0.04] ring-amber-500/20',
+} as const;
+
+function StatTile({
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  tone: keyof typeof TILE_TONES;
+}) {
+  return (
+    <div className={`rounded-xl p-4 ring-1 ${TILE_TONES[tone]}`}>
+      <p className="text-xs font-medium text-muted">{label}</p>
+      <p className="dc-value mt-1">{value}</p>
+      {sub ? <p className="dc-sublabel mt-0.5">{sub}</p> : null}
+    </div>
+  );
 }
 
 export function CategoriesBoard() {
@@ -110,18 +137,14 @@ export function CategoriesBoard() {
 
       {items ? (
         <div className="space-y-3">
-          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-            <MetricCell
-              label="Categories"
-              value={categories.length}
-              sub="service types"
-            />
-            <MetricCell
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <StatTile label="Categories" value={categories.length.toLocaleString()} sub="service types" tone="primary" />
+            <StatTile
               label="Active services"
-              value={totalActive}
-              highlight={totalActive > 0 ? 'accent' : 'warning'}
+              value={totalActive.toLocaleString()}
+              tone={totalActive > 0 ? 'accent' : 'amber'}
             />
-            <MetricCell label="Total services" value={totalServices} sub="across all types" />
+            <StatTile label="Total services" value={totalServices.toLocaleString()} sub="across all types" tone="secondary" />
           </div>
 
           {categories.length === 0 ? (

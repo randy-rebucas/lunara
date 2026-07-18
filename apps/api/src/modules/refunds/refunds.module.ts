@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { Customer, CustomerSchema } from '../customers/schemas/customer.schema';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
@@ -15,6 +16,7 @@ import { PartnerModule } from '../partner/partner.module';
   imports: [
     MongooseModule.forFeature([
       { name: RefundRequest.name, schema: RefundRequestSchema },
+      { name: Customer.name, schema: CustomerSchema },
       { name: Order.name, schema: OrderSchema },
       { name: Payment.name, schema: PaymentSchema },
       { name: User.name, schema: UserSchema },

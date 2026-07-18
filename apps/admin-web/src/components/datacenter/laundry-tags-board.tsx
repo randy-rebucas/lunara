@@ -4,7 +4,6 @@ import QRCode from 'react-qr-code';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { buildTagQrPayload } from '@lunara/utils';
 import { filterBySearch, ListControls } from '../list-controls';
-import { MetricCell } from './metric-cell';
 import { LiveBadge } from '../ui/stat-card';
 import { adminFetch } from '../../lib/admin-api';
 import { isAdminRealtimeConnected } from '../../lib/admin-realtime';
@@ -28,6 +27,48 @@ const STATUS_FILTER_OPTIONS = [
   { value: 'assigned',  label: 'Assigned' },
   { value: 'retired',   label: 'Retired' },
 ];
+
+// ── Stat tiles ─────────────────────────────────────────────────────────────
+const TILE_TONES = {
+  primary: 'bg-primary/[0.04] ring-primary/15',
+  accent: 'bg-accent/[0.04] ring-accent/20',
+  secondary: 'bg-secondary/[0.04] ring-secondary/15',
+  amber: 'bg-amber-500/[0.04] ring-amber-500/20',
+} as const;
+
+function StatTile({
+  label,
+  value,
+  sub,
+  tone,
+  onClick,
+  active,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  tone: keyof typeof TILE_TONES;
+  onClick?: () => void;
+  active?: boolean;
+}) {
+  const cls = `rounded-xl p-4 text-left ring-1 transition-all ${TILE_TONES[tone]} ${
+    active ? 'ring-2 ring-primary/40' : ''
+  }`;
+  const inner = (
+    <>
+      <p className="text-xs font-medium text-muted">{label}</p>
+      <p className="dc-value mt-1">{value}</p>
+      {sub ? <p className="dc-sublabel mt-0.5">{sub}</p> : null}
+    </>
+  );
+  return onClick ? (
+    <button type="button" onClick={onClick} className={`${cls} hover:shadow-[var(--shadow-elevated)]`}>
+      {inner}
+    </button>
+  ) : (
+    <div className={cls}>{inner}</div>
+  );
+}
 
 function TagQrPreviewModal({ tag, onClose }: { tag: LaundryTag | null; onClose: () => void }) {
   if (!tag) return null;
@@ -207,10 +248,28 @@ export function LaundryTagsBoard() {
 
       {items && (
         <div className="space-y-3">
-          <div className="grid gap-2.5 sm:grid-cols-3">
-            <MetricCell label="Available" value={availableCount} highlight={availableCount > 0 ? 'accent' : 'warning'} />
-            <MetricCell label="Assigned"  value={assignedCount} />
-            <MetricCell label="Retired"   value={retiredCount} />
+          <div className="grid grid-cols-3 gap-3">
+            <StatTile
+              label="Available"
+              value={availableCount.toLocaleString()}
+              tone={availableCount > 0 ? 'accent' : 'amber'}
+              onClick={() => setStatusFilter('available')}
+              active={statusFilter === 'available'}
+            />
+            <StatTile
+              label="Assigned"
+              value={assignedCount.toLocaleString()}
+              tone="primary"
+              onClick={() => setStatusFilter('assigned')}
+              active={statusFilter === 'assigned'}
+            />
+            <StatTile
+              label="Retired"
+              value={retiredCount.toLocaleString()}
+              tone="secondary"
+              onClick={() => setStatusFilter('retired')}
+              active={statusFilter === 'retired'}
+            />
           </div>
 
           <ListControls

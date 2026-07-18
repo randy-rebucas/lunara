@@ -439,7 +439,7 @@ export function RevenueBoard() {
               <PanelHeader
                 title="Revenue by shop"
                 sub="Completed orders this week"
-                action={{ href: '/shops', label: 'View all' }}
+                action={{ href: '/partners', label: 'View all' }}
               />
               {data.byBranch.length === 0 ? (
                 <p className="dc-panel-empty text-sm text-muted">No completed orders this week.</p>

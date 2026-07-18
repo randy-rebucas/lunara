@@ -83,13 +83,13 @@ const nav: NavItem[] = [
   // Physical network → the catalog it sells → shop-floor tooling
   { section: 'Network' },
   { href: '/branches',     label: 'Branches',     icon: Icons.branches },
-  { href: '/shops',        label: 'Shops',        icon: Icons.shops },
   { href: '/categories',   label: 'Categories',   icon: Icons.categories },
   { href: '/services',     label: 'Services',     icon: Icons.services },
   { href: '/addons',       label: 'Add-ons',      icon: Icons.addons },
   { href: '/laundry-tags', label: 'Laundry tags', icon: Icons.laundryTags },
 
   { section: 'Partners' },
+  { href: '/partners',             label: 'Partners',    icon: Icons.shops },
   { href: '/partners/branding',    label: 'Branding',    icon: Icons.branding },
   { href: '/partners/settlements', label: 'Settlements', icon: Icons.settlements },
 
@@ -200,7 +200,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[var(--width-sidebar)] flex-col bg-sidebar shadow-[var(--shadow-sidebar)] transition-transform ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-[var(--width-sidebar)] flex-col bg-sidebar shadow-[var(--shadow-sidebar)] transition-transform print:hidden ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
@@ -229,8 +229,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main column */}
-      <div className="flex min-h-screen min-w-0 flex-col lg:pl-[var(--width-sidebar)]">
-        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-border/60 bg-surface/95 px-4 backdrop-blur-sm sm:px-6 lg:px-8">
+      <div className="flex min-h-screen min-w-0 flex-col lg:pl-[var(--width-sidebar)] print:pl-0">
+        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-border/60 bg-surface/95 px-4 backdrop-blur-sm sm:px-6 lg:px-8 print:hidden">
           <button
             type="button"
             className="inline-flex rounded-lg p-2 text-muted hover:bg-slate-100 lg:hidden"

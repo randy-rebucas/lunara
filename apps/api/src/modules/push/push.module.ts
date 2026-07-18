@@ -13,12 +13,17 @@ import { PushController } from './push.controller';
 import { PushNotificationService } from './push-notification.service';
 import { RiderOfferPushService } from './rider-offer-push.service';
 import { PushToken, PushTokenSchema } from './schemas/push-token.schema';
+import {
+  BroadcastNotification,
+  BroadcastNotificationSchema,
+} from './schemas/broadcast-notification.schema';
 
 @Global()
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: PushToken.name, schema: PushTokenSchema },
+      { name: BroadcastNotification.name, schema: BroadcastNotificationSchema },
       { name: Notification.name, schema: NotificationSchema },
       { name: Rider.name, schema: RiderSchema },
       { name: Order.name, schema: OrderSchema },

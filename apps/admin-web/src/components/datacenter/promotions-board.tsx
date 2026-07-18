@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { useCallback, useMemo, useState } from 'react';
 import { filterBySearch, ListControls } from '../list-controls';
-import { MetricCell } from './metric-cell';
 import { adminFetch } from '../../lib/admin-api';
 import { formatPeso } from '../../lib/format-peso';
 import { useAdminQuery } from '../../lib/use-admin-query';
@@ -23,17 +22,13 @@ interface Promotion {
   newCustomerWithinDays?: number;
   startsAt?: string;
   endsAt?: string;
+  redemptions: number;
+  discountGiven: number;
+  revenueImpact: number;
 }
 
 type PromoState = 'nominal' | 'attention';
-
-const QUICK_ACTIONS = [
-  { href: '/',        label: 'Ops center' },
-  { href: '/orders',  label: 'Orders' },
-  { href: '/revenue', label: 'Revenue' },
-  { href: '/reports', label: 'Reports' },
-  { href: '/shops',   label: 'Shops' },
-] as const;
+type StatusTab = 'all' | 'active' | 'inactive';
 
 const promoCopy: Record<PromoState, { label: string; detail: string; dot: string; bar: string }> = {
   nominal: {
@@ -49,12 +44,6 @@ const promoCopy: Record<PromoState, { label: string; detail: string; dot: string
     bar: 'border-amber-500/35 bg-amber-950/5',
   },
 };
-
-const STATUS_FILTER_OPTIONS = [
-  { value: '',         label: 'All statuses' },
-  { value: 'active',   label: 'Active' },
-  { value: 'inactive', label: 'Inactive' },
-];
 
 function formatDiscount(p: Promotion) {
   return p.discountType === 'percent' ? `${p.discountValue}% off` : `${formatPeso(p.discountValue)} off`;
@@ -87,11 +76,83 @@ function derivePromoState(items: Promotion[]): PromoState {
   return items.some((p) => p.isActive && !isPromoExpired(p, now)) ? 'nominal' : 'attention';
 }
 
+// ── Small blocks ───────────────────────────────────────────────────────────
+const TILE_TONES = {
+  primary: 'bg-primary/[0.04] ring-primary/15',
+  accent: 'bg-accent/[0.04] ring-accent/20',
+  secondary: 'bg-secondary/[0.04] ring-secondary/15',
+  amber: 'bg-amber-500/[0.04] ring-amber-500/20',
+  violet: 'bg-violet-500/[0.04] ring-violet-500/20',
+  rose: 'bg-rose-500/[0.04] ring-rose-500/20',
+} as const;
+
+function StatTile({
+  label,
+  value,
+  sub,
+  tone,
+  onClick,
+  active,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  tone: keyof typeof TILE_TONES;
+  onClick?: () => void;
+  active?: boolean;
+}) {
+  const cls = `rounded-xl p-4 text-left ring-1 transition-all ${TILE_TONES[tone]} ${
+    active ? 'ring-2 ring-primary/40' : ''
+  }`;
+  const inner = (
+    <>
+      <p className="text-xs font-medium text-muted">{label}</p>
+      <p className="dc-value mt-1">{value}</p>
+      {sub ? <p className="dc-sublabel mt-0.5">{sub}</p> : null}
+    </>
+  );
+  return onClick ? (
+    <button type="button" onClick={onClick} className={`${cls} hover:shadow-[var(--shadow-elevated)]`}>
+      {inner}
+    </button>
+  ) : (
+    <div className={cls}>{inner}</div>
+  );
+}
+
+function ShareBar({ value, max }: { value: number; max: number }) {
+  return (
+    <div className="mt-1 h-1.5 w-24 overflow-hidden rounded-full bg-slate-100">
+      <div className="h-full rounded-full bg-primary/70" style={{ width: `${max > 0 ? (value / max) * 100 : 0}%` }} />
+    </div>
+  );
+}
+
+function RailSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="border-t border-border/60 px-5 py-4 first:border-0">
+      <p className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-muted">{title}</p>
+      <div className="space-y-2">{children}</div>
+    </div>
+  );
+}
+
+function RailRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-3 text-sm">
+      <span className="shrink-0 text-muted">{label}</span>
+      <span className="min-w-0 text-right font-medium text-slate-900">{value}</span>
+    </div>
+  );
+}
+
 export function PromotionsBoard() {
-  const [statusFilter, setStatusFilter] = useState('');
-  const [search, setSearch]             = useState('');
-  const [limit, setLimit]               = useState(50);
-  const [lastUpdated, setLastUpdated]   = useState<Date | null>(null);
+  const [statusTab, setStatusTab] = useState<StatusTab>('all');
+  const [search, setSearch] = useState('');
+  const [limit, setLimit] = useState(50);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
 
   // Create form state
   const [code, setCode]                             = useState('');
@@ -116,28 +177,49 @@ export function PromotionsBoard() {
 
   const { data: items, loading, error, reload } = useAdminQuery(load, []);
 
-  const promos      = useMemo(() => items ?? [], [items]);
-  const now         = new Date();
-  const activeCount   = promos.filter((p) => p.isActive && !isPromoExpired(p, now)).length;
+  const promos = useMemo(() => items ?? [], [items]);
+  const now = new Date();
+  const activeCount = promos.filter((p) => p.isActive && !isPromoExpired(p, now)).length;
   const inactiveCount = promos.length - activeCount;
-  const percentCount  = promos.filter((p) => p.discountType === 'percent').length;
-  const fixedCount    = promos.filter((p) => p.discountType === 'fixed').length;
+  const totalRedemptions = promos.reduce((s, p) => s + p.redemptions, 0);
+  const totalDiscountGiven = promos.reduce((s, p) => s + p.discountGiven, 0);
+  const totalRevenueImpact = promos.reduce((s, p) => s + p.revenueImpact, 0);
+  const maxRedemptions = Math.max(1, ...promos.map((p) => p.redemptions));
 
-  const filteredPromos = useMemo(() => {
-    let list = promos;
-    if (statusFilter === 'active')   list = list.filter((p) => p.isActive && !isPromoExpired(p, now));
-    if (statusFilter === 'inactive') list = list.filter((p) => !p.isActive || isPromoExpired(p, now));
-    return filterBySearch(list, search, [(p) => p.code, (p) => p.title, (p) => p.description]).slice(0, limit);
-    // `now` intentionally excluded: expiry is re-evaluated whenever promos/filters change, doesn't need its own tick.
+  const tabFiltered = useMemo(() => {
+    if (statusTab === 'active') return promos.filter((p) => p.isActive && !isPromoExpired(p, now));
+    if (statusTab === 'inactive') return promos.filter((p) => !p.isActive || isPromoExpired(p, now));
+    return promos;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [promos, statusFilter, search, limit]);
+  }, [promos, statusTab]);
+
+  const filteredPromos = useMemo(
+    () => filterBySearch(tabFiltered, search, [(p) => p.code, (p) => p.title, (p) => p.description]).slice(0, limit),
+    [tabFiltered, search, limit],
+  );
+
+  const selected = useMemo(
+    () => (selectedId ? (promos.find((p) => p._id === selectedId) ?? null) : null),
+    [promos, selectedId],
+  );
 
   const promoState = derivePromoState(promos);
-  const copy       = promoCopy[promoState];
+  const copy = promoCopy[promoState];
 
   const updatedLabel = lastUpdated
     ? lastUpdated.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : '—';
+
+  const STATUS_TABS: { id: StatusTab; label: string; count: number }[] = [
+    { id: 'all', label: 'All promotions', count: promos.length },
+    { id: 'active', label: 'Active', count: activeCount },
+    { id: 'inactive', label: 'Inactive', count: inactiveCount },
+  ];
+
+  function selectTab(next: StatusTab) {
+    setStatusTab(next);
+    setSelectedId(null);
+  }
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -164,6 +246,7 @@ export function PromotionsBoard() {
       setCode(''); setTitle(''); setDiscountValue('10'); setDiscountType('percent');
       setMinOrderAmount('0'); setAudience('all'); setKind('standard');
       setMaxUsesPerCustomer(''); setNewCustomerWithinDays(''); setStartsAt(''); setEndsAt('');
+      setShowCreate(false);
       await reload();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Failed to create promotion');
@@ -184,7 +267,6 @@ export function PromotionsBoard() {
 
   return (
     <div>
-      {/* ── Header ──────────────────────────────────────────────── */}
       <header className="mb-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -193,21 +275,30 @@ export function PromotionsBoard() {
               Promotions
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted sm:text-base">
-              Promo codes for customer checkout — percent or fixed discounts. Toggle active state without deleting codes.
+              Promo codes for customer checkout — percent or fixed discounts, with real redemption
+              and revenue tracking.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="badge-neutral">Polling</span>
             <span className="dc-sublabel tabular-nums" title="Last data refresh">Updated {updatedLabel}</span>
             <button type="button" className="btn-outline btn-sm" onClick={() => void reload()} disabled={loading}>
               {loading ? 'Syncing…' : 'Sync'}
             </button>
-            <a href="#promo-create" className="btn-primary btn-sm">New promotion</a>
+            <button
+              type="button"
+              className="btn-primary btn-sm"
+              onClick={() => {
+                setShowCreate((v) => !v);
+                setSelectedId(null);
+              }}
+            >
+              {showCreate ? 'Close form' : 'New promotion'}
+            </button>
           </div>
         </div>
       </header>
 
-      {error       && <div className="alert-error mb-4" role="alert">{error}</div>}
+      {error && <div className="alert-error mb-4" role="alert">{error}</div>}
       {actionError && <div className="alert-error mb-4" role="alert">{actionError}</div>}
 
       {loading && !items && (
@@ -218,134 +309,68 @@ export function PromotionsBoard() {
       )}
 
       {items && (
-        <div className="space-y-3">
-
-          {/* ── State banner ─────────────────────────────────────── */}
+        <div className="space-y-4">
+          {/* State banner */}
           <div className={`flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 ${copy.bar}`}>
             <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${copy.dot}`} aria-hidden />
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-slate-900">{copy.label}</p>
               <p className="text-xs text-muted">{copy.detail}</p>
             </div>
-            {activeCount > 0   && <span className="badge-accent px-3 py-1 text-xs font-semibold">{activeCount} active</span>}
-            {inactiveCount > 0 && <span className="badge-neutral px-3 py-1 text-xs font-semibold">{inactiveCount} inactive</span>}
+            {activeCount > 0 ? <span className="badge-accent px-3 py-1 text-xs font-semibold">{activeCount} active</span> : null}
           </div>
 
-          {/* ── Metric row ───────────────────────────────────────── */}
-          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-            <MetricCell label="Active codes"  value={activeCount}   highlight={activeCount > 0 ? 'accent' : 'warning'} />
-            <MetricCell label="Inactive"      value={inactiveCount} />
-            <MetricCell label="Percent off"   value={percentCount}  sub="discount type" />
-            <MetricCell label="Fixed amount"  value={fixedCount}    sub="discount type" />
+          {/* Stat tiles */}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+            <StatTile
+              label="Total promotions"
+              value={promos.length.toLocaleString()}
+              tone="primary"
+              onClick={() => selectTab('all')}
+              active={statusTab === 'all'}
+            />
+            <StatTile
+              label="Active"
+              value={String(activeCount)}
+              tone={activeCount > 0 ? 'accent' : 'rose'}
+              onClick={() => selectTab('active')}
+              active={statusTab === 'active'}
+            />
+            <StatTile
+              label="Inactive"
+              value={String(inactiveCount)}
+              tone="secondary"
+              onClick={() => selectTab('inactive')}
+              active={statusTab === 'inactive'}
+            />
+            <StatTile
+              label="Total redemptions"
+              value={totalRedemptions.toLocaleString()}
+              sub="completed orders"
+              tone="violet"
+            />
+            <StatTile
+              label="Discount given"
+              value={formatPeso(totalDiscountGiven, true)}
+              sub="all time"
+              tone="amber"
+            />
+            <StatTile
+              label="Revenue impact"
+              value={formatPeso(totalRevenueImpact, true)}
+              sub="orders using a code"
+              tone="accent"
+            />
           </div>
 
-          {/* ── Quick actions ────────────────────────────────────── */}
-          <div className="flex flex-wrap gap-2">
-            {QUICK_ACTIONS.map((a) => (
-              <Link key={a.href} href={a.href} className="dc-chip rounded-md border border-border/80 bg-surface px-3 py-1.5 transition-colors hover:border-primary/40 hover:text-primary">
-                {a.label}
-              </Link>
-            ))}
-          </div>
-
-          {/* ── List controls ────────────────────────────────────── */}
-          <ListControls
-            search={search}
-            onSearchChange={setSearch}
-            searchPlaceholder="Code, title, description…"
-            limit={limit}
-            onLimitChange={setLimit}
-            total={promos.length}
-            filtered={filteredPromos.length}
-            filterValue={statusFilter}
-            onFilterChange={setStatusFilter}
-            filterOptions={STATUS_FILTER_OPTIONS}
-            filterLabel="Status"
-          />
-
-          {/* ── Promo catalog ────────────────────────────────────── */}
-          <section className="dc-panel" id="promo-catalog">
-            <div className="dc-panel-header flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-900">Promo catalog</h2>
-                <p className="text-xs text-muted">
-                  Showing {filteredPromos.length} of {promos.length} codes
-                  {statusFilter ? ` · ${STATUS_FILTER_OPTIONS.find((o) => o.value === statusFilter)?.label ?? statusFilter}` : ''}
-                </p>
-              </div>
-              <a href="#promo-create" className="link-primary text-xs font-medium">New promotion →</a>
-            </div>
-
-            {filteredPromos.length === 0 ? (
-              <div className="dc-panel-empty">
-                <p className="font-medium text-slate-900">
-                  {search || statusFilter ? 'No promotions match' : 'No promotions yet'}
-                </p>
-                <p className="mt-1 text-sm text-muted">
-                  {search || statusFilter ? 'Try another filter or search term.' : 'Create a code below for customers to apply at checkout.'}
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="data-table min-w-[1080px]">
-                  <caption className="sr-only">Promotion codes catalog</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Code</th>
-                      <th scope="col">Title</th>
-                      <th scope="col">Discount</th>
-                      <th scope="col">Min order</th>
-                      <th scope="col">Audience</th>
-                      <th scope="col">Validity</th>
-                      <th scope="col">Uses / customer</th>
-                      <th scope="col">Status</th>
-                      <th scope="col"><span className="sr-only">Toggle</span></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredPromos.map((p) => (
-                      <tr key={p._id} className={!p.isActive ? 'opacity-75' : ''}>
-                        <td className="text-code font-bold text-primary">{p.code}</td>
-                        <td className="max-w-[14rem]">
-                          <p className="font-medium text-slate-900">{p.title}</p>
-                          {p.description && (
-                            <p className="truncate text-xs text-muted" title={p.description}>{p.description}</p>
-                          )}
-                        </td>
-                        <td className="tabular-nums">{formatDiscount(p)}</td>
-                        <td className="tabular-nums text-muted">{p.minOrderAmount > 0 ? formatPeso(p.minOrderAmount) : '—'}</td>
-                        <td className="text-sm text-muted">{formatAudience(p)}</td>
-                        <td className="text-sm text-muted">{formatValidity(p)}</td>
-                        <td className="text-sm text-muted">{formatUsesPerCustomer(p)}</td>
-                        <td>
-                          {isPromoExpired(p, now)
-                            ? <span className="badge-neutral">Expired</span>
-                            : <span className={p.isActive ? 'badge-accent' : 'badge-neutral'}>{p.isActive ? 'Active' : 'Inactive'}</span>
-                          }
-                        </td>
-                        <td>
-                          <button type="button" className="link-primary text-xs font-medium" onClick={() => void toggleActive(p)}>
-                            {p.isActive ? 'Deactivate' : 'Activate'}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-
-          {/* ── Create + guide ───────────────────────────────────── */}
-          <div className="grid gap-4 xl:grid-cols-2" id="promo-create">
-
-            <section className="dc-panel flex h-full flex-col">
+          {showCreate ? (
+            <section className="dc-panel ring-2 ring-primary/30">
               <div className="dc-panel-header">
                 <h2 className="text-sm font-semibold text-slate-900">Create promotion</h2>
                 <p className="text-xs text-muted">New code — active immediately after create</p>
               </div>
-              <form onSubmit={create} className="dc-panel-body flex flex-1 flex-col">
-                <div className="dc-form-grid flex-1">
+              <form onSubmit={create} className="dc-panel-body">
+                <div className="dc-form-grid">
                   <div>
                     <label htmlFor="promo-code" className="form-label">Code</label>
                     <input id="promo-code" className="input-field text-code uppercase" placeholder="SUMMER20"
@@ -418,33 +443,189 @@ export function PromotionsBoard() {
                 </div>
               </form>
             </section>
+          ) : null}
 
-            <section className="dc-panel flex h-full flex-col">
-              <div className="dc-panel-header">
-                <h2 className="text-sm font-semibold text-slate-900">How promos work</h2>
-                <p className="text-xs text-muted">Customer-facing checkout behavior</p>
-              </div>
-              <div className="dc-panel-body flex flex-1 flex-col">
-                <ol className="space-y-4 text-sm">
-                  {[
-                    { step: 1, title: 'Admin creates code',          desc: 'Set percent or fixed discount. Code is stored uppercase.' },
-                    { step: 2, title: 'Customer applies at checkout', desc: 'Only active codes are accepted. Min order rules apply when set.' },
-                    { step: 3, title: 'Toggle without deleting',      desc: 'Deactivate seasonal codes to pause them — re-enable when the campaign returns.' },
-                  ].map(({ step, title: t, desc }) => (
-                    <li key={step} className="flex gap-3">
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                        {step}
+          <div className="grid gap-4 xl:grid-cols-12 xl:items-start">
+            {/* ── Promo catalog ── */}
+            <section className="dc-panel min-w-0 xl:col-span-8">
+              <div
+                className="overflow-x-auto overflow-y-hidden border-b border-border/60 px-3"
+                role="tablist"
+                aria-label="Promotion status"
+              >
+                <div className="flex min-w-max gap-1">
+                  {STATUS_TABS.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={statusTab === t.id}
+                      onClick={() => selectTab(t.id)}
+                      className={`-mb-px inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3.5 py-3 text-sm font-medium transition-colors ${
+                        statusTab === t.id
+                          ? 'border-primary text-primary'
+                          : 'border-transparent text-muted hover:text-slate-900'
+                      }`}
+                    >
+                      {t.label}
+                      <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[0.6875rem] font-semibold tabular-nums text-slate-600">
+                        {t.count.toLocaleString()}
                       </span>
-                      <div>
-                        <p className="font-medium text-slate-900">{t}</p>
-                        <p className="mt-0.5 text-muted">{desc}</p>
-                      </div>
-                    </li>
+                    </button>
                   ))}
-                </ol>
+                </div>
               </div>
+
+              <div className="px-4 pb-1">
+                <ListControls
+                  search={search}
+                  onSearchChange={setSearch}
+                  searchPlaceholder="Code, title, description…"
+                  limit={limit}
+                  onLimitChange={setLimit}
+                  total={tabFiltered.length}
+                  filtered={filteredPromos.length}
+                />
+              </div>
+
+              {filteredPromos.length === 0 ? (
+                <div className="dc-panel-empty">
+                  <p className="font-medium text-slate-900">
+                    {search || statusTab !== 'all' ? 'No promotions match' : 'No promotions yet'}
+                  </p>
+                  <p className="mt-1 text-sm text-muted">
+                    {search || statusTab !== 'all' ? 'Try another filter or search term.' : 'Create a code for customers to apply at checkout.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="data-table min-w-[760px]">
+                    <caption className="sr-only">Promotion codes catalog</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Code</th>
+                        <th scope="col">Discount</th>
+                        <th scope="col">Redemptions</th>
+                        <th scope="col" className="text-right">Discount given</th>
+                        <th scope="col">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredPromos.map((p) => {
+                        const expired = isPromoExpired(p, now);
+                        const isSelected = selectedId === p._id;
+                        return (
+                          <tr
+                            key={p._id}
+                            onClick={() => setSelectedId((prev) => (prev === p._id ? null : p._id))}
+                            aria-selected={isSelected}
+                            className={`cursor-pointer ${isSelected ? 'bg-primary/5 hover:bg-primary/5' : !p.isActive ? 'opacity-70' : ''}`}
+                          >
+                            <td>
+                              <span className="text-code font-bold text-primary">{p.code}</span>
+                              <p className="max-w-[12rem] truncate text-xs text-muted" title={p.title}>{p.title}</p>
+                            </td>
+                            <td className="whitespace-nowrap tabular-nums text-sm">{formatDiscount(p)}</td>
+                            <td>
+                              <p className="text-sm font-medium tabular-nums">{p.redemptions.toLocaleString()}</p>
+                              <ShareBar value={p.redemptions} max={maxRedemptions} />
+                            </td>
+                            <td className="text-right text-sm font-medium tabular-nums">
+                              {formatPeso(p.discountGiven)}
+                            </td>
+                            <td>
+                              {expired
+                                ? <span className="badge-neutral">Expired</span>
+                                : <span className={p.isActive ? 'badge-accent' : 'badge-neutral'}>{p.isActive ? 'Active' : 'Inactive'}</span>
+                              }
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </section>
 
+            {/* ── Detail rail ── */}
+            <div className="xl:col-span-4">
+              {!selected ? (
+                <section className="dc-panel">
+                  <div className="dc-panel-header">
+                    <h2 className="text-sm font-semibold text-slate-900">Promotion detail</h2>
+                  </div>
+                  <p className="px-5 py-8 text-center text-sm text-muted">
+                    Select a promotion row to preview it here.
+                  </p>
+                </section>
+              ) : (
+                <section className="dc-panel">
+                  <div className="dc-panel-header flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-code text-sm font-bold text-primary">{selected.code}</p>
+                      <p className="truncate text-sm font-medium text-slate-900" title={selected.title}>
+                        {selected.title}
+                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        {isPromoExpired(selected, now) ? (
+                          <span className="badge-neutral">Expired</span>
+                        ) : (
+                          <span className={selected.isActive ? 'badge-accent' : 'badge-neutral'}>
+                            {selected.isActive ? 'Active' : 'Inactive'}
+                          </span>
+                        )}
+                        <span className="badge-secondary capitalize">{selected.discountType}</span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-ghost btn-sm shrink-0"
+                      aria-label="Close detail panel"
+                      onClick={() => setSelectedId(null)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  {selected.description ? (
+                    <RailSection title="Description">
+                      <p className="text-sm leading-relaxed text-slate-700">{selected.description}</p>
+                    </RailSection>
+                  ) : null}
+
+                  <RailSection title="Rules">
+                    <RailRow label="Discount" value={formatDiscount(selected)} />
+                    <RailRow label="Min order" value={selected.minOrderAmount > 0 ? formatPeso(selected.minOrderAmount) : 'None'} />
+                    <RailRow label="Audience" value={formatAudience(selected)} />
+                    <RailRow label="Uses / customer" value={formatUsesPerCustomer(selected)} />
+                    <RailRow label="Validity" value={formatValidity(selected)} />
+                  </RailSection>
+
+                  <RailSection title="Performance">
+                    <RailRow label="Redemptions" value={selected.redemptions.toLocaleString()} />
+                    <RailRow label="Discount given" value={formatPeso(selected.discountGiven)} />
+                    <RailRow label="Revenue impact" value={formatPeso(selected.revenueImpact)} />
+                  </RailSection>
+
+                  <div className="flex flex-wrap gap-2 border-t border-border/60 px-5 py-4">
+                    <button
+                      type="button"
+                      className="btn-outline btn-sm flex-1"
+                      onClick={() => void toggleActive(selected)}
+                    >
+                      {selected.isActive ? 'Deactivate' : 'Activate'}
+                    </button>
+                    <Link
+                      href={`/orders?search=${encodeURIComponent(selected.code)}`}
+                      className="btn-primary btn-sm flex-1 text-center"
+                    >
+                      View orders
+                    </Link>
+                  </div>
+                </section>
+              )}
+            </div>
           </div>
         </div>
       )}

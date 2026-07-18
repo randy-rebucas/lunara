@@ -2,7 +2,6 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { filterBySearch, ListControls } from '../list-controls';
-import { MetricCell } from './metric-cell';
 import { adminFetch } from '../../lib/admin-api';
 import { formatPeso } from '../../lib/format-peso';
 import { useAdminQuery } from '../../lib/use-admin-query';
@@ -38,6 +37,48 @@ const serviceCopy: Record<ServiceState, { label: string; detail: string; dot: st
 function deriveServiceState(items: LaundryServiceRow[]): ServiceState {
   if (items.some((s) => s.isActive)) return 'nominal';
   return 'attention';
+}
+
+// ── Stat tiles ─────────────────────────────────────────────────────────────
+const TILE_TONES = {
+  primary: 'bg-primary/[0.04] ring-primary/15',
+  accent: 'bg-accent/[0.04] ring-accent/20',
+  secondary: 'bg-secondary/[0.04] ring-secondary/15',
+  amber: 'bg-amber-500/[0.04] ring-amber-500/20',
+} as const;
+
+function StatTile({
+  label,
+  value,
+  sub,
+  tone,
+  onClick,
+  active,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  tone: keyof typeof TILE_TONES;
+  onClick?: () => void;
+  active?: boolean;
+}) {
+  const cls = `rounded-xl p-4 text-left ring-1 transition-all ${TILE_TONES[tone]} ${
+    active ? 'ring-2 ring-primary/40' : ''
+  }`;
+  const inner = (
+    <>
+      <p className="text-xs font-medium text-muted">{label}</p>
+      <p className="dc-value mt-1">{value}</p>
+      {sub ? <p className="dc-sublabel mt-0.5">{sub}</p> : null}
+    </>
+  );
+  return onClick ? (
+    <button type="button" onClick={onClick} className={`${cls} hover:shadow-[var(--shadow-elevated)]`}>
+      {inner}
+    </button>
+  ) : (
+    <div className={cls}>{inner}</div>
+  );
 }
 
 export function ServicesBoard() {
@@ -210,61 +251,30 @@ export function ServicesBoard() {
             ) : null}
           </div>
 
-          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-            <MetricCell
-              label="Active services"
-              value={activeCount}
-              highlight={activeCount > 0 ? 'accent' : 'warning'}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <StatTile
+              label="Catalog size"
+              value={services.length.toLocaleString()}
+              sub="booking types"
+              tone="primary"
+              onClick={() => setStatusFilter('all')}
+              active={statusFilter === 'all'}
             />
-            <MetricCell label="Inactive" value={inactiveCount} />
-            <MetricCell label="Catalog size" value={services.length} sub="booking types" />
+            <StatTile
+              label="Active services"
+              value={activeCount.toLocaleString()}
+              tone={activeCount > 0 ? 'accent' : 'amber'}
+              onClick={() => setStatusFilter('active')}
+              active={statusFilter === 'active'}
+            />
+            <StatTile
+              label="Inactive"
+              value={inactiveCount.toLocaleString()}
+              tone="secondary"
+              onClick={() => setStatusFilter('inactive')}
+              active={statusFilter === 'inactive'}
+            />
           </div>
-
-          <section className="dc-panel">
-            <div className="dc-panel-header flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-900">Status filter</h2>
-                <p className="text-xs text-muted">{services.length} services total</p>
-              </div>
-              {statusFilter !== 'all' ? (
-                <button
-                  type="button"
-                  className="link-primary text-xs font-medium"
-                  onClick={() => setStatusFilter('all')}
-                >
-                  Clear filter
-                </button>
-              ) : null}
-            </div>
-            <div className="dc-panel-body pt-1">
-              <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by status">
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter('all')}
-                  className={statusFilter === 'all' ? 'filter-chip-active' : 'filter-chip'}
-                  aria-pressed={statusFilter === 'all'}
-                >
-                  All ({services.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter('active')}
-                  className={statusFilter === 'active' ? 'filter-chip-active' : 'filter-chip'}
-                  aria-pressed={statusFilter === 'active'}
-                >
-                  Active ({activeCount})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter('inactive')}
-                  className={statusFilter === 'inactive' ? 'filter-chip-active' : 'filter-chip'}
-                  aria-pressed={statusFilter === 'inactive'}
-                >
-                  Inactive ({inactiveCount})
-                </button>
-              </div>
-            </div>
-          </section>
 
           <ListControls
             search={search}

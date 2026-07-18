@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useCallback, useMemo, useState } from 'react';
-import { MetricCell } from './metric-cell';
 import { adminFetch } from '../../lib/admin-api';
 import { formatSlugLabel } from '../../lib/format-label';
 import { formatPeso, formatPesoWhole } from '../../lib/format-peso';
@@ -72,6 +71,54 @@ function statusBadgeClass(status: string) {
 
 function sortedEntries(data: Record<string, number>) {
   return Object.entries(data).sort((a, b) => b[1] - a[1]);
+}
+
+// ── Stat tiles ─────────────────────────────────────────────────────────────
+const TILE_TONES = {
+  primary: 'bg-primary/[0.04] ring-primary/15',
+  accent: 'bg-accent/[0.04] ring-accent/20',
+  secondary: 'bg-secondary/[0.04] ring-secondary/15',
+  amber: 'bg-amber-500/[0.04] ring-amber-500/20',
+  violet: 'bg-violet-500/[0.04] ring-violet-500/20',
+  rose: 'bg-rose-500/[0.04] ring-rose-500/20',
+} as const;
+
+function StatTile({
+  label,
+  value,
+  sub,
+  tone,
+  href,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  tone: keyof typeof TILE_TONES;
+  href?: string;
+}) {
+  const cls = `rounded-xl p-4 ring-1 ${TILE_TONES[tone]}`;
+  const inner = (
+    <>
+      <p className="text-xs font-medium text-muted">{label}</p>
+      <p className="dc-value mt-1">{value}</p>
+      {sub ? <p className="dc-sublabel mt-0.5">{sub}</p> : null}
+    </>
+  );
+  return href ? (
+    <Link href={href} className={`${cls} block transition-all hover:shadow-[var(--shadow-elevated)]`}>
+      {inner}
+    </Link>
+  ) : (
+    <div className={cls}>{inner}</div>
+  );
+}
+
+function ShareBar({ value }: { value: number }) {
+  return (
+    <div className="ml-auto mt-1 h-1.5 w-20 overflow-hidden rounded-full bg-slate-100">
+      <div className="h-full rounded-full bg-primary/70" style={{ width: `${Math.min(100, value)}%` }} />
+    </div>
+  );
 }
 
 function formatPeriodFrom(from?: string) {
@@ -228,40 +275,41 @@ export function ReportsBoard() {
             ) : null}
           </div>
 
-          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-            <MetricCell label="Total orders" value={report.totalOrders} href="/orders" />
-            <MetricCell
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+            <StatTile label="Total orders" value={report.totalOrders.toLocaleString()} tone="primary" href="/orders" />
+            <StatTile
               label="Completed"
-              value={report.completedOrders}
+              value={report.completedOrders.toLocaleString()}
               sub={`${completionRate}% of period`}
-              highlight={report.completedOrders > 0 ? 'accent' : undefined}
+              tone="accent"
             />
-            <MetricCell
+            <StatTile
               label="In flight"
-              value={inFlight}
+              value={inFlight.toLocaleString()}
               sub="not completed/cancelled"
-              highlight={inFlight > 0 ? 'primary' : undefined}
+              tone="primary"
             />
-            <MetricCell
+            <StatTile
               label="Cancelled"
-              value={report.cancelledOrders}
-              highlight={report.cancelledOrders > 0 ? 'warning' : undefined}
+              value={report.cancelledOrders.toLocaleString()}
+              tone={report.cancelledOrders > 0 ? 'amber' : 'secondary'}
             />
-            <MetricCell
+            <StatTile
               label="Revenue"
               value={formatPesoWhole(report.revenue)}
+              tone="accent"
               href="/revenue"
-              highlight={report.revenue > 0 ? 'accent' : undefined}
             />
-            <MetricCell
+            <StatTile
               label="Avg order"
               value={report.completedOrders > 0 ? formatPeso(report.averageOrderValue) : '—'}
+              tone="secondary"
             />
-            <MetricCell
+            <StatTile
               label="New customers"
-              value={report.newCustomers}
+              value={report.newCustomers.toLocaleString()}
               sub={`${report.ridersJoined} riders joined`}
-              highlight={report.newCustomers > 0 ? 'primary' : undefined}
+              tone="violet"
             />
           </div>
 
@@ -315,7 +363,10 @@ export function ReportsBoard() {
                             </span>
                           </td>
                           <td className="text-right tabular-nums">{row.count}</td>
-                          <td className="text-right tabular-nums text-muted">{row.share}%</td>
+                          <td className="text-right">
+                            <span className="tabular-nums text-muted">{row.share}%</span>
+                            <ShareBar value={row.share} />
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -359,7 +410,10 @@ export function ReportsBoard() {
                         <tr key={row.service}>
                           <td className="font-medium capitalize">{formatSlugLabel(row.service)}</td>
                           <td className="text-right tabular-nums">{row.count}</td>
-                          <td className="text-right tabular-nums text-muted">{row.share}%</td>
+                          <td className="text-right">
+                            <span className="tabular-nums text-muted">{row.share}%</span>
+                            <ShareBar value={row.share} />
+                          </td>
                         </tr>
                       ))}
                     </tbody>

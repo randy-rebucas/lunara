@@ -89,7 +89,7 @@ export default function CreatePartnerPage() {
           maxWeightCapacityKg: Number(form.maxWeightCapacityKg),
         }),
       });
-      router.push('/shops');
+      router.push('/partners');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create partner');
     } finally {
@@ -101,7 +101,7 @@ export default function CreatePartnerPage() {
     <div className="mx-auto max-w-3xl">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <Link href="/shops" className="text-xs text-muted hover:text-primary">← Shops</Link>
+          <Link href="/partners" className="text-xs text-muted hover:text-primary">← Partners</Link>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">Create partner</h1>
           <p className="mt-1 text-sm text-muted">Creates a portal login account and branch in one step.</p>
         </div>
@@ -231,7 +231,7 @@ export default function CreatePartnerPage() {
         ) : null}
 
         <div className="flex items-center justify-between">
-          <Link href="/shops" className="btn-outline btn-sm">Cancel</Link>
+          <Link href="/partners" className="btn-outline btn-sm">Cancel</Link>
           <button type="submit" className="btn-primary" disabled={busy}>
             {busy ? 'Creating…' : 'Create partner & branch'}
           </button>

@@ -1,10 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { PushPlatform } from '@lunara/types';
+import { PushPlatform, UserRole } from '@lunara/types';
+import { User, UserDocument } from '../users/schemas/user.schema';
 import { FirebaseService } from './firebase.service';
 import { isInvalidFcmTokenError, stringifyPushData } from './push-utils';
 import { PushToken, PushTokenDocument } from './schemas/push-token.schema';
+import {
+  BroadcastNotification,
+  BroadcastNotificationDocument,
+} from './schemas/broadcast-notification.schema';
 
 export interface PushPayload {
   title: string;
@@ -20,8 +25,34 @@ export class PushNotificationService {
 
   constructor(
     @InjectModel(PushToken.name) private pushTokenModel: Model<PushTokenDocument>,
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(BroadcastNotification.name)
+    private broadcastModel: Model<BroadcastNotificationDocument>,
     private firebase: FirebaseService,
   ) {}
+
+  /** Records a sent broadcast to history, shown on the admin Notifications page. */
+  async recordBroadcast(params: {
+    title: string;
+    body: string;
+    audience: string;
+    sentCount: number;
+    createdBy: string;
+  }) {
+    const admin = await this.userModel.findById(params.createdBy).select('email').lean();
+    await this.broadcastModel.create({
+      title: params.title,
+      body: params.body,
+      audience: params.audience,
+      sentCount: params.sentCount,
+      createdBy: new Types.ObjectId(params.createdBy),
+      createdByName: admin?.email,
+    });
+  }
+
+  async listBroadcasts(limit = 50) {
+    return this.broadcastModel.find({}).sort({ createdAt: -1 }).limit(limit).lean();
+  }
 
   async registerToken(
     userId: string,
@@ -67,6 +98,34 @@ export class PushNotificationService {
   async broadcastToAll(payload: PushPayload): Promise<number> {
     const tokens = await this.pushTokenModel.find({});
     return this.sendToTokens(tokens, payload);
+  }
+
+  /** Broadcast to every registered device belonging to users of one role (customer/rider/partner/staff). */
+  async broadcastToRole(role: UserRole, payload: PushPayload): Promise<number> {
+    const users = await this.userModel.find({ role }).select('_id').lean();
+    if (users.length === 0) return 0;
+    return this.sendToUsers(
+      users.map((u) => u._id.toString()),
+      payload,
+    );
+  }
+
+  /** Registered-device counts grouped by the owning user's role, for the broadcast composer's audience picker. */
+  async getAudienceDeviceCounts(): Promise<Record<string, number>> {
+    const rows = await this.pushTokenModel.aggregate<{ _id: string; count: number }>([
+      { $group: { _id: '$userId' } },
+      {
+        $lookup: {
+          from: 'users',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'user',
+        },
+      },
+      { $unwind: '$user' },
+      { $group: { _id: '$user.role', count: { $sum: 1 } } },
+    ]);
+    return Object.fromEntries(rows.map((r) => [r._id, r.count]));
   }
 
   private async sendToTokens(

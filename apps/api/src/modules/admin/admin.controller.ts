@@ -50,6 +50,7 @@ import { OnboardPartnerDto } from './dto/onboard-partner.dto';
 import { InitNetworkDto } from './dto/init-network.dto';
 import { CreateSetupBranchDto } from './dto/create-setup-branch.dto';
 import { SetShopActiveDto } from './dto/set-shop-active.dto';
+import { UpdatePartnerProfileDto } from './dto/update-partner-profile.dto';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { CreateRiderDto } from './dto/create-rider.dto';
 import { RiderAnnouncementDto } from './dto/rider-announcement.dto';
@@ -315,9 +316,19 @@ export class AdminController {
     return this.adminService.getShops();
   }
 
+  @Get('shops/:id/detail')
+  getShopDetail(@Param('id') id: string) {
+    return this.adminService.getShopDetail(id);
+  }
+
   @Patch('shops/:id')
   setShopActive(@Param('id') id: string, @Body() dto: SetShopActiveDto) {
     return this.branchManagementService.setPartnerActive(id, dto.isActive);
+  }
+
+  @Patch('shops/:id/profile')
+  updatePartnerProfile(@Param('id') id: string, @Body() dto: UpdatePartnerProfileDto) {
+    return this.adminService.updatePartnerProfile(id, dto);
   }
 
   @Post('partners')
@@ -580,9 +591,46 @@ export class AdminController {
   }
 
   @Post('broadcast')
-  async broadcast(@Body() dto: { title: string; body: string; audience?: 'all' }) {
-    const sent = await this.pushService.broadcastToAll({ title: dto.title, body: dto.body });
+  async broadcast(
+    @Body() dto: { title: string; body: string; audience?: 'all' | UserRole },
+    @Req() req: { user: { sub: string } },
+  ) {
+    const audience = dto.audience ?? 'all';
+    const sent =
+      audience === 'all'
+        ? await this.pushService.broadcastToAll({ title: dto.title, body: dto.body })
+        : await this.pushService.broadcastToRole(audience, { title: dto.title, body: dto.body });
+    await this.pushService.recordBroadcast({
+      title: dto.title,
+      body: dto.body,
+      audience,
+      sentCount: sent,
+      createdBy: req.user.sub,
+    });
     return { success: true, sent };
+  }
+
+  @Get('broadcast/audience-counts')
+  async getBroadcastAudienceCounts() {
+    const data = await this.pushService.getAudienceDeviceCounts();
+    return { success: true, data };
+  }
+
+  @Get('broadcast/history')
+  async getBroadcastHistory() {
+    const items = await this.pushService.listBroadcasts();
+    return {
+      success: true,
+      data: items.map((item) => ({
+        id: item._id.toString(),
+        title: item.title,
+        body: item.body,
+        audience: item.audience,
+        sentCount: item.sentCount,
+        createdByName: item.createdByName,
+        createdAt: item.createdAt,
+      })),
+    };
   }
 
   @Post('addons/:id/image')

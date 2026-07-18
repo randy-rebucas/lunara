@@ -298,7 +298,7 @@ export default function SetupPage() {
                   <span className="text-muted"> — delivery fees, coverage radii, display preferences</span>
                 </li>
                 <li>
-                  <Link href="/shops" className="link-primary font-medium">Shops</Link>
+                  <Link href="/partners" className="link-primary font-medium">Partners</Link>
                   <span className="text-muted"> — partner accounts overview</span>
                 </li>
               </ul>

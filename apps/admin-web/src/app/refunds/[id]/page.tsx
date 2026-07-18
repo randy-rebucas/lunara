@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { useCallback, useState } from 'react';
+import { useParams, useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 import { REFUND_FLOW, formatRefundStatus, refundFlowIndex } from '@lunara/utils';
 import { DetailPageHeader } from '../../../components/detail-page-header';
 import { DataPageStatus } from '../../../components/data-page-status';
@@ -49,6 +49,7 @@ interface RefundReview {
 
 export default function AdminRefundReviewPage() {
   const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const [adminNote, setAdminNote] = useState('');
   const [approvedAmount, setApprovedAmount] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
@@ -63,6 +64,13 @@ export default function AdminRefundReviewPage() {
   }, [id]);
 
   const { data, loading: pageLoading, error: loadError, reload } = useAdminQuery(load, [id]);
+
+  useEffect(() => {
+    if (data && searchParams.get('print') === '1') {
+      const t = window.setTimeout(() => window.print(), 200);
+      return () => window.clearTimeout(t);
+    }
+  }, [data, searchParams]);
 
   async function review(action: string, body?: Record<string, unknown>) {
     if (!id) return;
@@ -112,9 +120,14 @@ export default function AdminRefundReviewPage() {
           </>
         }
         actions={
-          <Link href={`/orders/${refund.orderId}`} className="btn-outline btn-sm">
-            Order ops
-          </Link>
+          <>
+            <button type="button" className="btn-outline btn-sm print:hidden" onClick={() => window.print()}>
+              Print / save receipt
+            </button>
+            <Link href={`/orders/${refund.orderId}`} className="btn-outline btn-sm print:hidden">
+              Order ops
+            </Link>
+          </>
         }
       />
 
@@ -195,7 +208,7 @@ export default function AdminRefundReviewPage() {
               <li>{data.verification.eligibleForRefund ? '✓' : '✗'} Eligible for refund</li>
             </ul>
           ) : null}
-          <div className="dc-form-actions mt-4">
+          <div className="dc-form-actions mt-4 print:hidden">
             <button
               type="button"
               disabled={loading || !!refund.orderVerifiedAt}
@@ -208,7 +221,7 @@ export default function AdminRefundReviewPage() {
         </OpsPanel>
       ) : null}
 
-      <OpsPanel title="Approve / reject" className="mt-4">
+      <OpsPanel title="Approve / reject" className="mt-4 print:hidden">
         <div className="dc-form-grid max-w-xl">
           <div>
             <label htmlFor="approved-amount" className="form-label">
@@ -255,7 +268,7 @@ export default function AdminRefundReviewPage() {
         </div>
       </OpsPanel>
 
-      <OpsPanel title="Process & notify" className="mt-4">
+      <OpsPanel title="Process & notify" className="mt-4 print:hidden">
         <label htmlFor="admin-note" className="form-label">
           Admin note
         </label>

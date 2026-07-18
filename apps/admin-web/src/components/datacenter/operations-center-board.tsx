@@ -416,7 +416,7 @@ export function OperationsCenterBoard() {
               value={data.counts.partners.toLocaleString()}
               icon={icons.shops}
               tone="accent"
-              href="/shops"
+              href="/partners"
               sub={`${data.counts.activePromos} active promos`}
             />
             <DashStatCard
@@ -530,7 +530,7 @@ export function OperationsCenterBoard() {
           {/* Leaderboards + revenue */}
           <div className="grid gap-4 lg:grid-cols-3">
             <section className="dc-panel">
-              <PanelHeader title="Top laundry shops" sub="This week" action={{ href: '/shops', label: 'View all' }} />
+              <PanelHeader title="Top laundry shops" sub="This week" action={{ href: '/partners', label: 'View all' }} />
               {data.topBranches.length === 0 ? (
                 <p className="dc-panel-empty text-sm text-muted">No completed orders this week.</p>
               ) : (

@@ -8,6 +8,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { OrderStatus, PaymentMethod, PaymentStatus } from '@lunara/types';
 import { REFUND_FLOW, isRefundablePaymentMethod } from '@lunara/utils';
+import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
@@ -53,6 +54,7 @@ const REFUNDABLE_ORDER_STATUSES = [
 export class RefundsService {
   constructor(
     @InjectModel(RefundRequest.name) private refundModel: Model<RefundRequestDocument>,
+    @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
@@ -153,26 +155,63 @@ export class RefundsService {
   async listAdminRefunds(status?: string) {
     const filter = status ? { status } : {};
     const items = await this.refundModel.find(filter).sort({ updatedAt: -1 }).limit(100);
-    const customers = await this.orderModel
+    const orders = await this.orderModel
       .find({ _id: { $in: items.map((r) => r.orderId) } })
       .select('customerId bookingType total status');
+    const customers = await this.customerModel
+      .find({ userId: { $in: items.map((r) => r.customerId) } })
+      .select('userId firstName lastName avatarUrl')
+      .lean();
 
-    const orderMap = new Map(customers.map((o) => [o._id.toString(), o]));
+    const orderMap = new Map(orders.map((o) => [o._id.toString(), o]));
+    const customerMap = new Map(customers.map((c) => [c.userId.toString(), c]));
+
+    const [pending, underReview, approved, total, processedAgg] = await Promise.all([
+      this.refundModel.countDocuments({ status: RefundStatus.PENDING }),
+      this.refundModel.countDocuments({ status: RefundStatus.UNDER_REVIEW }),
+      this.refundModel.countDocuments({ status: RefundStatus.APPROVED }),
+      this.refundModel.countDocuments({}),
+      this.refundModel.aggregate<{ _id: null; count: number; amount: number }>([
+        {
+          $match: {
+            $or: [
+              { status: RefundStatus.PROCESSED },
+              { status: RefundStatus.CLOSED, processedAt: { $ne: null } },
+            ],
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            count: { $sum: 1 },
+            amount: { $sum: { $ifNull: ['$approvedAmount', '$requestedAmount'] } },
+          },
+        },
+      ]),
+    ]);
+    const rejected = await this.refundModel.countDocuments({ status: RefundStatus.REJECTED });
 
     return {
       success: true,
       data: {
-        items: items.map((r) => ({
-          ...this.serializeRefund(r),
-          orderStatus: orderMap.get(r.orderId.toString())?.status,
-          bookingType: orderMap.get(r.orderId.toString())?.bookingType,
-        })),
+        items: items.map((r) => {
+          const customer = customerMap.get(r.customerId.toString());
+          return {
+            ...this.serializeRefund(r),
+            orderStatus: orderMap.get(r.orderId.toString())?.status,
+            bookingType: orderMap.get(r.orderId.toString())?.bookingType,
+            customerName: customer ? `${customer.firstName} ${customer.lastName}`.trim() : undefined,
+            customerAvatarUrl: customer?.avatarUrl,
+          };
+        }),
         counts: {
-          pending: await this.refundModel.countDocuments({ status: RefundStatus.PENDING }),
-          underReview: await this.refundModel.countDocuments({
-            status: RefundStatus.UNDER_REVIEW,
-          }),
-          approved: await this.refundModel.countDocuments({ status: RefundStatus.APPROVED }),
+          pending,
+          underReview,
+          approved,
+          total,
+          rejected,
+          processed: processedAgg[0]?.count ?? 0,
+          refundedAmount: processedAgg[0]?.amount ?? 0,
         },
       },
     };

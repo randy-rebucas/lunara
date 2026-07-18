@@ -310,7 +310,7 @@ export function MessagesBoard() {
             </RailSection>
 
             <div className="flex flex-wrap gap-2 border-t border-border/60 px-5 py-4">
-              <Link href="/shops" className="btn-outline btn-sm flex-1 text-center">
+              <Link href="/partners" className="btn-outline btn-sm flex-1 text-center">
                 Shop directory
               </Link>
               <Link href="/partners/settlements" className="btn-outline btn-sm flex-1 text-center">

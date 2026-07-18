@@ -25,6 +25,8 @@ import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { CreateRiderDto } from './dto/create-rider.dto';
 import { UpdatePromotionDto } from './dto/update-promotion.dto';
 import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
+import { Review, ReviewDocument } from '../reviews/schemas/review.schema';
+import { UpdatePartnerProfileDto } from './dto/update-partner-profile.dto';
 import {
   buildOrderPaymentSummary,
   loadLatestOrderPaymentsByOrderId,
@@ -127,6 +129,7 @@ export class AdminService {
     @InjectModel(Promotion.name) private promotionModel: Model<PromotionDocument>,
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
     @InjectModel(Branch.name) private branchModel: Model<BranchDocument>,
+    @InjectModel(Review.name) private reviewModel: Model<ReviewDocument>,
     private supportService: SupportService,
     private branchesService: BranchesService,
     private branchManagementService: BranchManagementService,
@@ -820,28 +823,60 @@ export class AdminService {
   async getShops() {
     const partners = await this.userModel
       .find({ role: UserRole.PARTNER })
-      .select('email phone isActive createdAt')
+      .select(
+        'email phone isActive createdAt ownerName subscriptionPlan planPrice planRenewsAt trialEndsAt',
+      )
       .sort({ email: 1 });
 
-    const orderStats = await this.orderModel.aggregate([
-      { $match: { partnerId: { $exists: true, $ne: null } } },
-      { $group: { _id: '$partnerId', totalOrders: { $sum: 1 }, revenue: { $sum: '$total' } } },
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const [orderStats, orderStats30d] = await Promise.all([
+      this.orderModel.aggregate([
+        { $match: { partnerId: { $exists: true, $ne: null } } },
+        { $group: { _id: '$partnerId', totalOrders: { $sum: 1 }, revenue: { $sum: '$total' } } },
+      ]),
+      this.orderModel.aggregate([
+        {
+          $match: {
+            partnerId: { $exists: true, $ne: null },
+            createdAt: { $gte: thirtyDaysAgo },
+          },
+        },
+        { $group: { _id: '$partnerId', orders30d: { $sum: 1 }, revenue30d: { $sum: '$total' } } },
+      ]),
     ]);
     const statsMap = new Map(
       orderStats.map((s) => [s._id.toString(), { totalOrders: s.totalOrders, revenue: s.revenue }]),
+    );
+    const stats30dMap = new Map(
+      orderStats30d.map((s) => [s._id.toString(), { orders30d: s.orders30d, revenue30d: s.revenue30d }]),
+    );
+
+    const ratingStats = await this.reviewModel.aggregate([
+      { $match: { partnerId: { $exists: true, $ne: null } } },
+      { $group: { _id: '$partnerId', avgRating: { $avg: '$rating' }, reviewCount: { $sum: 1 } } },
+    ]);
+    const ratingMap = new Map(
+      ratingStats.map((r) => [r._id.toString(), { avgRating: r.avgRating, reviewCount: r.reviewCount }]),
     );
 
     // A partner account can own several branches (e.g. franchise locations) — surface all of
     // them here so admin-web doesn't just show a blank/singular branch name for those partners.
     const branches = await this.branchModel
       .find({ partnerUserId: { $in: partners.map((p) => p._id) } })
-      .select('partnerUserId name');
+      .select('partnerUserId name operatingHours')
+      .sort({ createdAt: 1 });
     const branchNamesByPartnerId = new Map<string, string[]>();
+    const operatingHoursByPartnerId = new Map<string, BranchDocument['operatingHours']>();
     for (const b of branches) {
       const key = b.partnerUserId.toString();
       const names = branchNamesByPartnerId.get(key) ?? [];
       names.push(b.name);
       branchNamesByPartnerId.set(key, names);
+      if (!operatingHoursByPartnerId.has(key)) {
+        operatingHoursByPartnerId.set(key, b.operatingHours);
+      }
     }
 
     const staffCount = await this.userModel.countDocuments({ role: UserRole.STAFF, isActive: true });
@@ -849,15 +884,170 @@ export class AdminService {
     return {
       success: true,
       data: {
-        shops: partners.map((p) => ({
-          _id: p._id.toString(),
-          email: p.email,
-          phone: p.phone,
-          isActive: p.isActive,
-          staffCount,
-          totalOrders: statsMap.get(p._id.toString())?.totalOrders ?? 0,
-          revenue: statsMap.get(p._id.toString())?.revenue ?? 0,
-          branchNames: branchNamesByPartnerId.get(p._id.toString()) ?? [],
+        shops: partners.map((p) => {
+          const id = p._id.toString();
+          const rating = ratingMap.get(id);
+          return {
+            _id: id,
+            email: p.email,
+            phone: p.phone,
+            isActive: p.isActive,
+            ownerName: p.ownerName,
+            subscriptionPlan: p.subscriptionPlan ?? 'trial',
+            planPrice: p.planPrice ?? 0,
+            planRenewsAt: p.planRenewsAt,
+            trialEndsAt: p.trialEndsAt,
+            staffCount,
+            totalOrders: statsMap.get(id)?.totalOrders ?? 0,
+            revenue: statsMap.get(id)?.revenue ?? 0,
+            orders30d: stats30dMap.get(id)?.orders30d ?? 0,
+            revenue30d: stats30dMap.get(id)?.revenue30d ?? 0,
+            rating: rating ? Math.round(rating.avgRating * 10) / 10 : null,
+            reviewCount: rating?.reviewCount ?? 0,
+            branchNames: branchNamesByPartnerId.get(id) ?? [],
+            operatingHours: operatingHoursByPartnerId.get(id) ?? [],
+          };
+        }),
+      },
+    };
+  }
+
+  async updatePartnerProfile(id: string, dto: UpdatePartnerProfileDto) {
+    const partner = await this.userModel.findOne({ _id: id, role: UserRole.PARTNER });
+    if (!partner) {
+      throw new NotFoundException('Partner not found');
+    }
+    if (dto.ownerName !== undefined) partner.ownerName = dto.ownerName;
+    if (dto.subscriptionPlan !== undefined) partner.subscriptionPlan = dto.subscriptionPlan;
+    if (dto.planPrice !== undefined) partner.planPrice = dto.planPrice;
+    if (dto.planRenewsAt !== undefined) partner.planRenewsAt = new Date(dto.planRenewsAt);
+    if (dto.trialEndsAt !== undefined) partner.trialEndsAt = new Date(dto.trialEndsAt);
+    if (dto.businessName !== undefined) partner.businessName = dto.businessName;
+    if (dto.tin !== undefined) partner.tin = dto.tin;
+    if (dto.businessPermitNumber !== undefined) partner.businessPermitNumber = dto.businessPermitNumber;
+    if (dto.businessPermitVerified !== undefined) partner.businessPermitVerified = dto.businessPermitVerified;
+    if (dto.birRegistrationNumber !== undefined) partner.birRegistrationNumber = dto.birRegistrationNumber;
+    if (dto.birRegistrationVerified !== undefined) partner.birRegistrationVerified = dto.birRegistrationVerified;
+    if (dto.deliveryRadiusKm !== undefined) partner.deliveryRadiusKm = dto.deliveryRadiusKm;
+    await partner.save();
+    return { success: true, data: { _id: partner._id.toString() } };
+  }
+
+  async getShopDetail(id: string) {
+    const partner = await this.userModel.findOne({ _id: id, role: UserRole.PARTNER });
+    if (!partner) {
+      throw new NotFoundException('Partner not found');
+    }
+
+    const partnerId = partner._id;
+
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const startOfMonth = new Date(startOfDay.getFullYear(), startOfDay.getMonth(), 1);
+    const startOfLastMonth = new Date(startOfDay.getFullYear(), startOfDay.getMonth() - 1, 1);
+
+    const monthSummary = async (from: Date, to: Date) => {
+      const rows = await this.orderModel.aggregate<{
+        _id: null;
+        orders: number;
+        completed: number;
+        cancelled: number;
+        revenue: number;
+      }>([
+        { $match: { partnerId, createdAt: { $gte: from, $lt: to } } },
+        {
+          $group: {
+            _id: null,
+            orders: { $sum: 1 },
+            completed: { $sum: { $cond: [{ $in: ['$status', COMPLETED] }, 1, 0] } },
+            cancelled: { $sum: { $cond: [{ $in: ['$status', CANCELLED] }, 1, 0] } },
+            revenue: { $sum: '$total' },
+          },
+        },
+      ]);
+      return rows[0] ?? { orders: 0, completed: 0, cancelled: 0, revenue: 0 };
+    };
+
+    const [thisMonth, lastMonth, branches, recentOrdersRaw, customerCounts, ratingRow] = await Promise.all([
+      monthSummary(startOfMonth, new Date(startOfDay.getFullYear(), startOfDay.getMonth() + 1, 1)),
+      monthSummary(startOfLastMonth, startOfMonth),
+      this.branchModel
+        .find({ partnerUserId: partnerId })
+        .select('name city province isActive serviceRadiusKm maxActiveOrders')
+        .sort({ createdAt: 1 }),
+      this.orderModel
+        .find({ partnerId })
+        .select('status total createdAt')
+        .sort({ createdAt: -1 })
+        .limit(5),
+      this.orderModel.aggregate<{ _id: Types.ObjectId; orderCount: number }>([
+        { $match: { partnerId } },
+        { $group: { _id: '$customerId', orderCount: { $sum: 1 } } },
+      ]),
+      this.reviewModel.aggregate<{ _id: null; avgRating: number; reviewCount: number }>([
+        { $match: { partnerId } },
+        { $group: { _id: null, avgRating: { $avg: '$rating' }, reviewCount: { $sum: 1 } } },
+      ]),
+    ]);
+
+    const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0);
+    const delta = (curr: number, prev: number) =>
+      prev > 0 ? Math.round(((curr - prev) / prev) * 1000) / 10 : curr > 0 ? 100 : 0;
+
+    const repeatCustomers = customerCounts.filter((c) => c.orderCount > 1).length;
+    const repeatRate = pct(repeatCustomers, customerCounts.length);
+    const rating = ratingRow[0];
+
+    return {
+      success: true,
+      data: {
+        _id: partner._id.toString(),
+        email: partner.email,
+        phone: partner.phone,
+        isActive: partner.isActive,
+        ownerName: partner.ownerName,
+        businessName: partner.businessName,
+        tin: partner.tin,
+        businessPermitNumber: partner.businessPermitNumber,
+        businessPermitVerified: partner.businessPermitVerified ?? false,
+        birRegistrationNumber: partner.birRegistrationNumber,
+        birRegistrationVerified: partner.birRegistrationVerified ?? false,
+        deliveryRadiusKm: partner.deliveryRadiusKm,
+        subscriptionPlan: partner.subscriptionPlan ?? 'trial',
+        planPrice: partner.planPrice ?? 0,
+        planRenewsAt: partner.planRenewsAt,
+        trialEndsAt: partner.trialEndsAt,
+        createdAt: partner.createdAt,
+        rating: rating ? Math.round(rating.avgRating * 10) / 10 : null,
+        reviewCount: rating?.reviewCount ?? 0,
+        performance: {
+          ordersThisMonth: thisMonth.orders,
+          completedThisMonth: thisMonth.completed,
+          cancelledThisMonth: thisMonth.cancelled,
+          revenueThisMonth: thisMonth.revenue,
+          ordersDelta: delta(thisMonth.orders, lastMonth.orders),
+          completedDelta: delta(thisMonth.completed, lastMonth.completed),
+          cancelledDelta: delta(thisMonth.cancelled, lastMonth.cancelled),
+          revenueDelta: delta(thisMonth.revenue, lastMonth.revenue),
+          completionRate: pct(thisMonth.completed, thisMonth.orders),
+          repeatRate,
+        },
+        branches: branches.map((b) => ({
+          _id: b._id.toString(),
+          name: b.name,
+          city: b.city,
+          province: b.province,
+          isActive: b.isActive,
+          serviceRadiusKm: b.serviceRadiusKm,
+          maxActiveOrders: b.maxActiveOrders,
+        })),
+        coverageCities: Array.from(new Set(branches.map((b) => b.city).filter(Boolean))),
+        pickupRadiusKm: branches.length > 0 ? Math.max(...branches.map((b) => b.serviceRadiusKm ?? 0)) : null,
+        recentOrders: recentOrdersRaw.map((o) => ({
+          _id: o._id.toString(),
+          status: o.status,
+          total: o.total,
+          createdAt: o.createdAt,
         })),
       },
     };
@@ -1063,7 +1253,42 @@ export class AdminService {
   async getPromotions() {
     await this.ensureSeeded();
     const items = await this.promotionModel.find().sort({ createdAt: -1 });
-    return { success: true, data: items.map((p) => this.serializePromotion(p)) };
+
+    // Real usage stats per code — orders that actually applied the coupon, excluding voided orders.
+    const codes = items.map((p) => p.code);
+    const stats =
+      codes.length > 0
+        ? await this.orderModel.aggregate<{
+            _id: string;
+            redemptions: number;
+            discountGiven: number;
+            revenueImpact: number;
+          }>([
+            { $match: { couponCode: { $in: codes }, status: { $nin: CANCELLED } } },
+            {
+              $group: {
+                _id: '$couponCode',
+                redemptions: { $sum: 1 },
+                discountGiven: { $sum: '$discount' },
+                revenueImpact: { $sum: '$total' },
+              },
+            },
+          ])
+        : [];
+    const statsByCode = new Map(stats.map((s) => [s._id, s]));
+
+    return {
+      success: true,
+      data: items.map((p) => {
+        const s = statsByCode.get(p.code);
+        return {
+          ...this.serializePromotion(p),
+          redemptions: s?.redemptions ?? 0,
+          discountGiven: s?.discountGiven ?? 0,
+          revenueImpact: s?.revenueImpact ?? 0,
+        };
+      }),
+    };
   }
 
   async getActiveDeals() {

@@ -52,6 +52,7 @@ export class AuditLogService {
     search?: string;
     actorEmail?: string;
     action?: string;
+    method?: string;
     from?: string;
     to?: string;
   }) {
@@ -61,6 +62,7 @@ export class AuditLogService {
     const filter: Record<string, unknown> = {};
     if (query.actorEmail) filter.actorEmail = query.actorEmail;
     if (query.action) filter.action = query.action;
+    if (query.method) filter.method = query.method;
     if (query.from || query.to) {
       const createdAt: Record<string, Date> = {};
       if (query.from) createdAt.$gte = new Date(query.from);
@@ -72,13 +74,21 @@ export class AuditLogService {
       filter.$or = [{ actorEmail: re }, { action: re }, { path: re }];
     }
 
-    const [items, total] = await Promise.all([
+    const [items, total, failedTotal, actorAgg, topActionAgg] = await Promise.all([
       this.auditLogModel
         .find(filter)
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit),
       this.auditLogModel.countDocuments(filter),
+      this.auditLogModel.countDocuments({ ...filter, statusCode: { $gte: 400 } }),
+      this.auditLogModel.distinct('actorEmail', filter),
+      this.auditLogModel.aggregate<{ _id: string; count: number }>([
+        { $match: filter },
+        { $group: { _id: '$action', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 1 },
+      ]),
     ]);
 
     return {
@@ -102,8 +112,19 @@ export class AuditLogService {
         limit,
         total,
         totalPages: Math.max(1, Math.ceil(total / limit)),
+        stats: {
+          failedTotal,
+          uniqueActors: actorAgg.length,
+          topAction: topActionAgg[0] ? { action: topActionAgg[0]._id, count: topActionAgg[0].count } : null,
+        },
       },
     };
+  }
+
+  /** Distinct HTTP methods for the admin filter chips. */
+  async listMethods() {
+    const methods = await this.auditLogModel.distinct('method');
+    return { success: true, data: methods.sort() };
   }
 
   /** Distinct action labels for the admin filter dropdown. */

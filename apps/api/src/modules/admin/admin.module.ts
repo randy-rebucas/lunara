@@ -21,6 +21,7 @@ import { PromotionsModule } from '../promotions/promotions.module';
 import { AdminService } from './admin.service';
 import { Promotion, PromotionSchema } from './schemas/promotion.schema';
 import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
+import { Review, ReviewSchema } from '../reviews/schemas/review.schema';
 import { PartnerModule } from '../partner/partner.module';
 
 @Module({
@@ -33,6 +34,7 @@ import { PartnerModule } from '../partner/partner.module';
       { name: Promotion.name, schema: PromotionSchema },
       { name: Payment.name, schema: PaymentSchema },
       { name: Branch.name, schema: BranchSchema },
+      { name: Review.name, schema: ReviewSchema },
     ]),
     SupportModule,
     RefundsModule,

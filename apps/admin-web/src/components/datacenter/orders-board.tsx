@@ -222,10 +222,13 @@ export function OrdersBoard() {
   const [socketLive, setSocketLive] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // Deep-link support: /orders?status=completed preselects the matching tab
+  // Deep-link support: /orders?status=completed preselects the tab; ?search= prefills the search box
   useEffect(() => {
-    const s = new URLSearchParams(window.location.search).get('status');
+    const params = new URLSearchParams(window.location.search);
+    const s = params.get('status');
     if (s && TABS.some((t) => t.id === s)) setTab(s as TabId);
+    const q = params.get('search');
+    if (q) setSearch(q);
   }, []);
 
   const load = useCallback(async () => {

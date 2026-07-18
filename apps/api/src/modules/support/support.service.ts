@@ -257,19 +257,20 @@ export class SupportService {
     const filter: Record<string, unknown> = {};
     if (status) filter.status = status;
     if (type) filter.type = type;
-    const items = await this.ticketModel.find(filter).sort({ updatedAt: -1 }).limit(100);
+    const [items, open, inProgress, resolved, closed, lostItem, total] = await Promise.all([
+      this.ticketModel.find(filter).sort({ updatedAt: -1 }).limit(100),
+      this.ticketModel.countDocuments({ status: TicketStatus.OPEN }),
+      this.ticketModel.countDocuments({ status: TicketStatus.IN_PROGRESS }),
+      this.ticketModel.countDocuments({ status: TicketStatus.RESOLVED }),
+      this.ticketModel.countDocuments({ status: TicketStatus.CLOSED }),
+      this.ticketModel.countDocuments({ type: TicketType.LOST_ITEM }),
+      this.ticketModel.countDocuments({}),
+    ]);
     return {
       success: true,
       data: {
         items: items.map((t) => this.serializeTicket(t)),
-        counts: {
-          open: await this.ticketModel.countDocuments({ status: TicketStatus.OPEN }),
-          inProgress: await this.ticketModel.countDocuments({
-            status: TicketStatus.IN_PROGRESS,
-          }),
-          resolved: await this.ticketModel.countDocuments({ status: TicketStatus.RESOLVED }),
-          lostItem: await this.ticketModel.countDocuments({ type: TicketType.LOST_ITEM }),
-        },
+        counts: { open, inProgress, resolved, closed, lostItem, total },
       },
     };
   }
