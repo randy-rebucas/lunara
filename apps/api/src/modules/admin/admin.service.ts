@@ -32,9 +32,91 @@ import {
 import { EmailService } from '../../common/email/email.service';
 
 const COMPLETED = [OrderStatus.DELIVERED, OrderStatus.COMPLETED];
+const CANCELLED = [OrderStatus.CANCELLED, OrderStatus.REFUNDED];
 const ACTIVE_ORDER_STATUSES = Object.values(OrderStatus).filter(
-  (s) => !COMPLETED.includes(s) && s !== OrderStatus.CANCELLED && s !== OrderStatus.REFUNDED,
+  (s) => !COMPLETED.includes(s) && !CANCELLED.includes(s),
 );
+
+/** Coarse pipeline buckets for the dashboard status donut. */
+const STATUS_BUCKETS: { key: string; label: string; statuses: OrderStatus[] }[] = [
+  {
+    key: 'pending',
+    label: 'Pending',
+    statuses: [OrderStatus.PENDING, OrderStatus.PENDING_DISPATCH],
+  },
+  {
+    key: 'confirmed',
+    label: 'Confirmed',
+    statuses: [
+      OrderStatus.SHOP_ASSIGNED,
+      OrderStatus.CONFIRMED,
+      OrderStatus.RIDER_ASSIGNED_PICKUP,
+      OrderStatus.RIDER_ASSIGNED,
+    ],
+  },
+  {
+    key: 'in_progress',
+    label: 'In progress',
+    statuses: [
+      OrderStatus.PICKED_UP,
+      OrderStatus.IN_TRANSIT_TO_SHOP,
+      OrderStatus.RECEIVED_AT_SHOP,
+      OrderStatus.RECEIVED,
+      OrderStatus.SORTING,
+      OrderStatus.WASHING,
+      OrderStatus.DRYING,
+      OrderStatus.FOLDING,
+      OrderStatus.IRONING,
+      OrderStatus.QUALITY_CHECK,
+      OrderStatus.READY_FOR_DELIVERY,
+      OrderStatus.CUSTOMER_PICKUP,
+    ],
+  },
+  {
+    key: 'out_for_delivery',
+    label: 'Out for delivery',
+    statuses: [OrderStatus.RIDER_ASSIGNED_DELIVERY, OrderStatus.OUT_FOR_DELIVERY],
+  },
+  { key: 'completed', label: 'Completed', statuses: COMPLETED },
+  { key: 'cancelled', label: 'Cancelled', statuses: CANCELLED },
+];
+
+function localDayKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function pctDelta(current: number, previous: number): number | null {
+  if (previous <= 0) return null;
+  return Math.round(((current - previous) / previous) * 1000) / 10;
+}
+
+/** Orders currently on the road with a rider (pickup or delivery leg). */
+const IN_TRANSIT_STATUSES = [
+  OrderStatus.RIDER_ASSIGNED_PICKUP,
+  OrderStatus.RIDER_ASSIGNED,
+  OrderStatus.PICKED_UP,
+  OrderStatus.IN_TRANSIT_TO_SHOP,
+  OrderStatus.RIDER_ASSIGNED_DELIVERY,
+  OrderStatus.OUT_FOR_DELIVERY,
+];
+
+const DELIVERY_LEG_STATUSES = [
+  OrderStatus.RIDER_ASSIGNED_DELIVERY,
+  OrderStatus.OUT_FOR_DELIVERY,
+];
+
+/** Statuses where the pickup SLA clock is still running. */
+const AWAITING_PICKUP_STATUSES = [
+  OrderStatus.PENDING,
+  OrderStatus.PENDING_DISPATCH,
+  OrderStatus.SHOP_ASSIGNED,
+  OrderStatus.CONFIRMED,
+  OrderStatus.RIDER_ASSIGNED_PICKUP,
+  OrderStatus.RIDER_ASSIGNED,
+];
 
 @Injectable()
 export class AdminService {
@@ -63,6 +145,10 @@ export class AdminService {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
     const startOfMonth = new Date(startOfDay.getFullYear(), startOfDay.getMonth(), 1);
+    const weekStart = new Date(startOfDay);
+    weekStart.setDate(weekStart.getDate() - 6);
+    const prevWeekStart = new Date(weekStart);
+    prevWeekStart.setDate(prevWeekStart.getDate() - 7);
 
     const [
       activeOrders,
@@ -77,6 +163,13 @@ export class AdminService {
       pendingDispatch,
       monthCompleted,
       recentOrders,
+      createdWindow,
+      settledWeek,
+      prevWeekCompleted,
+      statusCounts,
+      totalOrders,
+      completedAllTime,
+      cancelledAllTime,
     ] = await Promise.all([
       this.orderModel.countDocuments({ status: { $in: ACTIVE_ORDER_STATUSES } }),
       this.orderModel.countDocuments({ createdAt: { $gte: startOfDay } }),
@@ -88,14 +181,134 @@ export class AdminService {
       this.supportService.countOpenTickets(),
       this.promotionModel.countDocuments({ isActive: true }),
       this.branchesService.countPendingDispatch(),
-      this.orderModel.find({
-        status: { $in: COMPLETED },
-        updatedAt: { $gte: startOfMonth },
-      }),
-      this.orderModel.find().sort({ updatedAt: -1 }).limit(6),
+      this.orderModel
+        .find({ status: { $in: COMPLETED }, updatedAt: { $gte: startOfMonth } })
+        .select('total')
+        .lean(),
+      this.orderModel.find().sort({ updatedAt: -1 }).limit(8),
+      this.orderModel
+        .find({ createdAt: { $gte: prevWeekStart } })
+        .select('createdAt')
+        .lean(),
+      this.orderModel
+        .find({ status: { $in: [...COMPLETED, ...CANCELLED] }, updatedAt: { $gte: weekStart } })
+        .select('updatedAt status total branchId branchName deliveryRiderId pickupRiderId')
+        .lean(),
+      this.orderModel
+        .find({ status: { $in: COMPLETED }, updatedAt: { $gte: prevWeekStart, $lt: weekStart } })
+        .select('total')
+        .lean(),
+      this.orderModel.aggregate<{ _id: string; count: number }>([
+        { $group: { _id: '$status', count: { $sum: 1 } } },
+      ]),
+      this.orderModel.estimatedDocumentCount(),
+      this.orderModel.countDocuments({ status: { $in: COMPLETED } }),
+      this.orderModel.countDocuments({ status: { $in: CANCELLED } }),
     ]);
 
     const monthRevenue = monthCompleted.reduce((s, o) => s + o.total, 0);
+
+    // 7-day trend of created / completed / cancelled orders plus daily revenue
+    const days: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(weekStart);
+      d.setDate(d.getDate() + i);
+      days.push(localDayKey(d));
+    }
+    const trendMap = new Map(
+      days.map((date) => [date, { date, created: 0, completed: 0, cancelled: 0, revenue: 0 }]),
+    );
+    let createdThisWeek = 0;
+    let createdPrevWeek = 0;
+    for (const o of createdWindow) {
+      if (o.createdAt >= weekStart) {
+        createdThisWeek += 1;
+        const bucket = trendMap.get(localDayKey(o.createdAt));
+        if (bucket) bucket.created += 1;
+      } else {
+        createdPrevWeek += 1;
+      }
+    }
+    let completedThisWeek = 0;
+    let weekRevenue = 0;
+    const branchAgg = new Map<string, { name: string; orders: number; revenue: number }>();
+    const riderAgg = new Map<string, number>();
+    for (const o of settledWeek) {
+      const bucket = trendMap.get(localDayKey(o.updatedAt));
+      if (COMPLETED.includes(o.status)) {
+        completedThisWeek += 1;
+        weekRevenue += o.total;
+        if (bucket) {
+          bucket.completed += 1;
+          bucket.revenue += o.total;
+        }
+        const branchKey = o.branchId?.toString() ?? 'unassigned';
+        const branch = branchAgg.get(branchKey) ?? {
+          name: o.branchName ?? 'Unassigned',
+          orders: 0,
+          revenue: 0,
+        };
+        branch.orders += 1;
+        branch.revenue += o.total;
+        branchAgg.set(branchKey, branch);
+        const riderKey = (o.deliveryRiderId ?? o.pickupRiderId)?.toString();
+        if (riderKey) riderAgg.set(riderKey, (riderAgg.get(riderKey) ?? 0) + 1);
+      } else if (bucket) {
+        bucket.cancelled += 1;
+      }
+    }
+    const prevWeekRevenue = prevWeekCompleted.reduce((s, o) => s + o.total, 0);
+
+    const topBranches = [...branchAgg.entries()]
+      .map(([id, b]) => ({ id, ...b }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 5);
+
+    const topRiderIds = [...riderAgg.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+    // Resolve names for leaderboard riders + recent-order participants (order refs hold user ids)
+    const riderUserIds = new Set<string>(topRiderIds.map(([id]) => id));
+    for (const o of recentOrders) {
+      const id = (o.deliveryRiderId ?? o.pickupRiderId)?.toString();
+      if (id) riderUserIds.add(id);
+    }
+    const [riderDocs, customerDocs] = await Promise.all([
+      this.riderModel
+        .find({ userId: { $in: [...riderUserIds].map((id) => new Types.ObjectId(id)) } })
+        .select('userId firstName lastName')
+        .lean(),
+      this.userModel
+        .find({ _id: { $in: recentOrders.map((o) => o.customerId).filter(Boolean) } })
+        .select('email phone')
+        .lean(),
+    ]);
+    const riderNameMap = new Map(
+      riderDocs.map((r) => [
+        r.userId.toString(),
+        [r.firstName, r.lastName].filter(Boolean).join(' ') || 'Rider',
+      ]),
+    );
+    const customerMap = new Map(customerDocs.map((c) => [c._id.toString(), c]));
+
+    const statusCountMap = new Map(statusCounts.map((s) => [s._id, s.count]));
+    const statusBreakdown = STATUS_BUCKETS.map((b) => ({
+      key: b.key,
+      label: b.label,
+      count: b.statuses.reduce((s, st) => s + (statusCountMap.get(st) ?? 0), 0),
+    }));
+
+    // Latest lifecycle event per recent order → activity feed
+    const activity = recentOrders
+      .map((o) => {
+        const last = o.statusHistory?.[o.statusHistory.length - 1];
+        return {
+          orderId: o._id.toString(),
+          status: last?.status ?? o.status,
+          branchName: o.branchName ?? null,
+          at: last?.timestamp ?? o.updatedAt,
+        };
+      })
+      .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
 
     return {
       success: true,
@@ -115,33 +328,225 @@ export class AdminService {
         revenue: {
           month: monthRevenue,
           monthOrders: monthCompleted.length,
+          week: weekRevenue,
         },
-        recentOrders: recentOrders.map((o) => ({
-          _id: o._id.toString(),
-          status: o.status,
-          bookingType: o.bookingType,
-          total: o.total,
-          updatedAt: o.updatedAt,
+        deltas: {
+          orders: pctDelta(createdThisWeek, createdPrevWeek),
+          completed: pctDelta(completedThisWeek, prevWeekCompleted.length),
+          revenue: pctDelta(weekRevenue, prevWeekRevenue),
+        },
+        week: {
+          orders: createdThisWeek,
+          completed: completedThisWeek,
+        },
+        trend: days.map((d) => {
+          const t = trendMap.get(d)!;
+          return { date: t.date, created: t.created, completed: t.completed, cancelled: t.cancelled };
+        }),
+        revenueDaily: days.map((d) => {
+          const t = trendMap.get(d)!;
+          return { date: t.date, revenue: t.revenue, orders: t.completed };
+        }),
+        statusBreakdown,
+        topBranches,
+        topRiders: topRiderIds.map(([id, deliveries]) => ({
+          id,
+          name: riderNameMap.get(id) ?? 'Rider',
+          deliveries,
         })),
+        totals: {
+          totalOrders,
+          completedOrders: completedAllTime,
+          cancelledOrders: cancelledAllTime,
+          cancellationRate:
+            totalOrders > 0 ? Math.round((cancelledAllTime / totalOrders) * 1000) / 10 : 0,
+        },
+        activity,
+        recentOrders: recentOrders.map((o) => {
+          const customer = customerMap.get(o.customerId?.toString() ?? '');
+          const riderId = (o.deliveryRiderId ?? o.pickupRiderId)?.toString();
+          return {
+            _id: o._id.toString(),
+            status: o.status,
+            bookingType: o.bookingType,
+            total: o.total,
+            customer: customer?.email ?? customer?.phone ?? null,
+            branchName: o.branchName ?? null,
+            riderName: riderId ? (riderNameMap.get(riderId) ?? null) : null,
+            createdAt: o.createdAt,
+            updatedAt: o.updatedAt,
+          };
+        }),
+      },
+    };
+  }
+
+  async getLiveTracking() {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const [onlineRiders, totalRiders, transitOrders, branches, completedToday, delayedPickups, pendingDispatch] =
+      await Promise.all([
+        this.riderModel
+          .find({ isOnline: true })
+          .select(
+            'userId firstName lastName currentLocation lastLocationSpeed lastLocationHeading lastLocationRecordedAt shiftStatus vehicleType plateNumber',
+          )
+          .lean(),
+        this.riderModel.countDocuments(),
+        this.orderModel.find({ status: { $in: IN_TRANSIT_STATUSES } }).sort({ updatedAt: -1 }).limit(50),
+        this.branchModel.find().select('name code city location').lean(),
+        this.orderModel.countDocuments({ status: { $in: COMPLETED }, updatedAt: { $gte: startOfDay } }),
+        this.orderModel.countDocuments({
+          status: { $in: AWAITING_PICKUP_STATUSES },
+          slaPickupDueAt: { $lt: new Date() },
+        }),
+        this.branchesService.countPendingDispatch(),
+      ]);
+
+    // Rider on the active leg of each transit order (delivery rider once the delivery leg starts)
+    const orderRiderIds = new Set<string>();
+    for (const o of transitOrders) {
+      const riderId = DELIVERY_LEG_STATUSES.includes(o.status)
+        ? (o.deliveryRiderId ?? o.pickupRiderId)
+        : (o.pickupRiderId ?? o.deliveryRiderId);
+      if (riderId) orderRiderIds.add(riderId.toString());
+    }
+
+    const [orderRiderDocs, contactUsers] = await Promise.all([
+      this.riderModel
+        .find({ userId: { $in: [...orderRiderIds].map((id) => new Types.ObjectId(id)) } })
+        .select('userId firstName lastName vehicleType plateNumber')
+        .lean(),
+      this.userModel
+        .find({
+          _id: {
+            $in: [
+              ...transitOrders.map((o) => o.customerId).filter(Boolean),
+              ...[...orderRiderIds].map((id) => new Types.ObjectId(id)),
+            ],
+          },
+        })
+        .select('email phone')
+        .lean(),
+      ]);
+
+    const riderByUserId = new Map(orderRiderDocs.map((r) => [r.userId.toString(), r]));
+    const contactById = new Map(contactUsers.map((u) => [u._id.toString(), u]));
+    const riderName = (r?: { firstName?: string; lastName?: string }) =>
+      r ? [r.firstName, r.lastName].filter(Boolean).join(' ') || 'Rider' : null;
+
+    return {
+      success: true,
+      data: {
+        stats: {
+          ridersOnline: onlineRiders.length,
+          totalRiders,
+          inTransit: transitOrders.length,
+          pendingDispatch,
+          delayedPickups,
+          completedToday,
+        },
+        riders: onlineRiders.map((r) => {
+          const [lng, lat] = r.currentLocation?.coordinates ?? [0, 0];
+          return {
+            userId: r.userId.toString(),
+            name: riderName(r) ?? 'Rider',
+            lat,
+            lng,
+            hasFix: Boolean(lat || lng),
+            speed: r.lastLocationSpeed ?? null,
+            heading: r.lastLocationHeading ?? null,
+            recordedAt: r.lastLocationRecordedAt ?? null,
+            shiftStatus: r.shiftStatus,
+            vehicleType: r.vehicleType,
+            plateNumber: r.plateNumber ?? null,
+          };
+        }),
+        branches: branches
+          .filter((b) => b.location?.coordinates?.length === 2)
+          .map((b) => ({
+            id: b._id.toString(),
+            name: b.name,
+            code: b.code,
+            city: b.city,
+            lat: b.location.coordinates[1],
+            lng: b.location.coordinates[0],
+          })),
+        orders: transitOrders.map((o) => {
+          const leg = DELIVERY_LEG_STATUSES.includes(o.status) ? 'delivery' : 'pickup';
+          const riderId = (
+            leg === 'delivery' ? (o.deliveryRiderId ?? o.pickupRiderId) : (o.pickupRiderId ?? o.deliveryRiderId)
+          )?.toString();
+          const rider = riderId ? riderByUserId.get(riderId) : undefined;
+          const riderContact = riderId ? contactById.get(riderId) : undefined;
+          const customer = contactById.get(o.customerId?.toString() ?? '');
+          return {
+            _id: o._id.toString(),
+            status: o.status,
+            leg,
+            bookingType: o.bookingType,
+            total: o.total,
+            branchName: o.branchName ?? null,
+            customer: customer?.email ?? customer?.phone ?? null,
+            customerPhone: customer?.phone ?? null,
+            riderUserId: riderId ?? null,
+            riderName: riderName(rider),
+            riderPhone: riderContact?.phone ?? null,
+            vehicleType: rider?.vehicleType ?? null,
+            plateNumber: rider?.plateNumber ?? null,
+            createdAt: o.createdAt,
+            slaPickupDueAt: o.slaPickupDueAt ?? null,
+            timeline: (o.statusHistory ?? []).slice(-5).map((e) => ({
+              status: e.status,
+              timestamp: e.timestamp,
+            })),
+          };
+        }),
       },
     };
   }
 
   async getOrders(status?: string, limit = 50) {
-    const filter = status ? { status } : {};
+    // `status` accepts a single status or a comma-separated group (e.g. "delivered,completed")
+    const statuses = (status ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const filter = statuses.length ? { status: { $in: statuses } } : {};
     const items = await this.orderModel
       .find(filter)
       .sort({ updatedAt: -1 })
       .limit(limit);
 
-    const customers = await this.userModel
-      .find({ _id: { $in: items.map((o) => o.customerId).filter(Boolean) } })
-      .select('email phone');
+    const riderUserIds = new Set<string>();
+    for (const o of items) {
+      const riderId = DELIVERY_LEG_STATUSES.includes(o.status)
+        ? (o.deliveryRiderId ?? o.pickupRiderId)
+        : (o.pickupRiderId ?? o.deliveryRiderId);
+      if (riderId) riderUserIds.add(riderId.toString());
+    }
+
+    const [customers, riderDocs, paymentsByOrderId] = await Promise.all([
+      this.userModel
+        .find({ _id: { $in: items.map((o) => o.customerId).filter(Boolean) } })
+        .select('email phone'),
+      this.riderModel
+        .find({ userId: { $in: [...riderUserIds].map((id) => new Types.ObjectId(id)) } })
+        .select('userId firstName lastName')
+        .lean(),
+      loadLatestOrderPaymentsByOrderId(
+        this.paymentModel,
+        items.map((o) => o._id),
+      ),
+    ]);
 
     const customerMap = new Map(customers.map((c) => [c._id.toString(), c]));
-    const paymentsByOrderId = await loadLatestOrderPaymentsByOrderId(
-      this.paymentModel,
-      items.map((o) => o._id),
+    const riderNameByUserId = new Map(
+      riderDocs.map((r) => [
+        r.userId.toString(),
+        [r.firstName, r.lastName].filter(Boolean).join(' ') || 'Rider',
+      ]),
     );
 
     return {
@@ -157,15 +562,30 @@ export class AdminService {
             pickupCollectedAt: o.pickup?.collectedAt,
           });
           const payment = buildOrderPaymentSummary(paymentsByOrderId.get(o._id.toString()));
+          const customer = customerMap.get(o.customerId?.toString() ?? '');
+          const riderId = (
+            DELIVERY_LEG_STATUSES.includes(o.status)
+              ? (o.deliveryRiderId ?? o.pickupRiderId)
+              : (o.pickupRiderId ?? o.deliveryRiderId)
+          )?.toString();
           return {
             _id: o._id.toString(),
             status: o.status,
             bookingType: o.bookingType,
             total: o.total,
+            subtotal: o.subtotal,
+            deliveryFee: o.deliveryFee,
+            discount: o.discount,
             customerId: o.customerId?.toString(),
-            customerEmail: customerMap.get(o.customerId?.toString() ?? '')?.email,
+            customerEmail: customer?.email,
+            customerPhone: customer?.phone,
             partnerId: o.partnerId?.toString(),
             branchName: o.branchName,
+            riderName: riderId ? (riderNameByUserId.get(riderId) ?? null) : null,
+            bagSizeLabel: o.bagSizeLabel ?? null,
+            estimatedWeightKg: o.estimatedWeightKg ?? null,
+            scheduledPickupAt: o.scheduledPickupAt ?? null,
+            scheduledDeliveryAt: o.scheduledDeliveryAt ?? null,
             dispatchStatus: o.dispatchStatus,
             operationsConflict: o.operationsConflict,
             createdAt: o.createdAt,
@@ -447,49 +867,149 @@ export class AdminService {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
     const startOfMonth = new Date(startOfDay.getFullYear(), startOfDay.getMonth(), 1);
+    const startOfLastMonth = new Date(startOfDay.getFullYear(), startOfDay.getMonth() - 1, 1);
+    const startOfYear = new Date(startOfDay.getFullYear(), 0, 1);
+    const weekStart = new Date(startOfDay);
+    weekStart.setDate(weekStart.getDate() - 6);
+    const prevWeekStart = new Date(weekStart);
+    prevWeekStart.setDate(prevWeekStart.getDate() - 7);
 
-    const [todayOrders, monthOrders, allCompleted] = await Promise.all([
-      this.orderModel.find({ status: { $in: COMPLETED }, updatedAt: { $gte: startOfDay } }),
-      this.orderModel.find({ status: { $in: COMPLETED }, updatedAt: { $gte: startOfMonth } }),
-      this.orderModel.countDocuments({ status: { $in: COMPLETED } }),
-    ]);
+    const sumRange = async (from: Date, to?: Date) => {
+      const rows = await this.orderModel.aggregate<{ revenue: number; orders: number }>([
+        {
+          $match: {
+            status: { $in: COMPLETED },
+            updatedAt: { $gte: from, ...(to ? { $lt: to } : {}) },
+          },
+        },
+        { $group: { _id: null, revenue: { $sum: '$total' }, orders: { $sum: 1 } } },
+      ]);
+      return { revenue: rows[0]?.revenue ?? 0, orders: rows[0]?.orders ?? 0 };
+    };
 
-    const daily = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(startOfDay);
-      d.setDate(d.getDate() - i);
-      const next = new Date(d);
-      next.setDate(next.getDate() + 1);
-      const dayOrders = await this.orderModel.find({
-        status: { $in: COMPLETED },
-        updatedAt: { $gte: d, $lt: next },
-      });
-      daily.push({
-        date: d.toISOString().slice(0, 10),
-        revenue: dayOrders.reduce((s, o) => s + o.total, 0),
-        orders: dayOrders.length,
-      });
+    const [windowOrders, allCompleted, monthSum, lastMonthSum, ytdSum, paymentMix] =
+      await Promise.all([
+        this.orderModel
+          .find({ status: { $in: COMPLETED }, updatedAt: { $gte: prevWeekStart } })
+          .select('updatedAt total subtotal deliveryFee discount branchName bookingType')
+          .lean(),
+        this.orderModel.countDocuments({ status: { $in: COMPLETED } }),
+        sumRange(startOfMonth),
+        sumRange(startOfLastMonth, startOfMonth),
+        sumRange(startOfYear),
+        this.paymentModel.aggregate<{ _id: string; amount: number; count: number }>([
+          {
+            $match: {
+              purpose: 'order',
+              status: 'paid',
+              paidAt: { $gte: weekStart },
+            },
+          },
+          { $group: { _id: '$method', amount: { $sum: '$amount' }, count: { $sum: 1 } } },
+          { $sort: { amount: -1 } },
+        ]),
+      ]);
+
+    // Daily series across both weeks + this-week composition and breakdowns
+    const days: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(weekStart);
+      d.setDate(d.getDate() + i);
+      days.push(localDayKey(d));
+    }
+    const prevDays: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(prevWeekStart);
+      d.setDate(d.getDate() + i);
+      prevDays.push(localDayKey(d));
+    }
+    const dailyMap = new Map(days.map((date) => [date, { date, revenue: 0, orders: 0 }]));
+    const prevDailyMap = new Map(prevDays.map((date) => [date, { date, revenue: 0, orders: 0 }]));
+
+    let week = { revenue: 0, orders: 0, subtotal: 0, deliveryFees: 0, discounts: 0 };
+    let prevWeek = { revenue: 0, orders: 0 };
+    let today = { revenue: 0, orders: 0 };
+    const branchAgg = new Map<string, { revenue: number; orders: number }>();
+    const serviceAgg = new Map<string, { revenue: number; count: number }>();
+
+    for (const o of windowOrders) {
+      const key = localDayKey(o.updatedAt);
+      if (o.updatedAt >= weekStart) {
+        week.revenue += o.total;
+        week.orders += 1;
+        week.subtotal += o.subtotal ?? 0;
+        week.deliveryFees += o.deliveryFee ?? 0;
+        week.discounts += o.discount ?? 0;
+        const day = dailyMap.get(key);
+        if (day) {
+          day.revenue += o.total;
+          day.orders += 1;
+        }
+        if (o.updatedAt >= startOfDay) {
+          today.revenue += o.total;
+          today.orders += 1;
+        }
+        const branchKey = o.branchName ?? 'Unassigned';
+        const branch = branchAgg.get(branchKey) ?? { revenue: 0, orders: 0 };
+        branch.revenue += o.total;
+        branch.orders += 1;
+        branchAgg.set(branchKey, branch);
+        const service = serviceAgg.get(o.bookingType) ?? { revenue: 0, count: 0 };
+        service.revenue += o.total;
+        service.count += 1;
+        serviceAgg.set(o.bookingType, service);
+      } else {
+        prevWeek.revenue += o.total;
+        prevWeek.orders += 1;
+        const day = prevDailyMap.get(key);
+        if (day) {
+          day.revenue += o.total;
+          day.orders += 1;
+        }
+      }
     }
 
-    const byService = await this.orderModel.aggregate([
-      { $match: { status: { $in: COMPLETED }, updatedAt: { $gte: startOfMonth } } },
-      { $group: { _id: '$bookingType', revenue: { $sum: '$total' }, count: { $sum: 1 } } },
-    ]);
+    const daily = days.map((d) => dailyMap.get(d)!);
+    const prevDaily = prevDays.map((d) => prevDailyMap.get(d)!);
 
     return {
       success: true,
       data: {
-        today: todayOrders.reduce((s, o) => s + o.total, 0),
-        month: monthOrders.reduce((s, o) => s + o.total, 0),
-        todayOrders: todayOrders.length,
-        monthOrders: monthOrders.length,
+        // Legacy fields kept for compatibility
+        today: today.revenue,
+        month: monthSum.revenue,
+        todayOrders: today.orders,
+        monthOrders: monthSum.orders,
         allTimeCompleted: allCompleted,
         daily,
-        byService: byService.map((p) => ({
-          service: p._id ?? 'unknown',
-          revenue: p.revenue,
-          count: p.count,
-        })),
+        byService: [...serviceAgg.entries()]
+          .map(([service, v]) => ({ service, ...v }))
+          .sort((a, b) => b.revenue - a.revenue),
+        // Week-over-week analytics
+        week: {
+          ...week,
+          revenueDelta: pctDelta(week.revenue, prevWeek.revenue),
+          ordersDelta: pctDelta(week.orders, prevWeek.orders),
+          avgOrderValue: week.orders > 0 ? Math.round(week.revenue / week.orders) : 0,
+          avgPerDay: Math.round(week.revenue / 7),
+        },
+        prevWeek,
+        prevDaily,
+        byBranch: [...branchAgg.entries()]
+          .map(([name, v]) => ({
+            name,
+            ...v,
+            avgOrderValue: v.orders > 0 ? Math.round(v.revenue / v.orders) : 0,
+          }))
+          .sort((a, b) => b.revenue - a.revenue)
+          .slice(0, 8),
+        byPayment: paymentMix.map((p) => ({ method: p._id, amount: p.amount, count: p.count })),
+        topDays: [...daily].filter((d) => d.revenue > 0).sort((a, b) => b.revenue - a.revenue).slice(0, 5),
+        summary: {
+          thisMonth: monthSum,
+          lastMonth: lastMonthSum,
+          ytd: ytdSum,
+        },
       },
     };
   }

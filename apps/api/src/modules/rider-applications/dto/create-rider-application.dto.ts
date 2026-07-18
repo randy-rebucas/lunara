@@ -1,4 +1,4 @@
-import { Transform, Type } from 'class-transformer';
+import { plainToInstance, Transform, Type } from 'class-transformer';
 import {
   Equals,
   IsBoolean,
@@ -16,13 +16,21 @@ import {
   RiderApplicationVehicleType,
 } from '../schemas/rider-application.schema';
 
-function parseJsonGroup({ value }: { value: unknown }) {
-  if (typeof value !== 'string') return value;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return {};
-  }
+/** Multipart fields arrive as JSON strings; convert to the DTO class so nested
+ * whitelist validation sees decorated instances (a bare @Transform result would
+ * override @Type() conversion and get rejected by forbidNonWhitelisted). */
+function parseJsonGroup<T>(cls: new () => T) {
+  return ({ value }: { value: unknown }) => {
+    let parsed: unknown = value;
+    if (typeof value === 'string') {
+      try {
+        parsed = JSON.parse(value);
+      } catch {
+        parsed = {};
+      }
+    }
+    return plainToInstance(cls, parsed);
+  };
 }
 
 export class AddressDto {
@@ -145,22 +153,22 @@ export class CreateRiderApplicationDto {
   @IsIn(['single', 'married', 'widowed', 'separated', 'divorced'])
   civilStatus!: string;
 
-  @Transform(parseJsonGroup)
+  @Transform(parseJsonGroup(AddressDto))
   @ValidateNested()
   @Type(() => AddressDto)
   address!: AddressDto;
 
-  @Transform(parseJsonGroup)
+  @Transform(parseJsonGroup(EmergencyContactDto))
   @ValidateNested()
   @Type(() => EmergencyContactDto)
   emergencyContact!: EmergencyContactDto;
 
-  @Transform(parseJsonGroup)
+  @Transform(parseJsonGroup(VehicleDto))
   @ValidateNested()
   @Type(() => VehicleDto)
   vehicle!: VehicleDto;
 
-  @Transform(parseJsonGroup)
+  @Transform(parseJsonGroup(LicenseDto))
   @ValidateNested()
   @Type(() => LicenseDto)
   license!: LicenseDto;

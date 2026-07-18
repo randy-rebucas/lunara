@@ -334,6 +334,8 @@ export class AuthService {
 
           isActive: user.isActive,
 
+          lastLoginAt: user.lastLoginAt,
+
           createdAt: user.createdAt,
 
           updatedAt: user.updatedAt,

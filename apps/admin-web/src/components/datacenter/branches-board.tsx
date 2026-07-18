@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BranchAddressEditor, type BranchAddressValue } from './branch-address-editor';
-import { MetricCell } from './metric-cell';
 import { ShopPricingPanel } from './shop-pricing-panel';
 import { adminFetch, adminUpload } from '../../lib/admin-api';
 import { formatPeso } from '../../lib/format-peso';
@@ -85,12 +84,81 @@ interface BranchProfile {
 
 type NetworkState = 'nominal' | 'attention';
 
-const QUICK_ACTIONS = [
-  { href: '/', label: 'Ops center' },
-  { href: '/dispatch', label: 'Dispatch' },
-  { href: '/shops', label: 'Shops' },
-  { href: '/orders', label: 'Orders' },
-] as const;
+const TILE_TONES = {
+  primary: 'bg-primary/[0.04] ring-primary/15',
+  accent: 'bg-accent/[0.04] ring-accent/20',
+  secondary: 'bg-secondary/[0.04] ring-secondary/15',
+  amber: 'bg-amber-500/[0.04] ring-amber-500/20',
+  violet: 'bg-violet-500/[0.04] ring-violet-500/20',
+  rose: 'bg-rose-500/[0.04] ring-rose-500/20',
+} as const;
+
+const TILE_CHIPS: Record<keyof typeof TILE_TONES, string> = {
+  primary: 'bg-primary/10 text-primary',
+  accent: 'bg-accent/10 text-accent',
+  secondary: 'bg-secondary/10 text-secondary',
+  amber: 'bg-amber-500/10 text-amber-600',
+  violet: 'bg-violet-500/10 text-violet-600',
+  rose: 'bg-rose-500/10 text-rose-600',
+};
+
+function TileIcon({ d, d2 }: { d: string; d2?: string }) {
+  return (
+    <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d={d} />
+      {d2 && <path strokeLinecap="round" strokeLinejoin="round" d={d2} />}
+    </svg>
+  );
+}
+
+const tileIcons = {
+  locations: <TileIcon d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />,
+  operational: <TileIcon d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />,
+  inactive: <TileIcon d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />,
+  performance: <TileIcon d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />,
+};
+
+function StatTile({
+  label,
+  value,
+  sub,
+  tone,
+  icon,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  tone: keyof typeof TILE_TONES;
+  icon?: React.ReactNode;
+}) {
+  return (
+    <div className={`rounded-xl p-4 ring-1 ${TILE_TONES[tone]}`}>
+      <div className="flex items-center gap-2.5">
+        {icon ? (
+          <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${TILE_CHIPS[tone]}`}>
+            {icon}
+          </span>
+        ) : null}
+        <p className="text-xs font-medium text-muted">{label}</p>
+      </div>
+      <p className="dc-value mt-2">{value}</p>
+      {sub ? <p className="dc-sublabel mt-0.5">{sub}</p> : null}
+    </div>
+  );
+}
+
+function CapacityBar({ percent }: { percent: number }) {
+  return (
+    <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+      <div
+        className={`h-full rounded-full ${
+          percent >= 100 ? 'bg-destructive' : percent >= 80 ? 'bg-amber-500' : 'bg-primary/80'
+        }`}
+        style={{ width: `${Math.min(100, percent)}%` }}
+      />
+    </div>
+  );
+}
 
 const networkCopy: Record<
   NetworkState,
@@ -207,6 +275,13 @@ export function BranchesBoard() {
   const [assignedRiderId, setAssignedRiderId] = useState('');
   const [riderBusy, setRiderBusy] = useState(false);
   const [logoBusy, setLogoBusy] = useState(false);
+  const [profileTab, setProfileTab] = useState<'edit' | 'pricing' | 'address'>('edit');
+
+  // Selecting a different branch always lands on the settings tab; staying put after a
+  // save (profile refresh) is intentional.
+  useEffect(() => {
+    setProfileTab('edit');
+  }, [selectedId]);
 
   const loadNetwork = useCallback(async () => {
     const data = await adminFetch<{
@@ -438,8 +513,10 @@ export function BranchesBoard() {
     }
   }
 
-  async function updateBranch(e: React.FormEvent) {
-    e.preventDefault();
+  // Called from the edit form's submit and from the standalone address panel's Save —
+  // both persist the combined branch settings + address in one PATCH.
+  async function updateBranch(e?: React.FormEvent) {
+    e?.preventDefault();
     if (!selectedId) return;
     setBranchBusy(true);
     setBranchMsg('');
@@ -578,47 +655,55 @@ export function BranchesBoard() {
             ) : null}
           </div>
 
-          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-            <MetricCell label="Total locations" value={stats.totalBranches} />
-            <MetricCell
-              label="Operational"
-              value={stats.operationalCount}
-              href="/dispatch"
-              highlight={stats.operationalCount > 0 ? 'accent' : undefined}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatTile
+              label="Total locations"
+              value={String(stats.totalBranches)}
+              sub="HQ, franchises, partner shops"
+              tone="primary"
+              icon={tileIcons.locations}
             />
-            <MetricCell
+            <StatTile
+              label="Operational"
+              value={String(stats.operationalCount)}
+              sub={
+                stats.totalBranches > 0
+                  ? `${Math.round((stats.operationalCount / stats.totalBranches) * 100)}% of network`
+                  : undefined
+              }
+              tone="accent"
+              icon={tileIcons.operational}
+            />
+            <StatTile
               label="Non-operational"
-              value={inactiveCount}
-              highlight={inactiveCount > 0 ? 'warning' : undefined}
+              value={String(inactiveCount)}
+              sub="inactive locations"
+              tone={inactiveCount > 0 ? 'amber' : 'violet'}
+              icon={tileIcons.inactive}
             />
             {profileMetrics ? (
-              <MetricCell
-                label="Selected · performance"
-                value={profileMetrics.score}
+              <StatTile
+                label="Selected performance"
+                value={String(profileMetrics.score)}
                 sub={profile?.branch.code}
-                highlight={
+                tone={
                   profileMetrics.score >= 85
                     ? 'accent'
                     : profileMetrics.score >= 70
-                      ? 'primary'
-                      : 'warning'
+                      ? 'secondary'
+                      : 'amber'
                 }
+                icon={tileIcons.performance}
               />
             ) : (
-              <MetricCell label="Selected branch" value="—" sub="Pick from tree" />
+              <StatTile
+                label="Selected branch"
+                value="—"
+                sub="Pick from tree"
+                tone="violet"
+                icon={tileIcons.performance}
+              />
             )}
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {QUICK_ACTIONS.map((a) => (
-              <Link
-                key={a.href}
-                href={a.href}
-                className="rounded-md border border-border/80 bg-surface px-3 py-1.5 dc-chip transition-colors hover:border-primary/40 hover:text-primary"
-              >
-                {a.label}
-              </Link>
-            ))}
           </div>
 
           {branchMsg ? (
@@ -754,13 +839,13 @@ export function BranchesBoard() {
             )}
           </section>
 
-          <div className="grid gap-4 lg:grid-cols-5">
-            <section className="dc-panel lg:col-span-2">
+          <div className="grid gap-4 xl:grid-cols-12 xl:items-start">
+            <section className="dc-panel xl:col-span-4">
               <div className="dc-panel-header">
                 <h2 className="text-sm font-semibold text-slate-900">Branch structure</h2>
                 <p className="text-xs text-muted">HQ → franchise or partner shop chains</p>
               </div>
-              <div className="dc-panel-body max-h-[32rem] overflow-y-auto pt-2">
+              <div className="dc-panel-body max-h-[40rem] overflow-y-auto pt-2">
                 {tree.length === 0 ? (
                   <p className="text-sm text-muted">No branches in network.</p>
                 ) : (
@@ -777,7 +862,7 @@ export function BranchesBoard() {
               </div>
             </section>
 
-            <section className="dc-panel lg:col-span-3">
+            <section className="dc-panel min-w-0 xl:col-span-8">
               <div className="dc-panel-header flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h2 className="text-sm font-semibold text-slate-900">Branch profile</h2>
@@ -907,39 +992,55 @@ export function BranchesBoard() {
                       </div>
                     ) : null}
 
-                    <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-                      <MetricCell
-                        label="Order capacity"
-                        value={profileMetrics?.orderUtil ?? '—'}
-                        sub={
-                          profile.capacity.ordersCapacityAvailable ? 'Accepting' : 'At limit'
-                        }
-                        highlight={
-                          !profile.capacity.ordersCapacityAvailable ? 'warning' : undefined
-                        }
-                      />
-                      <MetricCell
-                        label="Weight load"
-                        value={profileMetrics?.weightUtil ?? '—'}
-                        sub={`${profile.capacity.currentLoadKg}/${profile.capacity.maxWeightCapacityKg} kg`}
-                        highlight={
-                          profile.capacity.utilizationWeightPercent >= 90 ? 'danger' : undefined
-                        }
-                      />
-                      <MetricCell
-                        label="Daily orders"
-                        value={profileMetrics?.quotaOrders ?? '—'}
-                        sub={`${profile.dailyQuota.ordersQuotaPercent}% of quota`}
-                      />
-                      <MetricCell
-                        label="Revenue today"
-                        value={formatPeso(profile.performance.revenueToday)}
-                        sub={`${profile.performance.ordersToday} orders`}
-                        highlight="accent"
-                      />
+                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                      <div
+                        className={`rounded-xl p-3.5 ring-1 ${
+                          profile.capacity.ordersCapacityAvailable
+                            ? TILE_TONES.primary
+                            : TILE_TONES.amber
+                        }`}
+                      >
+                        <p className="text-xs font-medium text-muted">Order capacity</p>
+                        <p className="dc-value-sm mt-1">{profileMetrics?.orderUtil ?? '—'}</p>
+                        <CapacityBar
+                          percent={
+                            profile.capacity.maxActiveOrders > 0
+                              ? (profile.capacity.activeOrders / profile.capacity.maxActiveOrders) * 100
+                              : 0
+                          }
+                        />
+                        <p className="dc-sublabel mt-1">
+                          {profile.capacity.ordersCapacityAvailable ? 'Accepting orders' : 'At limit'}
+                        </p>
+                      </div>
+                      <div
+                        className={`rounded-xl p-3.5 ring-1 ${
+                          profile.capacity.utilizationWeightPercent >= 90
+                            ? TILE_TONES.rose
+                            : TILE_TONES.secondary
+                        }`}
+                      >
+                        <p className="text-xs font-medium text-muted">Weight load</p>
+                        <p className="dc-value-sm mt-1">{profileMetrics?.weightUtil ?? '—'}</p>
+                        <CapacityBar percent={profile.capacity.utilizationWeightPercent} />
+                        <p className="dc-sublabel mt-1">
+                          {profile.capacity.currentLoadKg}/{profile.capacity.maxWeightCapacityKg} kg
+                        </p>
+                      </div>
+                      <div className={`rounded-xl p-3.5 ring-1 ${TILE_TONES.violet}`}>
+                        <p className="text-xs font-medium text-muted">Daily orders</p>
+                        <p className="dc-value-sm mt-1">{profileMetrics?.quotaOrders ?? '—'}</p>
+                        <CapacityBar percent={profile.dailyQuota.ordersQuotaPercent} />
+                        <p className="dc-sublabel mt-1">{profile.dailyQuota.ordersQuotaPercent}% of quota</p>
+                      </div>
+                      <div className={`rounded-xl p-3.5 ring-1 ${TILE_TONES.accent}`}>
+                        <p className="text-xs font-medium text-muted">Revenue today</p>
+                        <p className="dc-value-sm mt-1">{formatPeso(profile.performance.revenueToday)}</p>
+                        <p className="dc-sublabel mt-1">{profile.performance.ordersToday} orders today</p>
+                      </div>
                     </div>
 
-                    <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                       <div className="rounded-lg border border-border/60 p-3">
                         <p className="dc-label">Manager</p>
                         <p className="mt-2 text-sm font-medium text-slate-900">
@@ -960,26 +1061,29 @@ export function BranchesBoard() {
                           </ul>
                         )}
                       </div>
+                      <div className="rounded-lg border border-border/60 p-3 sm:col-span-2 xl:col-span-1">
+                        <p className="dc-label">Assigned rider</p>
+                        {assignedRider ? (
+                          <p className="mt-2 flex items-center gap-2 text-sm font-medium text-slate-900">
+                            {assignedRider.firstName || assignedRider.lastName
+                              ? `${assignedRider.firstName ?? ''} ${assignedRider.lastName ?? ''}`.trim()
+                              : (assignedRider.email ?? assignedRider.userId)}
+                            <span className={assignedRider.isOnline ? 'badge-accent' : 'badge-warning'}>
+                              {assignedRider.isOnline ? 'Online' : 'Offline'}
+                            </span>
+                          </p>
+                        ) : (
+                          <p className="mt-2 text-sm text-muted">No default rider assigned</p>
+                        )}
+                      </div>
                     </div>
 
                     <div className="rounded-lg border border-border/60 p-3">
-                      <p className="dc-label">Assigned rider</p>
+                      <p className="dc-label">Assign default rider</p>
                       <p className="mt-1 text-xs text-muted">
                         Default rider dispatched for pickups/deliveries at this branch. If they&apos;re
                         offline when a task comes up, the nearest online rider is used instead.
                       </p>
-                      {assignedRider ? (
-                        <p className="mt-2 flex items-center gap-2 text-sm font-medium text-slate-900">
-                          {assignedRider.firstName || assignedRider.lastName
-                            ? `${assignedRider.firstName ?? ''} ${assignedRider.lastName ?? ''}`.trim()
-                            : (assignedRider.email ?? assignedRider.userId)}
-                          <span className={assignedRider.isOnline ? 'badge-accent' : 'badge-warning'}>
-                            {assignedRider.isOnline ? 'Online' : 'Offline'}
-                          </span>
-                        </p>
-                      ) : (
-                        <p className="mt-2 text-sm text-muted">No default rider assigned</p>
-                      )}
                       <div className="mt-3 flex flex-wrap gap-2">
                         <select
                           id="assigned-rider"
@@ -1039,8 +1143,42 @@ export function BranchesBoard() {
                       </p>
                     </div>
 
-                    <form onSubmit={updateBranch} className="border-t border-border/60 pt-4">
-                      <h4 className="text-sm font-semibold text-slate-900">Edit branch</h4>
+                    {/* ── Settings / pricing / address tabs ── */}
+                    <div
+                      className="overflow-x-auto overflow-y-hidden border-t border-border/60 pt-2"
+                      role="tablist"
+                      aria-label="Branch settings sections"
+                    >
+                      <div className="flex min-w-max gap-1 border-b border-border/60">
+                        {(
+                          [
+                            { id: 'edit', label: 'Edit branch' },
+                            ...(profile.branch.branchType === 'partner_shop'
+                              ? [{ id: 'pricing', label: 'Shop pricing' }]
+                              : []),
+                            { id: 'address', label: 'Address' },
+                          ] as { id: typeof profileTab; label: string }[]
+                        ).map((t) => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            role="tab"
+                            aria-selected={profileTab === t.id}
+                            onClick={() => setProfileTab(t.id)}
+                            className={`-mb-px inline-flex items-center whitespace-nowrap border-b-2 px-3.5 py-2.5 text-sm font-medium transition-colors ${
+                              profileTab === t.id
+                                ? 'border-primary text-primary'
+                                : 'border-transparent text-muted hover:text-slate-900'
+                            }`}
+                          >
+                            {t.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {profileTab === 'edit' ? (
+                    <form onSubmit={updateBranch} className="pt-1">
                       <div className="dc-form-grid mt-3">
                         <div>
                           <label htmlFor="edit-name" className="form-label">
@@ -1142,17 +1280,27 @@ export function BranchesBoard() {
                         </div>
                       </div>
 
-                      {profile.branch.branchType === 'partner_shop' ? (
+                      <div className="dc-form-actions mt-4">
+                        <button type="submit" className="btn-primary btn-sm" disabled={branchBusy}>
+                          {branchBusy ? 'Saving…' : 'Save changes'}
+                        </button>
+                      </div>
+                    </form>
+                    ) : null}
+
+                    {profileTab === 'pricing' && profile.branch.branchType === 'partner_shop' ? (
+                      <div className="pt-1">
                         <ShopPricingPanel
                           branchId={profile.branch.id}
                           initialPricing={profile.branch.servicePricing}
                           initialAddonPricing={profile.branch.addonPricing}
                         />
-                      ) : null}
+                      </div>
+                    ) : null}
 
-                      <div className="mt-4 border-t border-border/60 pt-4">
-                        <h4 className="text-sm font-semibold text-slate-900">Address</h4>
-                        <p className="mt-0.5 text-xs text-muted">
+                    {profileTab === 'address' ? (
+                      <div className="pt-3">
+                        <p className="text-xs text-muted">
                           Used for dispatch distance ranking — keep the pin accurate.
                         </p>
                         <div className="mt-3">
@@ -1162,14 +1310,18 @@ export function BranchesBoard() {
                             resetKey={selectedId ?? undefined}
                           />
                         </div>
+                        <div className="dc-form-actions mt-4">
+                          <button
+                            type="button"
+                            className="btn-primary btn-sm"
+                            disabled={branchBusy}
+                            onClick={() => void updateBranch()}
+                          >
+                            {branchBusy ? 'Saving…' : 'Save changes'}
+                          </button>
+                        </div>
                       </div>
-
-                      <div className="dc-form-actions mt-4">
-                        <button type="submit" className="btn-primary btn-sm" disabled={branchBusy}>
-                          {branchBusy ? 'Saving…' : 'Save changes'}
-                        </button>
-                      </div>
-                    </form>
+                    ) : null}
                   </div>
                 ) : null}
               </div>

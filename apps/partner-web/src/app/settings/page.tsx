@@ -60,7 +60,7 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
 }
 
 type PayoutMethod = 'gcash' | 'maya' | 'bank' | 'counter';
-type Tab = 'shop' | 'hours' | 'preferences' | 'payout';
+type Tab = 'shop' | 'hours' | 'machines' | 'preferences' | 'payout';
 
 const PAYOUT_METHOD_LABELS: Record<PayoutMethod, string> = {
   gcash: 'GCash',
@@ -72,9 +72,332 @@ const PAYOUT_METHOD_LABELS: Record<PayoutMethod, string> = {
 const TABS: { id: Tab; label: string }[] = [
   { id: 'shop', label: 'Shop' },
   { id: 'hours', label: 'Hours' },
+  { id: 'machines', label: 'Machines' },
   { id: 'preferences', label: 'Preferences' },
   { id: 'payout', label: 'Payout' },
 ];
+
+// ── Machines ───────────────────────────────────────────────────────────────
+interface BranchMachine {
+  id: string;
+  label: string;
+  machineType: string;
+  status: string;
+  capacityKg: number;
+}
+
+const MACHINE_TYPES = ['washer', 'dryer', 'folder', 'press', 'other'] as const;
+
+const MACHINE_TYPE_LABELS: Record<string, string> = {
+  washer: 'Washer',
+  dryer: 'Dryer',
+  folder: 'Folding station',
+  press: 'Press / Iron',
+  other: 'Other',
+};
+
+const MACHINE_STATUSES = ['active', 'maintenance', 'offline'] as const;
+
+const MACHINE_STATUS_META: Record<string, { label: string; badge: string }> = {
+  active: { label: 'Active', badge: 'badge-accent' },
+  maintenance: { label: 'Maintenance', badge: 'badge-warning' },
+  offline: { label: 'Offline', badge: 'badge-neutral' },
+};
+
+function MachinesTab({ branchId, canEdit }: { branchId: string; canEdit: boolean }) {
+  const load = useCallback(
+    () => partnerFetch<BranchMachine[]>(`/partner/branches/${branchId}/machines`),
+    [branchId],
+  );
+  const { data, loading, error, reload } = usePartnerQuery(load, [branchId]);
+  const machines = data ?? [];
+
+  const [busy, setBusy] = useState(false);
+  const [addForm, setAddForm] = useState({ label: '', machineType: 'washer', capacityKg: '8' });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ label: '', machineType: 'washer', capacityKg: '' });
+
+  async function run(action: () => Promise<unknown>, successMessage: string) {
+    setBusy(true);
+    try {
+      await action();
+      await reload();
+      toast.success(successMessage);
+      return true;
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not update machines');
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function addMachine(e: React.FormEvent) {
+    e.preventDefault();
+    if (!addForm.label.trim()) return;
+    const ok = await run(
+      () =>
+        partnerFetch(`/partner/branches/${branchId}/machines`, {
+          method: 'POST',
+          body: JSON.stringify({
+            label: addForm.label.trim(),
+            machineType: addForm.machineType,
+            capacityKg: Number(addForm.capacityKg) || 8,
+          }),
+        }),
+      'Machine added',
+    );
+    if (ok) setAddForm({ label: '', machineType: 'washer', capacityKg: '8' });
+  }
+
+  function startEdit(m: BranchMachine) {
+    setEditingId(m.id);
+    setEditForm({ label: m.label, machineType: m.machineType, capacityKg: String(m.capacityKg) });
+  }
+
+  async function saveEdit(machineId: string) {
+    if (!editForm.label.trim()) return;
+    const ok = await run(
+      () =>
+        partnerFetch(`/partner/branches/${branchId}/machines/${machineId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            label: editForm.label.trim(),
+            machineType: editForm.machineType,
+            capacityKg: Number(editForm.capacityKg) || undefined,
+          }),
+        }),
+      'Machine updated',
+    );
+    if (ok) setEditingId(null);
+  }
+
+  async function setStatus(m: BranchMachine, status: string) {
+    if (status === m.status) return;
+    await run(
+      () =>
+        partnerFetch(`/partner/branches/${branchId}/machines/${m.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status }),
+        }),
+      'Machine status updated',
+    );
+  }
+
+  async function removeMachine(m: BranchMachine) {
+    if (!window.confirm(`Remove ${m.label}? This only affects capacity display — no orders are changed.`)) {
+      return;
+    }
+    await run(
+      () =>
+        partnerFetch(`/partner/branches/${branchId}/machines/${m.id}`, { method: 'DELETE' }),
+      'Machine removed',
+    );
+  }
+
+  return (
+    <SectionPanel
+      title="Machines"
+      description="Washers, dryers, and stations at your shop. Lunara shows these to dispatch for capacity context; mark machines under maintenance so the team knows."
+    >
+      <DataPageStatus loading={loading && !data} error={error} loadingMessage="Loading machines…" />
+
+      {data ? (
+        <div>
+          {machines.length === 0 ? (
+            <p className="px-6 py-6 text-sm text-muted sm:px-8">
+              No machines registered yet{canEdit ? ' — add your first one below.' : '.'}
+            </p>
+          ) : (
+            <ul className="divide-y divide-border/60">
+              {machines.map((m) => (
+                <li key={m.id} className="px-6 py-4 sm:px-8">
+                  {editingId === m.id ? (
+                    <div className="flex flex-wrap items-end gap-3">
+                      <div className="min-w-0 flex-1">
+                        <label className="text-xs font-medium text-slate-600" htmlFor={`edit-label-${m.id}`}>
+                          Label
+                        </label>
+                        <input
+                          id={`edit-label-${m.id}`}
+                          className="mt-1 block w-full rounded-lg border px-3 py-2 text-sm"
+                          value={editForm.label}
+                          disabled={busy}
+                          onChange={(e) => setEditForm((f) => ({ ...f, label: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-slate-600" htmlFor={`edit-type-${m.id}`}>
+                          Type
+                        </label>
+                        <select
+                          id={`edit-type-${m.id}`}
+                          className="mt-1 block rounded-lg border px-3 py-2 text-sm"
+                          value={editForm.machineType}
+                          disabled={busy}
+                          onChange={(e) => setEditForm((f) => ({ ...f, machineType: e.target.value }))}
+                        >
+                          {MACHINE_TYPES.map((t) => (
+                            <option key={t} value={t}>
+                              {MACHINE_TYPE_LABELS[t]}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-slate-600" htmlFor={`edit-cap-${m.id}`}>
+                          Capacity (kg)
+                        </label>
+                        <input
+                          id={`edit-cap-${m.id}`}
+                          type="number"
+                          min={1}
+                          max={500}
+                          className="mt-1 block w-24 rounded-lg border px-3 py-2 text-sm"
+                          value={editForm.capacityKg}
+                          disabled={busy}
+                          onChange={(e) => setEditForm((f) => ({ ...f, capacityKg: e.target.value }))}
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          className="btn-primary btn-sm"
+                          disabled={busy || !editForm.label.trim()}
+                          onClick={() => void saveEdit(m.id)}
+                        >
+                          {busy ? 'Saving…' : 'Save'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-outline btn-sm"
+                          disabled={busy}
+                          onClick={() => setEditingId(null)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-slate-900">{m.label}</p>
+                        <p className="text-xs text-muted">
+                          {MACHINE_TYPE_LABELS[m.machineType] ?? m.machineType} · {m.capacityKg} kg
+                        </p>
+                      </div>
+                      {canEdit ? (
+                        <select
+                          className="rounded-lg border px-2 py-1.5 text-sm"
+                          value={m.status}
+                          disabled={busy}
+                          aria-label={`Status of ${m.label}`}
+                          onChange={(e) => void setStatus(m, e.target.value)}
+                        >
+                          {MACHINE_STATUSES.map((s) => (
+                            <option key={s} value={s}>
+                              {MACHINE_STATUS_META[s].label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className={MACHINE_STATUS_META[m.status]?.badge ?? 'badge-neutral'}>
+                          {MACHINE_STATUS_META[m.status]?.label ?? m.status}
+                        </span>
+                      )}
+                      {canEdit ? (
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            className="btn-outline btn-sm"
+                            disabled={busy}
+                            onClick={() => startEdit(m)}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-outline btn-sm !text-red-600"
+                            disabled={busy}
+                            onClick={() => void removeMachine(m)}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {canEdit ? (
+            <form
+              onSubmit={addMachine}
+              className="flex flex-wrap items-end gap-3 border-t border-border/60 px-6 py-4 sm:px-8"
+            >
+              <div className="min-w-0 flex-1">
+                <label className="text-xs font-medium text-slate-600" htmlFor="new-machine-label">
+                  Label
+                </label>
+                <input
+                  id="new-machine-label"
+                  placeholder="e.g. Washer 3"
+                  className="mt-1 block w-full rounded-lg border px-3 py-2 text-sm"
+                  value={addForm.label}
+                  disabled={busy}
+                  maxLength={80}
+                  onChange={(e) => setAddForm((f) => ({ ...f, label: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-600" htmlFor="new-machine-type">
+                  Type
+                </label>
+                <select
+                  id="new-machine-type"
+                  className="mt-1 block rounded-lg border px-3 py-2 text-sm"
+                  value={addForm.machineType}
+                  disabled={busy}
+                  onChange={(e) => setAddForm((f) => ({ ...f, machineType: e.target.value }))}
+                >
+                  {MACHINE_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {MACHINE_TYPE_LABELS[t]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-600" htmlFor="new-machine-capacity">
+                  Capacity (kg)
+                </label>
+                <input
+                  id="new-machine-capacity"
+                  type="number"
+                  min={1}
+                  max={500}
+                  className="mt-1 block w-24 rounded-lg border px-3 py-2 text-sm"
+                  value={addForm.capacityKg}
+                  disabled={busy}
+                  onChange={(e) => setAddForm((f) => ({ ...f, capacityKg: e.target.value }))}
+                />
+              </div>
+              <button type="submit" className="btn-primary btn-sm" disabled={busy || !addForm.label.trim()}>
+                {busy ? 'Adding…' : 'Add machine'}
+              </button>
+            </form>
+          ) : (
+            <p className="border-t border-border/60 px-6 py-4 text-sm text-muted sm:px-8">
+              Only shop partners can add or update machines.
+            </p>
+          )}
+        </div>
+      ) : null}
+    </SectionPanel>
+  );
+}
 
 /** Display order Mon–Sun; each entry's `dayIndex` maps back to `OperatingHours` (JS `Date.getDay()`). */
 const WEEKDAY_ROWS: { dayIndex: number; label: string }[] = [
@@ -395,6 +718,11 @@ export default function PartnerSettingsPage() {
                   </div>
                 ) : null}
               </SectionPanel>
+            )}
+
+            {/* Machines tab */}
+            {activeTab === 'machines' && (
+              <MachinesTab branchId={branch.id} canEdit={canEdit} />
             )}
 
             {/* Preferences tab */}

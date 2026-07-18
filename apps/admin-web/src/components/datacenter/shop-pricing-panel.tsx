@@ -112,60 +112,67 @@ export function ShopPricingPanel({
   if (!services || !addons) return null;
 
   return (
-    <div className="mt-4 border-t border-border/60 pt-4">
-      <h4 className="text-sm font-semibold text-slate-900">Shop pricing</h4>
-      <p className="mt-0.5 text-xs text-muted">
+    <div className="pt-2">
+      <p className="text-xs text-muted">
         This shop&apos;s own prices. Customers see them marked up ×{MARKUP_MULTIPLIER} for Lunara&apos;s cut.
       </p>
-      <div className="mt-3 space-y-2">
-        {services.map((service) => {
-          const base = Number(prices[service.type] ?? 0);
-          return (
-            <div key={service.type} className="flex items-center gap-3">
-              <span className="w-40 text-sm text-slate-900">{service.label}</span>
-              <span className="text-sm text-muted">₱</span>
-              <input
-                type="number"
-                min={0}
-                step="0.5"
-                className="input-field w-28"
-                value={prices[service.type] ?? ''}
-                onChange={(e) =>
-                  setPrices((p) => ({ ...p, [service.type]: e.target.value }))
-                }
-              />
-              <span className="text-xs text-muted">
-                customer pays ₱{(base * MARKUP_MULTIPLIER).toFixed(2)}/kg
-              </span>
-            </div>
-          );
-        })}
-      </div>
+      <div className="mt-3 grid items-start gap-x-8 gap-y-5 xl:grid-cols-2">
+        <div className="space-y-2">
+          {services.map((service) => {
+            const base = Number(prices[service.type] ?? 0);
+            return (
+              <div key={service.type} className="flex items-center gap-3">
+                <span className="w-36 min-w-0 truncate text-sm text-slate-900" title={service.label}>
+                  {service.label}
+                </span>
+                <span className="text-sm text-muted">₱</span>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.5"
+                  className="input-field w-24"
+                  value={prices[service.type] ?? ''}
+                  onChange={(e) =>
+                    setPrices((p) => ({ ...p, [service.type]: e.target.value }))
+                  }
+                />
+                <span className="whitespace-nowrap text-xs text-muted">
+                  customer pays ₱{(base * MARKUP_MULTIPLIER).toFixed(2)}/kg
+                </span>
+              </div>
+            );
+          })}
+        </div>
 
-      <h4 className="mt-5 text-sm font-semibold text-slate-900">Add-on pricing</h4>
-      <div className="mt-3 space-y-2">
-        {addons.map((addon) => {
-          const base = Number(addonPrices[addon.slug] ?? 0);
-          return (
-            <div key={addon.slug} className="flex items-center gap-3">
-              <span className="w-40 text-sm text-slate-900">{addon.label}</span>
-              <span className="text-sm text-muted">₱</span>
-              <input
-                type="number"
-                min={0}
-                step="0.5"
-                className="input-field w-28"
-                value={addonPrices[addon.slug] ?? ''}
-                onChange={(e) =>
-                  setAddonPrices((p) => ({ ...p, [addon.slug]: e.target.value }))
-                }
-              />
-              <span className="text-xs text-muted">
-                customer pays ₱{(base * MARKUP_MULTIPLIER).toFixed(2)}
-              </span>
-            </div>
-          );
-        })}
+        <div>
+          <h4 className="text-sm font-semibold text-slate-900">Add-on pricing</h4>
+          <div className="mt-3 space-y-2">
+            {addons.map((addon) => {
+              const base = Number(addonPrices[addon.slug] ?? 0);
+              return (
+                <div key={addon.slug} className="flex items-center gap-3">
+                  <span className="w-36 min-w-0 truncate text-sm text-slate-900" title={addon.label}>
+                    {addon.label}
+                  </span>
+                  <span className="text-sm text-muted">₱</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.5"
+                    className="input-field w-24"
+                    value={addonPrices[addon.slug] ?? ''}
+                    onChange={(e) =>
+                      setAddonPrices((p) => ({ ...p, [addon.slug]: e.target.value }))
+                    }
+                  />
+                  <span className="whitespace-nowrap text-xs text-muted">
+                    customer pays ₱{(base * MARKUP_MULTIPLIER).toFixed(2)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {error ? <p className="mt-2 text-xs text-destructive">{error}</p> : null}

@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { EmptyState } from '../empty-state';
 import { LiveBadge } from '../ui/stat-card';
-import { MetricCell } from './metric-cell';
 import { adminFetch } from '../../lib/admin-api';
 import { formatOrderId } from '../../lib/format-label';
 import { isAdminRealtimeConnected } from '../../lib/admin-realtime';
@@ -51,10 +50,17 @@ interface RiderBoardRow {
 
 interface BranchEvaluation {
   branchId: string;
+  code: string;
   name: string;
+  distanceLabel: string;
   recommendationScore: number;
+  rank: number;
   isRecommended: boolean;
-  availability: { acceptingOrders: boolean };
+  qualified: boolean;
+  estimatedTurnaroundLabel: string;
+  capacity: { utilizationPercent: number; label: string };
+  performance: { score: number; label: string; onTimeRatePercent: number };
+  availability: { acceptingOrders: boolean; label: string };
 }
 
 interface DispatchDashboard {
@@ -78,13 +84,11 @@ const RIDER_STATUS_CLASS: Record<string, string> = {
   Offline: 'badge-neutral',
 };
 
-const QUICK_ACTIONS = [
-  { href: '/', label: 'Ops center' },
-  { href: '/control-tower', label: 'Control tower' },
-  { href: '/orders', label: 'Orders' },
-  { href: '/riders', label: 'Riders' },
-  { href: '/shops', label: 'Shops' },
-] as const;
+function queueStatusTone(status: string): string {
+  if (status === 'pending' || status === 'pending_dispatch') return 'badge-warning';
+  if (status.includes('rider') || status.includes('delivery')) return 'badge-primary';
+  return 'badge-secondary';
+}
 
 function deriveDispatchState(
   counts: DispatchDashboard['counts'],
@@ -126,11 +130,84 @@ const dispatchCopy: Record<
   },
 };
 
+// ── Small blocks ───────────────────────────────────────────────────────────
+const TILE_TONES = {
+  primary: 'bg-primary/[0.04] ring-primary/15',
+  secondary: 'bg-secondary/[0.04] ring-secondary/15',
+  accent: 'bg-accent/[0.04] ring-accent/20',
+  amber: 'bg-amber-500/[0.04] ring-amber-500/20',
+  violet: 'bg-violet-500/[0.04] ring-violet-500/20',
+  rose: 'bg-rose-500/[0.04] ring-rose-500/20',
+} as const;
+
+function StatTile({
+  label,
+  value,
+  sub,
+  tone,
+  href,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  tone: keyof typeof TILE_TONES;
+  href?: string;
+}) {
+  const inner = (
+    <>
+      <p className="text-xs font-medium text-muted">{label}</p>
+      <p className="dc-value mt-1">{value}</p>
+      {sub ? <p className="dc-sublabel mt-0.5">{sub}</p> : null}
+    </>
+  );
+  const cls = `block rounded-xl p-4 ring-1 ${TILE_TONES[tone]}`;
+  return href ? (
+    <Link href={href} className={`${cls} transition-all hover:shadow-[var(--shadow-elevated)]`}>
+      {inner}
+    </Link>
+  ) : (
+    <div className={cls}>{inner}</div>
+  );
+}
+
+function PanelHeader({
+  title,
+  sub,
+  action,
+}: {
+  title: string;
+  sub?: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="dc-panel-header flex flex-wrap items-center justify-between gap-2">
+      <div>
+        <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
+        {sub ? <p className="text-xs text-muted">{sub}</p> : null}
+      </div>
+      {action}
+    </div>
+  );
+}
+
+function CapacityBar({ percent, over }: { percent: number; over: boolean }) {
+  return (
+    <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+      <div
+        className={`h-full rounded-full ${over ? 'bg-destructive' : percent >= 80 ? 'bg-amber-500' : 'bg-primary/80'}`}
+        style={{ width: `${Math.min(100, percent)}%` }}
+      />
+    </div>
+  );
+}
+
+// ── Board ──────────────────────────────────────────────────────────────────
 export function DispatchBoard() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [socketLive, setSocketLive] = useState(false);
   const [shopAssignOrderId, setShopAssignOrderId] = useState<string | null>(null);
   const [evaluations, setEvaluations] = useState<BranchEvaluation[]>([]);
+  const [loadingEvaluations, setLoadingEvaluations] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState('');
   const [assigning, setAssigning] = useState(false);
   const [assignError, setAssignError] = useState('');
@@ -190,6 +267,7 @@ export function DispatchBoard() {
     setSelectedBranch('');
     setEvaluations([]);
     setAssignError('');
+    setLoadingEvaluations(true);
     try {
       const suggestions = await adminFetch<{
         branchEvaluations: BranchEvaluation[];
@@ -199,7 +277,16 @@ export function DispatchBoard() {
       setSelectedBranch(recommended?.branchId ?? '');
     } catch {
       setAssignError('Could not load shop evaluations');
+    } finally {
+      setLoadingEvaluations(false);
     }
+  }
+
+  function closeShopAssign() {
+    setShopAssignOrderId(null);
+    setEvaluations([]);
+    setSelectedBranch('');
+    setAssignError('');
   }
 
   async function assignShop() {
@@ -211,7 +298,7 @@ export function DispatchBoard() {
         method: 'POST',
         body: JSON.stringify({ branchId: selectedBranch }),
       });
-      setShopAssignOrderId(null);
+      closeShopAssign();
       await reload();
     } catch (e) {
       setAssignError(e instanceof Error ? e.message : 'Assign shop failed');
@@ -230,8 +317,8 @@ export function DispatchBoard() {
               Dispatch
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted sm:text-base">
-              Incoming queue, shop capacity (kg), and rider availability — balance workload across
-              branches.
+              Incoming queue, shop capacity, and rider availability — balance workload across the
+              network.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -247,6 +334,12 @@ export function DispatchBoard() {
             >
               {loading ? 'Syncing…' : 'Sync'}
             </button>
+            <Link href="/live-tracking" className="btn-outline btn-sm">
+              Live tracking
+            </Link>
+            <Link href="/control-tower" className="btn-primary btn-sm">
+              Control tower
+            </Link>
           </div>
         </div>
       </header>
@@ -268,7 +361,8 @@ export function DispatchBoard() {
       ) : null}
 
       {data && counts ? (
-        <div className="space-y-3">
+        <div className="space-y-4">
+          {/* State banner */}
           <div className={`flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 ${copy.bar}`}>
             <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${copy.dot}`} aria-hidden />
             <div className="min-w-0 flex-1">
@@ -285,48 +379,37 @@ export function DispatchBoard() {
             ) : null}
           </div>
 
-          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
-            <MetricCell
+          {/* Stat tiles */}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+            <StatTile
               label="Incoming queue"
-              value={counts.incoming}
-              highlight={counts.incoming > 0 ? 'primary' : undefined}
+              value={String(counts.incoming)}
+              sub="orders needing action"
+              tone="primary"
             />
-            <MetricCell
-              label="Need shop"
-              value={counts.needsShop}
-              highlight={counts.needsShop > 0 ? 'warning' : undefined}
-            />
-            <MetricCell
+            <StatTile label="Need shop" value={String(counts.needsShop)} sub="awaiting assignment" tone="amber" />
+            <StatTile
               label="Need pickup rider"
-              value={counts.needsPickupRider}
-              highlight={counts.needsPickupRider > 0 ? 'warning' : undefined}
+              value={String(counts.needsPickupRider)}
+              sub="shop accepted"
+              tone="secondary"
             />
-            <MetricCell
+            <StatTile
               label="Need delivery rider"
-              value={counts.needsDeliveryRider}
-              highlight={counts.needsDeliveryRider > 0 ? 'primary' : undefined}
+              value={String(counts.needsDeliveryRider)}
+              sub="ready lane"
+              tone="violet"
             />
-            <MetricCell
+            <StatTile
               label="Riders available"
-              value={availableRiders}
-              href="/riders"
+              value={String(availableRiders)}
               sub={`of ${data.riderBoard.length} on board`}
-              highlight={availableRiders === 0 && backlogTotal > 0 ? 'danger' : 'accent'}
+              tone={availableRiders === 0 && backlogTotal > 0 ? 'rose' : 'accent'}
+              href="/riders"
             />
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {QUICK_ACTIONS.map((a) => (
-              <Link
-                key={a.href}
-                href={a.href}
-                className="rounded-md border border-border/80 bg-surface px-3 py-1.5 dc-chip transition-colors hover:border-primary/40 hover:text-primary"
-              >
-                {a.label}
-              </Link>
-            ))}
-          </div>
-
+          {/* Live dispatcher alert */}
           {liveAlert?.message && liveAlert.type !== 'rider_sos' ? (
             <div className="alert-info flex flex-wrap items-start justify-between gap-3">
               <p>
@@ -346,263 +429,287 @@ export function DispatchBoard() {
             </div>
           ) : null}
 
-          {assignError ? (
-            <div className="alert-error" role="alert">
-              {assignError}
-            </div>
-          ) : null}
-
-          <section className="dc-panel">
-            <div className="dc-panel-header flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-900">Incoming orders queue</h2>
-                <p className="text-xs text-muted">
-                  {counts.incoming} in queue — shop assignment, partner accept, rider dispatch
-                </p>
-              </div>
-              <Link href="/orders" className="link-primary text-xs font-medium">
-                Orders ledger →
-              </Link>
-            </div>
-
-            {data.incomingOrders.length === 0 ? (
-              <EmptyState
-                title="Queue clear"
-                description="No orders waiting on dispatch actions right now."
+          <div className="grid gap-4 xl:grid-cols-12 xl:items-start">
+            {/* ── Incoming queue ── */}
+            <section className="dc-panel min-w-0 xl:col-span-8">
+              <PanelHeader
+                title="Incoming orders queue"
+                sub={`${counts.incoming} in queue — shop assignment, partner accept, rider dispatch`}
+                action={
+                  <Link href="/orders" className="link-primary text-xs font-medium">
+                    Orders ledger →
+                  </Link>
+                }
               />
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="data-table min-w-[800px]">
-                  <caption className="sr-only">Incoming dispatch queue</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Order</th>
-                      <th scope="col">Customer</th>
-                      <th scope="col">Area</th>
-                      <th scope="col">Weight</th>
-                      <th scope="col">Status</th>
-                      <th scope="col">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.incomingOrders.map((row) => (
-                      <tr key={row.orderId}>
-                        <td>
-                          <Link
-                            href={`/orders/${row.orderId}`}
-                            className="link-primary text-code font-semibold"
-                          >
-                            {row.orderLabel || formatOrderId(row.orderId)}
-                          </Link>
-                          {row.branchName ? (
-                            <p className="mt-0.5 text-xs text-muted">{row.branchName}</p>
-                          ) : null}
-                        </td>
-                        <td className="max-w-[12rem] truncate text-muted" title={row.customer}>
-                          {row.customer}
-                        </td>
-                        <td className="text-muted">{row.area}</td>
-                        <td className="tabular-nums">{row.weightKg} kg</td>
-                        <td>
-                          <span className="badge-neutral capitalize">{row.statusLabel}</span>
-                        </td>
-                        <td>
-                          <div className="flex flex-wrap gap-2">
-                            <Link href={`/orders/${row.orderId}`} className="link-primary text-xs font-medium">
-                              Ops →
-                            </Link>
-                            {row.canAssignShop ? (
-                              <button
-                                type="button"
-                                onClick={() => void openShopAssign(row.orderId)}
-                                className="badge-warning px-2 py-1 text-xs font-medium hover:opacity-90"
-                              >
-                                Assign shop
-                              </button>
-                            ) : null}
-                            {row.awaitingPartnerAccept ? (
-                              <span
-                                className="badge-neutral px-2 py-1 text-xs font-medium"
-                                title="Partner must accept the order in the partner portal before a rider can be assigned"
-                              >
-                                Awaiting partner
-                              </span>
-                            ) : null}
-                            {row.canAssignPickupRider || row.canAssignDeliveryRider ? (
+
+              {data.incomingOrders.length === 0 ? (
+                <EmptyState
+                  title="Queue clear"
+                  description="No orders waiting on dispatch actions right now."
+                />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="data-table min-w-[720px]">
+                    <caption className="sr-only">Incoming dispatch queue</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Order</th>
+                        <th scope="col">Customer</th>
+                        <th scope="col">Area</th>
+                        <th scope="col">Load</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.incomingOrders.map((row) => {
+                        const isAssigning = shopAssignOrderId === row.orderId;
+                        return (
+                          <tr key={row.orderId} className={isAssigning ? 'bg-primary/5 hover:bg-primary/5' : ''}>
+                            <td>
                               <Link
                                 href={`/orders/${row.orderId}`}
-                                className="badge-primary px-2 py-1 text-xs font-medium hover:opacity-90"
+                                className="link-primary text-code font-semibold"
                               >
-                                Assign rider
+                                {row.orderLabel || formatOrderId(row.orderId)}
                               </Link>
-                            ) : null}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-
-          {shopAssignOrderId ? (
-            <section className="rounded-lg border border-amber-500/35 bg-amber-950/5 px-4 py-4 ring-1 ring-amber-500/20">
-              <h3 className="text-sm font-semibold text-slate-900">Assign laundry shop</h3>
-              <p className="mt-1 text-xs text-muted">
-                Order{' '}
-                <span className="text-code">{formatOrderId(shopAssignOrderId)}</span>
-              </p>
-              <select
-                className="input-field mt-4 max-w-md"
-                value={selectedBranch}
-                onChange={(e) => setSelectedBranch(e.target.value)}
-              >
-                <option value="">Select shop…</option>
-                {evaluations.map((b) => (
-                  <option
-                    key={b.branchId}
-                    value={b.branchId}
-                  >
-                    {b.name} — score {b.recommendationScore}
-                    {b.isRecommended ? ' ★' : ''}
-                    {!b.availability.acceptingOrders ? ' ⚠ unavailable' : ''}
-                  </option>
-                ))}
-              </select>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  disabled={assigning || !selectedBranch}
-                  onClick={() => void assignShop()}
-                  className="btn-primary btn-sm"
-                >
-                  Confirm assign shop
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShopAssignOrderId(null)}
-                  className="btn-outline btn-sm"
-                >
-                  Cancel
-                </button>
-              </div>
-            </section>
-          ) : null}
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <section className="dc-panel">
-              <div className="dc-panel-header">
-                <h2 className="text-sm font-semibold text-slate-900">Shop capacity board</h2>
-                <p className="text-xs text-muted">Balance workload by weight (kg)</p>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="data-table">
-                  <caption className="sr-only">Shop capacity by branch</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Shop</th>
-                      <th scope="col">Capacity</th>
-                      <th scope="col">Current load</th>
-                      <th scope="col">Utilization</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.shopCapacityBoard.map((s) => (
-                      <tr key={s.branchId} className={s.isOverCapacity ? 'bg-red-50/80' : ''}>
-                        <td className="font-medium">
-                          {s.shop}
-                          <span className="ml-1 text-code text-xs font-normal text-muted">
-                            {s.code}
-                          </span>
-                          {s.isOverCapacity ? (
-                            <span className="badge-danger ml-2 text-xs">Over</span>
-                          ) : null}
-                        </td>
-                        <td className="tabular-nums">{s.capacityKg} kg</td>
-                        <td className="tabular-nums">{s.currentLoadKg} kg</td>
-                        <td>
-                          <div className="flex items-center gap-2">
-                            <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-200">
-                              <div
-                                className={`h-full ${s.isOverCapacity ? 'bg-destructive' : 'bg-primary'}`}
-                                style={{ width: `${Math.min(100, s.utilizationPercent)}%` }}
-                              />
-                            </div>
-                            <span className="text-xs tabular-nums">{s.utilizationPercent}%</span>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section className="dc-panel">
-              <div className="dc-panel-header flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h2 className="text-sm font-semibold text-slate-900">Rider board</h2>
-                  <p className="text-xs text-muted">Live assignment status</p>
+                              {row.branchName ? (
+                                <p className="mt-0.5 max-w-[10rem] truncate text-xs text-muted" title={row.branchName}>
+                                  {row.branchName}
+                                </p>
+                              ) : null}
+                            </td>
+                            <td className="max-w-[11rem] truncate text-muted" title={row.customer}>
+                              {row.customer}
+                            </td>
+                            <td className="max-w-[8rem] truncate text-muted" title={row.area}>
+                              {row.area}
+                            </td>
+                            <td className="whitespace-nowrap tabular-nums">{row.weightKg} kg</td>
+                            <td>
+                              <span className={`${queueStatusTone(row.status)} whitespace-nowrap capitalize`}>
+                                {row.statusLabel}
+                              </span>
+                            </td>
+                            <td>
+                              <div className="flex flex-wrap gap-1.5">
+                                {row.canAssignShop ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => void openShopAssign(row.orderId)}
+                                    className="btn-primary btn-sm"
+                                    disabled={isAssigning}
+                                  >
+                                    {isAssigning ? 'Assigning…' : 'Assign shop'}
+                                  </button>
+                                ) : null}
+                                {row.awaitingPartnerAccept ? (
+                                  <span
+                                    className="badge-neutral px-2 py-1 text-xs font-medium"
+                                    title="Partner must accept the order in the partner portal before a rider can be assigned"
+                                  >
+                                    Awaiting partner
+                                  </span>
+                                ) : null}
+                                {row.canAssignPickupRider || row.canAssignDeliveryRider ? (
+                                  <Link href={`/orders/${row.orderId}`} className="btn-outline btn-sm">
+                                    Assign rider
+                                  </Link>
+                                ) : null}
+                                {!row.canAssignShop &&
+                                !row.awaitingPartnerAccept &&
+                                !row.canAssignPickupRider &&
+                                !row.canAssignDeliveryRider ? (
+                                  <Link href={`/orders/${row.orderId}`} className="link-primary text-xs font-medium">
+                                    Ops →
+                                  </Link>
+                                ) : null}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-                <Link href="/riders" className="link-primary text-xs font-medium">
-                  All riders →
-                </Link>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="data-table">
-                  <caption className="sr-only">Rider dispatch board</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Rider</th>
-                      <th scope="col">Status</th>
-                      <th scope="col">Active order</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.riderBoard.length === 0 ? (
-                      <tr>
-                        <td colSpan={3} className="py-8 text-center text-sm text-muted">
-                          No riders on the board.
-                        </td>
-                      </tr>
-                    ) : (
-                      data.riderBoard.map((r) => (
-                        <tr key={r.riderId}>
-                          <td>
-                            <span className="font-medium">{r.rider}</span>
-                            {!r.isOnline ? (
-                              <span className="ml-2 text-xs text-muted">offline</span>
-                            ) : null}
-                          </td>
-                          <td>
-                            <span
-                              className={
-                                RIDER_STATUS_CLASS[r.boardStatus] ?? RIDER_STATUS_CLASS.Offline
-                              }
-                            >
-                              {r.boardStatus}
-                            </span>
-                          </td>
-                          <td>
-                            {r.activeOrderId ? (
-                              <Link
-                                href={`/orders/${r.activeOrderId}`}
-                                className="link-primary text-code"
-                              >
-                                {formatOrderId(r.activeOrderId)}
-                              </Link>
-                            ) : (
-                              <span className="text-muted">—</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              )}
             </section>
+
+            {/* ── Rail ── */}
+            <div className="space-y-4 xl:col-span-4">
+              {shopAssignOrderId ? (
+                <section className="dc-panel ring-2 ring-primary/30">
+                  <PanelHeader
+                    title="Assign laundry shop"
+                    sub={`Order ${formatOrderId(shopAssignOrderId)} — ranked by distance, capacity, and performance`}
+                    action={
+                      <button type="button" className="btn-ghost btn-sm" aria-label="Cancel assignment" onClick={closeShopAssign}>
+                        ✕
+                      </button>
+                    }
+                  />
+                  {assignError ? (
+                    <p className="px-4 pt-3 text-sm text-destructive" role="alert">
+                      {assignError}
+                    </p>
+                  ) : null}
+                  {loadingEvaluations ? (
+                    <p className="px-4 py-6 text-sm text-muted">Evaluating branches…</p>
+                  ) : (
+                    <div className="max-h-[24rem] space-y-2 overflow-y-auto p-3">
+                      {evaluations.map((b) => {
+                        const selected = selectedBranch === b.branchId;
+                        return (
+                          <button
+                            key={b.branchId}
+                            type="button"
+                            onClick={() => setSelectedBranch(b.branchId)}
+                            aria-pressed={selected}
+                            className={`w-full rounded-lg p-3 text-left ring-1 transition-all ${
+                              selected
+                                ? 'bg-primary/5 ring-2 ring-primary/40'
+                                : 'ring-border/60 hover:ring-primary/30'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-slate-900">
+                                  {b.name}
+                                  <span className="text-code ml-1.5 text-xs font-normal text-muted">{b.code}</span>
+                                </p>
+                                <p className="mt-0.5 text-xs text-muted">
+                                  {b.distanceLabel} · {b.estimatedTurnaroundLabel}
+                                </p>
+                              </div>
+                              <div className="flex shrink-0 flex-col items-end gap-1">
+                                <span className="text-sm font-bold tabular-nums text-slate-900">
+                                  {b.recommendationScore}
+                                </span>
+                                {b.isRecommended ? <span className="badge-accent">Recommended</span> : null}
+                              </div>
+                            </div>
+                            <div className="mt-2 flex items-center gap-2">
+                              <CapacityBar
+                                percent={b.capacity.utilizationPercent}
+                                over={b.capacity.utilizationPercent >= 100}
+                              />
+                              <span className="shrink-0 text-xs tabular-nums text-muted">
+                                {b.capacity.utilizationPercent}%
+                              </span>
+                            </div>
+                            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                              <span className="badge-neutral">{b.performance.label}</span>
+                              {!b.availability.acceptingOrders ? (
+                                <span className="badge-danger">{b.availability.label}</span>
+                              ) : null}
+                              {!b.qualified ? (
+                                <span
+                                  className="badge-warning"
+                                  title="Below the auto-dispatch quality bar — manual assignment still allowed"
+                                >
+                                  Below quality bar
+                                </span>
+                              ) : null}
+                            </div>
+                          </button>
+                        );
+                      })}
+                      {evaluations.length === 0 ? (
+                        <p className="py-4 text-center text-sm text-muted">No branches evaluated.</p>
+                      ) : null}
+                    </div>
+                  )}
+                  <div className="flex gap-2 border-t border-border/60 px-3 py-3">
+                    <button
+                      type="button"
+                      disabled={assigning || !selectedBranch}
+                      onClick={() => void assignShop()}
+                      className="btn-primary btn-sm flex-1"
+                    >
+                      {assigning ? 'Assigning…' : 'Confirm assignment'}
+                    </button>
+                    <button type="button" onClick={closeShopAssign} className="btn-outline btn-sm">
+                      Cancel
+                    </button>
+                  </div>
+                </section>
+              ) : null}
+
+              <section className="dc-panel">
+                <PanelHeader title="Shop capacity" sub="Workload by weight (kg)" />
+                {data.shopCapacityBoard.length === 0 ? (
+                  <p className="dc-panel-empty text-sm text-muted">No operational shops yet.</p>
+                ) : (
+                  <ul className="space-y-3 px-4 py-4">
+                    {data.shopCapacityBoard.map((s) => (
+                      <li key={s.branchId}>
+                        <div className="flex items-center justify-between gap-2 text-sm">
+                          <span className="min-w-0 truncate font-medium text-slate-900" title={s.shop}>
+                            {s.shop}
+                            <span className="text-code ml-1.5 text-xs font-normal text-muted">{s.code}</span>
+                          </span>
+                          <span className="shrink-0 text-xs tabular-nums text-muted">
+                            {s.currentLoadKg} / {s.capacityKg} kg
+                          </span>
+                        </div>
+                        <div className="mt-1 flex items-center gap-2">
+                          <CapacityBar percent={s.utilizationPercent} over={s.isOverCapacity} />
+                          <span
+                            className={`shrink-0 text-xs font-semibold tabular-nums ${
+                              s.isOverCapacity ? 'text-red-600' : 'text-slate-700'
+                            }`}
+                          >
+                            {s.utilizationPercent}%
+                          </span>
+                        </div>
+                        {s.isOverCapacity ? (
+                          <span className="badge-danger mt-1">Over capacity</span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+
+              <section className="dc-panel">
+                <PanelHeader
+                  title="Rider board"
+                  sub="Live assignment status"
+                  action={
+                    <Link href="/riders" className="link-primary text-xs font-medium">
+                      All riders →
+                    </Link>
+                  }
+                />
+                {data.riderBoard.length === 0 ? (
+                  <p className="dc-panel-empty text-sm text-muted">No riders on the board.</p>
+                ) : (
+                  <ul className="divide-y divide-border/40">
+                    {data.riderBoard.map((r) => (
+                      <li key={r.riderId} className="flex items-center gap-3 px-4 py-2.5">
+                        <span
+                          className={`h-2 w-2 shrink-0 rounded-full ${r.isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                          aria-hidden
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-slate-900">{r.rider}</p>
+                          {r.activeOrderId ? (
+                            <Link href={`/orders/${r.activeOrderId}`} className="link-primary text-code text-xs">
+                              {formatOrderId(r.activeOrderId)}
+                            </Link>
+                          ) : (
+                            <p className="text-xs text-muted">No active order</p>
+                          )}
+                        </div>
+                        <span className={RIDER_STATUS_CLASS[r.boardStatus] ?? RIDER_STATUS_CLASS.Offline}>
+                          {r.boardStatus}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            </div>
           </div>
         </div>
       ) : null}

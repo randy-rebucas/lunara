@@ -194,6 +194,11 @@ export class AdminController {
     return this.adminService.getDashboard();
   }
 
+  @Get('live-tracking')
+  getLiveTracking() {
+    return this.adminService.getLiveTracking();
+  }
+
   @Get('orders')
   getOrders(@Query('status') status?: string, @Query('limit') limit?: string) {
     return this.adminService.getOrders(status, Number(limit) || 50);

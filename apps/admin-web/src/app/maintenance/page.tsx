@@ -51,60 +51,125 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'backup',  label: 'Backup & Restore' },
 ];
 
+// ── Shared tile styling (matches the rest of the admin suite) ─────────────────
+
+const TILE_TONES = {
+  primary: 'bg-primary/[0.04] ring-primary/15',
+  accent: 'bg-accent/[0.04] ring-accent/20',
+  secondary: 'bg-secondary/[0.04] ring-secondary/15',
+  amber: 'bg-amber-500/[0.04] ring-amber-500/20',
+  violet: 'bg-violet-500/[0.04] ring-violet-500/20',
+  rose: 'bg-rose-500/[0.04] ring-rose-500/20',
+} as const;
+
+function StatTile({
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  tone: keyof typeof TILE_TONES;
+}) {
+  return (
+    <div className={`rounded-xl p-4 ring-1 ${TILE_TONES[tone]}`}>
+      <p className="text-xs font-medium text-muted">{label}</p>
+      <p className="dc-value mt-1">{value}</p>
+      {sub ? <p className="dc-sublabel mt-0.5 truncate">{sub}</p> : null}
+    </div>
+  );
+}
+
 // ── Status Tab ────────────────────────────────────────────────────────────────
 
 function StatusTab() {
   const load = useCallback(() => adminFetch<CollectionStat[]>('/admin/maintenance/status'), []);
   const { data, loading, error, reload } = useAdminQuery(load, []);
   const total = data?.reduce((s, r) => s + r.count, 0) ?? 0;
+  const maxCount = Math.max(1, ...(data ?? []).map((r) => r.count));
+  const largest = data && data.length > 0 ? [...data].sort((a, b) => b.count - a.count)[0] : null;
+  const emptyCount = data?.filter((r) => r.count === 0).length ?? 0;
 
   return (
-    <section className="dc-panel">
-      <div className="dc-panel-header flex items-center justify-between gap-2">
-        <div>
-          <h2 className="text-sm font-semibold text-slate-900">Collection statistics</h2>
-          <p className="text-xs text-muted">Live document counts per MongoDB collection.</p>
-        </div>
-        <button type="button" onClick={() => void reload()} className="btn-outline btn-sm" disabled={loading}>
-          {loading ? 'Refreshing…' : 'Refresh'}
-        </button>
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile label="Total documents" value={total.toLocaleString()} sub="across all collections" tone="primary" />
+        <StatTile label="Collections tracked" value={String(data?.length ?? 0)} tone="secondary" />
+        <StatTile
+          label="Largest collection"
+          value={largest ? largest.count.toLocaleString() : '—'}
+          sub={largest?.collection}
+          tone="violet"
+        />
+        <StatTile
+          label="Empty collections"
+          value={String(emptyCount)}
+          sub={emptyCount > 0 ? 'no documents yet' : 'all seeded'}
+          tone={emptyCount > 0 ? 'amber' : 'accent'}
+        />
       </div>
 
-      {loading && !data && (
-        <div className="flex items-center gap-3 px-3 py-4 text-sm text-muted">
-          <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary/30 border-t-primary" aria-hidden />
-          Loading…
+      <section className="dc-panel">
+        <div className="dc-panel-header flex items-center justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900">Collection statistics</h2>
+            <p className="text-xs text-muted">Live document counts per MongoDB collection.</p>
+          </div>
+          <button type="button" onClick={() => void reload()} className="btn-outline btn-sm" disabled={loading}>
+            {loading ? 'Refreshing…' : 'Refresh'}
+          </button>
         </div>
-      )}
-      {error && <div className="alert-error m-3" role="alert">{error}</div>}
 
-      {data && (
-        <div className="overflow-x-auto">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th scope="col">Collection</th>
-                <th scope="col" className="text-right">Documents</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((row) => (
-                <tr key={row.collection}>
-                  <td className="text-code text-slate-700">{row.collection}</td>
-                  <td className="text-right tabular-nums font-medium">{row.count.toLocaleString()}</td>
+        {loading && !data && (
+          <div className="flex items-center gap-3 px-3 py-4 text-sm text-muted">
+            <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary/30 border-t-primary" aria-hidden />
+            Loading…
+          </div>
+        )}
+        {error && <div className="alert-error m-3" role="alert">{error}</div>}
+
+        {data && (
+          <div className="overflow-x-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th scope="col">Collection</th>
+                  <th scope="col">Share</th>
+                  <th scope="col" className="text-right">Documents</th>
                 </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="border-t border-border/60 bg-slate-50/80 font-medium">
-                <td className="text-slate-900">Total</td>
-                <td className="text-right tabular-nums text-slate-900">{total.toLocaleString()}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      )}
-    </section>
+              </thead>
+              <tbody>
+                {[...data]
+                  .sort((a, b) => b.count - a.count)
+                  .map((row) => (
+                    <tr key={row.collection}>
+                      <td className="text-code text-slate-700">{row.collection}</td>
+                      <td>
+                        <div className="h-1.5 w-32 overflow-hidden rounded-full bg-slate-100">
+                          <div
+                            className="h-full rounded-full bg-primary/70"
+                            style={{ width: `${(row.count / maxCount) * 100}%` }}
+                          />
+                        </div>
+                      </td>
+                      <td className="text-right tabular-nums font-medium">{row.count.toLocaleString()}</td>
+                    </tr>
+                  ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-border/60 bg-slate-50/80 font-medium">
+                  <td className="text-slate-900">Total</td>
+                  <td />
+                  <td className="text-right tabular-nums text-slate-900">{total.toLocaleString()}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -142,19 +207,20 @@ function SeedTab() {
               const result    = results[t.id];
               const isSuccess = result && typeof result !== 'string';
               const isError   = result && typeof result === 'string';
+              const tone: keyof typeof TILE_TONES = t.id === 'all' ? 'violet' : 'primary';
               return (
-                <div key={t.id} className="flex flex-col gap-3 rounded-lg border border-border/60 bg-slate-50/60 p-4">
+                <div key={t.id} className={`flex flex-col gap-3 rounded-xl p-4 ring-1 ${TILE_TONES[tone]}`}>
                   <div>
                     <p className="font-medium text-slate-900">{t.label}</p>
                     <p className="mt-0.5 text-xs text-muted">{t.description}</p>
                   </div>
                   {isSuccess && (
-                    <div className="space-y-0.5 rounded bg-emerald-50 px-2 py-1.5 text-xs text-emerald-700">
+                    <div className="space-y-0.5 rounded-lg bg-emerald-50 px-2.5 py-2 text-xs text-emerald-700">
                       {(result as SeedResult).log.map((l, i) => <p key={i}>✓ {l}</p>)}
                     </div>
                   )}
                   {isError && (
-                    <p className="rounded bg-red-50 px-2 py-1.5 text-xs text-red-600">{result as string}</p>
+                    <p className="rounded-lg bg-red-50 px-2.5 py-2 text-xs text-red-600">{result as string}</p>
                   )}
                   <button
                     type="button"
@@ -216,18 +282,32 @@ function ResetTab() {
         </div>
 
         <div>
-          <label htmlFor="reset-scope" className="form-label">Scope</label>
-          <select
-            id="reset-scope"
-            className="input-field"
-            value={scope}
-            onChange={(e) => { setScope(e.target.value); setConfirmText(''); setResult(null); setError(null); }}
-          >
-            {RESET_SCOPES.map((s) => (
-              <option key={s.id} value={s.id}>{s.label}</option>
-            ))}
-          </select>
-          {selectedScope && <p className="mt-1 text-xs text-muted">{selectedScope.description}</p>}
+          <p className="form-label">Scope</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {RESET_SCOPES.map((s) => {
+              const selected = scope === s.id;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => { setScope(s.id); setConfirmText(''); setResult(null); setError(null); }}
+                  aria-pressed={selected}
+                  className={`rounded-lg p-3 text-left ring-1 transition-all ${
+                    selected
+                      ? s.id === 'all'
+                        ? 'bg-red-50 ring-2 ring-red-400'
+                        : 'bg-primary/5 ring-2 ring-primary/40'
+                      : 'ring-border/60 hover:ring-primary/30'
+                  }`}
+                >
+                  <p className={`text-sm font-medium ${s.id === 'all' && selected ? 'text-red-700' : 'text-slate-900'}`}>
+                    {s.label}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted">{s.description}</p>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <div>

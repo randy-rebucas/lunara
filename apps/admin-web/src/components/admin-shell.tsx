@@ -24,6 +24,7 @@ const Icons: Record<string, React.ReactNode> = {
   // Operations
   overview:       <Icon d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />,
   controlTower:   <Icon d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />,
+  liveTracking:   <Icon d="M12 8a4 4 0 100 8 4 4 0 000-8z" d2="M12 2v3m0 14v3M2 12h3m14 0h3" />,
   orders:         <Icon d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />,
   dispatch:       <Icon d="M13 10V3L4 14h7v7l9-11h-7z" />,
   // People
@@ -45,6 +46,7 @@ const Icons: Record<string, React.ReactNode> = {
   reconciliation: <Icon d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21H5a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v14a2 2 0 01-2 2h-2M9 3h6v4H9V3z" />,
   accounting:     <Icon d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />,
   refunds:        <Icon d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />,
+  withdrawals:    <Icon d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />,
   // Growth
   promotions:     <Icon d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />,
   notifications:  <Icon d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />,
@@ -53,7 +55,7 @@ const Icons: Record<string, React.ReactNode> = {
   messages:       <Icon d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />,
   support:        <Icon d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />,
   setup:          <Icon d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" d2="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />,
-  maintenance:    <Icon d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" d2="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />,
+  maintenance:    <Icon d="M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m1.404 3.563l5.83 5.83a2.652 2.652 0 003.75-3.75l-5.876-5.877m-3.704 3.797l2.496-3.03c.317-.384.74-.626 1.208-.766m0 0c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95" />,
   auditLog:       <Icon d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />,
   signout:        <Icon d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />,
 };
@@ -64,56 +66,76 @@ type NavItem =
   | { href: string; label: string; icon: React.ReactNode };
 
 const nav: NavItem[] = [
+  // Daily order pipeline, in workflow order: see everything → manage → assign → track → exceptions
   { section: 'Operations' },
-  { href: '/',               label: 'Overview',       icon: Icons.overview },
-  { href: '/control-tower', label: 'Control tower',  icon: Icons.controlTower },
-  { href: '/orders',        label: 'Orders',         icon: Icons.orders },
-  { href: '/dispatch',      label: 'Dispatch',       icon: Icons.dispatch },
+  { href: '/',              label: 'Overview',      icon: Icons.overview },
+  { href: '/orders',        label: 'Orders',        icon: Icons.orders },
+  { href: '/dispatch',      label: 'Dispatch',      icon: Icons.dispatch },
+  { href: '/live-tracking', label: 'Live tracking', icon: Icons.liveTracking },
+  { href: '/control-tower', label: 'Control tower', icon: Icons.controlTower },
 
+  // Accounts: everyone → the fleet → inbound applicants
   { section: 'People' },
-  { href: '/users',         label: 'Users',          icon: Icons.users },
-  { href: '/riders',        label: 'Riders',         icon: Icons.riders },
-  { href: '/applications',  label: 'Applications',   icon: Icons.applications },
+  { href: '/users',        label: 'Users',        icon: Icons.users },
+  { href: '/riders',       label: 'Riders',       icon: Icons.riders },
+  { href: '/applications', label: 'Applications', icon: Icons.applications },
 
+  // Physical network → the catalog it sells → shop-floor tooling
   { section: 'Network' },
-  { href: '/branches',      label: 'Branches',       icon: Icons.branches },
-  { href: '/shops',         label: 'Shops',          icon: Icons.shops },
-  { href: '/categories',    label: 'Categories',     icon: Icons.categories },
-  { href: '/services',      label: 'Services',       icon: Icons.services },
-  { href: '/addons',        label: 'Add-ons',        icon: Icons.addons },
-  { href: '/laundry-tags',  label: 'Laundry tags',   icon: Icons.laundryTags },
+  { href: '/branches',     label: 'Branches',     icon: Icons.branches },
+  { href: '/shops',        label: 'Shops',        icon: Icons.shops },
+  { href: '/categories',   label: 'Categories',   icon: Icons.categories },
+  { href: '/services',     label: 'Services',     icon: Icons.services },
+  { href: '/addons',       label: 'Add-ons',      icon: Icons.addons },
+  { href: '/laundry-tags', label: 'Laundry tags', icon: Icons.laundryTags },
 
   { section: 'Partners' },
-  { href: '/partners/branding',     label: 'Branding',     icon: Icons.branding },
-  { href: '/partners/settlements',  label: 'Settlements',  icon: Icons.settlements },
+  { href: '/partners/branding',    label: 'Branding',    icon: Icons.branding },
+  { href: '/partners/settlements', label: 'Settlements', icon: Icons.settlements },
 
+  // Money in (analytics) → books → money out (approval queues)
   { section: 'Finance' },
-  { href: '/revenue',        label: 'Revenue',        icon: Icons.revenue },
-  { href: '/reconciliation', label: 'Reconciliation', icon: Icons.reconciliation },
-  { href: '/accounting',     label: 'Accounting',     icon: Icons.accounting },
-  { href: '/refunds',        label: 'Refunds',        icon: Icons.refunds },
+  { href: '/revenue',            label: 'Revenue',           icon: Icons.revenue },
+  { href: '/reports',            label: 'Reports',           icon: Icons.reports },
+  { href: '/accounting',         label: 'Accounting',        icon: Icons.accounting },
+  { href: '/reconciliation',     label: 'Reconciliation',    icon: Icons.reconciliation },
+  { href: '/refunds',            label: 'Refunds',           icon: Icons.refunds },
+  { href: '/riders/withdrawals', label: 'Rider withdrawals', icon: Icons.withdrawals },
 
-  { section: 'Growth' },
-  { href: '/promotions',    label: 'Promotions',     icon: Icons.promotions },
-  { href: '/notifications', label: 'Notifications',  icon: Icons.notifications },
-  { href: '/reports',       label: 'Reports',        icon: Icons.reports },
+  { section: 'Marketing' },
+  { href: '/promotions',    label: 'Promotions',    icon: Icons.promotions },
+  { href: '/notifications', label: 'Announcements', icon: Icons.notifications },
 
+  // Daily comms first, admin tooling after, dev tools last
   { section: 'System' },
-  { href: '/messages',              label: 'Messages',              icon: Icons.messages },
-  { href: '/support',               label: 'Support',                icon: Icons.support },
-  { href: '/automation-settings',   label: 'Automation settings',    icon: Icons.setup },
-  { href: '/setup',                 label: 'Setup',                  icon: Icons.setup },
-  { href: '/maintenance',           label: 'Maintenance',            icon: Icons.maintenance },
-  { href: '/audit-log',             label: 'Audit log',              icon: Icons.auditLog },
+  { href: '/messages',    label: 'Messages',        icon: Icons.messages },
+  { href: '/support',     label: 'Support',         icon: Icons.support },
+  { href: '/settings',    label: 'System settings', icon: Icons.setup },
+  { href: '/audit-log',   label: 'Audit log',       icon: Icons.auditLog },
+  { href: '/maintenance', label: 'Maintenance',     icon: Icons.maintenance },
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────
-function isActive(pathname: string, href: string) {
+function matchesRoute(pathname: string, href: string) {
   return pathname === href || (href !== '/' && pathname.startsWith(`${href}/`));
+}
+
+/** Longest matching nav href wins so nested routes (e.g. /riders/withdrawals)
+ * highlight their own entry instead of every prefix ancestor too. */
+function activeHref(pathname: string): string | null {
+  let best: string | null = null;
+  for (const item of nav) {
+    if ('section' in item) continue;
+    if (matchesRoute(pathname, item.href) && (best === null || item.href.length > best.length)) {
+      best = item.href;
+    }
+  }
+  return best;
 }
 
 function SidebarNav({ onNavigate, messageBadge }: { onNavigate?: () => void; messageBadge?: number }) {
   const pathname = usePathname();
+  const active = activeHref(pathname);
 
   return (
     <nav className="space-y-0.5">
@@ -134,7 +156,7 @@ function SidebarNav({ onNavigate, messageBadge }: { onNavigate?: () => void; mes
             key={item.href}
             href={item.href}
             onClick={onNavigate}
-            className={`flex items-center gap-2.5 ${isActive(pathname, item.href) ? 'nav-link-active' : 'nav-link'}`}
+            className={`flex items-center gap-2.5 ${active === item.href ? 'nav-link-active' : 'nav-link'}`}
           >
             {item.icon}
             <span className="flex-1">{item.label}</span>

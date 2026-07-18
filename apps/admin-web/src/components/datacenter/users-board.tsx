@@ -1,8 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useMemo, useState } from 'react';
 import { filterBySearch, ListControls } from '../list-controls';
-import { MetricCell } from './metric-cell';
 import { adminFetch } from '../../lib/admin-api';
 import { useAdminQuery } from '../../lib/use-admin-query';
 
@@ -17,15 +17,35 @@ interface UserRow {
   createdAt: string;
 }
 
+interface AuditLogPage {
+  items: {
+    _id: string;
+    action: string;
+    method: string;
+    statusCode: number;
+    createdAt: string;
+  }[];
+  total: number;
+}
+
 const ROLES = ['customer', 'rider', 'partner', 'staff', 'admin'] as const;
 type RoleFilter = (typeof ROLES)[number] | '';
+type StatusTab = 'all' | 'active' | 'inactive';
 
 const ROLE_BADGE: Record<string, string> = {
-  admin:    'bg-violet-100 text-violet-700',
-  partner:  'bg-blue-100 text-blue-700',
-  staff:    'bg-sky-100 text-sky-700',
-  rider:    'bg-amber-100 text-amber-700',
+  admin: 'bg-violet-100 text-violet-700',
+  partner: 'bg-blue-100 text-blue-700',
+  staff: 'bg-sky-100 text-sky-700',
+  rider: 'bg-amber-100 text-amber-700',
   customer: 'bg-slate-100 text-slate-600',
+};
+
+const ROLE_AVATAR: Record<string, string> = {
+  admin: 'bg-violet-500/10 text-violet-600',
+  partner: 'bg-blue-500/10 text-blue-600',
+  staff: 'bg-sky-500/10 text-sky-600',
+  rider: 'bg-amber-500/10 text-amber-600',
+  customer: 'bg-primary/10 text-primary',
 };
 
 function fmt(date?: string) {
@@ -40,92 +60,140 @@ function fmtTime(date?: string) {
   });
 }
 
-function IconBtn({
-  label, onClick, disabled, children, danger,
+function timeAgo(value?: string | Date | null): string {
+  if (!value) return '—';
+  const seconds = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000));
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+function displayName(u: UserRow): string {
+  return u.email ?? u.phone ?? 'User';
+}
+
+function initial(u: UserRow): string {
+  return (displayName(u)[0] ?? 'U').toUpperCase();
+}
+
+// ── Small blocks ───────────────────────────────────────────────────────────
+const TILE_TONES = {
+  primary: 'bg-primary/[0.04] ring-primary/15',
+  accent: 'bg-accent/[0.04] ring-accent/20',
+  secondary: 'bg-secondary/[0.04] ring-secondary/15',
+  amber: 'bg-amber-500/[0.04] ring-amber-500/20',
+  violet: 'bg-violet-500/[0.04] ring-violet-500/20',
+  rose: 'bg-rose-500/[0.04] ring-rose-500/20',
+} as const;
+
+function StatTile({
+  label,
+  value,
+  sub,
+  tone,
+  onClick,
+  active,
 }: {
-  label: string; onClick: () => void; disabled?: boolean; children: React.ReactNode; danger?: boolean;
+  label: string;
+  value: string;
+  sub?: string;
+  tone: keyof typeof TILE_TONES;
+  onClick?: () => void;
+  active?: boolean;
 }) {
   return (
     <button
       type="button"
-      title={label}
-      aria-label={label}
-      disabled={disabled}
-      onClick={(e) => { e.stopPropagation(); onClick(); }}
-      className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors disabled:opacity-40 ${
-        danger ? 'text-red-400 hover:bg-red-50 hover:text-red-600' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700'
+      onClick={onClick}
+      className={`rounded-xl p-4 text-left ring-1 transition-all hover:shadow-[var(--shadow-elevated)] ${TILE_TONES[tone]} ${
+        active ? 'ring-2 ring-primary/40' : ''
       }`}
     >
-      {children}
+      <p className="text-xs font-medium text-muted">{label}</p>
+      <p className="dc-value mt-1">{value}</p>
+      {sub ? <p className="dc-sublabel mt-0.5">{sub}</p> : null}
     </button>
   );
 }
 
-function IconActivate() {
+function RailSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <svg className="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.8}>
-      <circle cx="10" cy="10" r="7" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M7 10l2 2 4-4" />
-    </svg>
+    <div className="border-t border-border/60 px-5 py-4 first:border-0">
+      <p className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-muted">{title}</p>
+      <div className="space-y-2">{children}</div>
+    </div>
   );
 }
 
-function IconDeactivate() {
+function RailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <svg className="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.8}>
-      <circle cx="10" cy="10" r="7" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 12.5l5-5M12.5 12.5l-5-5" />
-    </svg>
+    <div className="flex items-start justify-between gap-3 text-sm">
+      <span className="shrink-0 text-muted">{label}</span>
+      <span className="min-w-0 break-all text-right font-medium text-slate-900">{value}</span>
+    </div>
   );
 }
 
-function IconClipboard() {
-  return (
-    <svg className="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.8}>
-      <rect x="7" y="3" width="9" height="12" rx="1.5" />
-      <path strokeLinecap="round" d="M4 7h2M4 10h2M4 13h2" />
-      <path strokeLinecap="round" d="M7 6H5.5A1.5 1.5 0 004 7.5v8A1.5 1.5 0 005.5 17h7a1.5 1.5 0 001.5-1.5V15" />
-    </svg>
-  );
-}
-
-function IconMail() {
-  return (
-    <svg className="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.8}>
-      <rect x="2.5" y="5" width="15" height="11" rx="1.5" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M2.5 7l7.5 5 7.5-5" />
-    </svg>
-  );
-}
-
+// ── Board ──────────────────────────────────────────────────────────────────
 export function UsersBoard() {
   const [search, setSearch] = useState('');
   const [limit, setLimit] = useState(50);
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('');
+  const [statusTab, setStatusTab] = useState<StatusTab>('all');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [actionError, setActionError] = useState('');
+  const [resetState, setResetState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
 
   const load = useCallback(() => adminFetch<UserRow[]>('/users'), []);
   const { data, loading, error, reload, setData } = useAdminQuery(load, []);
 
   const users = useMemo(() => data ?? [], [data]);
 
-  const counts = useMemo(() => {
-    return Object.fromEntries(ROLES.map((r) => [r, users.filter((u) => u.role === r).length]));
-  }, [users]);
-
+  const counts = useMemo(
+    () => Object.fromEntries(ROLES.map((r) => [r, users.filter((u) => u.role === r).length])),
+    [users],
+  );
   const activeCount = useMemo(() => users.filter((u) => u.isActive).length, [users]);
+  const newThisMonth = useMemo(() => {
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+    return users.filter((u) => new Date(u.createdAt) >= startOfMonth).length;
+  }, [users]);
 
   const searched = useMemo(() => {
     let list = users;
     if (roleFilter) list = list.filter((u) => u.role === roleFilter);
+    if (statusTab === 'active') list = list.filter((u) => u.isActive);
+    if (statusTab === 'inactive') list = list.filter((u) => !u.isActive);
     return filterBySearch(list, search, [(u) => u.email, (u) => u.phone, (u) => u.role, (u) => u._id]);
-  }, [users, search, roleFilter]);
+  }, [users, search, roleFilter, statusTab]);
 
   const visible = useMemo(() => searched.slice(0, limit), [searched, limit]);
 
+  const selected = useMemo(
+    () => (selectedId ? (users.find((u) => u._id === selectedId) ?? null) : null),
+    [users, selectedId],
+  );
+
+  // Recent audit activity for the selected user — only admins/staff appear as audit actors
+  const selectedEmail = selected && (selected.role === 'admin' || selected.role === 'staff') ? selected.email : null;
+  const loadActivity = useCallback(async (): Promise<AuditLogPage | null> => {
+    if (!selectedEmail) return null;
+    return adminFetch<AuditLogPage>(
+      `/admin/audit-logs?actorEmail=${encodeURIComponent(selectedEmail)}&limit=5`,
+    );
+  }, [selectedEmail]);
+  const activity = useAdminQuery(loadActivity, [selectedEmail]);
+
   async function toggleActive(id: string, next: boolean) {
     setBusyId(id);
+    setActionError('');
     try {
       const updated = await adminFetch<UserRow>(`/users/${id}/active`, {
         method: 'PATCH',
@@ -133,10 +201,26 @@ export function UsersBoard() {
         body: JSON.stringify({ isActive: next }),
       });
       setData((prev) => (prev ?? []).map((u) => (u._id === id ? updated : u)));
-    } catch {
-      // leave state unchanged on error
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Failed to update account status');
     } finally {
       setBusyId(null);
+    }
+  }
+
+  async function sendPasswordReset(email: string) {
+    setResetState('sending');
+    setActionError('');
+    try {
+      await adminFetch('/auth/forgot-password', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      });
+      setResetState('sent');
+      window.setTimeout(() => setResetState('idle'), 3000);
+    } catch (e) {
+      setResetState('error');
+      setActionError(e instanceof Error ? e.message : 'Failed to send reset email');
     }
   }
 
@@ -146,14 +230,30 @@ export function UsersBoard() {
     setTimeout(() => setCopied((k) => (k === key ? null : k)), 1500);
   }
 
+  function selectUser(id: string) {
+    setSelectedId((prev) => (prev === id ? null : id));
+    setResetState('idle');
+    setActionError('');
+  }
+
   const roleFilterOptions = [
     { value: '' as RoleFilter, label: 'All roles', count: users.length },
-    ...ROLES.map((r) => ({ value: r, label: r.charAt(0).toUpperCase() + r.slice(1) + 's', count: counts[r] ?? 0 })),
+    ...ROLES.map((r) => ({
+      value: r,
+      label: r.charAt(0).toUpperCase() + r.slice(1) + 's',
+      count: counts[r] ?? 0,
+    })),
+  ];
+
+  const STATUS_TABS: { id: StatusTab; label: string; count: number }[] = [
+    { id: 'all', label: 'All users', count: users.length },
+    { id: 'active', label: 'Active', count: activeCount },
+    { id: 'inactive', label: 'Inactive', count: users.length - activeCount },
   ];
 
   return (
     <div>
-      {/* ── Header ──────────────────────────────────────────────── */}
+      {/* ── Header ── */}
       <header className="mb-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -162,10 +262,10 @@ export function UsersBoard() {
               Users
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted sm:text-base">
-              All registered accounts — customers, riders, partners, staff, and admins.
+              Manage all registered accounts — customers, riders, partners, staff, and admins.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               className="btn-outline btn-sm"
@@ -174,11 +274,18 @@ export function UsersBoard() {
             >
               {loading ? 'Syncing…' : 'Sync'}
             </button>
+            <Link href="/riders" className="btn-outline btn-sm">
+              Riders
+            </Link>
+            <Link href="/partners/new" className="btn-primary btn-sm">
+              Add partner
+            </Link>
           </div>
         </div>
       </header>
 
       {error && <div className="alert-error mb-4" role="alert">{error}</div>}
+      {actionError && <div className="alert-error mb-4" role="alert">{actionError}</div>}
 
       {loading && !data ? (
         <div className="flex items-center gap-3 py-8 text-sm text-muted">
@@ -188,121 +295,370 @@ export function UsersBoard() {
       ) : null}
 
       {data ? (
-        <div className="space-y-3">
-          {/* ── Metric row ────────────────────────────────────────── */}
-          <div className="grid gap-2.5 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
-            <MetricCell label="Active" value={activeCount} highlight={activeCount > 0 ? 'accent' : undefined} />
-            {ROLES.map((r) => (
-              <MetricCell key={r} label={r.charAt(0).toUpperCase() + r.slice(1) + 's'} value={counts[r] ?? 0} />
-            ))}
+        <div className="space-y-4">
+          {/* ── Stat tiles — click role tiles to filter ── */}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+            <StatTile
+              label="Total users"
+              value={users.length.toLocaleString()}
+              sub={newThisMonth > 0 ? `+${newThisMonth} this month` : 'no new this month'}
+              tone="primary"
+              onClick={() => setRoleFilter('')}
+              active={roleFilter === ''}
+            />
+            <StatTile
+              label="Active accounts"
+              value={activeCount.toLocaleString()}
+              sub={users.length > 0 ? `${Math.round((activeCount / users.length) * 100)}% of total` : undefined}
+              tone="accent"
+              onClick={() => {
+                setRoleFilter('');
+                setStatusTab('active');
+              }}
+              active={statusTab === 'active' && roleFilter === ''}
+            />
+            <StatTile
+              label="Customers"
+              value={(counts.customer ?? 0).toLocaleString()}
+              tone="secondary"
+              onClick={() => setRoleFilter('customer')}
+              active={roleFilter === 'customer'}
+            />
+            <StatTile
+              label="Riders"
+              value={(counts.rider ?? 0).toLocaleString()}
+              tone="amber"
+              onClick={() => setRoleFilter('rider')}
+              active={roleFilter === 'rider'}
+            />
+            <StatTile
+              label="Partners"
+              value={(counts.partner ?? 0).toLocaleString()}
+              tone="rose"
+              onClick={() => setRoleFilter('partner')}
+              active={roleFilter === 'partner'}
+            />
+            <StatTile
+              label="Team"
+              value={((counts.staff ?? 0) + (counts.admin ?? 0)).toLocaleString()}
+              sub={`${counts.admin ?? 0} admin · ${counts.staff ?? 0} staff`}
+              tone="violet"
+              onClick={() => setRoleFilter('admin')}
+              active={roleFilter === 'admin' || roleFilter === 'staff'}
+            />
           </div>
 
-          {/* ── List controls + table ─────────────────────────────── */}
-          <ListControls
-            search={search}
-            onSearchChange={setSearch}
-            searchPlaceholder="Search by email, phone, or ID…"
-            limit={limit}
-            onLimitChange={setLimit}
-            limitOptions={[25, 50, 100, 250]}
-            total={searched.length}
-            filtered={visible.length}
-            filterValue={roleFilter}
-            onFilterChange={(v) => setRoleFilter(v as RoleFilter)}
-            filterOptions={roleFilterOptions}
-            filterLabel="Role"
-          />
-
-          <section className="dc-panel">
-            <div className="dc-panel-header flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-900">User roster</h2>
-                <p className="text-xs text-muted">
-                  Showing {visible.length} of {searched.length}{roleFilter ? ` ${roleFilter}s` : ' users'}
-                </p>
+          <div className="grid gap-4 xl:grid-cols-12 xl:items-start">
+            {/* ── Roster ── */}
+            <section className="dc-panel min-w-0 xl:col-span-8">
+              {/* Status tabs */}
+              <div
+                className="overflow-x-auto overflow-y-hidden border-b border-border/60 px-3"
+                role="tablist"
+                aria-label="User status"
+              >
+                <div className="flex min-w-max gap-1">
+                  {STATUS_TABS.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={statusTab === t.id}
+                      onClick={() => setStatusTab(t.id)}
+                      className={`-mb-px inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3.5 py-3 text-sm font-medium transition-colors ${
+                        statusTab === t.id
+                          ? 'border-primary text-primary'
+                          : 'border-transparent text-muted hover:text-slate-900'
+                      }`}
+                    >
+                      {t.label}
+                      <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[0.6875rem] font-semibold tabular-nums text-slate-600">
+                        {t.count.toLocaleString()}
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
 
-            {visible.length === 0 ? (
-              <div className="dc-panel-empty">
-                <p className="font-medium text-slate-900">No users found</p>
-                <p className="mt-1 text-sm text-muted">Try a different search or role filter.</p>
+              <div className="px-4 pb-1">
+                <ListControls
+                  search={search}
+                  onSearchChange={setSearch}
+                  searchPlaceholder="Search by email, phone, or ID…"
+                  limit={limit}
+                  onLimitChange={setLimit}
+                  limitOptions={[25, 50, 100, 250]}
+                  total={searched.length}
+                  filtered={visible.length}
+                  filterValue={roleFilter}
+                  onFilterChange={(v) => setRoleFilter(v as RoleFilter)}
+                  filterOptions={roleFilterOptions}
+                  filterLabel="Role"
+                />
               </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th scope="col">Email / Phone</th>
-                      <th scope="col">Role</th>
-                      <th scope="col">Status</th>
-                      <th scope="col">Last login</th>
-                      <th scope="col">Joined</th>
-                      <th scope="col" className="w-24"><span className="sr-only">Actions</span></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visible.map((u) => (
-                      <tr key={u._id} className="group">
-                        <td>
-                          <div className="flex flex-col gap-0.5">
-                            {u.email && <span className="text-sm font-medium text-slate-900">{u.email}</span>}
-                            {u.phone && <span className="text-xs text-muted">{u.phone}</span>}
-                            {!u.email && !u.phone && <span className="text-xs text-muted">—</span>}
-                            <span className="font-mono text-[10px] text-muted/50">{u._id}</span>
-                          </div>
-                        </td>
-                        <td>
-                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${ROLE_BADGE[u.role] ?? 'bg-slate-100 text-slate-600'}`}>
-                            {u.role}
-                          </span>
-                        </td>
-                        <td>
-                          {u.isActive ? (
-                            <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
-                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Active
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-400">
-                              <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />Inactive
-                            </span>
-                          )}
-                        </td>
-                        <td className="text-sm text-muted">{fmtTime(u.lastLoginAt)}</td>
-                        <td className="text-sm text-muted">{fmt(u.createdAt)}</td>
-                        <td>
-                          <div className="flex items-center justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                            <IconBtn
-                              label={u.isActive ? 'Deactivate account' : 'Activate account'}
-                              disabled={busyId === u._id}
-                              danger={u.isActive}
-                              onClick={() => toggleActive(u._id, !u.isActive)}
-                            >
-                              {u.isActive ? <IconDeactivate /> : <IconActivate />}
-                            </IconBtn>
-                            <IconBtn
-                              label={copied === `id-${u._id}` ? 'Copied!' : 'Copy user ID'}
-                              onClick={() => copy(u._id, `id-${u._id}`)}
-                            >
-                              <IconClipboard />
-                            </IconBtn>
-                            {u.email && (
-                              <IconBtn
-                                label={copied === `email-${u._id}` ? 'Copied!' : 'Copy email'}
-                                onClick={() => copy(u.email!, `email-${u._id}`)}
-                              >
-                                <IconMail />
-                              </IconBtn>
-                            )}
-                          </div>
-                        </td>
+
+              {visible.length === 0 ? (
+                <div className="dc-panel-empty">
+                  <p className="font-medium text-slate-900">No users found</p>
+                  <p className="mt-1 text-sm text-muted">Try a different search, role, or status tab.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="data-table min-w-[620px]">
+                    <caption className="sr-only">Registered platform users</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">User</th>
+                        <th scope="col">Role</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Last login</th>
+                        <th scope="col">Joined</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
+                    </thead>
+                    <tbody>
+                      {visible.map((u) => {
+                        const isSelected = selectedId === u._id;
+                        return (
+                          <tr
+                            key={u._id}
+                            onClick={() => selectUser(u._id)}
+                            aria-selected={isSelected}
+                            className={`cursor-pointer ${isSelected ? 'bg-primary/5 hover:bg-primary/5' : ''}`}
+                          >
+                            <td>
+                              <div className="flex items-center gap-3">
+                                <span
+                                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
+                                    ROLE_AVATAR[u.role] ?? ROLE_AVATAR.customer
+                                  }`}
+                                  aria-hidden
+                                >
+                                  {initial(u)}
+                                </span>
+                                <div className="min-w-0">
+                                  <p className="max-w-[14rem] truncate text-sm font-medium text-slate-900" title={u.email}>
+                                    {u.email ?? '—'}
+                                  </p>
+                                  <p className="text-xs text-muted">{u.phone ?? ''}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td>
+                              <span
+                                className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${
+                                  ROLE_BADGE[u.role] ?? 'bg-slate-100 text-slate-600'
+                                }`}
+                              >
+                                {u.role}
+                              </span>
+                            </td>
+                            <td>
+                              {u.isActive ? (
+                                <span className="badge-accent">Active</span>
+                              ) : (
+                                <span className="badge-neutral">Inactive</span>
+                              )}
+                            </td>
+                            <td className="whitespace-nowrap text-sm text-muted">{fmtTime(u.lastLoginAt)}</td>
+                            <td className="whitespace-nowrap text-sm text-muted">{fmt(u.createdAt)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            {/* ── User details rail ── */}
+            <div className="xl:col-span-4">
+              {!selected ? (
+                <section className="dc-panel">
+                  <div className="dc-panel-header">
+                    <h2 className="text-sm font-semibold text-slate-900">User details</h2>
+                  </div>
+                  <p className="px-5 py-8 text-center text-sm text-muted">
+                    Select a user row to view details and account actions.
+                  </p>
+                </section>
+              ) : (
+                <section className="dc-panel">
+                  <div className="dc-panel-header flex items-center justify-between gap-2">
+                    <h2 className="text-sm font-semibold text-slate-900">User details</h2>
+                    <button
+                      type="button"
+                      className="btn-ghost btn-sm"
+                      aria-label="Close detail panel"
+                      onClick={() => setSelectedId(null)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-3 px-5 py-4">
+                    <span
+                      className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-xl font-semibold ${
+                        ROLE_AVATAR[selected.role] ?? ROLE_AVATAR.customer
+                      }`}
+                      aria-hidden
+                    >
+                      {initial(selected)}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900" title={displayName(selected)}>
+                        {displayName(selected)}
+                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${
+                            ROLE_BADGE[selected.role] ?? 'bg-slate-100 text-slate-600'
+                          }`}
+                        >
+                          {selected.role}
+                        </span>
+                        {selected.isActive ? (
+                          <span className="badge-accent">Active</span>
+                        ) : (
+                          <span className="badge-neutral">Inactive</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <RailSection title="Contact">
+                    <RailRow
+                      label="Email"
+                      value={
+                        selected.email ? (
+                          <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
+                            {selected.email}
+                            <button
+                              type="button"
+                              className="link-primary text-xs font-medium"
+                              onClick={() => copy(selected.email!, 'email')}
+                            >
+                              {copied === 'email' ? 'Copied' : 'Copy'}
+                            </button>
+                          </span>
+                        ) : (
+                          '—'
+                        )
+                      }
+                    />
+                    <RailRow
+                      label="Phone"
+                      value={
+                        selected.phone ? (
+                          <a href={`tel:${selected.phone}`} className="link-primary">
+                            {selected.phone}
+                          </a>
+                        ) : (
+                          '—'
+                        )
+                      }
+                    />
+                  </RailSection>
+
+                  <RailSection title="Account">
+                    <RailRow
+                      label="User ID"
+                      value={
+                        <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
+                          <span className="text-code">{selected._id}</span>
+                          <button
+                            type="button"
+                            className="link-primary text-xs font-medium"
+                            onClick={() => copy(selected._id, 'id')}
+                          >
+                            {copied === 'id' ? 'Copied' : 'Copy'}
+                          </button>
+                        </span>
+                      }
+                    />
+                    <RailRow label="Joined" value={fmt(selected.createdAt)} />
+                    <RailRow label="Last login" value={fmtTime(selected.lastLoginAt)} />
+                  </RailSection>
+
+                  <RailSection title="Quick actions">
+                    <div className="flex flex-col gap-2">
+                      <button
+                        type="button"
+                        disabled={busyId === selected._id}
+                        onClick={() => void toggleActive(selected._id, !selected.isActive)}
+                        className={selected.isActive ? 'btn-outline btn-sm w-full !text-red-600' : 'btn-primary btn-sm w-full'}
+                      >
+                        {busyId === selected._id
+                          ? 'Updating…'
+                          : selected.isActive
+                            ? 'Deactivate account'
+                            : 'Activate account'}
+                      </button>
+                      {selected.email ? (
+                        <button
+                          type="button"
+                          className="btn-outline btn-sm w-full"
+                          disabled={resetState === 'sending' || resetState === 'sent'}
+                          onClick={() => void sendPasswordReset(selected.email!)}
+                        >
+                          {resetState === 'sending'
+                            ? 'Sending…'
+                            : resetState === 'sent'
+                              ? 'Reset link sent'
+                              : 'Send password reset'}
+                        </button>
+                      ) : null}
+                      {selected.role === 'rider' ? (
+                        <Link href="/riders" className="btn-outline btn-sm w-full text-center">
+                          Open rider management
+                        </Link>
+                      ) : null}
+                      {selected.role === 'partner' ? (
+                        <Link href="/shops" className="btn-outline btn-sm w-full text-center">
+                          Open partner shops
+                        </Link>
+                      ) : null}
+                    </div>
+                  </RailSection>
+
+                  {selectedEmail ? (
+                    <RailSection title="Recent activity">
+                      {activity.loading && !activity.data ? (
+                        <p className="text-sm text-muted">Loading activity…</p>
+                      ) : null}
+                      {activity.data && activity.data.items.length === 0 ? (
+                        <p className="text-sm text-muted">No logged admin actions yet.</p>
+                      ) : null}
+                      {activity.data && activity.data.items.length > 0 ? (
+                        <>
+                          <ul className="space-y-2">
+                            {activity.data.items.map((entry) => (
+                              <li key={entry._id} className="flex items-center gap-2 text-sm">
+                                <span
+                                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                                    entry.statusCode < 400 ? 'bg-emerald-500' : 'bg-red-500'
+                                  }`}
+                                  aria-hidden
+                                />
+                                <span className="min-w-0 flex-1 truncate text-slate-900" title={entry.action}>
+                                  {entry.action.replace(/^(get|post|patch|put|delete)\./i, '')}
+                                </span>
+                                <span className="shrink-0 text-xs tabular-nums text-muted">
+                                  {timeAgo(entry.createdAt)}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                          <Link href="/audit-log" className="link-primary text-xs font-medium">
+                            View full audit log →
+                          </Link>
+                        </>
+                      ) : null}
+                    </RailSection>
+                  ) : null}
+                </section>
+              )}
+            </div>
+          </div>
         </div>
       ) : null}
     </div>

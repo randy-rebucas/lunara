@@ -1,4 +1,4 @@
-import { Transform, Type } from 'class-transformer';
+import { plainToInstance, Transform, Type } from 'class-transformer';
 import {
   Equals,
   IsBoolean,
@@ -18,13 +18,21 @@ import {
   PartnerApplicationBusinessType,
 } from '../schemas/partner-application.schema';
 
-function parseJsonGroup({ value }: { value: unknown }) {
-  if (typeof value !== 'string') return value;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return {};
-  }
+/** Multipart fields arrive as JSON strings; convert to the DTO class so nested
+ * whitelist validation sees decorated instances (a bare @Transform result would
+ * override @Type() conversion and get rejected by forbidNonWhitelisted). */
+function parseJsonGroup<T>(cls: new () => T) {
+  return ({ value }: { value: unknown }) => {
+    let parsed: unknown = value;
+    if (typeof value === 'string') {
+      try {
+        parsed = JSON.parse(value);
+      } catch {
+        parsed = {};
+      }
+    }
+    return plainToInstance(cls, parsed);
+  };
 }
 
 export class PartnerAddressDto {
@@ -96,12 +104,12 @@ export class CreatePartnerApplicationDto {
   @IsIn(PARTNER_APPLICATION_BUSINESS_TYPES)
   businessType!: PartnerApplicationBusinessType;
 
-  @Transform(parseJsonGroup)
+  @Transform(parseJsonGroup(PartnerAddressDto))
   @ValidateNested()
   @Type(() => PartnerAddressDto)
   address!: PartnerAddressDto;
 
-  @Transform(parseJsonGroup)
+  @Transform(parseJsonGroup(PartnerOperationsDto))
   @ValidateNested()
   @Type(() => PartnerOperationsDto)
   operations!: PartnerOperationsDto;

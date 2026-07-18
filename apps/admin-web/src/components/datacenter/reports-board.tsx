@@ -142,7 +142,7 @@ export function ReportsBoard() {
       <header className="mb-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="dc-eyebrow">Analytics</p>
+            <p className="dc-eyebrow">Finance</p>
             <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
               Reports
             </h1>

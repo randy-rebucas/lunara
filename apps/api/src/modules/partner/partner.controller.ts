@@ -36,6 +36,7 @@ import { UpdateBranchCustomServiceDto } from '../branches/dto/update-branch-cust
 import { CreateBranchCustomAddonDto } from '../branches/dto/create-branch-custom-addon.dto';
 import { UpdateBranchCustomAddonDto } from '../branches/dto/update-branch-custom-addon.dto';
 import { UpdateBranchHiddenCatalogDto } from '../branches/dto/update-branch-hidden-catalog.dto';
+import { CreateBranchMachineDto, UpdateBranchMachineDto } from '../branches/dto/branch-machine.dto';
 import { AssignStaffDto } from './dto/assign-staff.dto';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { AssignStaffBranchDto } from './dto/assign-staff-branch.dto';
@@ -227,6 +228,58 @@ export class PartnerController {
       await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
     }
     return this.branchesService.deleteCustomAddon(id, addonId);
+  }
+
+  @Get('branches/:id/machines')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  async listOwnBranchMachines(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('id') id: string,
+  ) {
+    if (req.user.role !== UserRole.ADMIN) {
+      await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
+    }
+    return this.branchesService.listMachines(id);
+  }
+
+  @Post('branches/:id/machines')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  async createOwnBranchMachine(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('id') id: string,
+    @Body() dto: CreateBranchMachineDto,
+  ) {
+    if (req.user.role !== UserRole.ADMIN) {
+      await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
+    }
+    return this.branchesService.addMachine(id, dto);
+  }
+
+  @Patch('branches/:id/machines/:machineId')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  async updateOwnBranchMachine(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('id') id: string,
+    @Param('machineId') machineId: string,
+    @Body() dto: UpdateBranchMachineDto,
+  ) {
+    if (req.user.role !== UserRole.ADMIN) {
+      await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
+    }
+    return this.branchesService.updateMachine(id, machineId, dto);
+  }
+
+  @Delete('branches/:id/machines/:machineId')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  async deleteOwnBranchMachine(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('id') id: string,
+    @Param('machineId') machineId: string,
+  ) {
+    if (req.user.role !== UserRole.ADMIN) {
+      await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
+    }
+    return this.branchesService.removeMachine(id, machineId);
   }
 
   @Get('settings')

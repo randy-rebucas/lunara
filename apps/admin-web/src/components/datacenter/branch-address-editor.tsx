@@ -117,7 +117,7 @@ function MapPicker({
       defaultZoom={15}
       gestureHandling="greedy"
       disableDefaultUI={false}
-      style={{ width: '100%', height: '280px', borderRadius: '0.5rem' }}
+      style={{ width: '100%', height: '100%', minHeight: '280px', borderRadius: '0.5rem' }}
       onClick={(e) => {
         if (e.detail.latLng) onPositionChange(e.detail.latLng.lat, e.detail.latLng.lng);
       }}
@@ -147,7 +147,8 @@ export function BranchAddressEditor({ value, onChange, resetKey }: BranchAddress
 
   return (
     <APIProvider apiKey={GOOGLE_MAPS_API_KEY} libraries={['places', 'marker']}>
-      <div className="space-y-3">
+      <div className="grid items-start gap-4 lg:grid-cols-2">
+        <div className="space-y-3">
         <div>
           <label className="form-label">Search address</label>
           <PlaceAutocompleteInput
@@ -221,11 +222,15 @@ export function BranchAddressEditor({ value, onChange, resetKey }: BranchAddress
           </div>
         </div>
 
-        <MapPicker
-          value={value}
-          recenterToken={`${resetKey ?? 'default'}-${recenterToken}`}
-          onPositionChange={(latitude, longitude) => onChange({ ...value, latitude, longitude })}
-        />
+        </div>
+
+        <div className="h-72 lg:h-full lg:min-h-[320px]">
+          <MapPicker
+            value={value}
+            recenterToken={`${resetKey ?? 'default'}-${recenterToken}`}
+            onPositionChange={(latitude, longitude) => onChange({ ...value, latitude, longitude })}
+          />
+        </div>
       </div>
     </APIProvider>
   );
