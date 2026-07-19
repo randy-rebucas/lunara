@@ -146,7 +146,9 @@ export class AdminOperationsService {
       this.orderModel.countDocuments({ status: { $in: activeNowStatuses } }),
       this.riderModel.countDocuments({ isOnline: true }),
       this.riderModel.countDocuments(),
-      this.branchModel.estimatedDocumentCount(),
+      // "Shops" on the network, not raw branch rows — a partner's variant branches roll up
+      // to their one isMainShop branch, so this stays 1 per active partner.
+      this.branchModel.countDocuments({ isMainShop: true, isActive: true }),
       this.orderModel
         .find({ 'pickup.collectedAt': { $gte: startOfDay } })
         .select('pickup.collectedAt slaPickupDueAt')

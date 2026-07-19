@@ -411,6 +411,11 @@ export class AdminController {
     return this.branchManagementService.updateBranch(id, dto);
   }
 
+  @Patch('branches/:id/main-shop')
+  promoteToMainShop(@Param('id') id: string) {
+    return this.branchManagementService.promoteToMainShop(id);
+  }
+
   @Patch('branches/:id/pricing')
   updateBranchPricing(@Param('id') id: string, @Body() dto: UpdateBranchPricingDto) {
     return this.branchesService.updateServicePricing(id, dto.servicePricing);

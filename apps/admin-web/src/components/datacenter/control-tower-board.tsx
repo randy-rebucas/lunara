@@ -521,7 +521,7 @@ export function ControlTowerBoard() {
                   <h2 className="text-sm font-semibold text-slate-900">Live operations map</h2>
                   <p className="text-xs text-muted">
                     {mapRiders.length} rider{mapRiders.length === 1 ? '' : 's'} with GPS ·{' '}
-                    {(mapQuery.data?.branches ?? []).length} shops
+                    {pulse?.totalBranches ?? 0} shops
                   </p>
                 </div>
                 <Link href="/live-tracking" className="link-primary text-xs font-medium">

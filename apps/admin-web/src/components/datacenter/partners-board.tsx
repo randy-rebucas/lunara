@@ -34,6 +34,7 @@ interface Shop {
   rating: number | null;
   reviewCount: number;
   branchNames: string[];
+  mainBranchName: string | null;
   operatingHours: DayHours[];
 }
 
@@ -141,6 +142,13 @@ const PLAN_BADGE: Record<SubscriptionPlan, string> = {
 
 function isTrial(s: Shop) {
   return s.subscriptionPlan === 'trial';
+}
+
+/** Other branches are variants of the partner's one main shop — lead with it, then list the rest. */
+function branchSummary(shop: Shop): string {
+  const others = shop.branchNames.filter((n) => n !== shop.mainBranchName);
+  if (!shop.mainBranchName) return shop.branchNames.join(', ');
+  return others.length > 0 ? `${shop.mainBranchName} (Main) + ${others.length} branch${others.length === 1 ? '' : 'es'}` : `${shop.mainBranchName} (Main)`;
 }
 
 function formatDate(iso?: string) {
@@ -719,7 +727,7 @@ function PartnerDetailsDrawer({
                 {detail ? <Stars rating={detail.rating} count={detail.reviewCount} /> : null}
               </div>
               {shop.branchNames.length > 0 ? (
-                <p className="mt-1 truncate text-xs text-muted">{shop.branchNames.join(', ')}</p>
+                <p className="mt-1 truncate text-xs text-muted">{branchSummary(shop)}</p>
               ) : null}
             </div>
           </div>
@@ -799,7 +807,7 @@ function PartnerDetailsDrawer({
                   <RailRow label="Owner" value={detail.ownerName ?? '—'} />
                   <RailRow label="Email" value={detail.email ?? '—'} />
                   <RailRow label="Phone" value={detail.phone ?? '—'} />
-                  <RailRow label="Address" value={shop.branchNames.length > 0 ? shop.branchNames.join(', ') : '—'} />
+                  <RailRow label="Address" value={shop.branchNames.length > 0 ? branchSummary(shop) : '—'} />
                   <RailRow label="Business hours (today)" value={formatHours(shop.operatingHours)} />
                   <RailRow label="Joined" value={formatDate(detail.createdAt)} />
                 </div>
@@ -1375,7 +1383,7 @@ export function PartnersBoard() {
                               </div>
                             </td>
                             <td className="max-w-[10rem] truncate text-muted" title={s.branchNames.join(', ')}>
-                              {s.branchNames.length > 0 ? s.branchNames.join(', ') : '—'}
+                              {s.branchNames.length > 0 ? branchSummary(s) : '—'}
                             </td>
                             <td>
                               <span className={s.isActive ? 'badge-accent' : 'badge-neutral'}>

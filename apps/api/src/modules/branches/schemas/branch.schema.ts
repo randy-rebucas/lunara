@@ -148,6 +148,12 @@ export class Branch {
   @Prop({ type: Types.ObjectId, required: true, index: true })
   partnerUserId!: Types.ObjectId;
 
+  /** The partner's single flagship shop — branches (variants) roll up to it in shop counts and
+   * customer-facing listings. Exactly one active branch per partnerUserId may have this set;
+   * enforced by the partial unique index below. Server-derived only — see BranchManagementService. */
+  @Prop({ default: false })
+  isMainShop!: boolean;
+
   @Prop({ type: Types.ObjectId })
   managerUserId?: Types.ObjectId;
 
@@ -219,3 +225,7 @@ export class Branch {
 
 export const BranchSchema = SchemaFactory.createForClass(Branch);
 BranchSchema.index({ location: '2dsphere' });
+BranchSchema.index(
+  { partnerUserId: 1 },
+  { unique: true, partialFilterExpression: { isMainShop: true, isActive: true } },
+);

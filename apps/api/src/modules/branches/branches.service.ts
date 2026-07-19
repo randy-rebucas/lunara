@@ -526,7 +526,9 @@ export class BranchesService {
     return branch;
   }
 
-  /** Active partner shops near an address, each with its own marked-up prices, for the customer shop-selection step. */
+  /** Active partner shops near an address, each with its own marked-up prices, for the customer shop-selection step.
+   * Grouped by partner — a partner's other branches are variants of their one shop, not separate
+   * listings, so each group headlines its nearest branch and lists the rest under `branches`. */
   async findNearbyShopsWithPricing(address: {
     city: string;
     latitude?: number;
@@ -546,6 +548,8 @@ export class BranchesService {
         const addons = await this.serializeShopAddonPricing(branch);
         return {
           branchId: branch._id.toString(),
+          partnerUserId: branch.partnerUserId.toString(),
+          isMainShop: branch.isMainShop,
           code: branch.code,
           name: branch.name,
           city: branch.city,
@@ -562,7 +566,33 @@ export class BranchesService {
     );
 
     ranked.sort((a, b) => a.distanceKm - b.distanceKm);
-    return { success: true, data: ranked };
+
+    const byPartner = new Map<string, typeof ranked>();
+    for (const entry of ranked) {
+      const list = byPartner.get(entry.partnerUserId) ?? [];
+      list.push(entry);
+      byPartner.set(entry.partnerUserId, list);
+    }
+
+    const shops = [...byPartner.values()].map((group) => {
+      // Group is already distance-sorted (built from the sorted `ranked` list), so [0] is nearest.
+      const nearest = group[0];
+      const mainShop = group.find((b) => b.isMainShop) ?? nearest;
+      return {
+        ...nearest,
+        mainShopId: mainShop.branchId,
+        branches: group.map((b) => ({
+          branchId: b.branchId,
+          name: b.name,
+          isMainShop: b.isMainShop,
+          distanceKm: b.distanceKm,
+          distanceLabel: b.distanceLabel,
+        })),
+      };
+    });
+
+    shops.sort((a, b) => a.distanceKm - b.distanceKm);
+    return { success: true, data: shops };
   }
 
   async findNearbyShopsForAddressId(userId: string, addressId: string) {

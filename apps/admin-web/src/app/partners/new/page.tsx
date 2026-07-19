@@ -154,7 +154,11 @@ export default function CreatePartnerPage() {
         <section className="section-panel">
           <div className="border-b border-border px-6 py-4">
             <h2 className="text-sm font-semibold text-slate-900">Branch</h2>
-            <p className="mt-0.5 text-xs text-muted">Physical shop location that receives and processes orders.</p>
+            <p className="mt-0.5 text-xs text-muted">
+              Physical shop location that receives and processes orders. This becomes the
+              partner&apos;s main shop automatically — add further branches (variants) afterward
+              from the Branches page.
+            </p>
           </div>
           <div className="p-6">
             <div className="dc-form-grid">

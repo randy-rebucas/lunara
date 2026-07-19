@@ -301,6 +301,14 @@ export class BranchManagementService {
       if (!manager) throw new BadRequestException('Manager user not found');
     }
 
+    // A partner's first branch becomes their main shop automatically; later branches are
+    // variants under it. isMainShop is otherwise only settable via promoteToMainShop().
+    const hasMainShop = await this.branchModel.exists({
+      partnerUserId: partner._id,
+      isMainShop: true,
+      isActive: true,
+    });
+
     const branch = await this.branchModel.create({
       code: dto.code,
       name: dto.name,
@@ -310,6 +318,7 @@ export class BranchManagementService {
       city: dto.city,
       province: dto.province,
       partnerUserId: partner._id,
+      isMainShop: !hasMainShop,
       managerUserId: dto.managerUserId
         ? new Types.ObjectId(dto.managerUserId)
         : partner._id,
@@ -328,6 +337,28 @@ export class BranchManagementService {
       success: true,
       data: { branchId: branch._id.toString(), code: branch.code, name: branch.name },
     };
+  }
+
+  /** Swaps which of a partner's branches is their main shop. Only one active branch per
+   * partner may carry isMainShop — enforced by a partial unique index on Branch. */
+  async promoteToMainShop(branchId: string) {
+    const branch = await this.branchModel.findById(branchId);
+    if (!branch) throw new NotFoundException('Branch not found');
+    if (!branch.isActive) {
+      throw new BadRequestException('Cannot promote an inactive branch to main shop');
+    }
+    if (branch.isMainShop) {
+      return { success: true, data: { branchId: branch._id.toString(), isMainShop: true } };
+    }
+
+    await this.branchModel.updateMany(
+      { partnerUserId: branch.partnerUserId, isMainShop: true },
+      { $set: { isMainShop: false } },
+    );
+    branch.isMainShop = true;
+    await branch.save();
+
+    return { success: true, data: { branchId: branch._id.toString(), isMainShop: true } };
   }
 
   async updateBranch(branchId: string, dto: UpdateBranchDto) {

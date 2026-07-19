@@ -188,11 +188,11 @@ export default function StaffBoardPage() {
 
       {error && <div className="alert-error mt-4">{error}</div>}
 
-      <div className="mt-6 flex gap-3 overflow-x-auto overscroll-x-contain pb-2 pb-safe">
+      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:overflow-x-auto sm:overscroll-x-contain sm:pb-2 pb-safe">
         {columns.map((col) => (
           <div
             key={col.stage}
-            className="flex w-72 shrink-0 flex-col rounded-lg border border-border/60 bg-surface-muted"
+            className="flex flex-col rounded-lg border border-border/60 bg-surface-muted sm:w-72 sm:shrink-0"
           >
             <div className="border-b border-border/60 px-3 py-2">
               <p className="text-sm font-semibold text-slate-900">{col.title}</p>

@@ -15,6 +15,7 @@
     "seed:services": "npx ts-node src/scripts/seed-services.ts",
     "seed:addons": "npx ts-node src/scripts/seed-addons.ts",
     "migrate:settlement-ledger": "npx ts-node src/scripts/migrate-settlement-ledger.ts",
+    "migrate:backfill-main-shop": "npx ts-node src/scripts/backfill-main-shop.ts",
     "clean": "rimraf dist tsconfig.tsbuildinfo"
   },
   "dependencies": {

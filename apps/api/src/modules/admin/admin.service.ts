@@ -865,10 +865,11 @@ export class AdminService {
     // them here so admin-web doesn't just show a blank/singular branch name for those partners.
     const branches = await this.branchModel
       .find({ partnerUserId: { $in: partners.map((p) => p._id) } })
-      .select('partnerUserId name operatingHours')
+      .select('partnerUserId name operatingHours isMainShop')
       .sort({ createdAt: 1 });
     const branchNamesByPartnerId = new Map<string, string[]>();
     const operatingHoursByPartnerId = new Map<string, BranchDocument['operatingHours']>();
+    const mainBranchNameByPartnerId = new Map<string, string>();
     for (const b of branches) {
       const key = b.partnerUserId.toString();
       const names = branchNamesByPartnerId.get(key) ?? [];
@@ -876,6 +877,9 @@ export class AdminService {
       branchNamesByPartnerId.set(key, names);
       if (!operatingHoursByPartnerId.has(key)) {
         operatingHoursByPartnerId.set(key, b.operatingHours);
+      }
+      if (b.isMainShop) {
+        mainBranchNameByPartnerId.set(key, b.name);
       }
     }
 
@@ -905,6 +909,7 @@ export class AdminService {
             rating: rating ? Math.round(rating.avgRating * 10) / 10 : null,
             reviewCount: rating?.reviewCount ?? 0,
             branchNames: branchNamesByPartnerId.get(id) ?? [],
+            mainBranchName: mainBranchNameByPartnerId.get(id) ?? null,
             operatingHours: operatingHoursByPartnerId.get(id) ?? [],
           };
         }),

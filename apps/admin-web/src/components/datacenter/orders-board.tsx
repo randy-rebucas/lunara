@@ -392,7 +392,7 @@ export function OrdersBoard() {
           </div>
 
           {/* Stat tiles — click to jump to the matching tab */}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
             <StatTile
               label="Total orders"
               value={totals.total.toLocaleString()}
