@@ -1,10 +1,24 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import {
+  Building2,
+  Camera,
+  Download,
+  KeyRound,
+  Laptop,
+  Shield,
+  ShieldCheck,
+  Truck,
+  Upload,
+  UserCog,
+  Users as UsersIcon,
+} from 'lucide-react';
 import { filterBySearch, ListControls } from '../list-controls';
-import { adminFetch } from '../../lib/admin-api';
+import { adminFetch, adminUpload } from '../../lib/admin-api';
 import { useAdminQuery } from '../../lib/use-admin-query';
+import { exportCsv, parseCsv } from '../../lib/export-csv';
 
 interface UserRow {
   _id: string;
@@ -12,6 +26,8 @@ interface UserRow {
   phone?: string;
   role: string;
   branchId?: string;
+  department?: string;
+  photoUrl?: string;
   isActive: boolean;
   lastLoginAt?: string;
   createdAt: string;
@@ -27,6 +43,21 @@ interface AuditLogPage {
   }[];
   total: number;
 }
+
+interface BranchOption {
+  _id: string;
+  code: string;
+  name: string;
+}
+
+type DetailTab = 'profile' | 'permissions' | 'activity' | 'sessions';
+
+const DETAIL_TABS: { id: DetailTab; label: string }[] = [
+  { id: 'profile', label: 'Profile' },
+  { id: 'permissions', label: 'Permissions' },
+  { id: 'activity', label: 'Activity' },
+  { id: 'sessions', label: 'Sessions' },
+];
 
 const ROLES = ['customer', 'rider', 'partner', 'staff', 'admin'] as const;
 type RoleFilter = (typeof ROLES)[number] | '';
@@ -47,6 +78,7 @@ const ROLE_AVATAR: Record<string, string> = {
   rider: 'bg-amber-500/10 text-amber-600',
   customer: 'bg-primary/10 text-primary',
 };
+
 
 function fmt(date?: string) {
   if (!date) return '—';
@@ -89,11 +121,21 @@ const TILE_TONES = {
   rose: 'bg-rose-500/[0.04] ring-rose-500/20',
 } as const;
 
+const TILE_ICON_TONES = {
+  primary: 'bg-primary/10 text-primary',
+  accent: 'bg-accent/10 text-accent',
+  secondary: 'bg-secondary/10 text-secondary',
+  amber: 'bg-amber-500/10 text-amber-600',
+  violet: 'bg-violet-500/10 text-violet-600',
+  rose: 'bg-rose-500/10 text-rose-600',
+} as const;
+
 function StatTile({
   label,
   value,
   sub,
   tone,
+  icon,
   onClick,
   active,
 }: {
@@ -101,9 +143,11 @@ function StatTile({
   value: string;
   sub?: string;
   tone: keyof typeof TILE_TONES;
+  icon: React.ComponentType<{ className?: string }>;
   onClick?: () => void;
   active?: boolean;
 }) {
+  const Icon = icon;
   return (
     <button
       type="button"
@@ -112,8 +156,16 @@ function StatTile({
         active ? 'ring-2 ring-primary/40' : ''
       }`}
     >
-      <p className="text-xs font-medium text-muted">{label}</p>
-      <p className="dc-value mt-1">{value}</p>
+      <div className="flex items-center gap-2">
+        <span
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${TILE_ICON_TONES[tone]}`}
+          aria-hidden
+        >
+          <Icon className="h-4 w-4" />
+        </span>
+        <p className="text-xs font-medium text-muted">{label}</p>
+      </div>
+      <p className="dc-value mt-2">{value}</p>
       {sub ? <p className="dc-sublabel mt-0.5">{sub}</p> : null}
     </button>
   );
@@ -125,6 +177,31 @@ function RailSection({ title, children }: { title: string; children: React.React
       <p className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-muted">{title}</p>
       <div className="space-y-2">{children}</div>
     </div>
+  );
+}
+
+function Avatar({ user, size }: { user: UserRow; size: 'sm' | 'lg' }) {
+  const dims = size === 'sm' ? 'h-9 w-9 text-sm' : 'h-14 w-14 text-xl';
+  if (user.photoUrl) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return (
+      <img
+        src={user.photoUrl}
+        alt=""
+        className={`${dims} shrink-0 rounded-full object-cover`}
+        aria-hidden
+      />
+    );
+  }
+  return (
+    <span
+      className={`flex ${dims} shrink-0 items-center justify-center rounded-full font-semibold ${
+        ROLE_AVATAR[user.role] ?? ROLE_AVATAR.customer
+      }`}
+      aria-hidden
+    >
+      {initial(user)}
+    </span>
   );
 }
 
@@ -148,9 +225,26 @@ export function UsersBoard() {
   const [copied, setCopied] = useState<string | null>(null);
   const [actionError, setActionError] = useState('');
   const [resetState, setResetState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [detailTab, setDetailTab] = useState<DetailTab>('profile');
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importSummary, setImportSummary] = useState('');
+  const [departmentDraft, setDepartmentDraft] = useState('');
+  const [savingDepartment, setSavingDepartment] = useState(false);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(() => adminFetch<UserRow[]>('/users'), []);
   const { data, loading, error, reload, setData } = useAdminQuery(load, []);
+
+  const loadBranches = useCallback(() => adminFetch<BranchOption[]>('/admin/branches'), []);
+  const { data: branches } = useAdminQuery(loadBranches, []);
+  const branchName = useMemo(() => {
+    const map = new Map((branches ?? []).map((b) => [b._id, b.name]));
+    return (id?: string) => (id ? (map.get(id) ?? '—') : '—');
+  }, [branches]);
 
   const users = useMemo(() => data ?? [], [data]);
 
@@ -234,6 +328,140 @@ export function UsersBoard() {
     setSelectedId((prev) => (prev === id ? null : id));
     setResetState('idle');
     setActionError('');
+    setDetailTab('profile');
+    setDepartmentDraft(users.find((u) => u._id === id)?.department ?? '');
+  }
+
+  function toggleChecked(id: string) {
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleCheckAll() {
+    setCheckedIds((prev) =>
+      prev.size === visible.length ? new Set() : new Set(visible.map((u) => u._id)),
+    );
+  }
+
+  async function bulkActivate(isActive: boolean) {
+    const ids = Array.from(checkedIds);
+    if (!ids.length) return;
+    setBulkBusy(true);
+    setActionError('');
+    try {
+      const updated = await adminFetch<UserRow[]>('/users/bulk-active', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, isActive }),
+      });
+      const byId = new Map(updated.map((u) => [u._id, u]));
+      setData((prev) => (prev ?? []).map((u) => byId.get(u._id) ?? u));
+      setCheckedIds(new Set());
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Bulk update failed');
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  function exportSelected() {
+    const ids = checkedIds.size > 0 ? checkedIds : new Set(visible.map((u) => u._id));
+    const rows = visible.filter((u) => ids.has(u._id));
+    exportCsv(
+      `users-${new Date().toISOString().slice(0, 10)}.csv`,
+      ['Email', 'Phone', 'Role', 'Department', 'Branch', 'Status', 'Last login', 'Joined'],
+      rows.map((u) => [
+        u.email ?? '',
+        u.phone ?? '',
+        u.role,
+        u.department ?? '',
+        branchName(u.branchId),
+        u.isActive ? 'Active' : 'Inactive',
+        fmtTime(u.lastLoginAt),
+        fmt(u.createdAt),
+      ]),
+    );
+  }
+
+  async function handleImportFile(file: File) {
+    setImporting(true);
+    setImportSummary('');
+    setActionError('');
+    try {
+      const text = await file.text();
+      const [header, ...rows] = parseCsv(text);
+      const col = (name: string) => header.findIndex((h) => h.toLowerCase() === name);
+      const emailCol = col('email');
+      const phoneCol = col('phone');
+      const roleCol = col('role');
+      const deptCol = col('department');
+      if (emailCol === -1 || roleCol === -1) {
+        throw new Error('CSV must include "email" and "role" columns');
+      }
+      const importRows = rows.map((r) => ({
+        email: r[emailCol],
+        phone: phoneCol >= 0 ? r[phoneCol] : undefined,
+        role: r[roleCol],
+        department: deptCol >= 0 ? r[deptCol] : undefined,
+      }));
+      const results = await adminFetch<{ email: string; status: string; message?: string }[]>(
+        '/users/import',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rows: importRows }),
+        },
+      );
+      const created = results.filter((r) => r.status === 'created').length;
+      const updated = results.filter((r) => r.status === 'updated').length;
+      const failed = results.filter((r) => r.status === 'error').length;
+      setImportSummary(`Imported: ${created} created, ${updated} updated, ${failed} failed`);
+      await reload();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Import failed');
+    } finally {
+      setImporting(false);
+      if (importInputRef.current) importInputRef.current.value = '';
+    }
+  }
+
+  async function saveDepartment() {
+    if (!selected) return;
+    setSavingDepartment(true);
+    setActionError('');
+    try {
+      const updated = await adminFetch<UserRow>(`/users/${selected._id}/department`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ department: departmentDraft }),
+      });
+      setData((prev) => (prev ?? []).map((u) => (u._id === updated._id ? updated : u)));
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Failed to save department');
+    } finally {
+      setSavingDepartment(false);
+    }
+  }
+
+  async function handlePhotoChange(file: File) {
+    if (!selected) return;
+    setPhotoUploading(true);
+    setActionError('');
+    try {
+      const formData = new FormData();
+      formData.append('photo', file);
+      const updated = await adminUpload<UserRow>(`/users/${selected._id}/photo`, formData);
+      setData((prev) => (prev ?? []).map((u) => (u._id === updated._id ? updated : u)));
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Photo upload failed');
+    } finally {
+      setPhotoUploading(false);
+      if (photoInputRef.current) photoInputRef.current.value = '';
+    }
   }
 
   const roleFilterOptions = [
@@ -274,6 +502,25 @@ export function UsersBoard() {
             >
               {loading ? 'Syncing…' : 'Sync'}
             </button>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void handleImportFile(file);
+              }}
+            />
+            <button
+              type="button"
+              className="btn-outline btn-sm gap-1.5"
+              onClick={() => importInputRef.current?.click()}
+              disabled={importing}
+            >
+              <Upload className="h-3.5 w-3.5" aria-hidden />
+              {importing ? 'Importing…' : 'Import users'}
+            </button>
             <Link href="/riders" className="btn-outline btn-sm">
               Riders
             </Link>
@@ -286,6 +533,7 @@ export function UsersBoard() {
 
       {error && <div className="alert-error mb-4" role="alert">{error}</div>}
       {actionError && <div className="alert-error mb-4" role="alert">{actionError}</div>}
+      {importSummary && <div className="alert-info mb-4" role="status">{importSummary}</div>}
 
       {loading && !data ? (
         <div className="flex items-center gap-3 py-8 text-sm text-muted">
@@ -303,6 +551,7 @@ export function UsersBoard() {
               value={users.length.toLocaleString()}
               sub={newThisMonth > 0 ? `+${newThisMonth} this month` : 'no new this month'}
               tone="primary"
+              icon={UsersIcon}
               onClick={() => setRoleFilter('')}
               active={roleFilter === ''}
             />
@@ -311,6 +560,7 @@ export function UsersBoard() {
               value={activeCount.toLocaleString()}
               sub={users.length > 0 ? `${Math.round((activeCount / users.length) * 100)}% of total` : undefined}
               tone="accent"
+              icon={ShieldCheck}
               onClick={() => {
                 setRoleFilter('');
                 setStatusTab('active');
@@ -321,6 +571,7 @@ export function UsersBoard() {
               label="Customers"
               value={(counts.customer ?? 0).toLocaleString()}
               tone="secondary"
+              icon={UsersIcon}
               onClick={() => setRoleFilter('customer')}
               active={roleFilter === 'customer'}
             />
@@ -328,6 +579,7 @@ export function UsersBoard() {
               label="Riders"
               value={(counts.rider ?? 0).toLocaleString()}
               tone="amber"
+              icon={Truck}
               onClick={() => setRoleFilter('rider')}
               active={roleFilter === 'rider'}
             />
@@ -335,6 +587,7 @@ export function UsersBoard() {
               label="Partners"
               value={(counts.partner ?? 0).toLocaleString()}
               tone="rose"
+              icon={Building2}
               onClick={() => setRoleFilter('partner')}
               active={roleFilter === 'partner'}
             />
@@ -343,6 +596,7 @@ export function UsersBoard() {
               value={((counts.staff ?? 0) + (counts.admin ?? 0)).toLocaleString()}
               sub={`${counts.admin ?? 0} admin · ${counts.staff ?? 0} staff`}
               tone="violet"
+              icon={UserCog}
               onClick={() => setRoleFilter('admin')}
               active={roleFilter === 'admin' || roleFilter === 'staff'}
             />
@@ -395,6 +649,37 @@ export function UsersBoard() {
                   filterOptions={roleFilterOptions}
                   filterLabel="Role"
                 />
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {checkedIds.size > 0 ? (
+                    <>
+                      <span className="text-sm text-muted">{checkedIds.size} selected</span>
+                      <button
+                        type="button"
+                        className="btn-outline btn-sm"
+                        disabled={bulkBusy}
+                        onClick={() => void bulkActivate(true)}
+                      >
+                        Activate
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-outline btn-sm !text-red-600"
+                        disabled={bulkBusy}
+                        onClick={() => void bulkActivate(false)}
+                      >
+                        Deactivate
+                      </button>
+                    </>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="btn-outline btn-sm ml-auto gap-1.5"
+                    onClick={exportSelected}
+                  >
+                    <Download className="h-3.5 w-3.5" aria-hidden />
+                    Export{checkedIds.size > 0 ? ` (${checkedIds.size})` : ''}
+                  </button>
+                </div>
               </div>
 
               {visible.length === 0 ? (
@@ -408,8 +693,20 @@ export function UsersBoard() {
                     <caption className="sr-only">Registered platform users</caption>
                     <thead>
                       <tr>
+                        <th scope="col" className="w-8">
+                          <input
+                            type="checkbox"
+                            aria-label="Select all visible users"
+                            checked={visible.length > 0 && checkedIds.size === visible.length}
+                            onChange={toggleCheckAll}
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-4 w-4 rounded border-border text-primary focus:ring-primary/25"
+                          />
+                        </th>
                         <th scope="col">User</th>
                         <th scope="col">Role</th>
+                        <th scope="col">Department</th>
+                        <th scope="col">Branch</th>
                         <th scope="col">Status</th>
                         <th scope="col">Last login</th>
                         <th scope="col">Joined</th>
@@ -426,15 +723,18 @@ export function UsersBoard() {
                             className={`cursor-pointer ${isSelected ? 'bg-primary/5 hover:bg-primary/5' : ''}`}
                           >
                             <td>
+                              <input
+                                type="checkbox"
+                                aria-label={`Select ${displayName(u)}`}
+                                checked={checkedIds.has(u._id)}
+                                onChange={() => toggleChecked(u._id)}
+                                onClick={(e) => e.stopPropagation()}
+                                className="h-4 w-4 rounded border-border text-primary focus:ring-primary/25"
+                              />
+                            </td>
+                            <td>
                               <div className="flex items-center gap-3">
-                                <span
-                                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
-                                    ROLE_AVATAR[u.role] ?? ROLE_AVATAR.customer
-                                  }`}
-                                  aria-hidden
-                                >
-                                  {initial(u)}
-                                </span>
+                                <Avatar user={u} size="sm" />
                                 <div className="min-w-0">
                                   <p className="max-w-[14rem] truncate text-sm font-medium text-slate-900" title={u.email}>
                                     {u.email ?? '—'}
@@ -452,6 +752,8 @@ export function UsersBoard() {
                                 {u.role}
                               </span>
                             </td>
+                            <td className="whitespace-nowrap text-sm text-muted">{u.department ?? '—'}</td>
+                            <td className="whitespace-nowrap text-sm text-muted">{branchName(u.branchId)}</td>
                             <td>
                               {u.isActive ? (
                                 <span className="badge-accent">Active</span>
@@ -496,14 +798,28 @@ export function UsersBoard() {
                   </div>
 
                   <div className="flex items-center gap-3 px-5 py-4">
-                    <span
-                      className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-xl font-semibold ${
-                        ROLE_AVATAR[selected.role] ?? ROLE_AVATAR.customer
-                      }`}
-                      aria-hidden
-                    >
-                      {initial(selected)}
-                    </span>
+                    <div className="relative shrink-0">
+                      <Avatar user={selected} size="lg" />
+                      <input
+                        ref={photoInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) void handlePhotoChange(file);
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-white ring-2 ring-surface disabled:opacity-50"
+                        aria-label="Upload photo"
+                        disabled={photoUploading}
+                        onClick={() => photoInputRef.current?.click()}
+                      >
+                        <Camera className="h-3.5 w-3.5" aria-hidden />
+                      </button>
+                    </div>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-slate-900" title={displayName(selected)}>
                         {displayName(selected)}
@@ -525,6 +841,31 @@ export function UsersBoard() {
                     </div>
                   </div>
 
+                  <div
+                    className="flex gap-1 overflow-x-auto border-b border-border/60 px-3"
+                    role="tablist"
+                    aria-label="User detail sections"
+                  >
+                    {DETAIL_TABS.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={detailTab === t.id}
+                        onClick={() => setDetailTab(t.id)}
+                        className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+                          detailTab === t.id
+                            ? 'border-primary text-primary'
+                            : 'border-transparent text-muted hover:text-slate-900'
+                        }`}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {detailTab === 'profile' ? (
+                    <>
                   <RailSection title="Contact">
                     <RailRow
                       label="Email"
@@ -577,6 +918,27 @@ export function UsersBoard() {
                     />
                     <RailRow label="Joined" value={fmt(selected.createdAt)} />
                     <RailRow label="Last login" value={fmtTime(selected.lastLoginAt)} />
+                    <RailRow label="Branch" value={branchName(selected.branchId)} />
+                    <div className="flex items-center justify-between gap-3 text-sm">
+                      <span className="shrink-0 text-muted">Department</span>
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <input
+                          type="text"
+                          value={departmentDraft}
+                          onChange={(e) => setDepartmentDraft(e.target.value)}
+                          placeholder="e.g. Operations"
+                          className="w-32 rounded-md bg-surface px-2 py-1 text-right text-sm ring-1 ring-border/60 focus:outline-none focus:ring-2 focus:ring-primary/25"
+                        />
+                        <button
+                          type="button"
+                          className="link-primary text-xs font-medium disabled:opacity-50"
+                          disabled={savingDepartment || departmentDraft === (selected.department ?? '')}
+                          onClick={() => void saveDepartment()}
+                        >
+                          {savingDepartment ? 'Saving…' : 'Save'}
+                        </button>
+                      </span>
+                    </div>
                   </RailSection>
 
                   <RailSection title="Quick actions">
@@ -619,41 +981,76 @@ export function UsersBoard() {
                       ) : null}
                     </div>
                   </RailSection>
+                    </>
+                  ) : null}
 
-                  {selectedEmail ? (
-                    <RailSection title="Recent activity">
-                      {activity.loading && !activity.data ? (
-                        <p className="text-sm text-muted">Loading activity…</p>
-                      ) : null}
-                      {activity.data && activity.data.items.length === 0 ? (
-                        <p className="text-sm text-muted">No logged admin actions yet.</p>
-                      ) : null}
-                      {activity.data && activity.data.items.length > 0 ? (
-                        <>
-                          <ul className="space-y-2">
-                            {activity.data.items.map((entry) => (
-                              <li key={entry._id} className="flex items-center gap-2 text-sm">
-                                <span
-                                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                                    entry.statusCode < 400 ? 'bg-emerald-500' : 'bg-red-500'
-                                  }`}
-                                  aria-hidden
-                                />
-                                <span className="min-w-0 flex-1 truncate text-slate-900" title={entry.action}>
-                                  {entry.action.replace(/^(get|post|patch|put|delete)\./i, '')}
-                                </span>
-                                <span className="shrink-0 text-xs tabular-nums text-muted">
-                                  {timeAgo(entry.createdAt)}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                          <Link href="/audit-log" className="link-primary text-xs font-medium">
-                            View full audit log →
-                          </Link>
-                        </>
-                      ) : null}
-                    </RailSection>
+                  {detailTab === 'permissions' ? (
+                    <div className="flex flex-col items-center gap-2 px-5 py-10 text-center">
+                      <Shield className="h-8 w-8 text-muted-foreground" aria-hidden />
+                      <p className="text-sm font-medium text-slate-900">Permissions not available</p>
+                      <p className="max-w-xs text-sm text-muted">
+                        Role-based permission editing isn&apos;t wired up yet — this account currently
+                        inherits the fixed capabilities of the <span className="capitalize">{selected.role}</span> role.
+                      </p>
+                    </div>
+                  ) : null}
+
+                  {detailTab === 'activity' ? (
+                    selectedEmail ? (
+                      <RailSection title="Recent activity">
+                        {activity.loading && !activity.data ? (
+                          <p className="text-sm text-muted">Loading activity…</p>
+                        ) : null}
+                        {activity.data && activity.data.items.length === 0 ? (
+                          <p className="text-sm text-muted">No logged admin actions yet.</p>
+                        ) : null}
+                        {activity.data && activity.data.items.length > 0 ? (
+                          <>
+                            <ul className="space-y-2">
+                              {activity.data.items.map((entry) => (
+                                <li key={entry._id} className="flex items-center gap-2 text-sm">
+                                  <span
+                                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                                      entry.statusCode < 400 ? 'bg-emerald-500' : 'bg-red-500'
+                                    }`}
+                                    aria-hidden
+                                  />
+                                  <span className="min-w-0 flex-1 truncate text-slate-900" title={entry.action}>
+                                    {entry.action.replace(/^(get|post|patch|put|delete)\./i, '')}
+                                  </span>
+                                  <span className="shrink-0 text-xs tabular-nums text-muted">
+                                    {timeAgo(entry.createdAt)}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                            <Link href="/audit-log" className="link-primary text-xs font-medium">
+                              View full audit log →
+                            </Link>
+                          </>
+                        ) : null}
+                      </RailSection>
+                    ) : (
+                      <div className="flex flex-col items-center gap-2 px-5 py-10 text-center">
+                        <KeyRound className="h-8 w-8 text-muted-foreground" aria-hidden />
+                        <p className="text-sm font-medium text-slate-900">No admin activity</p>
+                        <p className="max-w-xs text-sm text-muted">
+                          Activity logging only tracks admin and staff actions — this account type
+                          isn&apos;t an audit actor.
+                        </p>
+                      </div>
+                    )
+                  ) : null}
+
+                  {detailTab === 'sessions' ? (
+                    <div className="flex flex-col items-center gap-2 px-5 py-10 text-center">
+                      <Laptop className="h-8 w-8 text-muted-foreground" aria-hidden />
+                      <p className="text-sm font-medium text-slate-900">Session tracking not available</p>
+                      <p className="max-w-xs text-sm text-muted">
+                        Device and active-session tracking isn&apos;t implemented yet — accounts don&apos;t
+                        currently record login devices.
+                      </p>
+                    </div>
                   ) : null}
                 </section>
               )}

@@ -27,6 +27,14 @@ export class User {
   @Prop()
   lastLoginAt?: Date;
 
+  /** Internal team members only (admin/staff): free-text department/team label. */
+  @Prop()
+  department?: string;
+
+  /** Profile photo URL — Cloudinary secure_url, or unset to fall back to initials. */
+  @Prop()
+  photoUrl?: string;
+
   /** Partner-only: display name of the shop owner, separate from the login email. */
   @Prop()
   ownerName?: string;
