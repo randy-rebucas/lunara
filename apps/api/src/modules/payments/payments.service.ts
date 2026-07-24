@@ -207,16 +207,31 @@ export class PaymentsService {
       status: PaymentStatus.PENDING,
     });
 
-    const payment = await this.paymentModel.create({
-      orderId: order._id,
-      userId: new Types.ObjectId(userId),
-      purpose: 'order',
-      method,
-      amount: order.total,
-      status: PaymentStatus.PENDING,
-      cashTiming: method === PaymentMethod.CASH ? cashTiming : undefined,
-      returnOrigin: webOrigin,
-    });
+    // The deleteMany above isn't atomic with this create — two concurrent createIntent calls for
+    // the same order can both pass it and both attempt to create a pending payment. The unique
+    // partial index on {orderId, purpose, status:'pending'} (payment.schema.ts) makes the loser's
+    // create() throw E11000 instead of silently succeeding, which is what previously let two
+    // PayMongo sessions or two wallet debits exist for one order.
+    let payment: PaymentDocument;
+    try {
+      payment = await this.paymentModel.create({
+        orderId: order._id,
+        userId: new Types.ObjectId(userId),
+        purpose: 'order',
+        method,
+        amount: order.total,
+        status: PaymentStatus.PENDING,
+        cashTiming: method === PaymentMethod.CASH ? cashTiming : undefined,
+        returnOrigin: webOrigin,
+      });
+    } catch (err) {
+      if (this.isDuplicateKeyError(err)) {
+        throw new BadRequestException(
+          'A payment is already being processed for this order — please wait a moment and try again.',
+        );
+      }
+      throw err;
+    }
 
     payment.receiptCode = generatePaymentReceiptCode(orderId, payment._id.toString());
 
@@ -703,5 +718,9 @@ export class PaymentsService {
       returnOrigin: payment.returnOrigin,
       createdAt: payment.createdAt,
     };
+  }
+
+  private isDuplicateKeyError(err: unknown): boolean {
+    return typeof err === 'object' && err !== null && (err as { code?: number }).code === 11000;
   }
 }

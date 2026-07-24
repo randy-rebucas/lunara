@@ -1,8 +1,11 @@
 'use client';
 
+import { resolveApiV1BaseUrl } from '@lunara/utils';
 import { useCallback, useRef, useState } from 'react';
 import { adminFetch } from '../../lib/admin-api';
 import { useAdminQuery } from '../../lib/use-admin-query';
+
+const API_URL = resolveApiV1BaseUrl(process.env.NEXT_PUBLIC_API_URL);
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -429,7 +432,7 @@ function BackupTab() {
     try {
       const { getAdminToken } = await import('../../lib/admin-api');
       const token = getAdminToken();
-      const res = await fetch('/api/v1/admin/maintenance/backup', {
+      const res = await fetch(`${API_URL}/admin/maintenance/backup`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {
@@ -450,6 +453,13 @@ function BackupTab() {
 
   async function handleRestore() {
     if (!restoreFile) return;
+    if (
+      !window.confirm(
+        `Restore from "${restoreFile.name}"? This drops every existing collection and replaces it with the backup's contents. This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
     setRestoring(true);
     setRestoreResult(null);
     setRestoreError(null);
@@ -458,7 +468,7 @@ function BackupTab() {
       const token = getAdminToken();
       const formData = new FormData();
       formData.append('file', restoreFile);
-      const res = await fetch('/api/v1/admin/maintenance/restore', {
+      const res = await fetch(`${API_URL}/admin/maintenance/restore`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,

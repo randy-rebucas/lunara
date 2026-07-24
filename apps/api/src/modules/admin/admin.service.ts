@@ -11,7 +11,7 @@ import {
   Promotion,
   PromotionDocument,
 } from './schemas/promotion.schema';
-import { computePickupSla } from '@lunara/utils';
+import { computeDeliverySla, computePickupSla } from '@lunara/utils';
 import { PromotionsService } from '../promotions/promotions.service';
 import { BranchesService } from '../branches/branches.service';
 import { BranchManagementService } from '../branches/branch-management.service';
@@ -377,7 +377,6 @@ export class AdminService {
             branchName: o.branchName ?? null,
             riderName: riderId ? (riderNameMap.get(riderId) ?? null) : null,
             createdAt: o.createdAt,
-            updatedAt: o.updatedAt,
           };
         }),
       },
@@ -484,6 +483,22 @@ export class AdminService {
           const rider = riderId ? riderByUserId.get(riderId) : undefined;
           const riderContact = riderId ? contactById.get(riderId) : undefined;
           const customer = contactById.get(o.customerId?.toString() ?? '');
+          const sla =
+            leg === 'delivery'
+              ? computeDeliverySla({
+                  status: o.status,
+                  scheduledDeliveryAt: o.scheduledDeliveryAt,
+                  deliveryRiderId: o.deliveryRiderId?.toString(),
+                  deliveredAt: o.delivery?.deliveredAt,
+                })
+              : computePickupSla({
+                  status: o.status,
+                  scheduledPickupAt: o.slaPickupDueAt ?? o.scheduledPickupAt,
+                  dispatchStatus: o.dispatchStatus,
+                  partnerAcceptedAt: o.partnerAcceptedAt,
+                  pickupRiderId: o.pickupRiderId?.toString(),
+                  pickupCollectedAt: o.pickup?.collectedAt,
+                });
           return {
             _id: o._id.toString(),
             status: o.status,
@@ -499,7 +514,7 @@ export class AdminService {
             vehicleType: rider?.vehicleType ?? null,
             plateNumber: rider?.plateNumber ?? null,
             createdAt: o.createdAt,
-            slaPickupDueAt: o.slaPickupDueAt ?? null,
+            sla: { status: sla.status, label: sla.label },
             timeline: (o.statusHistory ?? []).slice(-5).map((e) => ({
               status: e.status,
               timestamp: e.timestamp,
@@ -579,10 +594,8 @@ export class AdminService {
             subtotal: o.subtotal,
             deliveryFee: o.deliveryFee,
             discount: o.discount,
-            customerId: o.customerId?.toString(),
             customerEmail: customer?.email,
             customerPhone: customer?.phone,
-            partnerId: o.partnerId?.toString(),
             branchName: o.branchName,
             riderName: riderId ? (riderNameByUserId.get(riderId) ?? null) : null,
             bagSizeLabel: o.bagSizeLabel ?? null,
@@ -590,9 +603,9 @@ export class AdminService {
             scheduledPickupAt: o.scheduledPickupAt ?? null,
             scheduledDeliveryAt: o.scheduledDeliveryAt ?? null,
             dispatchStatus: o.dispatchStatus,
+            partnerAcceptedAt: o.partnerAcceptedAt ?? null,
             operationsConflict: o.operationsConflict,
             createdAt: o.createdAt,
-            updatedAt: o.updatedAt,
             slaStatus: sla.status,
             slaLabel: sla.label,
             ...payment,
@@ -883,8 +896,6 @@ export class AdminService {
       }
     }
 
-    const staffCount = await this.userModel.countDocuments({ role: UserRole.STAFF, isActive: true });
-
     return {
       success: true,
       data: {
@@ -901,7 +912,6 @@ export class AdminService {
             planPrice: p.planPrice ?? 0,
             planRenewsAt: p.planRenewsAt,
             trialEndsAt: p.trialEndsAt,
-            staffCount,
             totalOrders: statsMap.get(id)?.totalOrders ?? 0,
             revenue: statsMap.get(id)?.revenue ?? 0,
             orders30d: stats30dMap.get(id)?.orders30d ?? 0,
@@ -1082,13 +1092,12 @@ export class AdminService {
       return { revenue: rows[0]?.revenue ?? 0, orders: rows[0]?.orders ?? 0 };
     };
 
-    const [windowOrders, allCompleted, monthSum, lastMonthSum, ytdSum, paymentMix] =
+    const [windowOrders, monthSum, lastMonthSum, ytdSum, paymentMix] =
       await Promise.all([
         this.orderModel
           .find({ status: { $in: COMPLETED }, updatedAt: { $gte: prevWeekStart } })
           .select('updatedAt total subtotal deliveryFee discount branchName bookingType')
           .lean(),
-        this.orderModel.countDocuments({ status: { $in: COMPLETED } }),
         sumRange(startOfMonth),
         sumRange(startOfLastMonth, startOfMonth),
         sumRange(startOfYear),
@@ -1123,7 +1132,6 @@ export class AdminService {
 
     let week = { revenue: 0, orders: 0, subtotal: 0, deliveryFees: 0, discounts: 0 };
     let prevWeek = { revenue: 0, orders: 0 };
-    let today = { revenue: 0, orders: 0 };
     const branchAgg = new Map<string, { revenue: number; orders: number }>();
     const serviceAgg = new Map<string, { revenue: number; count: number }>();
 
@@ -1139,10 +1147,6 @@ export class AdminService {
         if (day) {
           day.revenue += o.total;
           day.orders += 1;
-        }
-        if (o.updatedAt >= startOfDay) {
-          today.revenue += o.total;
-          today.orders += 1;
         }
         const branchKey = o.branchName ?? 'Unassigned';
         const branch = branchAgg.get(branchKey) ?? { revenue: 0, orders: 0 };
@@ -1170,12 +1174,6 @@ export class AdminService {
     return {
       success: true,
       data: {
-        // Legacy fields kept for compatibility
-        today: today.revenue,
-        month: monthSum.revenue,
-        todayOrders: today.orders,
-        monthOrders: monthSum.orders,
-        allTimeCompleted: allCompleted,
         daily,
         byService: [...serviceAgg.entries()]
           .map(([service, v]) => ({ service, ...v }))
@@ -1188,7 +1186,6 @@ export class AdminService {
           avgOrderValue: week.orders > 0 ? Math.round(week.revenue / week.orders) : 0,
           avgPerDay: Math.round(week.revenue / 7),
         },
-        prevWeek,
         prevDaily,
         byBranch: [...branchAgg.entries()]
           .map(([name, v]) => ({
@@ -1210,11 +1207,18 @@ export class AdminService {
   }
 
   async getReports(days = 7) {
+    // Clamp to a sane window: the frontend only ever offers 7/14/30, but the query
+    // param is otherwise unvalidated — a negative value would silently query a future
+    // "from" date (always-empty result) and an unbounded value would scan the entire
+    // orders collection.
+    const clampedDays = Math.min(Math.max(Math.trunc(days) || 7, 1), 90);
     const from = new Date();
-    from.setDate(from.getDate() - days);
+    from.setDate(from.getDate() - clampedDays);
     from.setHours(0, 0, 0, 0);
 
-    const orders = await this.orderModel.find({ createdAt: { $gte: from } });
+    const orders = await this.orderModel
+      .find({ createdAt: { $gte: from } })
+      .select('status total bookingType createdAt');
     const completed = orders.filter((o) => COMPLETED.includes(o.status));
     const revenue = completed.reduce((s, o) => s + o.total, 0);
 
@@ -1228,7 +1232,7 @@ export class AdminService {
     return {
       success: true,
       data: {
-        periodDays: days,
+        periodDays: clampedDays,
         from: from.toISOString(),
         totalOrders: orders.length,
         completedOrders: completed.length,
@@ -1316,21 +1320,29 @@ export class AdminService {
   }
 
   async createPromotion(dto: CreatePromotionDto) {
-    const promo = await this.promotionModel.create({
-      code: dto.code.toUpperCase(),
-      title: dto.title,
-      description: dto.description,
-      discountType: dto.discountType,
-      discountValue: dto.discountValue,
-      minOrderAmount: dto.minOrderAmount ?? 0,
-      isActive: dto.isActive ?? true,
-      audience: dto.audience,
-      kind: dto.kind,
-      maxUsesPerCustomer: dto.maxUsesPerCustomer,
-      newCustomerWithinDays: dto.newCustomerWithinDays,
-      startsAt: dto.startsAt ? new Date(dto.startsAt) : undefined,
-      endsAt: dto.endsAt ? new Date(dto.endsAt) : undefined,
-    });
+    let promo: PromotionDocument;
+    try {
+      promo = await this.promotionModel.create({
+        code: dto.code.toUpperCase(),
+        title: dto.title,
+        description: dto.description,
+        discountType: dto.discountType,
+        discountValue: dto.discountValue,
+        minOrderAmount: dto.minOrderAmount ?? 0,
+        isActive: dto.isActive ?? true,
+        audience: dto.audience,
+        kind: dto.kind,
+        maxUsesPerCustomer: dto.maxUsesPerCustomer,
+        newCustomerWithinDays: dto.newCustomerWithinDays,
+        startsAt: dto.startsAt ? new Date(dto.startsAt) : undefined,
+        endsAt: dto.endsAt ? new Date(dto.endsAt) : undefined,
+      });
+    } catch (e) {
+      if ((e as { code?: number })?.code === 11000) {
+        throw new ConflictException(`A promotion with code "${dto.code.toUpperCase()}" already exists`);
+      }
+      throw e;
+    }
     return { success: true, data: this.serializePromotion(promo) };
   }
 

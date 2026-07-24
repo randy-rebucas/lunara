@@ -95,9 +95,17 @@ export function MessagesBoard() {
       setDetail(null);
       return;
     }
+    let cancelled = false;
     adminFetch<ConversationDetail>(`/admin/messages/${selectedId}`)
-      .then(setDetail)
-      .catch(() => setDetail(null));
+      .then((d) => {
+        if (!cancelled) setDetail(d);
+      })
+      .catch(() => {
+        if (!cancelled) setDetail(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [selectedId]);
 
   const items = useMemo(() => conversations ?? [], [conversations]);

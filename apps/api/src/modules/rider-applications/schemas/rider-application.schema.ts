@@ -170,6 +170,9 @@ export class RiderApplication {
   @Prop({ required: true, enum: RiderApplicationStatus, default: RiderApplicationStatus.PENDING })
   status!: RiderApplicationStatus;
 
+  @Prop({ trim: true, maxlength: 1000 })
+  rejectionReason?: string;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

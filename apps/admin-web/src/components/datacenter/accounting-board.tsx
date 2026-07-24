@@ -329,13 +329,19 @@ function AccountPanel({ group, maxRows = 10, riderMap }: { group: AccountGroup; 
   );
 }
 
-function TrialBalancePanel() {
-  const load = useCallback(() => adminFetch<LedgerRow[]>('/admin/ledger/trial-balance'), []);
-  const { data, loading, error, reload } = useAdminQuery(load, []);
-
-  const loadRiders = useCallback(() => adminFetch<RiderSummary[]>('/admin/riders'), []);
-  const { data: riders } = useAdminQuery(loadRiders, []);
-
+function TrialBalancePanel({
+  data,
+  loading,
+  error,
+  reload,
+  riders,
+}: {
+  data: LedgerRow[] | null;
+  loading: boolean;
+  error: string;
+  reload: () => Promise<void>;
+  riders: RiderSummary[] | null;
+}) {
   const riderMap = useMemo(() => {
     const map = new Map<string, RiderSummary>();
     for (const r of riders ?? []) map.set(r.userId, r);
@@ -491,7 +497,15 @@ export function AccountingBoard() {
     useAdminQuery(loadOverview, []);
 
   const loadTrialBalance = useCallback(() => adminFetch<LedgerRow[]>('/admin/ledger/trial-balance'), []);
-  const { data: trialBalance } = useAdminQuery(loadTrialBalance, []);
+  const {
+    data: trialBalance,
+    loading: trialBalanceLoading,
+    error: trialBalanceError,
+    reload: reloadTrialBalance,
+  } = useAdminQuery(loadTrialBalance, []);
+
+  const loadRiders = useCallback(() => adminFetch<RiderSummary[]>('/admin/riders'), []);
+  const { data: riders } = useAdminQuery(loadRiders, []);
 
   const topAccounts = useMemo(() => {
     return [...(trialBalance ?? [])]
@@ -511,6 +525,18 @@ export function AccountingBoard() {
     };
   }, [overview]);
 
+  const cashFlowChartSeries = useMemo(() => {
+    const trend = overview?.trend ?? [];
+    return {
+      labels: trend.map((t) => monthLabel(t.month)),
+      series: [
+        { label: 'Cash in', color: '#10b981', values: trend.map((t) => t.cashIn) },
+        { label: 'Cash out', color: '#ef4444', values: trend.map((t) => t.cashOut) },
+        { label: 'Net cash flow', color: '#6366f1', values: trend.map((t) => t.netCashFlow) },
+      ],
+    };
+  }, [overview]);
+
   const cashFlow = overview?.cashFlow;
   const donutSegments: DonutSegment[] = cashFlow
     ? [
@@ -522,6 +548,7 @@ export function AccountingBoard() {
   function refresh() {
     void reloadRecon();
     void reloadOverview();
+    void reloadTrialBalance();
   }
 
   return (
@@ -608,7 +635,13 @@ export function AccountingBoard() {
 
         <div className="dc-panel-body">
           {tab === 'trial_balance' ? (
-            <TrialBalancePanel />
+            <TrialBalancePanel
+              data={trialBalance}
+              loading={trialBalanceLoading}
+              error={trialBalanceError}
+              reload={reloadTrialBalance}
+              riders={riders}
+            />
           ) : (
             <div className="space-y-4">
               <div className="grid gap-4 lg:grid-cols-3">
@@ -670,9 +703,47 @@ export function AccountingBoard() {
                     ) : (
                       <p className="py-8 text-center text-sm text-muted">No cash movement this month.</p>
                     )}
+                    {recon?.cashFlow && (
+                      <div className="mt-4 flex items-center justify-between gap-2 border-t border-border/60 pt-3 text-xs text-muted">
+                        <span>All time</span>
+                        <span className="font-medium tabular-nums text-slate-700">
+                          {formatPesoWhole(recon.cashFlow.cashIn)} in · {formatPesoWhole(recon.cashFlow.cashOut)} out · net {fp(recon.cashFlow.net)}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </section>
               </div>
+
+              <section className="dc-panel">
+                <div className="dc-panel-header">
+                  <h2 className="text-sm font-semibold text-slate-900">Cash flow trend</h2>
+                  <p className="text-xs text-muted">Cash in, cash out, and net cash flow — last {overview?.trend.length ?? 6} months</p>
+                </div>
+                <div className="dc-panel-body">
+                  {overviewLoading && !overview ? (
+                    <p className="py-8 text-center text-sm text-muted">Loading trend…</p>
+                  ) : (
+                    <>
+                      <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+                        {cashFlowChartSeries.series.map((s) => (
+                          <span key={s.label} className="inline-flex items-center gap-1.5 text-xs text-muted">
+                            <span className="inline-block h-0.5 w-4 rounded-full" style={{ backgroundColor: s.color }} aria-hidden />
+                            {s.label}
+                          </span>
+                        ))}
+                      </div>
+                      <CompareLineChart
+                        labels={cashFlowChartSeries.labels}
+                        series={cashFlowChartSeries.series}
+                        formatValue={(n) => formatPeso(n, true)}
+                        labelEvery={1}
+                        ariaLabel="Cash in, cash out, and net cash flow by month"
+                      />
+                    </>
+                  )}
+                </div>
+              </section>
 
               <div className="grid gap-4 xl:grid-cols-12 xl:items-start">
                 <section className="dc-panel min-w-0 xl:col-span-8">

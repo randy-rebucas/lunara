@@ -1,4 +1,4 @@
-import { IsArray, IsNumber, IsString, MinLength } from 'class-validator';
+import { IsArray, IsNotEmpty, IsNumber, IsString, MinLength } from 'class-validator';
 
 export class InitNetworkDto {
   @IsString()
@@ -10,12 +10,15 @@ export class InitNetworkDto {
   name!: string;
 
   @IsString()
+  @IsNotEmpty()
   line1!: string;
 
   @IsString()
+  @IsNotEmpty()
   city!: string;
 
   @IsString()
+  @IsNotEmpty()
   province!: string;
 
   @IsArray()

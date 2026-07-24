@@ -3,8 +3,9 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
-import type { PartnerReceivingView } from '@lunara/types';
+import { BranchPricingMode, type PartnerReceivingView } from '@lunara/types';
 import { UserRole } from '@lunara/types';
+import { estimateMachineLoads, formatCurrency } from '@lunara/utils';
 import { AuthLoading } from '../../../../components/auth-loading';
 import { PageHeader } from '../../../../components/ui/page-header';
 import { ActionCard, Icon, ICONS, StepIcon } from '../../../../components/ui/icon';
@@ -17,6 +18,8 @@ export default function ShopReceivingPage() {
   const partner = isPartnerRole();
   const [view, setView] = useState<PartnerReceivingView | null>(null);
   const [weight, setWeight] = useState('');
+  const [loadCount, setLoadCount] = useState('');
+  const [pieceCount, setPieceCount] = useState('');
   const [itemCount, setItemCount] = useState('1');
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
@@ -35,6 +38,16 @@ export default function ShopReceivingPage() {
       setWeight(String(data.order.estimatedWeightKg));
     } else if (data.order.pickup?.actualWeightKg) {
       setWeight(String(data.order.pickup.actualWeightKg));
+    }
+    if (data.order.pickup?.actualLoadCount) {
+      setLoadCount(String(data.order.pickup.actualLoadCount));
+    } else if (data.order.estimatedLoadCount) {
+      setLoadCount(String(data.order.estimatedLoadCount));
+    }
+    if (data.order.pickup?.actualPieceCount) {
+      setPieceCount(String(data.order.pickup.actualPieceCount));
+    } else if (data.order.estimatedPieceCount) {
+      setPieceCount(String(data.order.estimatedPieceCount));
     }
     if (data.shopReceiving?.itemCount) setItemCount(String(data.shopReceiving.itemCount));
   }, [id]);
@@ -205,18 +218,92 @@ export default function ShopReceivingPage() {
             inputMode="decimal"
             placeholder="e.g. 8.2"
             value={weight}
-            onChange={(e) => setWeight(e.target.value)}
+            onChange={(e) => {
+              const v = e.target.value;
+              setWeight(v);
+              if (view.order.pricingMode === BranchPricingMode.PER_LOAD && v) {
+                setLoadCount(String(estimateMachineLoads(Number(v) || 0)));
+              }
+            }}
           />
+
+          {view.order.pricingMode === BranchPricingMode.PER_LOAD && (
+            <>
+              <label className="form-label mt-3" htmlFor="verify-load-count">
+                Load count
+              </label>
+              <input
+                id="verify-load-count"
+                className="input-field"
+                type="number"
+                step="1"
+                min={1}
+                inputMode="numeric"
+                value={loadCount}
+                onChange={(e) => setLoadCount(e.target.value)}
+              />
+            </>
+          )}
+
+          {view.order.pricingMode === BranchPricingMode.PER_PIECE && (
+            <>
+              <label className="form-label mt-3" htmlFor="verify-piece-count">
+                Piece count
+              </label>
+              <input
+                id="verify-piece-count"
+                className="input-field"
+                type="number"
+                step="1"
+                min={1}
+                inputMode="numeric"
+                value={pieceCount}
+                onChange={(e) => setPieceCount(e.target.value)}
+              />
+            </>
+          )}
+
           <button
             type="button"
-            disabled={loading || !weight}
+            disabled={
+              loading ||
+              !weight ||
+              (view.order.pricingMode === BranchPricingMode.PER_LOAD && !loadCount) ||
+              (view.order.pricingMode === BranchPricingMode.PER_PIECE && !pieceCount)
+            }
             className="btn-primary mt-4 w-full sm:w-auto"
             onClick={() =>
-              run('verify-weight', { verifiedWeightKg: Number(weight), note: note || undefined })
+              run('verify-weight', {
+                verifiedWeightKg: Number(weight),
+                ...(view.order.pricingMode === BranchPricingMode.PER_LOAD
+                  ? { verifiedLoadCount: Number(loadCount) }
+                  : {}),
+                ...(view.order.pricingMode === BranchPricingMode.PER_PIECE
+                  ? { verifiedPieceCount: Number(pieceCount) }
+                  : {}),
+                note: note || undefined,
+              })
             }
           >
             {loading ? 'Saving…' : 'Verify weight'}
           </button>
+
+          {view.order.finalTotal != null && (
+            <div className="mt-4 grid grid-cols-2 gap-3 rounded-lg bg-accent/5 p-3 text-center ring-1 ring-accent/20">
+              <div>
+                <p className="text-xs text-muted-foreground">Estimated total</p>
+                <p className="tabular-nums text-sm font-semibold text-slate-900">
+                  {formatCurrency(view.order.total)}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Finalized total</p>
+                <p className="tabular-nums text-sm font-semibold text-accent">
+                  {formatCurrency(view.order.finalTotal)}
+                </p>
+              </div>
+            </div>
+          )}
         </ActionCard>
       )}
 

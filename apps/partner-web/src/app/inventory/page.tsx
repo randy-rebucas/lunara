@@ -102,6 +102,9 @@ export default function InventoryPage() {
       }
     } catch (e) {
       setActionError(e instanceof Error ? e.message : 'Failed to update');
+      // adjustQty applies an optimistic update before this call — resync from the server so a
+      // failed PATCH doesn't leave the on-screen quantity out of sync with what's actually saved.
+      await reload();
     } finally {
       setSaving(null);
     }

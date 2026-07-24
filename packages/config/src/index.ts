@@ -25,6 +25,7 @@ export const appConfig = {
   defaultCurrency: 'PHP',
   defaultLocale: 'en-PH',
   supportEmail: 'support@lunara.app',
+  supportPhone: '+63281234567',
   marketing: marketingConfig,
   pagination: {
     defaultLimit: 20,

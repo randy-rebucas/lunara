@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { OrderStatus } from '@lunara/types';
-import { computePickupSla } from '@lunara/utils';
+import { computeDeliverySla, computePickupSla } from '@lunara/utils';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { Rider, RiderDocument } from '../riders/schemas/rider.schema';
@@ -22,6 +22,12 @@ const COMPLETED_STATUSES = [OrderStatus.DELIVERED, OrderStatus.COMPLETED];
 const CANCELLED_STATUSES = [OrderStatus.CANCELLED, OrderStatus.REFUNDED];
 const SCHEDULED_STATUSES = [OrderStatus.PENDING, OrderStatus.PENDING_DISPATCH];
 const OUT_FOR_DELIVERY_STATUSES = [
+  OrderStatus.RIDER_ASSIGNED_DELIVERY,
+  OrderStatus.OUT_FOR_DELIVERY,
+];
+
+/** Orders already on their delivery leg — the pickup SLA no longer applies to these. */
+const DELIVERY_LEG_STATUSES = [
   OrderStatus.RIDER_ASSIGNED_DELIVERY,
   OrderStatus.OUT_FOR_DELIVERY,
 ];
@@ -469,14 +475,21 @@ export class AdminOperationsService {
     order: OrderDocument,
     paymentsByOrderId?: Map<string, PaymentDocument>,
   ) {
-    const sla = computePickupSla({
-      status: order.status,
-      scheduledPickupAt: order.slaPickupDueAt ?? order.scheduledPickupAt,
-      dispatchStatus: order.dispatchStatus,
-      partnerAcceptedAt: order.partnerAcceptedAt,
-      pickupRiderId: order.pickupRiderId?.toString(),
-      pickupCollectedAt: order.pickup?.collectedAt,
-    });
+    const sla = DELIVERY_LEG_STATUSES.includes(order.status)
+      ? computeDeliverySla({
+          status: order.status,
+          scheduledDeliveryAt: order.scheduledDeliveryAt,
+          deliveryRiderId: order.deliveryRiderId?.toString(),
+          deliveredAt: order.delivery?.deliveredAt,
+        })
+      : computePickupSla({
+          status: order.status,
+          scheduledPickupAt: order.slaPickupDueAt ?? order.scheduledPickupAt,
+          dispatchStatus: order.dispatchStatus,
+          partnerAcceptedAt: order.partnerAcceptedAt,
+          pickupRiderId: order.pickupRiderId?.toString(),
+          pickupCollectedAt: order.pickup?.collectedAt,
+        });
 
     const paymentMap =
       paymentsByOrderId ??

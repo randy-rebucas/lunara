@@ -30,6 +30,7 @@ export default function ProfilePage() {
   const [editingAddress, setEditingAddress] = useState<CustomerAddress | null>(null);
   const [addressSaving, setAddressSaving] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [actioningAddressId, setActioningAddressId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const [profileRes, addressesRes] = await Promise.all([
@@ -113,21 +114,27 @@ export default function ProfilePage() {
 
   async function deleteAddress(address: CustomerAddress) {
     if (!window.confirm(`Delete "${address.label}"?`)) return;
+    setActioningAddressId(address._id);
     try {
       await api.delete(`/addresses/${address._id}`);
       await reload();
     } catch (e) {
       window.alert(e instanceof Error ? e.message : 'Could not delete address');
+    } finally {
+      setActioningAddressId(null);
     }
   }
 
   async function setDefaultAddress(address: CustomerAddress) {
     if (address.isDefault) return;
+    setActioningAddressId(address._id);
     try {
       await api.patch(`/addresses/${address._id}`, { isDefault: true });
       await reload();
     } catch (e) {
       window.alert(e instanceof Error ? e.message : 'Could not update address');
+    } finally {
+      setActioningAddressId(null);
     }
   }
 
@@ -172,11 +179,11 @@ export default function ProfilePage() {
               <CardBody className="space-y-4">
                 <div>
                   <FormLabel>First name</FormLabel>
-                  <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+                  <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} maxLength={80} />
                 </div>
                 <div>
                   <FormLabel>Last name</FormLabel>
-                  <Input value={lastName} onChange={(e) => setLastName(e.target.value)} />
+                  <Input value={lastName} onChange={(e) => setLastName(e.target.value)} maxLength={80} />
                 </div>
                 {profileError && (
                   <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -242,13 +249,19 @@ export default function ProfilePage() {
                       </p>
                       <div className="mt-4 flex flex-wrap gap-2">
                         {!address.isDefault && (
-                          <Button variant="outline" size="sm" onClick={() => setDefaultAddress(address)}>
-                            Set default
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={actioningAddressId === address._id}
+                            onClick={() => setDefaultAddress(address)}
+                          >
+                            {actioningAddressId === address._id ? 'Working…' : 'Set default'}
                           </Button>
                         )}
                         <Button
                           variant="outline"
                           size="sm"
+                          disabled={actioningAddressId === address._id}
                           onClick={() => {
                             setEditingAddress(address);
                             setAddressModalOpen(true);
@@ -256,8 +269,13 @@ export default function ProfilePage() {
                         >
                           Edit
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={() => deleteAddress(address)}>
-                          Delete
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={actioningAddressId === address._id}
+                          onClick={() => deleteAddress(address)}
+                        >
+                          {actioningAddressId === address._id ? 'Working…' : 'Delete'}
                         </Button>
                       </div>
                     </CardBody>

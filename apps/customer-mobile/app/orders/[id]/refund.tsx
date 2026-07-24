@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { formatCurrency } from '@lunara/utils';
+import { PaymentMethod } from '@lunara/types';
+import { formatCashTimingLabel, formatCurrency, isRefundablePaymentMethod } from '@lunara/utils';
 import { Button } from '../../../src/components/ui/button';
 import { Card } from '../../../src/components/ui/card';
 import { Input } from '../../../src/components/ui/input';
@@ -17,6 +18,8 @@ export default function RequestRefundScreen() {
   const apiFetch = useAuthStore((s) => s.apiFetch);
   const [reason, setReason] = useState('');
   const [orderTotal, setOrderTotal] = useState<number | null>(null);
+  const [cashBlocked, setCashBlocked] = useState(false);
+  const [cashLabel, setCashLabel] = useState('');
   const [loadError, setLoadError] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -24,13 +27,30 @@ export default function RequestRefundScreen() {
 
   useEffect(() => {
     if (!id) return;
-    apiFetch<{ order: { total: number } }>(`/payments/orders/${id}`)
-      .then((res) => setOrderTotal(res.order?.total ?? null))
+    apiFetch<{
+      order: { total: number };
+      payment: { method: string; cashTiming?: 'pickup' | 'delivery' } | null;
+    }>(`/payments/orders/${id}`)
+      .then((res) => {
+        setOrderTotal(res.order?.total ?? null);
+        const payment = res.payment;
+        if (
+          !payment ||
+          payment.method === PaymentMethod.CASH ||
+          !isRefundablePaymentMethod(payment.method as PaymentMethod)
+        ) {
+          setCashBlocked(true);
+          if (payment?.method === PaymentMethod.CASH) {
+            setCashLabel(formatCashTimingLabel(payment.cashTiming));
+          }
+        }
+      })
       .catch((e) => setLoadError(e instanceof Error ? e.message : 'Failed to load order'))
       .finally(() => setLoading(false));
   }, [apiFetch, id]);
 
   async function handleSubmit() {
+    if (cashBlocked) return;
     if (!id || reason.trim().length < 10) {
       setError('Please explain your refund request (at least 10 characters).');
       return;
@@ -88,46 +108,63 @@ export default function RequestRefundScreen() {
             </Card>
           ) : null}
 
-          {/* Form card */}
-          <Card style={styles.card}>
-            <View style={styles.cardHeaderRow}>
-              <Ionicons name="create-outline" size={16} color={colors.primary} />
-              <Text style={styles.cardTitle}>Your reason</Text>
-            </View>
-
-            <Text style={styles.label}>Reason for refund</Text>
-            <Input
-              style={styles.textarea}
-              placeholder="Explain why you are requesting a refund…"
-              value={reason}
-              onChangeText={setReason}
-              multiline
-              numberOfLines={5}
-              textAlignVertical="top"
-            />
-            <Text style={styles.charCount}>{reason.trim().length} / 10 min characters</Text>
-
-            {error ? (
-              <View style={styles.errorRow}>
-                <Ionicons name="alert-circle-outline" size={14} color={colors.destructive} />
-                <Text style={styles.error}>{error}</Text>
+          {cashBlocked ? (
+            <Card style={styles.blockedCard}>
+              <View style={styles.cardHeaderRow}>
+                <Ionicons name="information-circle-outline" size={16} color={colors.warning} />
+                <Text style={styles.blockedTitle}>Not eligible for a wallet refund</Text>
               </View>
-            ) : null}
-          </Card>
+              <Text style={styles.blockedText}>
+                {cashLabel
+                  ? `This order uses ${cashLabel.toLowerCase()} and cannot be refunded to your wallet. Contact support if you need help.`
+                  : 'This order is not eligible for a wallet refund. Only wallet and online payments qualify.'}
+              </Text>
+            </Card>
+          ) : (
+            <>
+              {/* Form card */}
+              <Card style={styles.card}>
+                <View style={styles.cardHeaderRow}>
+                  <Ionicons name="create-outline" size={16} color={colors.primary} />
+                  <Text style={styles.cardTitle}>Your reason</Text>
+                </View>
 
-          <Button
-            label={submitting ? 'Submitting…' : 'Submit refund request'}
-            onPress={handleSubmit}
-            disabled={submitting}
-          />
+                <Text style={styles.label}>Reason for refund</Text>
+                <Input
+                  style={styles.textarea}
+                  placeholder="Explain why you are requesting a refund…"
+                  value={reason}
+                  onChangeText={setReason}
+                  multiline
+                  numberOfLines={5}
+                  textAlignVertical="top"
+                />
+                <Text style={styles.charCount}>{reason.trim().length} / 10 min characters</Text>
 
-          {/* Info note */}
-          <View style={styles.noteRow}>
-            <Ionicons name="time-outline" size={13} color={colors.muted} />
-            <Text style={styles.note}>
-              Our team reviews refund requests within 1–3 business days.
-            </Text>
-          </View>
+                {error ? (
+                  <View style={styles.errorRow}>
+                    <Ionicons name="alert-circle-outline" size={14} color={colors.destructive} />
+                    <Text style={styles.error}>{error}</Text>
+                  </View>
+                ) : null}
+              </Card>
+
+              <Button
+                label={submitting ? 'Submitting…' : 'Submit refund request'}
+                onPress={handleSubmit}
+                disabled={submitting}
+              />
+            </>
+          )}
+
+          {!cashBlocked ? (
+            <View style={styles.noteRow}>
+              <Ionicons name="time-outline" size={13} color={colors.muted} />
+              <Text style={styles.note}>
+                Our team reviews refund requests within 1–3 business days.
+              </Text>
+            </View>
+          ) : null}
         </>
       ) : null}
     </KeyboardSafeScrollView>
@@ -159,6 +196,11 @@ const styles = StyleSheet.create({
   totalLabel: { fontWeight: '600', fontSize: 14, color: colors.foreground },
   totalAmount: { fontSize: 28, fontWeight: '800', color: colors.primary },
   totalHint: { ...typography.caption, color: colors.muted },
+
+  /* Cash-blocked notice */
+  blockedCard: { gap: spacing.sm, backgroundColor: colors.warningBg, borderColor: colors.warningBorder },
+  blockedTitle: { fontWeight: '600', fontSize: 14, color: colors.warning },
+  blockedText: { ...typography.bodySm, color: colors.warning, lineHeight: 20 },
 
   /* Form card */
   card: { gap: spacing.sm },

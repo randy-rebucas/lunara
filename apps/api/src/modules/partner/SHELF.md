@@ -62,10 +62,15 @@ prefix/fuzzy search).
   that actually have a shelf slot / tag code, since most don't). Mongoose
   `autoIndex` is on by default, so these build automatically next time the
   API starts — no manual migration needed.
-- **Exact match only.** Lookup is an exact string match on the trimmed
-  query — no case-insensitivity or partial match. Acceptable for scanned
-  codes, but a mistyped/partial slot number returns nothing rather than
-  suggestions.
+- **Case-insensitive exact match (updated 2026-07-23).** Shelf-slot lookup
+  now matches case-insensitively (anchored regex, query escaped first) —
+  see `docs/audits/partner-web/shelf-lookup.md`. Neither the shelf-slot
+  assignment input nor the original lookup normalized case, so a slot typed
+  as `"a-12"` at assignment and searched as `"A-12"` (the lookup input's own
+  CSS visually suggests uppercase) would silently return nothing. Tag-code
+  lookups were unaffected — already normalized via `resolveTagCode`. Still
+  no partial/fuzzy match — a mistyped slot number returns nothing rather
+  than suggestions.
 - **Stale build was the actual root cause of the earlier "Cannot GET"
   report** — the route existed correctly in source but `dist/` hadn't been
   rebuilt. Not a code defect; resolved by rebuilding.

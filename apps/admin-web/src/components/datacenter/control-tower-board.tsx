@@ -13,6 +13,8 @@ import { isAdminRealtimeConnected } from '../../lib/admin-realtime';
 import { useAdminQuery } from '../../lib/use-admin-query';
 import { useAdminOperationsSocket } from '../../lib/use-admin-operations-socket';
 
+const MAP_POLL_INTERVAL_MS = 15_000;
+
 // ── Data shapes ────────────────────────────────────────────────────────────
 interface ControlTowerData {
   counts: {
@@ -127,6 +129,17 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const SERVICE_COLORS = ['var(--color-primary)', 'var(--color-accent)', '#f59e0b', '#8b5cf6', '#64748b'];
+
+function timeAgo(value?: string | Date | null): string {
+  if (!value) return '—';
+  const seconds = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000));
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
 
 function hourLabel(hour: number): string {
   const h = hour % 12 || 12;
@@ -321,11 +334,18 @@ export function ControlTowerBoard() {
   useAdminOperationsSocket({
     onDispatchQueueUpdated: () => {
       void reload();
+      void mapQuery.reload();
     },
     onDispatcherAlert: () => {
       void reload();
+      void mapQuery.reload();
     },
   });
+
+  useEffect(() => {
+    const id = setInterval(() => void mapQuery.reload(), MAP_POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [mapQuery.reload]);
 
   useEffect(() => {
     setSocketLive(isAdminRealtimeConnected());
@@ -371,6 +391,7 @@ export function ControlTowerBoard() {
       lat: r.lat,
       lng: r.lng,
       color: LEG_COLORS[legByRider.get(r.userId) ?? 'idle'],
+      title: `${r.name} — ${timeAgo(r.recordedAt)}`,
     }));
   }, [mapQuery.data]);
 

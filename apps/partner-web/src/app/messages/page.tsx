@@ -69,6 +69,7 @@ export default function MessagesPage() {
   const [error, setError] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadAbortRef = useRef<AbortController | null>(null);
 
   const myId = useMemo(() => {
     try {
@@ -120,6 +121,8 @@ export default function MessagesPage() {
     if (!file || !conversation) return;
     setPendingPreview(file.type.startsWith('image/') ? URL.createObjectURL(file) : file.name);
     setUploading(true);
+    const controller = new AbortController();
+    uploadAbortRef.current = controller;
     try {
       const form = new FormData();
       form.append('file', file);
@@ -129,12 +132,16 @@ export default function MessagesPage() {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: form,
+        signal: controller.signal,
       });
       const body = await res.json();
       if (!body.success) throw new Error(body.message ?? 'Upload failed');
       const att = body.data as MessageAttachment;
-      setPendingAttachment(att);
+      // The upload could have been cancelled (removePending) while this request was in flight —
+      // don't resurrect an attachment the user already dismissed.
+      if (uploadAbortRef.current === controller) setPendingAttachment(att);
     } catch (err) {
+      if (controller.signal.aborted) return;
       setError(err instanceof Error ? err.message : 'Upload failed');
       setPendingPreview(null);
     } finally {
@@ -154,6 +161,8 @@ export default function MessagesPage() {
   }, []);
 
   function removePending() {
+    uploadAbortRef.current?.abort();
+    uploadAbortRef.current = null;
     setPendingAttachment(null);
     if (pendingPreview?.startsWith('blob:')) URL.revokeObjectURL(pendingPreview);
     setPendingPreview(null);

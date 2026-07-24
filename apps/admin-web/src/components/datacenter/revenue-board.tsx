@@ -16,11 +16,6 @@ interface DailyPoint {
 }
 
 interface RevenueData {
-  today: number;
-  month: number;
-  todayOrders: number;
-  monthOrders: number;
-  allTimeCompleted: number;
   daily: DailyPoint[];
   byService: { service: string; revenue: number; count: number }[];
   week: {
@@ -34,7 +29,6 @@ interface RevenueData {
     avgOrderValue: number;
     avgPerDay: number;
   };
-  prevWeek: { revenue: number; orders: number };
   prevDaily: DailyPoint[];
   byBranch: { name: string; revenue: number; orders: number; avgOrderValue: number }[];
   byPayment: { method: string; amount: number; count: number }[];

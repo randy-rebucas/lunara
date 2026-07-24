@@ -68,7 +68,14 @@ export class PartnersService {
     Object.assign(partner.brandConfig, rest);
     if (colors) Object.assign(partner.brandConfig.colors, colors);
     if (fonts) Object.assign(partner.brandConfig.fonts, fonts);
-    await partner.save();
+    try {
+      await partner.save();
+    } catch (e) {
+      if ((e as { code?: number })?.code === 11000) {
+        throw new BadRequestException('That domain is already in use by another partner');
+      }
+      throw e;
+    }
     return { success: true, data: partner };
   }
 

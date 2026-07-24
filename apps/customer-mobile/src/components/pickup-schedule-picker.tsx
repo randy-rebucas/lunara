@@ -6,6 +6,7 @@ import {
   formatPickupSlotTimeWindow,
   isPickupSlotBookable,
   pickupSlotDayKey,
+  type BranchHoliday,
   type PickupSlot,
 } from '@lunara/utils';
 import { colors, radius, spacing } from '../theme';
@@ -15,6 +16,7 @@ interface PickupSchedulePickerProps {
   selectedStartAt: string;
   onSelectStartAt: (startAt: string) => void;
   dayCount?: number;
+  holidays?: BranchHoliday[];
 }
 
 export function PickupSchedulePicker({
@@ -22,10 +24,11 @@ export function PickupSchedulePicker({
   selectedStartAt,
   onSelectStartAt,
   dayCount = PICKUP_SCHEDULE_DAY_COUNT,
+  holidays = [],
 }: PickupSchedulePickerProps) {
   const scheduleDays = useMemo(
-    () => buildPickupScheduleDays(slots, new Date(), dayCount),
-    [slots, dayCount],
+    () => buildPickupScheduleDays(slots, new Date(), dayCount, holidays),
+    [slots, dayCount, holidays],
   );
 
   const [selectedDayKey, setSelectedDayKey] = useState('');
@@ -92,7 +95,11 @@ export function PickupSchedulePicker({
                 {day.monthLabel}
               </Text>
               {day.isToday ? <Text style={styles.dayToday}>Today</Text> : null}
-              {limited && !selected ? <Text style={styles.dayFull}>Full</Text> : null}
+              {day.holidayLabel ? (
+                <Text style={styles.dayFull}>Holiday</Text>
+              ) : limited && !selected ? (
+                <Text style={styles.dayFull}>Full</Text>
+              ) : null}
             </Pressable>
           );
         })}
@@ -103,7 +110,9 @@ export function PickupSchedulePicker({
           ? `Pickup time · ${selectedDay.weekday}, ${selectedDay.monthLabel} ${selectedDay.dayLabel}`
           : 'Pickup time'}
       </Text>
-      {timeSlots.length === 0 ? (
+      {selectedDay?.holidayLabel ? (
+        <Text style={styles.emptyText}>{selectedDay.holidayLabel}. Choose another day.</Text>
+      ) : timeSlots.length === 0 ? (
         <Text style={styles.emptyText}>No pickup windows on this day. Choose another day.</Text>
       ) : (
         timeSlots.map((slot) => {

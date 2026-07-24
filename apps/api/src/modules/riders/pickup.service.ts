@@ -123,35 +123,48 @@ export class PickupService {
       throw new BadRequestException('Go online to accept pickup jobs');
     }
 
-    const order = await this.orderModel.findById(orderId);
-    if (!order) throw new NotFoundException('Order not found');
-    if (order.dispatchStatus !== 'dispatched' || !order.branchId) {
+    const preCheck = await this.orderModel.findById(orderId);
+    if (!preCheck) throw new NotFoundException('Order not found');
+    if (preCheck.dispatchStatus !== 'dispatched' || !preCheck.branchId) {
       throw new BadRequestException('Order is not ready for rider pickup');
     }
-    if (!order.partnerAcceptedAt) {
+    if (!preCheck.partnerAcceptedAt) {
       throw new BadRequestException('Partner has not accepted this order yet');
     }
-    if (
-      (order.status !== OrderStatus.SHOP_ASSIGNED && order.status !== OrderStatus.CONFIRMED) ||
-      order.pickupRiderId
-    ) {
+
+    const customer = await this.userModel.findById(preCheck.customerId);
+    const now = new Date();
+    const verificationHint = phoneVerificationHint(customer?.phone);
+
+    // Atomic claim: the pickupRiderId:{$exists:false} filter is re-checked at write time so two
+    // riders accepting the same offer concurrently can't both pass a stale in-memory read.
+    const order = await this.orderModel.findOneAndUpdate(
+      {
+        _id: orderId,
+        status: { $in: [OrderStatus.SHOP_ASSIGNED, OrderStatus.CONFIRMED] },
+        pickupRiderId: { $exists: false },
+      },
+      {
+        $set: {
+          pickupRiderId: new Types.ObjectId(riderUserId),
+          status: OrderStatus.RIDER_ASSIGNED_PICKUP,
+          'pickup.acceptedAt': now,
+          'pickup.verificationHint': verificationHint,
+        },
+        $push: {
+          statusHistory: {
+            status: OrderStatus.RIDER_ASSIGNED_PICKUP,
+            timestamp: now,
+            note: 'Rider accepted pickup',
+            updatedBy: riderUserId,
+          },
+        },
+      },
+      { new: true },
+    );
+    if (!order) {
       throw new BadRequestException('Pickup no longer available');
     }
-
-    const customer = await this.userModel.findById(order.customerId);
-    const now = new Date();
-    order.pickupRiderId = new Types.ObjectId(riderUserId);
-    order.status = OrderStatus.RIDER_ASSIGNED_PICKUP;
-    if (!order.pickup) order.pickup = {};
-    order.pickup.acceptedAt = now;
-    order.pickup.verificationHint = phoneVerificationHint(customer?.phone);
-    order.statusHistory.push({
-      status: OrderStatus.RIDER_ASSIGNED_PICKUP,
-      timestamp: now,
-      note: 'Rider accepted pickup',
-      updatedBy: riderUserId,
-    });
-    await order.save();
 
     this.trackingGateway.emitOrderStatus(orderId, OrderStatus.RIDER_ASSIGNED_PICKUP);
     this.trackingGateway.emitOrderEvent(orderId, 'riderAssigned', {

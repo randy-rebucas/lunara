@@ -172,6 +172,7 @@ export function BranchAddressEditor({ value, onChange, resetKey }: BranchAddress
               className="input-field"
               value={value.line1}
               onChange={(e) => onChange({ ...value, line1: e.target.value })}
+              required
             />
           </div>
           <div>
@@ -180,6 +181,7 @@ export function BranchAddressEditor({ value, onChange, resetKey }: BranchAddress
               className="input-field"
               value={value.city}
               onChange={(e) => onChange({ ...value, city: e.target.value })}
+              required
             />
           </div>
           <div>
@@ -188,6 +190,7 @@ export function BranchAddressEditor({ value, onChange, resetKey }: BranchAddress
               className="input-field"
               value={value.province}
               onChange={(e) => onChange({ ...value, province: e.target.value })}
+              required
             />
           </div>
           <div>

@@ -294,7 +294,15 @@ export default function AdminRefundReviewPage() {
             type="button"
             disabled={loading || refund.status !== 'approved'}
             className="btn-primary btn-sm disabled:opacity-50"
-            onClick={() => review('process')}
+            onClick={() => {
+              if (
+                window.confirm(
+                  `Refund ${formatPeso(refund.approvedAmount ?? refund.requestedAmount)} to the customer's wallet? This moves real money and cannot be undone from this page.`,
+                )
+              ) {
+                void review('process');
+              }
+            }}
           >
             Process refund (wallet)
           </button>

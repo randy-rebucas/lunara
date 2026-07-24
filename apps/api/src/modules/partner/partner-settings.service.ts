@@ -43,7 +43,21 @@ export class PartnerSettingsService {
     return branch;
   }
 
-  private formatBranch(branch: BranchDocument) {
+  /** Holidays set directly on this branch, or inherited from the partner's main shop when this
+   * branch hasn't defined its own — mirrors BranchesService.resolveBranchHolidays for the customer
+   * side. Also reports whether the returned list is this branch's own or inherited, so the partner
+   * portal can label it correctly. */
+  private async resolveHolidaysForSettings(branch: BranchDocument) {
+    if (branch.holidays?.length) return { holidays: branch.holidays, inherited: false };
+    if (branch.isMainShop) return { holidays: [], inherited: false };
+    const mainShop = await this.branchModel
+      .findOne({ partnerUserId: branch.partnerUserId, isMainShop: true, isActive: true })
+      .lean();
+    return { holidays: mainShop?.holidays ?? [], inherited: true };
+  }
+
+  private async formatBranch(branch: BranchDocument) {
+    const { holidays, inherited } = await this.resolveHolidaysForSettings(branch);
     return {
       id: branch._id.toString(),
       code: branch.code,
@@ -52,6 +66,7 @@ export class PartnerSettingsService {
       city: branch.city,
       province: branch.province,
       isActive: branch.isActive,
+      isMainShop: branch.isMainShop,
       logoUrl: branch.logoUrl,
       maxActiveOrders: branch.maxActiveOrders,
       maxWeightCapacityKg: branch.maxWeightCapacityKg,
@@ -60,20 +75,38 @@ export class PartnerSettingsService {
       serviceRadiusKm: branch.serviceRadiusKm,
       operatingHours:
         branch.operatingHours?.length === 7 ? branch.operatingHours : DEFAULT_OPERATING_HOURS,
+      holidays,
+      holidaysInherited: inherited,
     };
   }
 
   async getSettings(userId: string, role: UserRole) {
     const branch = await this.resolveBranch(userId, role);
     const canEdit = role === UserRole.PARTNER || role === UserRole.ADMIN;
+    const settings = normalizePortalSettings(branch.toObject().portalSettings);
     return {
       success: true,
       data: {
-        branch: this.formatBranch(branch),
-        settings: normalizePortalSettings(branch.toObject().portalSettings),
+        branch: await this.formatBranch(branch),
+        // Payout details (bank/e-wallet account info) are only relevant to whoever can actually
+        // change them — staff have no need to see the shop owner's financial account numbers.
+        settings: canEdit ? settings : this.stripPayoutDetails(settings),
         canEdit,
       },
     };
+  }
+
+  private stripPayoutDetails(settings: PartnerPortalSettings): PartnerPortalSettings {
+    const {
+      payoutMethod: _payoutMethod,
+      gcashNumber: _gcashNumber,
+      mayaNumber: _mayaNumber,
+      bankName: _bankName,
+      bankAccountName: _bankAccountName,
+      bankAccountNumber: _bankAccountNumber,
+      ...rest
+    } = settings;
+    return rest as PartnerPortalSettings;
   }
 
   async updateSettings(userId: string, role: UserRole, dto: UpdatePartnerSettingsDto) {
@@ -86,7 +119,7 @@ export class PartnerSettingsService {
       throw new ForbiddenException("Cannot update another shop's settings");
     }
 
-    const { operatingHours, ...portalPatchRaw } = dto;
+    const { operatingHours, holidays, ...portalPatchRaw } = dto;
 
     // Strip undefined values from dto so unset optional fields don't overwrite existing settings
     const patch = Object.fromEntries(
@@ -104,12 +137,17 @@ export class PartnerSettingsService {
       branch.markModified('operatingHours');
     }
 
+    if (holidays) {
+      branch.holidays = holidays;
+      branch.markModified('holidays');
+    }
+
     await branch.save();
 
     return {
       success: true,
       data: {
-        branch: this.formatBranch(branch),
+        branch: await this.formatBranch(branch),
         settings: normalizePortalSettings(branch.toObject().portalSettings),
         canEdit: true,
       },
@@ -139,7 +177,7 @@ export class PartnerSettingsService {
 
     return {
       success: true,
-      data: { branch: this.formatBranch(branch) },
+      data: { branch: await this.formatBranch(branch) },
     };
   }
 
@@ -159,7 +197,7 @@ export class PartnerSettingsService {
 
     return {
       success: true,
-      data: { branch: this.formatBranch(branch) },
+      data: { branch: await this.formatBranch(branch) },
     };
   }
 }

@@ -122,17 +122,17 @@ export class OrdersController {
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
   markCustomerPickup(
     @Param('id') id: string,
-    @Req() req: { user: { sub: string } },
+    @Req() req: { user: { sub: string; role: UserRole } },
   ) {
-    return this.ordersService.markCustomerPickup(id, req.user.sub);
+    return this.ordersService.markCustomerPickup(id, req.user.sub, req.user.role);
   }
 
   @Post(':id/customer-pickup/complete')
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
   completeCustomerPickup(
     @Param('id') id: string,
-    @Req() req: { user: { sub: string } },
+    @Req() req: { user: { sub: string; role: UserRole } },
   ) {
-    return this.ordersService.completeCustomerPickup(id, req.user.sub);
+    return this.ordersService.completeCustomerPickup(id, req.user.sub, req.user.role);
   }
 }

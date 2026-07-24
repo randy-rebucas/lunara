@@ -70,7 +70,8 @@ export class AuditLogService {
       filter.createdAt = createdAt;
     }
     if (query.search) {
-      const re = new RegExp(query.search.trim(), 'i');
+      const escaped = query.search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(escaped, 'i');
       filter.$or = [{ actorEmail: re }, { action: re }, { path: re }];
     }
 

@@ -1,10 +1,10 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { UserRole } from '@lunara/types';
 import { BrandMark } from '../../components/ui/brand-mark';
-import { staffLogin } from '../../lib/partner-api';
+import { getPartnerToken, getPortalUser, staffLogin } from '../../lib/partner-api';
 
 const DEV_EMAIL = 'partner@lunara.dev';
 const DEV_PASSWORD = 'password123';
@@ -16,6 +16,12 @@ export default function PortalLoginPage() {
   const [password, setPassword] = useState(isDev ? DEV_PASSWORD : '');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!getPartnerToken()) return;
+    const user = getPortalUser();
+    router.replace(user?.role === UserRole.STAFF ? '/orders' : '/');
+  }, [router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

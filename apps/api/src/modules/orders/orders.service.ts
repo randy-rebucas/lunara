@@ -8,10 +8,12 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { BookingType, OrderStatus, PaymentMethod, PaymentStatus, UserRole } from '@lunara/types';
 import {
+  BranchPricingMode,
   buildPartnerCoverageNotice,
   canTransitionOrderStatus,
   isPaymongoMethod,
   type PartnerCoverageInfo,
+  type PricingModeRates,
 } from '@lunara/utils';
 import { BranchesService } from '../branches/branches.service';
 import { RiderAssignmentService } from '../riders/rider-assignment.service';
@@ -47,6 +49,8 @@ export interface BookingOrderPayload {
   scheduledDeliveryAt?: string;
   couponCode?: string;
   estimatedWeightKg: number;
+  estimatedLoadCount?: number;
+  estimatedPieceCount?: number;
   bagSizeId?: string;
   bagSizeLabel?: string;
   addons: { id: string; label: string; price: number }[];
@@ -60,6 +64,8 @@ export interface BookingOrderPayload {
   partnerId?: string;
   baseSubtotal?: number;
   pricingModel?: 'shop_markup' | 'commission';
+  pricingMode?: BranchPricingMode;
+  pricingSnapshot?: PricingModeRates;
 }
 
 @Injectable()
@@ -189,6 +195,8 @@ export class OrdersService {
         ? new Date(payload.scheduledDeliveryAt)
         : undefined,
       estimatedWeightKg: payload.estimatedWeightKg,
+      estimatedLoadCount: payload.estimatedLoadCount,
+      estimatedPieceCount: payload.estimatedPieceCount,
       bagSizeId: payload.bagSizeId,
       bagSizeLabel: payload.bagSizeLabel,
       addons: payload.addons,
@@ -200,6 +208,8 @@ export class OrdersService {
       total: payload.total,
       baseSubtotal: payload.baseSubtotal,
       pricingModel: payload.pricingModel,
+      pricingMode: payload.pricingMode ?? BranchPricingMode.FLAT_BAG,
+      pricingSnapshot: payload.pricingSnapshot,
       statusHistory: [{ status: OrderStatus.PENDING, timestamp: new Date() }],
     });
 
@@ -436,9 +446,14 @@ export class OrdersService {
     return { success: true, data: updated };
   }
 
-  async markCustomerPickup(id: string, updatedBy: string) {
+  async markCustomerPickup(id: string, updatedBy: string, role: UserRole) {
     const order = await this.orderModel.findById(id);
     if (!order) throw new NotFoundException('Order not found');
+
+    if (role === UserRole.PARTNER || role === UserRole.STAFF) {
+      const staffBranchId = await resolvePortalBranchId(this.userModel, updatedBy, role);
+      assertOrderPortalAccess(order, updatedBy, role, staffBranchId);
+    }
 
     if (order.status !== OrderStatus.READY_FOR_DELIVERY) {
       throw new BadRequestException(
@@ -461,9 +476,14 @@ export class OrdersService {
     return { success: true, data: await this.orderModel.findById(id) };
   }
 
-  async completeCustomerPickup(id: string, updatedBy: string) {
+  async completeCustomerPickup(id: string, updatedBy: string, role: UserRole) {
     const order = await this.orderModel.findById(id);
     if (!order) throw new NotFoundException('Order not found');
+
+    if (role === UserRole.PARTNER || role === UserRole.STAFF) {
+      const staffBranchId = await resolvePortalBranchId(this.userModel, updatedBy, role);
+      assertOrderPortalAccess(order, updatedBy, role, staffBranchId);
+    }
 
     if (order.status !== OrderStatus.CUSTOMER_PICKUP) {
       throw new BadRequestException(

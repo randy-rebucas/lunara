@@ -42,6 +42,14 @@ interface OrderDetail {
   bookingType: string;
   estimatedWeightKg?: number;
   bagSizeLabel?: string;
+  /** How the base service is billed — 'flat_bag' (or unset) orders are final at booking time;
+   * other modes are estimated until the shop confirms actual weight/load/piece count. */
+  pricingMode?: string;
+  finalTotal?: number;
+  finalServiceSubtotal?: number;
+  /** Booking-time estimate, snapshotted right before `total` is overwritten with the finalized
+   * amount — use this (not `total`) to show "was estimated at ₱X" once finalized. */
+  estimatedTotal?: number;
   scheduledPickupAt?: string;
   branchName?: string;
   branchCode?: string;
@@ -89,6 +97,8 @@ export default function OrderTrackScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [verifyCode, setVerifyCode] = useState('');
   const [signatureName, setSignatureName] = useState('');
+  const [verifying, setVerifying] = useState(false);
+  const [signing, setSigning] = useState(false);
   const [deliveryError, setDeliveryError] = useState('');
   const [loadError, setLoadError] = useState('');
   const [pageLoading, setPageLoading] = useState(true);
@@ -197,8 +207,9 @@ export default function OrderTrackScreen() {
   }
 
   async function handleVerify() {
-    if (!id) return;
+    if (!id || verifying) return;
     setDeliveryError('');
+    setVerifying(true);
     try {
       await apiFetch(`/orders/${id}/delivery/verify`, {
         method: 'POST',
@@ -209,17 +220,20 @@ export default function OrderTrackScreen() {
       pushNotification('Delivery verified');
     } catch (e) {
       setDeliveryError(e instanceof Error ? e.message : 'Verification failed');
+    } finally {
+      setVerifying(false);
     }
   }
 
   async function handleSign(nameOverride?: string) {
-    if (!id) return;
+    if (!id || signing) return;
     const name = (nameOverride ?? signatureName).trim();
     if (name.length < 2) {
       setDeliveryError('Enter your name (min 2 characters) to sign.');
       return;
     }
     setDeliveryError('');
+    setSigning(true);
     try {
       await apiFetch(`/orders/${id}/delivery/sign`, {
         method: 'POST',
@@ -229,6 +243,8 @@ export default function OrderTrackScreen() {
       pushNotification('Delivery signed');
     } catch (e) {
       setDeliveryError(e instanceof Error ? e.message : 'Sign failed');
+    } finally {
+      setSigning(false);
     }
   }
 
@@ -302,6 +318,8 @@ export default function OrderTrackScreen() {
   const isCashPending =
     order.paymentMethod === PaymentMethod.CASH &&
     order.paymentStatus === PaymentStatus.PENDING;
+  const isPriceFinalized = order.pricingMode !== undefined && order.pricingMode !== 'flat_bag';
+  const displayTotal = isPriceFinalized && order.finalTotal != null ? order.finalTotal : order.total;
 
   return (
     <KeyboardSafeScrollView
@@ -332,7 +350,8 @@ export default function OrderTrackScreen() {
         <View style={styles.metaRow}>
           <Ionicons name="pricetag-outline" size={13} color={colors.mutedForeground} />
           <Text style={styles.meta}>
-            {order.bookingType.replace(/_/g, ' ')} · {formatCurrency(order.total)}
+            {order.bookingType.replace(/_/g, ' ')} · {formatCurrency(displayTotal)}
+            {isPriceFinalized && order.finalTotal == null ? ' (estimated)' : ''}
             {order.bagSizeLabel
               ? ` · ${order.bagSizeLabel} bag`
               : order.estimatedWeightKg
@@ -340,6 +359,17 @@ export default function OrderTrackScreen() {
                 : ''}
           </Text>
         </View>
+        {isPriceFinalized && order.finalTotal == null ? (
+          <Text style={styles.estimateNote}>
+            Estimated total — we&apos;ll confirm the final price once the shop weighs your order.
+          </Text>
+        ) : null}
+        {isPriceFinalized && order.finalTotal != null ? (
+          <Text style={styles.estimateNote}>
+            Final price confirmed by the shop (was estimated at{' '}
+            {formatCurrency(order.estimatedTotal ?? order.total)}).
+          </Text>
+        ) : null}
 
         <View style={styles.progressTrack}>
           <View style={[styles.progressFill, { width: `${timeline.progressPercent}%` }]} />
@@ -494,7 +524,12 @@ export default function OrderTrackScreen() {
             value={verifyCode}
             onChangeText={setVerifyCode}
           />
-          <Button label="Verify" onPress={handleVerify} style={styles.actionBtn} />
+          <Button
+            label={verifying ? 'Verifying…' : 'Verify'}
+            onPress={handleVerify}
+            disabled={verifying}
+            style={styles.actionBtn}
+          />
         </Card>
       )}
 
@@ -517,7 +552,12 @@ export default function OrderTrackScreen() {
               value={signatureName}
               onChangeText={setSignatureName}
             />
-            <Button label="Sign" onPress={() => handleSign()} style={styles.actionBtn} />
+            <Button
+              label={signing ? 'Signing…' : 'Sign'}
+              onPress={() => handleSign()}
+              disabled={signing}
+              style={styles.actionBtn}
+            />
 
             {accountName ? (
               <View style={styles.orRow}>
@@ -531,6 +571,7 @@ export default function OrderTrackScreen() {
               <Pressable
                 style={styles.tapToSignRow}
                 onPress={() => handleSign(accountName)}
+                disabled={signing}
                 accessibilityRole="button"
                 accessibilityLabel={`Tap to sign as ${accountName}`}
               >
@@ -722,6 +763,7 @@ const styles = StyleSheet.create({
   live: { fontSize: 11, fontWeight: '700', color: colors.accentDark },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.lg },
   meta: { color: colors.muted, fontSize: 13, textTransform: 'capitalize' },
+  estimateNote: { color: colors.muted, fontSize: 12, marginTop: spacing.xs },
   progressTrack: {
     marginTop: spacing.md,
     height: 8,

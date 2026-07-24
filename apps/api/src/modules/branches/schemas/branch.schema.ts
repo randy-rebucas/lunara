@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { BookingType } from '@lunara/types';
-import { DEFAULT_OPERATING_HOURS } from '@lunara/utils';
+import { BranchPricingMode, DEFAULT_OPERATING_HOURS } from '@lunara/utils';
 import { HydratedDocument, Types } from 'mongoose';
 
 export type BranchDocument = HydratedDocument<Branch>;
@@ -84,6 +84,16 @@ export class DayOperatingHours {
 }
 
 @Schema({ _id: false })
+export class BranchHoliday {
+  /** ISO date (YYYY-MM-DD), no time component — shop is fully closed this calendar day. */
+  @Prop({ required: true })
+  date!: string;
+
+  @Prop()
+  label?: string;
+}
+
+@Schema({ _id: false })
 class BranchMachine {
   @Prop({ required: true })
   id!: string;
@@ -101,14 +111,29 @@ class BranchMachine {
   capacityKg!: number;
 }
 
+export { BranchPricingMode };
+
 @Schema({ _id: false })
 class BranchServicePrice {
   @Prop({ required: true, enum: BookingType })
   serviceType!: BookingType;
 
-  /** Shop's own price per kg, before Lunara's customer-facing markup. */
-  @Prop({ required: true, min: 0 })
-  basePricePerKg!: number;
+  /** Shop's own price per kg, before Lunara's customer-facing markup. Used when pricingMode = PER_KG. */
+  @Prop({ min: 0 })
+  basePricePerKg?: number;
+
+  /** Shop's own price per load, before Lunara's customer-facing markup. Used when pricingMode = PER_LOAD. */
+  @Prop({ min: 0 })
+  basePricePerLoad?: number;
+
+  /** Shop's own price per piece, before Lunara's customer-facing markup. Used when pricingMode = PER_PIECE. */
+  @Prop({ min: 0 })
+  basePricePerPiece?: number;
+
+  /** How this specific service bills the customer. Falls back to the branch-level `pricingMode`
+   * when unset, so branches configured before per-service units existed keep working unchanged. */
+  @Prop({ enum: BranchPricingMode })
+  pricingUnit?: BranchPricingMode;
 }
 
 @Schema({ _id: false })
@@ -117,9 +142,27 @@ class BranchAddonPrice {
   @Prop({ required: true })
   addonSlug!: string;
 
-  /** Shop's own add-on price, before Lunara's customer-facing markup. */
+  /** Shop's own add-on price, before Lunara's customer-facing markup. Flat total when
+   * pricingUnit is FLAT_BAG (or unset). */
   @Prop({ required: true, min: 0 })
   basePrice!: number;
+
+  /** Shop's own add-on price per kg, before markup. Used when pricingUnit = PER_KG. */
+  @Prop({ min: 0 })
+  basePricePerKg?: number;
+
+  /** Shop's own add-on price per machine load, before markup. Used when pricingUnit = PER_LOAD. */
+  @Prop({ min: 0 })
+  basePricePerLoad?: number;
+
+  /** Shop's own add-on price per piece, before markup. Used when pricingUnit = PER_PIECE. */
+  @Prop({ min: 0 })
+  basePricePerPiece?: number;
+
+  /** How this add-on bills the customer — flat per order, or scaled by weight/load/piece count.
+   * Falls back to FLAT_BAG (today's behavior) when unset. */
+  @Prop({ enum: BranchPricingMode })
+  pricingUnit?: BranchPricingMode;
 }
 
 @Schema({ timestamps: true, collection: 'branches' })
@@ -190,7 +233,11 @@ export class Branch {
   @Prop({ default: 0.20, min: 0, max: 1 })
   commissionRate!: number;
 
-  /** This shop's own price per kg per service; falls back to the global catalog price when a type is missing. */
+  /** How this shop bills the customer for the base laundry service. Defaults to the platform-wide flat bag pricing. */
+  @Prop({ default: BranchPricingMode.FLAT_BAG, enum: BranchPricingMode })
+  pricingMode!: BranchPricingMode;
+
+  /** This shop's own price per kg/load per service; falls back to the global catalog price when a type is missing. */
   @Prop({ type: [BranchServicePrice], default: [] })
   servicePricing!: BranchServicePrice[];
 
@@ -212,6 +259,13 @@ export class Branch {
   /** Weekly schedule, index = JS `Date.getDay()` (0 = Sunday … 6 = Saturday). Defaults to every day 8AM–5PM. */
   @Prop({ type: [DayOperatingHours], default: () => DEFAULT_OPERATING_HOURS.map((d) => ({ ...d })) })
   operatingHours!: DayOperatingHours[];
+
+  /** One-off closed dates (holidays), set per-partner on their main shop and inherited by every
+   * branch under that partner unless a branch defines its own (see resolveBranchHolidays in
+   * branches.service.ts). Only meaningful when set on the main shop — sub-branches may still set
+   * their own to override the inherited list entirely. */
+  @Prop({ type: [BranchHoliday], default: [] })
+  holidays!: BranchHoliday[];
 
   @Prop({
     type: { type: String, enum: ['Point'], default: 'Point' },

@@ -20,10 +20,18 @@ export async function fetchOnboardingStatus(
   return apiFetch<OnboardingStatus>('/customers/me/onboarding');
 }
 
+/** Never throws — a failed onboarding-status check must not surface as a login/signup failure
+ * (the auth call it follows already succeeded and persisted tokens by this point) or as an
+ * unhandled rejection from the app-start redirect in `_layout.tsx`. Falls back to the tabs root,
+ * where deeper checks can still catch an incomplete profile/address on the next screen. */
 export async function redirectAfterAuth(
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>,
   router: Pick<Router, 'replace'>,
 ) {
-  const status = await fetchOnboardingStatus(apiFetch);
-  router.replace(getOnboardingPath(status));
+  try {
+    const status = await fetchOnboardingStatus(apiFetch);
+    router.replace(getOnboardingPath(status));
+  } catch {
+    router.replace('/(tabs)');
+  }
 }

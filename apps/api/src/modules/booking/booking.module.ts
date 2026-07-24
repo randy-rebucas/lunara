@@ -5,6 +5,7 @@ import { OrdersModule } from '../orders/orders.module';
 import { CatalogModule } from '../catalog/catalog.module';
 import { PromotionsModule } from '../promotions/promotions.module';
 import { SettingsModule } from '../settings/settings.module';
+import { ServiceAreasModule } from '../service-areas/service-areas.module';
 import { BookingController } from './booking.controller';
 import { BookingService } from './booking.service';
 
@@ -16,6 +17,7 @@ import { BookingService } from './booking.service';
     CatalogModule,
     PromotionsModule,
     SettingsModule,
+    ServiceAreasModule,
   ],
   controllers: [BookingController],
   providers: [BookingService],

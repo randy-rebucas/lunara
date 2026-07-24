@@ -153,6 +153,7 @@ export function PromotionsBoard() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   // Create form state
   const [code, setCode]                             = useState('');
@@ -257,11 +258,14 @@ export function PromotionsBoard() {
 
   async function toggleActive(p: Promotion) {
     setActionError('');
+    setTogglingId(p._id);
     try {
       await adminFetch(`/admin/promotions/${p._id}`, { method: 'PATCH', body: JSON.stringify({ isActive: !p.isActive }) });
       await reload();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Failed to update promotion');
+    } finally {
+      setTogglingId(null);
     }
   }
 
@@ -612,9 +616,10 @@ export function PromotionsBoard() {
                     <button
                       type="button"
                       className="btn-outline btn-sm flex-1"
+                      disabled={togglingId === selected._id}
                       onClick={() => void toggleActive(selected)}
                     >
-                      {selected.isActive ? 'Deactivate' : 'Activate'}
+                      {togglingId === selected._id ? 'Saving…' : selected.isActive ? 'Deactivate' : 'Activate'}
                     </button>
                     <Link
                       href={`/orders?search=${encodeURIComponent(selected.code)}`}

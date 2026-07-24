@@ -146,6 +146,15 @@ export function NotificationsBoard() {
   async function send(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim() || !body.trim()) return;
+    const reachLabel =
+      selectedReach != null ? `${selectedReach.toLocaleString()} device${selectedReach === 1 ? '' : 's'}` : 'an unknown number of devices';
+    if (
+      !window.confirm(
+        `Send this push notification to ${selectedOption?.label} (${reachLabel})? This can't be recalled once sent.`,
+      )
+    ) {
+      return;
+    }
     setSending(true);
     setActionError('');
     try {

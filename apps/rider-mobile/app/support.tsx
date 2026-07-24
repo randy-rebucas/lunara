@@ -196,7 +196,7 @@ export default function SupportScreen() {
   }
 
   function callDispatch() {
-    void Linking.openURL('tel:+63281234567');
+    void Linking.openURL(`tel:${appConfig.supportPhone}`);
   }
 
   return (

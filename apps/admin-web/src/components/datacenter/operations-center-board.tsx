@@ -572,6 +572,10 @@ export function OperationsCenterBoard() {
               <div className="dc-panel-body">
                 <p className="dc-value">{formatPeso(data.revenue.week, true)}</p>
                 <p className="dc-sublabel mb-2">completed order revenue this week</p>
+                <p className="text-xs text-muted mb-2">
+                  Month to date: <span className="font-semibold text-slate-900">{formatPeso(data.revenue.month, true)}</span>{' '}
+                  across {data.revenue.monthOrders.toLocaleString()} order{data.revenue.monthOrders === 1 ? '' : 's'}
+                </p>
                 <RevenueBarChart data={data.revenueDaily} />
               </div>
             </section>

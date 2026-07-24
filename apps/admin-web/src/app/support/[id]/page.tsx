@@ -369,12 +369,19 @@ export default function SupportTicketInvestigationPage() {
                 type="button"
                 disabled={loading || !!ticket.compensationCreditedAt}
                 className="btn-primary btn-sm disabled:opacity-50"
-                onClick={() =>
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      `Credit ${formatPeso(Number(compensationAmount))} to the customer's wallet? This cannot be undone.`,
+                    )
+                  ) {
+                    return;
+                  }
                   investigate('compensate', {
                     outcome: 'compensated',
                     compensationAmount: Number(compensationAmount),
-                  })
-                }
+                  });
+                }}
               >
                 Credit wallet ({formatPeso(Number(compensationAmount))})
               </button>

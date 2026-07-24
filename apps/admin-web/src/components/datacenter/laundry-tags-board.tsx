@@ -124,19 +124,15 @@ export function LaundryTagsBoard() {
   const [previewTag, setPreviewTag]   = useState<LaundryTag | null>(null);
 
   const load = useCallback(async () => {
-    const pageSize = 200;
-    const all: LaundryTag[] = [];
-    for (let page = 1; ; page++) {
-      const data = await adminFetch<{ items: LaundryTag[]; total: number }>(
-        `/laundry-tags?limit=${pageSize}&page=${page}`,
-      );
-      all.push(...data.items);
-      if (all.length >= data.total || data.items.length === 0) break;
-    }
-    return all;
-  }, []);
+    const params = new URLSearchParams();
+    if (statusFilter) params.set('status', statusFilter);
+    params.set('limit', String(limit));
+    return adminFetch<{ items: LaundryTag[]; total: number; statusCounts: Record<string, number> }>(
+      `/laundry-tags?${params}`,
+    );
+  }, [statusFilter, limit]);
 
-  const { data: items, loading, error, reload } = useAdminQuery(load, []);
+  const { data, loading, error, reload } = useAdminQuery(load, [statusFilter, limit]);
 
   const [socketLive, setSocketLive] = useState(false);
   useAdminOperationsSocket({
@@ -150,21 +146,16 @@ export function LaundryTagsBoard() {
     return () => clearInterval(id);
   }, []);
 
-  const tags = useMemo(() => items ?? [], [items]);
-  const { availableCount, assignedCount, retiredCount } = useMemo(
-    () => ({
-      availableCount: tags.filter((t) => t.status === 'available').length,
-      assignedCount: tags.filter((t) => t.status === 'assigned').length,
-      retiredCount: tags.filter((t) => t.status === 'retired').length,
-    }),
-    [tags],
-  );
+  const tags = useMemo(() => data?.items ?? [], [data]);
+  const statusCounts = data?.statusCounts ?? {};
+  const availableCount = statusCounts.available ?? 0;
+  const assignedCount = statusCounts.assigned ?? 0;
+  const retiredCount = statusCounts.retired ?? 0;
 
-  const filteredTags = useMemo(() => {
-    let list = tags;
-    if (statusFilter) list = list.filter((t) => t.status === statusFilter);
-    return filterBySearch(list, search, [(t) => t.code, (t) => t.batchId]).slice(0, limit);
-  }, [tags, statusFilter, search, limit]);
+  const filteredTags = useMemo(
+    () => filterBySearch(tags, search, [(t) => t.code, (t) => t.batchId]),
+    [tags, search],
+  );
 
   async function generateBatch(e: React.FormEvent) {
     e.preventDefault();
@@ -239,14 +230,14 @@ export function LaundryTagsBoard() {
       {error       && <div className="alert-error mb-4" role="alert">{error}</div>}
       {actionError && <div className="alert-error mb-4" role="alert">{actionError}</div>}
 
-      {loading && !items && (
+      {loading && !data && (
         <div className="flex items-center gap-3 py-8 text-sm text-muted">
           <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary/30 border-t-primary" aria-hidden />
           Loading tags…
         </div>
       )}
 
-      {items && (
+      {data && (
         <div className="space-y-3">
           <div className="grid grid-cols-3 gap-3">
             <StatTile
@@ -278,7 +269,7 @@ export function LaundryTagsBoard() {
             searchPlaceholder="Tag code, batch id…"
             limit={limit}
             onLimitChange={setLimit}
-            total={tags.length}
+            total={data.total}
             filtered={filteredTags.length}
             filterValue={statusFilter}
             onFilterChange={setStatusFilter}
@@ -291,7 +282,7 @@ export function LaundryTagsBoard() {
               <div>
                 <h2 className="text-sm font-semibold text-slate-900">Tag pool</h2>
                 <p className="text-xs text-muted">
-                  Showing {filteredTags.length} of {tags.length} tags
+                  Showing {filteredTags.length} of {data.total} tags
                 </p>
               </div>
               <a href="#tag-generate" className="link-primary text-xs font-medium">Generate batch →</a>
@@ -329,7 +320,7 @@ export function LaundryTagsBoard() {
                               t.status === 'available'
                                 ? 'badge-accent'
                                 : t.status === 'assigned'
-                                  ? 'badge-neutral'
+                                  ? 'badge-primary'
                                   : 'badge-neutral'
                             }
                           >

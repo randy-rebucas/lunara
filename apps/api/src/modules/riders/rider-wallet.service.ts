@@ -651,10 +651,32 @@ export class RiderWalletService {
       throw new BadRequestException('Invalid remittance mode');
     }
     const riderObjectId = new Types.ObjectId(riderUserId);
-    const items = await this.remittanceModel.find({
+    const candidates = await this.remittanceModel.find({
       riderUserId: riderObjectId,
       status: 'pending',
     });
+    if (candidates.length === 0) throw new NotFoundException('No pending cash remittances to submit');
+
+    // Atomic per-item claim: two overlapping submitRemittance calls (double-tap, a retried request
+    // after a client timeout) must not both process the same remittance — that would double the
+    // full_amount wallet credit-back and ledger topup below. Each findOneAndUpdate re-checks
+    // status:'pending' at write time, so only one caller can win a given item.
+    const claimed = await Promise.all(
+      candidates.map((item) =>
+        this.remittanceModel.findOneAndUpdate(
+          { _id: item._id, status: 'pending' },
+          {
+            status: 'submitted',
+            submittedAt: new Date(),
+            remittanceMode: mode,
+            ...(proofImageUrl && { proofImageUrl }),
+            ...(transactionId && { transactionId }),
+          },
+          { new: true },
+        ),
+      ),
+    );
+    const items = claimed.filter((item): item is NonNullable<typeof item> => item !== null);
     if (items.length === 0) throw new NotFoundException('No pending cash remittances to submit');
 
     // Declared here rather than at collection, because collection happens mid-task before the
@@ -704,17 +726,6 @@ export class RiderWalletService {
         );
       }
     }
-
-    await this.remittanceModel.updateMany(
-      { _id: { $in: items.map((i) => i._id) } },
-      {
-        status: 'submitted',
-        submittedAt: new Date(),
-        remittanceMode: mode,
-        ...(proofImageUrl && { proofImageUrl }),
-        ...(transactionId && { transactionId }),
-      },
-    );
 
     const totalRemitted = items.reduce(
       (s, r) => s + (mode === 'full_amount' ? r.cashAmount : r.netRemittance),

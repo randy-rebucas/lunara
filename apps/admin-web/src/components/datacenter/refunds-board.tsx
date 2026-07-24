@@ -207,8 +207,6 @@ export function RefundsBoard() {
   const [page, setPage] = useState(1);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [paymentInfo, setPaymentInfo] = useState<RefundPaymentInfo | null>(null);
-  const [paymentInfoLoading, setPaymentInfoLoading] = useState(false);
 
   const load = useCallback(async () => {
     const data = await adminFetch<{ items: RefundRow[]; counts: RefundCounts }>('/admin/refunds');
@@ -291,28 +289,14 @@ export function RefundsBoard() {
     [items, selectedId],
   );
 
-  useEffect(() => {
-    if (!selected) {
-      setPaymentInfo(null);
-      return;
-    }
-    let cancelled = false;
-    setPaymentInfoLoading(true);
-    setPaymentInfo(null);
-    adminFetch<{ payment: { method: string; receiptCode?: string } | null }>(`/admin/refunds/${selected._id}`)
-      .then((res) => {
-        if (!cancelled) setPaymentInfo(res.payment ? { method: res.payment.method, receiptCode: res.payment.receiptCode } : null);
-      })
-      .catch(() => {
-        if (!cancelled) setPaymentInfo(null);
-      })
-      .finally(() => {
-        if (!cancelled) setPaymentInfoLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+  const loadPaymentInfo = useCallback(async (): Promise<RefundPaymentInfo | null> => {
+    if (!selected) return null;
+    const res = await adminFetch<{ payment: { method: string; receiptCode?: string } | null }>(
+      `/admin/refunds/${selected._id}`,
+    );
+    return res.payment ? { method: res.payment.method, receiptCode: res.payment.receiptCode } : null;
   }, [selected]);
+  const { data: paymentInfo, loading: paymentInfoLoading } = useAdminQuery(loadPaymentInfo, [selected?._id]);
 
   const queueValue = useMemo(
     () =>
@@ -331,12 +315,17 @@ export function RefundsBoard() {
     ? lastUpdated.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : '—';
 
+  // Tab badges use the server-computed, uncapped counts (same source as the stat tiles above)
+  // wherever available, rather than re-deriving from `items` — the list endpoint caps `items`
+  // to the 100 most-recently-updated refunds, so a client-side count would silently disagree
+  // with the accurate "Total refunds"/"Needs review" stat tiles once total volume exceeds 100.
+  // "Closed" has no server-side count field yet, so it's still derived from the capped window.
   const STATUS_TABS: { id: StatusTab; label: string; count: number }[] = [
-    { id: 'all', label: 'All refunds', count: items.length },
-    { id: 'needs_review', label: 'Needs review', count: items.filter(needsReview).length },
-    { id: 'approved', label: 'Approved', count: items.filter((r) => r.status === 'approved').length },
-    { id: 'processed', label: 'Processed', count: items.filter((r) => r.status === 'processed').length },
-    { id: 'rejected', label: 'Rejected', count: items.filter((r) => r.status === 'rejected').length },
+    { id: 'all', label: 'All refunds', count: counts.total },
+    { id: 'needs_review', label: 'Needs review', count: counts.pending + counts.underReview },
+    { id: 'approved', label: 'Approved', count: counts.approved },
+    { id: 'processed', label: 'Processed', count: counts.processed },
+    { id: 'rejected', label: 'Rejected', count: counts.rejected },
     { id: 'closed', label: 'Closed', count: items.filter((r) => r.status === 'closed').length },
   ];
 
@@ -382,7 +371,6 @@ export function RefundsBoard() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="badge-neutral">Polling</span>
             <span className="dc-sublabel tabular-nums" title="Last data refresh">Updated {updatedLabel}</span>
             <button type="button" className="btn-outline btn-sm" onClick={() => void reload()} disabled={loading}>
               {loading ? 'Syncing…' : 'Sync'}

@@ -190,15 +190,17 @@ export class LaundryTagsService {
   }
 
   async listTags(query: QueryTagsDto, actor: { sub: string; role: PortalRole }) {
-    const filter: Record<string, unknown> = {};
-    if (query.status) filter.status = query.status;
-    if (query.batchId) filter.batchId = query.batchId;
+    // Scoping filter (branch access + batchId) shared between the paginated item
+    // query and the status-count aggregate — `status` is deliberately excluded here
+    // so the counts always reflect the full scoped pool, not just the current filter.
+    const scopeFilter: Record<string, unknown> = {};
+    if (query.batchId) scopeFilter.batchId = query.batchId;
 
     if (actor.role === UserRole.STAFF) {
       // Staff are locked to their own branch regardless of what branchId (if any) was requested.
       const staffBranchId = await resolvePortalBranchId(this.userModel, actor.sub, actor.role);
-      if (!staffBranchId) return { items: [], total: 0 };
-      filter.branchId = staffBranchId;
+      if (!staffBranchId) return { items: [], total: 0, statusCounts: {} };
+      scopeFilter.branchId = staffBranchId;
     } else if (actor.role === UserRole.PARTNER) {
       // Partners see tags across whichever branches they own; a requested branchId narrows
       // that set further but can never widen it to another partner's branch.
@@ -207,29 +209,42 @@ export class LaundryTagsService {
       ).map((b) => b._id);
       if (query.branchId) {
         const requested = new Types.ObjectId(query.branchId);
-        if (!ownedBranchIds.some((id) => id.equals(requested))) return { items: [], total: 0 };
-        filter.branchId = requested;
+        if (!ownedBranchIds.some((id) => id.equals(requested))) {
+          return { items: [], total: 0, statusCounts: {} };
+        }
+        scopeFilter.branchId = requested;
       } else {
-        filter.branchId = { $in: ownedBranchIds };
+        scopeFilter.branchId = { $in: ownedBranchIds };
       }
     } else if (query.branchId) {
       // ADMIN — free to filter by any branch.
-      filter.branchId = new Types.ObjectId(query.branchId);
+      scopeFilter.branchId = new Types.ObjectId(query.branchId);
     }
+
+    const filter = query.status ? { ...scopeFilter, status: query.status } : scopeFilter;
 
     const page = query.page ?? 1;
     const limit = query.limit ?? 50;
 
-    const [items, total] = await Promise.all([
+    const [items, total, statusCounts] = await Promise.all([
       this.tagModel
         .find(filter)
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit),
       this.tagModel.countDocuments(filter),
+      this.tagStatusCounts(scopeFilter),
     ]);
 
-    return { items, total };
+    return { items, total, statusCounts };
+  }
+
+  private async tagStatusCounts(scopeFilter: Record<string, unknown>) {
+    const grouped = await this.tagModel.aggregate([
+      { $match: scopeFilter },
+      { $group: { _id: '$status', count: { $sum: 1 } } },
+    ]);
+    return Object.fromEntries(grouped.map((g) => [g._id, g.count])) as Record<string, number>;
   }
 
   async getById(tagId: string): Promise<LaundryTagDocument> {

@@ -30,27 +30,41 @@ interface AuthStore {
   apiUpload: <T>(path: string, formData: FormData) => Promise<T>;
 }
 
+/** On a 401 with a refresh function available, try refreshing once and retrying the original
+ * request before giving up — mirrors customer-web's AuthProvider, which transparently refreshes
+ * instead of forcing a re-login every time the (7-day) access token expires despite a still-valid
+ * 30-day refresh token sitting unused. */
 async function authRequest<T>(
   path: string,
   init?: RequestInit,
   token?: string | null,
   onUnauthorized?: () => void,
+  refreshAndGetToken?: () => Promise<string | null>,
 ): Promise<T> {
   const baseUrl = getApiV1BaseUrl();
   const partnerId = getPartnerId();
-  let res: Response;
-  try {
-    res = await fetch(`${baseUrl}${path}`, {
-      ...init,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(partnerId ? { 'x-lunara-partner-id': partnerId } : {}),
-        ...(init?.headers ?? {}),
-      },
-    });
-  } catch {
-    throw new Error(apiUnreachableMessage(baseUrl));
+  const doFetch = async (accessToken?: string | null) => {
+    try {
+      return await fetch(`${baseUrl}${path}`, {
+        ...init,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          ...(partnerId ? { 'x-lunara-partner-id': partnerId } : {}),
+          ...(init?.headers ?? {}),
+        },
+      });
+    } catch {
+      throw new Error(apiUnreachableMessage(baseUrl));
+    }
+  };
+
+  let res = await doFetch(token);
+  if (res.status === 401 && token && refreshAndGetToken) {
+    const refreshed = await refreshAndGetToken().catch(() => null);
+    if (refreshed) {
+      res = await doFetch(refreshed);
+    }
   }
   const body = await res.json();
   if (res.status === 401 && token) {
@@ -68,21 +82,31 @@ async function authUpload<T>(
   formData: FormData,
   token?: string | null,
   onUnauthorized?: () => void,
+  refreshAndGetToken?: () => Promise<string | null>,
 ): Promise<T> {
   const baseUrl = getApiV1BaseUrl();
   const partnerId = getPartnerId();
-  let res: Response;
-  try {
-    res = await fetch(`${baseUrl}${path}`, {
-      method: 'POST',
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(partnerId ? { 'x-lunara-partner-id': partnerId } : {}),
-      },
-      body: formData,
-    });
-  } catch {
-    throw new Error(apiUnreachableMessage(baseUrl));
+  const doFetch = async (accessToken?: string | null) => {
+    try {
+      return await fetch(`${baseUrl}${path}`, {
+        method: 'POST',
+        headers: {
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          ...(partnerId ? { 'x-lunara-partner-id': partnerId } : {}),
+        },
+        body: formData,
+      });
+    } catch {
+      throw new Error(apiUnreachableMessage(baseUrl));
+    }
+  };
+
+  let res = await doFetch(token);
+  if (res.status === 401 && token && refreshAndGetToken) {
+    const refreshed = await refreshAndGetToken().catch(() => null);
+    if (refreshed) {
+      res = await doFetch(refreshed);
+    }
   }
   const body = await res.json();
   if (res.status === 401 && token) {
@@ -94,6 +118,8 @@ async function authUpload<T>(
   }
   return body.data as T;
 }
+
+let refreshInFlight: Promise<string | null> | null = null;
 
 export const useAuthStore = create<AuthStore>((set, get) => ({
   user: null,
@@ -169,9 +195,15 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     if (!tokens?.accessToken) {
       throw new Error('Please sign in to continue.');
     }
-    return authRequest<T>(path, init, tokens.accessToken, () => {
-      void get().logout();
-    });
+    return authRequest<T>(
+      path,
+      init,
+      tokens.accessToken,
+      () => {
+        void get().logout();
+      },
+      () => refreshAccessToken(get, set),
+    );
   },
 
   apiUpload: async <T>(path: string, formData: FormData) => {
@@ -179,8 +211,48 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     if (!tokens?.accessToken) {
       throw new Error('Please sign in to continue.');
     }
-    return authUpload<T>(path, formData, tokens.accessToken, () => {
-      void get().logout();
-    });
+    return authUpload<T>(
+      path,
+      formData,
+      tokens.accessToken,
+      () => {
+        void get().logout();
+      },
+      () => refreshAccessToken(get, set),
+    );
   },
 }));
+
+/** Exchanges the stored refresh token for a new session, deduping concurrent callers (e.g. several
+ * screens hitting a 401 at once) behind a single in-flight request. Returns the new access token,
+ * or null if the refresh itself failed (caller falls through to the normal logout path). */
+async function refreshAccessToken(
+  get: () => AuthStore,
+  set: (partial: Partial<AuthStore>) => void,
+): Promise<string | null> {
+  if (refreshInFlight) return refreshInFlight;
+
+  const { tokens, user } = get();
+  if (!tokens?.refreshToken) return null;
+
+  refreshInFlight = (async () => {
+    try {
+      const data = await authRequest<{ user?: User; tokens: AuthTokens }>('/auth/refresh', {
+        method: 'POST',
+        body: JSON.stringify({ refreshToken: tokens.refreshToken }),
+      });
+      const nextUser = data.user ?? user;
+      if (!nextUser) return null;
+      const next = { user: nextUser, tokens: data.tokens };
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      set(next);
+      return data.tokens.accessToken;
+    } catch {
+      return null;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+
+  return refreshInFlight;
+}

@@ -5,6 +5,18 @@ export class VerifyShopWeightDto {
   @Min(0.1)
   verifiedWeightKg!: number;
 
+  /** PER_LOAD orders only — actual load count, if different from the weight-derived estimate. */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  verifiedLoadCount?: number;
+
+  /** PER_PIECE orders only — actual piece count. */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  verifiedPieceCount?: number;
+
   @IsOptional()
   @IsString()
   note?: string;

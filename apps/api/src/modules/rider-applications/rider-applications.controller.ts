@@ -76,6 +76,6 @@ export class RiderApplicationsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.STAFF)
   updateStatus(@Param('id') id: string, @Body() dto: UpdateRiderApplicationStatusDto) {
-    return this.riderApplicationsService.updateStatus(id, dto.status);
+    return this.riderApplicationsService.updateStatus(id, dto.status, dto.rejectionReason);
   }
 }

@@ -13,11 +13,15 @@ export const SHOP_PRICE_MARKUP_MULTIPLIER = 1.3;
 export const BOOKING_MACHINE_LOAD_MIN_KG = 8;
 
 export const BOOKING_MACHINE_LOAD_INFO =
-  'Each machine holds up to 8 kg per load. Under 8 kg counts as 1 load; over 8 kg counts as 2 loads.';
+  'Each machine holds up to 8 kg per load — every additional 8 kg (or part of it) counts as another load.';
 
-/** ≤8 kg = 1 load; >8 kg = 2 loads. */
+/** Number of 8kg machine loads needed for a given weight, rounded up (min 1). Used both for
+ * dispatch/display capacity estimates and — for PER_LOAD pricing — as the billed load count when
+ * the customer/partner enters a weight instead of an explicit load count, so it must scale with
+ * weight rather than cap out (a capped estimate would systematically underbill heavy orders). */
 export function estimateMachineLoads(weightKg: number): number {
-  return weightKg <= BOOKING_MACHINE_LOAD_MIN_KG ? 1 : 2;
+  if (weightKg <= 0) return 1;
+  return Math.max(1, Math.ceil(weightKg / BOOKING_MACHINE_LOAD_MIN_KG));
 }
 
 export function formatMachineLoadLabel(weightKg: number): string {
@@ -62,7 +66,9 @@ export interface BookingAddonOption {
   id: string;
   label: string;
   description: string;
+  /** Flat total when pricingUnit is FLAT_BAG (or unset); otherwise the per-kg/load/piece rate. */
   price: number;
+  pricingUnit?: BranchPricingMode;
   imageUrl?: string;
 }
 
@@ -91,21 +97,84 @@ export interface AddressInput {
   line1: string;
 }
 
+export enum BranchPricingMode {
+  FLAT_BAG = 'flat_bag',
+  PER_KG = 'per_kg',
+  PER_LOAD = 'per_load',
+  PER_PIECE = 'per_piece',
+}
+
+/** Partner's own rates for the active pricing mode; branch-level, resolved server-side. */
+export interface PricingModeRates {
+  basePricePerKg?: number;
+  basePricePerLoad?: number;
+  basePricePerPiece?: number;
+  minWeightKg?: number;
+}
+
 export interface QuoteInput {
   bookingType: BookingType;
-  bagSizeId: BagSizeId;
+  /** Required when pricingMode is FLAT_BAG (or omitted). */
+  bagSizeId?: BagSizeId;
   addonIds: string[];
+  /** Defaults to FLAT_BAG (today's behavior) when omitted. */
+  pricingMode?: BranchPricingMode;
+  /** Partner's per-kg/per-load/per-piece rates — required when pricingMode is PER_KG, PER_LOAD, or PER_PIECE. */
+  rates?: PricingModeRates;
+  /** Customer-entered weight — required for PER_KG, and used to derive load count for PER_LOAD if enteredLoadCount is omitted. */
+  enteredWeightKg?: number;
+  /** Customer-entered load count — required for PER_LOAD unless enteredWeightKg is provided instead. */
+  enteredLoadCount?: number;
+  /** Customer-entered piece count — required for PER_PIECE. */
+  enteredPieceCount?: number;
+}
+
+/** Computes the base laundry service subtotal for a given pricing mode. Shared between booking-time
+ * estimates and pickup-time finalization so both use identical math. */
+export function computeServiceSubtotal(
+  mode: BranchPricingMode,
+  rates: PricingModeRates | undefined,
+  qty: { bag?: BagSizeOption; weightKg?: number; loadCount?: number; pieceCount?: number },
+): number {
+  switch (mode) {
+    case BranchPricingMode.PER_KG: {
+      const perKg = rates?.basePricePerKg;
+      if (perKg == null) throw new Error('Missing basePricePerKg for PER_KG pricing mode');
+      const minWeight = rates?.minWeightKg ?? 0;
+      const weightKg = Math.max(qty.weightKg ?? 0, minWeight);
+      return Math.round(weightKg * perKg * 100) / 100;
+    }
+    case BranchPricingMode.PER_LOAD: {
+      const perLoad = rates?.basePricePerLoad;
+      if (perLoad == null) throw new Error('Missing basePricePerLoad for PER_LOAD pricing mode');
+      const loadCount = qty.loadCount ?? (qty.weightKg != null ? estimateMachineLoads(qty.weightKg) : 0);
+      return Math.round(loadCount * perLoad * 100) / 100;
+    }
+    case BranchPricingMode.PER_PIECE: {
+      const perPiece = rates?.basePricePerPiece;
+      if (perPiece == null) throw new Error('Missing basePricePerPiece for PER_PIECE pricing mode');
+      const pieceCount = qty.pieceCount ?? 0;
+      return Math.round(pieceCount * perPiece * 100) / 100;
+    }
+    case BranchPricingMode.FLAT_BAG:
+    default: {
+      if (!qty.bag) throw new Error('Missing bag size for FLAT_BAG pricing mode');
+      return qty.bag.price;
+    }
+  }
 }
 
 export interface QuoteBreakdown {
   bookingType: BookingType;
   serviceLabel: string;
-  bagSizeId: BagSizeId;
+  bagSizeId?: BagSizeId;
   bagLabel: string;
   /** Nominal weight from the bag's capacity — for machine-load estimates and display, not billing. */
   weightKg: number;
   serviceSubtotal: number;
-  addons: { id: string; label: string; price: number }[];
+  /** `price` is the computed line total (already rate × quantity for non-flat units). `unit`/
+   * `quantity` describe what that total was computed from, for display. */
+  addons: { id: string; label: string; price: number; unit?: BranchPricingMode; quantity?: number }[];
   addonsSubtotal: number;
   subtotal: number;
   deliveryFee: number;
@@ -115,6 +184,11 @@ export interface QuoteBreakdown {
   minimumOrderAmount: number;
   couponCode?: string;
   promotionTitle?: string;
+  pricingMode: BranchPricingMode;
+  /** PER_PIECE orders only — piece count the subtotal was computed from. */
+  pieceCount?: number;
+  /** True when the base service price is provisional (PER_KG/PER_LOAD/PER_PIECE) and will be confirmed at pickup. */
+  isEstimate: boolean;
 }
 
 export const LAUNDRY_SERVICES: LaundryServiceOption[] = [
@@ -186,51 +260,6 @@ export function isExpressReturnAllowed(scheduledPickupAt?: string | null): boole
   return manilaHourOf(scheduledPickupAt) < EXPRESS_RETURN_CUTOFF_HOUR;
 }
 
-/** Metro Manila coverage for MVP. */
-export const SERVICE_AREAS: ServiceAreaRule[] = [
-  {
-    id: 'metro-manila',
-    label: 'Metro Manila',
-    cities: [
-      'Manila',
-      'Makati',
-      'Quezon City',
-      'Pasig',
-      'Taguig',
-      'Mandaluyong',
-      'San Juan',
-      'Marikina',
-      'Parañaque',
-      'Las Piñas',
-      'Muntinlupa',
-      'Caloocan',
-      'Valenzuela',
-      'Pasay',
-      'Pateros',
-      'Navotas',
-      'Malabon',
-    ],
-    provinces: ['Metro Manila', 'NCR', 'National Capital Region'],
-    postalPrefixes: ['10', '11', '12', '13', '14', '15', '16', '17'],
-    services: [
-      BookingType.WASH_FOLD,
-      BookingType.WASH_DRY_FOLD,
-      BookingType.DRY_CLEANING,
-    ],
-  },
-  {
-    id: 'baybay-leyte',
-    label: 'Baybay City, Leyte',
-    cities: ['Baybay', 'Baybay City'],
-    provinces: ['Leyte'],
-    postalPrefixes: ['65'],
-    services: [
-      BookingType.WASH_FOLD,
-      BookingType.WASH_DRY_FOLD,
-      BookingType.DRY_CLEANING,
-    ],
-  },
-];
 
 /** Marks up a partner shop's base price/kg by Lunara's cut, rounded to the nearest centavo. */
 export function applyShopMarkup(basePricePerKg: number): number {
@@ -274,44 +303,18 @@ function provinceMatches(areaProvince: string, addressProvince: string) {
   return isNcrProvince(area) && isNcrProvince(province);
 }
 
-export function validateServiceArea(address: AddressInput): {
-  valid: boolean;
-  areaId?: string;
-  areaLabel?: string;
-  message?: string;
-  availableServices: BookingType[];
-} {
+/** Whether an address falls within a given service area's coverage (city, province, or postal
+ * prefix match) — the shared matching rule used both by the admin-managed area lookup (server-side,
+ * against DB-loaded areas) and any future callers that need the same semantics. */
+export function areaMatchesAddress(
+  area: Pick<ServiceAreaRule, 'cities' | 'provinces' | 'postalPrefixes'>,
+  address: AddressInput,
+): boolean {
   const postal = address.postalCode.trim();
-
-  for (const area of SERVICE_AREAS) {
-    const cityMatch = area.cities.some((c) => cityMatches(c, address.city));
-    const provinceMatch = area.provinces.some((p) => provinceMatches(p, address.province));
-    const postalMatch = area.postalPrefixes.some((prefix) => postal.startsWith(prefix));
-
-    if (cityMatch || provinceMatch || postalMatch) {
-      return {
-        valid: true,
-        areaId: area.id,
-        areaLabel: area.label,
-        availableServices: area.services,
-      };
-    }
-  }
-
-  return {
-    valid: false,
-    message: 'Laundry pickup is not available in your area yet. Try a Metro Manila address.',
-    availableServices: [],
-  };
-}
-
-/** Metro Manila / NCR addresses get the lower "city" delivery fee tier; everywhere else is "provincial". */
-export function isMetroManilaAddress(address: { city: string; province: string }): boolean {
-  const metro = SERVICE_AREAS.find((a) => a.id === 'metro-manila');
-  if (!metro) return false;
-  const cityMatch = metro.cities.some((c) => cityMatches(c, address.city));
-  const provinceMatch = metro.provinces.some((p) => provinceMatches(p, address.province));
-  return cityMatch || provinceMatch;
+  const cityMatch = area.cities.some((c) => cityMatches(c, address.city));
+  const provinceMatch = area.provinces.some((p) => provinceMatches(p, address.province));
+  const postalMatch = area.postalPrefixes.some((prefix) => postal.startsWith(prefix));
+  return cityMatch || provinceMatch || postalMatch;
 }
 
 export function isServiceAvailableInArea(bookingType: BookingType, areaServices: BookingType[]) {
@@ -338,15 +341,45 @@ export function calculateQuote(
   const service = serviceOverride ?? getService(input.bookingType);
   if (!service) throw new Error('Unknown service type');
 
-  const bag = getBagSize(input.bagSizeId);
-  if (!bag) throw new Error('Unknown bag size');
+  const pricingMode = input.pricingMode ?? BranchPricingMode.FLAT_BAG;
+  const bag = input.bagSizeId ? getBagSize(input.bagSizeId) : undefined;
+  if (pricingMode === BranchPricingMode.FLAT_BAG && !bag) throw new Error('Unknown bag size');
 
-  const serviceSubtotal = bag.price;
+  const weightKg =
+    pricingMode === BranchPricingMode.FLAT_BAG
+      ? (bag?.capacityKg ?? 0)
+      : (input.enteredWeightKg ?? 0);
+  // Always resolved regardless of the service's own mode — an add-on can bill per-load or
+  // per-piece independently of how the base service itself is priced.
+  const loadCount = input.enteredLoadCount ?? estimateMachineLoads(weightKg);
+  const pieceCount = input.enteredPieceCount;
+
+  const serviceSubtotal = computeServiceSubtotal(pricingMode, input.rates, {
+    bag,
+    weightKg,
+    loadCount: pricingMode === BranchPricingMode.PER_LOAD ? loadCount : undefined,
+    pieceCount: pricingMode === BranchPricingMode.PER_PIECE ? pieceCount : undefined,
+  });
   const catalog = addonOptions ?? BOOKING_ADDONS;
   const addons = input.addonIds
     .map((id) => catalog.find((a) => a.id === id))
     .filter((a): a is BookingAddonOption => !!a)
-    .map((a) => ({ id: a.id, label: a.label, price: a.price }));
+    .map((a) => {
+      const unit = a.pricingUnit ?? BranchPricingMode.FLAT_BAG;
+      const quantity =
+        unit === BranchPricingMode.PER_KG
+          ? weightKg
+          : unit === BranchPricingMode.PER_LOAD
+            ? loadCount
+            : unit === BranchPricingMode.PER_PIECE
+              ? (pieceCount ?? 0)
+              : undefined;
+      const price =
+        unit === BranchPricingMode.FLAT_BAG
+          ? a.price
+          : Math.round(a.price * (quantity ?? 0) * 100) / 100;
+      return { id: a.id, label: a.label, price, unit, quantity };
+    });
   const addonsSubtotal = addons.reduce((sum, a) => sum + a.price, 0);
   const subtotal = serviceSubtotal + addonsSubtotal;
   const deliveryFee = deliveryFeeOverride ?? BOOKING_FLAT_DELIVERY_FEE;
@@ -356,9 +389,9 @@ export function calculateQuote(
   return {
     bookingType: input.bookingType,
     serviceLabel: service.label,
-    bagSizeId: bag.id,
-    bagLabel: bag.label,
-    weightKg: bag.capacityKg,
+    bagSizeId: bag?.id ?? input.bagSizeId,
+    bagLabel: bag?.label ?? '',
+    weightKg,
     serviceSubtotal,
     addons,
     addonsSubtotal,
@@ -368,6 +401,9 @@ export function calculateQuote(
     total,
     meetsMinimum: subtotal >= BOOKING_MIN_ORDER_AMOUNT,
     minimumOrderAmount: BOOKING_MIN_ORDER_AMOUNT,
+    pricingMode,
+    pieceCount,
+    isEstimate: pricingMode !== BranchPricingMode.FLAT_BAG,
   };
 }
 
@@ -416,12 +452,16 @@ export interface PickupScheduleDay {
   isToday: boolean;
   slots: PickupSlot[];
   hasAvailable: boolean;
+  /** Set when the shop is closed this day for a one-off holiday (as opposed to just having no
+   * remaining bookable slots or being closed on this weekday recurringly). */
+  holidayLabel?: string;
 }
 
 export function buildPickupScheduleDays(
   slots: PickupSlot[],
   fromDate: Date = new Date(),
   dayCount = PICKUP_SCHEDULE_DAY_COUNT,
+  holidays: BranchHoliday[] = [],
 ): PickupScheduleDay[] {
   const byDay = groupPickupSlotsByDay(slots);
   const start = new Date(fromDate);
@@ -434,6 +474,7 @@ export function buildPickupScheduleDays(
     date.setDate(start.getDate() + i);
     const key = pickupSlotDayKey(date);
     const daySlots = byDay.get(key) ?? [];
+    const holiday = findHolidayForDate(holidays, date);
     days.push({
       key,
       date,
@@ -443,6 +484,7 @@ export function buildPickupScheduleDays(
       isToday: key === todayKey,
       slots: daySlots,
       hasAvailable: daySlots.some((s) => isPickupSlotBookable(s)),
+      holidayLabel: holiday?.label ?? (holiday ? 'Holiday' : undefined),
     });
   }
   return days;
@@ -476,6 +518,59 @@ function resolveDayHours(operatingHours: OperatingHours, dayOfWeek: number): Day
   return operatingHours[dayOfWeek] ?? DEFAULT_OPERATING_HOURS[dayOfWeek];
 }
 
+export interface BranchHoliday {
+  /** ISO date (YYYY-MM-DD), no time component. */
+  date: string;
+  label?: string;
+}
+
+/** YYYY-MM-DD for a Date, in local time (matches BranchHoliday.date format). */
+export function dateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+export function findHolidayForDate(holidays: BranchHoliday[] | undefined, d: Date): BranchHoliday | undefined {
+  if (!holidays?.length) return undefined;
+  const key = dateKey(d);
+  return holidays.find((h) => h.date === key);
+}
+
+export interface TodayScheduleSummary {
+  isOpenNow: boolean;
+  /** e.g. "Open until 5:00 PM", "Closed today", "Closed for New Year's Day", "Opens 8:00 AM tomorrow". */
+  label: string;
+}
+
+/** Today's open/closed status for a shop, holiday-aware — for "Open now" / "Closed today" badges
+ * on shop cards. `now` defaults to the current time; pass a fixed Date in tests. */
+export function getTodayScheduleSummary(
+  operatingHours: OperatingHours = DEFAULT_OPERATING_HOURS,
+  holidays: BranchHoliday[] = [],
+  now: Date = new Date(),
+): TodayScheduleSummary {
+  const holiday = findHolidayForDate(holidays, now);
+  if (holiday) {
+    return { isOpenNow: false, label: holiday.label ? `Closed for ${holiday.label}` : 'Closed for holiday' };
+  }
+
+  const dayHours = resolveDayHours(operatingHours, now.getDay());
+  if (dayHours.isClosed) {
+    return { isOpenNow: false, label: 'Closed today' };
+  }
+
+  const nowHour = now.getHours() + now.getMinutes() / 60;
+  const openHour = parseTimeToHour(dayHours.openTime);
+  const closeHour = parseTimeToHour(dayHours.closeTime);
+
+  if (nowHour < openHour) {
+    return { isOpenNow: false, label: `Opens ${formatHourLabel(Math.floor(openHour))} today` };
+  }
+  if (nowHour >= closeHour) {
+    return { isOpenNow: false, label: 'Closed for today' };
+  }
+  return { isOpenNow: true, label: `Open until ${formatHourLabel(Math.ceil(closeHour))}` };
+}
+
 function formatHourLabel(hour: number): string {
   const period = hour >= 12 ? 'PM' : 'AM';
   const displayHour = hour % 12 === 0 ? 12 : hour % 12;
@@ -494,6 +589,7 @@ export function generatePickupSlots(
   fromDate: Date = new Date(),
   days = 7,
   operatingHours: OperatingHours = DEFAULT_OPERATING_HOURS,
+  holidays: BranchHoliday[] = [],
 ): PickupSlot[] {
   const slots: PickupSlot[] = [];
 
@@ -501,6 +597,8 @@ export function generatePickupSlots(
     const day = new Date(fromDate);
     day.setHours(0, 0, 0, 0);
     day.setDate(day.getDate() + d);
+
+    if (findHolidayForDate(holidays, day)) continue;
 
     const dayHours = resolveDayHours(operatingHours, day.getDay());
     if (dayHours.isClosed) continue;

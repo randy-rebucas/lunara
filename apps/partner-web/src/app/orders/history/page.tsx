@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useState } from 'react';
 import { AuthLoading } from '../../../components/auth-loading';
 import { DataPageStatus } from '../../../components/data-page-status';
 import { PageHeader } from '../../../components/ui/page-header';
@@ -49,16 +50,21 @@ function formatAmount(amount?: number) {
 
 const STATUSES = ['delivered', 'completed', 'customer_pickup', 'cancelled'];
 
-export default function OrderHistoryPage() {
+function OrderHistoryContent() {
   const { ready } = useRequirePartner();
+  const searchParams = useSearchParams();
+  const customerId = searchParams.get('customer') ?? undefined;
   const [statusFilter, setStatusFilter] = useState('all');
 
   const load = useCallback(async () => {
-    const params = statusFilter !== 'all' ? `?status=${statusFilter}` : '';
-    return partnerFetch<HistoryOrder[]>(`/partner/orders/history${params}`);
-  }, [statusFilter]);
+    const params = new URLSearchParams();
+    if (statusFilter !== 'all') params.set('status', statusFilter);
+    if (customerId) params.set('customerId', customerId);
+    const qs = params.toString();
+    return partnerFetch<HistoryOrder[]>(`/partner/orders/history${qs ? `?${qs}` : ''}`);
+  }, [statusFilter, customerId]);
 
-  const { data: orders, loading, error } = usePartnerQuery(load, [statusFilter]);
+  const { data: orders, loading, error } = usePartnerQuery(load, [statusFilter, customerId]);
 
   if (!ready) return <AuthLoading message="Loading order history…" />;
 
@@ -66,7 +72,11 @@ export default function OrderHistoryPage() {
     <div>
       <PageHeader
         title="Order history"
-        description="Completed, delivered, and cancelled orders"
+        description={
+          customerId
+            ? 'Completed, delivered, and cancelled orders for this customer.'
+            : 'Completed, delivered, and cancelled orders'
+        }
       />
 
       {/* Status filter */}
@@ -148,5 +158,13 @@ export default function OrderHistoryPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function OrderHistoryPage() {
+  return (
+    <Suspense fallback={<AuthLoading message="Loading order history…" />}>
+      <OrderHistoryContent />
+    </Suspense>
   );
 }

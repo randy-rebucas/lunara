@@ -18,6 +18,8 @@ import { getJwtSecret } from '../../common/config/jwt-config';
 import { getAllowedOrigins } from '../../common/config/cors-config';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { Conversation, ConversationDocument } from '../messaging/schemas/conversation.schema';
+import { User, UserDocument } from '../users/schemas/user.schema';
+import { Branch, BranchDocument } from '../branches/schemas/branch.schema';
 import { RiderSosService } from '../sos/rider-sos.service';
 import { CustomerOrderNotificationService } from '../push/customer-order-notification.service';
 import { PartnerOrderNotificationService } from '../push/partner-order-notification.service';
@@ -36,6 +38,8 @@ export class TrackingGateway implements OnGatewayConnection {
     private readonly jwtService: JwtService,
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
     @InjectModel(Conversation.name) private readonly conversationModel: Model<ConversationDocument>,
+    @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+    @InjectModel(Branch.name) private readonly branchModel: Model<BranchDocument>,
     @Inject(forwardRef(() => RiderSosService))
     private readonly riderSosService: RiderSosService,
     private readonly customerOrderNotifications: CustomerOrderNotificationService,
@@ -420,20 +424,40 @@ export class TrackingGateway implements OnGatewayConnection {
     if (!user) return { success: false, error: 'Unauthorized' };
     if (!data?.conversationId) return { success: false, error: 'conversationId required' };
 
-    // Admins may join any conversation room; partners must own it
+    // Admins may join any conversation room; partners/staff must own it
     if (user.role !== UserRole.ADMIN) {
       const convo = await this.conversationModel
         .findById(data.conversationId)
         .select('partnerId')
         .lean()
         .catch(() => null);
-      if (!convo || convo.partnerId.toString() !== user.sub) {
+      const ownerId = await this.resolveConversationOwnerId(user.sub, user.role);
+      if (!convo || convo.partnerId.toString() !== ownerId) {
         return { success: false, error: 'Forbidden' };
       }
     }
 
     client.join(`conversation:${data.conversationId}`);
     return { success: true, room: `conversation:${data.conversationId}` };
+  }
+
+  /**
+   * Mirrors `MessagingService.resolveConversationOwnerId` — a shop's conversation is keyed by
+   * its owning partner's userId, and staff accounts don't have one of their own, so resolve to
+   * their branch's partner instead of rejecting every staff join as Forbidden.
+   */
+  private async resolveConversationOwnerId(userId: string, role: string): Promise<string> {
+    if (role === UserRole.STAFF) {
+      const staffUser = await this.userModel.findById(userId).select('branchId').lean();
+      if (staffUser?.branchId) {
+        const branch = await this.branchModel
+          .findById(staffUser.branchId)
+          .select('partnerUserId')
+          .lean();
+        if (branch?.partnerUserId) return branch.partnerUserId.toString();
+      }
+    }
+    return userId;
   }
 
   @SubscribeMessage('leaveConversation')

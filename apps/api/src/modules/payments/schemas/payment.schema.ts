@@ -56,3 +56,14 @@ export class Payment {
 }
 
 export const PaymentSchema = SchemaFactory.createForClass(Payment);
+
+// Prevents two concurrent createIntent calls for the same order from both creating a pending
+// payment row — the second create() hits this constraint (E11000) instead of silently succeeding
+// alongside the first, which is what let two PayMongo sessions / two wallet debits exist for one
+// order. Scoped to status:'pending' (paid/failed history isn't blocked) AND orderId existing —
+// wallet-topup payments have no orderId, and without that second condition every pending wallet
+// top-up across all users would collide on the same {null, 'order', 'pending'}-shaped key.
+PaymentSchema.index(
+  { orderId: 1, purpose: 1, status: 1 },
+  { unique: true, partialFilterExpression: { status: 'pending', orderId: { $exists: true } } },
+);

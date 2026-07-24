@@ -1,6 +1,6 @@
 import { useRouter, type Href } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, type PressableStateCallbackType } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View, type PressableStateCallbackType } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { appConfig } from '@lunara/config';
@@ -103,6 +103,10 @@ export default function LoginScreen() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function contactSupport() {
+    void Linking.openURL(`mailto:${appConfig.supportEmail}?subject=Lunara%20Rider%20Support`);
   }
 
   function switchMode(next: LoginMode) {
@@ -364,7 +368,7 @@ export default function LoginScreen() {
             )}
 
             {/* ── Support footer ── */}
-            <Pressable style={styles.supportRow} accessibilityRole="button">
+            <Pressable style={styles.supportRow} onPress={contactSupport} accessibilityRole="button">
               <View style={styles.supportIconWrap}>
                 <Ionicons name="shield-checkmark-outline" size={20} color={colors.primary} />
               </View>

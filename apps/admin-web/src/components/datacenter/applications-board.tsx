@@ -211,7 +211,12 @@ export function ApplicationsBoard() {
     [rows, selectedId],
   );
 
-  const pendingQueue = useMemo(() => rows.filter((r) => r.status === 'pending').slice(0, 8), [rows]);
+  // `rows` is sorted newest-first; the review queue highlights the longest-waiting
+  // (oldest) pending applications, so take from the tail and reverse to oldest-first.
+  const pendingQueue = useMemo(
+    () => rows.filter((r) => r.status === 'pending').slice(-8).reverse(),
+    [rows],
+  );
 
   const TYPE_TABS: { id: TypeTab; label: string; count: number }[] = [
     { id: 'all', label: 'All applications', count: rows.length },
@@ -543,7 +548,7 @@ export function ApplicationsBoard() {
                     </p>
                   ) : (
                     <ul className="divide-y divide-border/40">
-                      {[...pendingQueue].reverse().map((a) => (
+                      {pendingQueue.map((a) => (
                         <li key={a.id} className="flex items-center gap-3 px-4 py-2.5">
                           <span
                             className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${

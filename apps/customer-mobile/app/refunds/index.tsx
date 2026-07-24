@@ -9,7 +9,9 @@ import { KeyboardSafeScrollView } from '../../src/components/ui/keyboard-safe-sc
 import { useAuthStore } from '../../src/store/auth';
 import { colors, radius, spacing, typography } from '../../src/theme';
 
-const RESOLVED_STATUSES = new Set(['processed', 'closed', 'approved']);
+// 'approved' still styles as open (payout hasn't happened yet); 'rejected' is a closed-out state
+// even though nothing was paid — matches the semantics of customer-web's isOpenRefundStatus.
+const RESOLVED_STATUSES = new Set(['processed', 'closed', 'rejected']);
 
 interface RefundRow {
   _id: string;

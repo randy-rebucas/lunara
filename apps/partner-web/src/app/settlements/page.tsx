@@ -47,9 +47,9 @@ export default function SettlementsPage() {
       return;
     }
     setExpandedId(s._id);
+    setOrdersError(null);
     if (ordersCache[s._id]) return;
     setOrdersLoading(s._id);
-    setOrdersError(null);
     try {
       const orders = await partnerFetch<PartnerOrderDetail[]>(`/partner/settlements/${s._id}/orders`);
       setOrdersCache((c) => ({ ...c, [s._id]: orders }));

@@ -190,11 +190,15 @@ export function WithdrawalsBoard() {
     ? lastUpdated.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : '—';
 
+  // Tab badges use the server-computed, uncapped `counts` (same source as the stat tiles above)
+  // rather than re-deriving from `items` — the list endpoint caps `items` to the 100 most-recent
+  // withdrawals, so a client-side count would silently disagree with the accurate stat tiles once
+  // total volume exceeds 100 (the same bug found and fixed on the Refunds board, see refunds.md).
   const STATUS_TABS: { id: StatusTab; label: string; count: number }[] = [
-    { id: 'all', label: 'All requests', count: items.length },
-    { id: 'pending', label: 'Pending', count: items.filter((r) => r.status === 'pending').length },
-    { id: 'paid', label: 'Paid', count: items.filter((r) => r.status === 'paid').length },
-    { id: 'rejected', label: 'Rejected', count: items.filter((r) => r.status === 'rejected').length },
+    { id: 'all', label: 'All requests', count: counts.total },
+    { id: 'pending', label: 'Pending', count: counts.pending },
+    { id: 'paid', label: 'Paid', count: counts.paid },
+    { id: 'rejected', label: 'Rejected', count: counts.rejected },
   ];
 
   function selectTab(next: StatusTab) {

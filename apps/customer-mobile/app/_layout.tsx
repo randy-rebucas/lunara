@@ -144,7 +144,11 @@ export default function RootLayout() {
 
 
 
-    if (signedIn && segs[0] === '(auth)') {
+    if (signedIn && (segs[0] === '(auth)' || segs[0] === 'index')) {
+
+      // `index` (the marketing splash) is `publicRoute` so signed-out users can land on it, but a
+      // signed-in user reaching it — e.g. a cold app relaunch, which starts fresh at `/` — must not
+      // be shown the "Get started / Sign in" splash. Route them onward exactly like a fresh login.
 
       void redirectAfterAuth(apiFetch, router);
 
@@ -158,13 +162,17 @@ export default function RootLayout() {
 
       let cancelled = false;
 
-      fetchOnboardingStatus(apiFetch).then((status) => {
+      fetchOnboardingStatus(apiFetch)
 
-        if (cancelled || status.isComplete) return;
+        .then((status) => {
 
-        router.replace(getOnboardingPath(status));
+          if (cancelled || status.isComplete) return;
 
-      });
+          router.replace(getOnboardingPath(status));
+
+        })
+
+        .catch(() => {});
 
       return () => {
 

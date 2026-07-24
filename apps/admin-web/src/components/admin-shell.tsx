@@ -38,6 +38,7 @@ const Icons: Record<string, React.ReactNode> = {
   services:       <Icon d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />,
   addons:         <Icon d="M12 6v6m0 0v6m0-6h6m-6 0H6" />,
   laundryTags:    <Icon d="M9 4H6a2 2 0 00-2 2v3l7.586 7.586a2 2 0 002.828 0l4.586-4.586a2 2 0 000-2.828L11.414 4H9z" d2="M7 8h.01" />,
+  serviceAreas:   <Icon d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" d2="M9.879 9.879a3 3 0 104.242 4.242" />,
   // Partners
   branding:       <Icon d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />,
   settlements:    <Icon d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />,
@@ -87,6 +88,7 @@ const nav: NavItem[] = [
   { href: '/services',     label: 'Services',     icon: Icons.services },
   { href: '/addons',       label: 'Add-ons',      icon: Icons.addons },
   { href: '/laundry-tags', label: 'Laundry tags', icon: Icons.laundryTags },
+  { href: '/service-areas', label: 'Service areas', icon: Icons.serviceAreas },
 
   { section: 'Partners' },
   { href: '/partners',             label: 'Partners',    icon: Icons.shops },

@@ -38,8 +38,15 @@ interface BranchProfile {
     dailyQuotaOrders: number;
     dailyQuotaWeightKg: number;
     commissionRate: number;
-    servicePricing: { serviceType: string; basePricePerKg: number }[];
-    addonPricing: { addonSlug: string; basePrice: number }[];
+    serviceRadiusKm: number;
+    servicePricing: {
+      serviceType: string;
+      basePricePerKg: number;
+      basePricePerLoad?: number;
+      basePricePerPiece?: number;
+      pricingUnit?: string;
+    }[];
+    addonPricing: { addonSlug: string; basePrice: number; pricingUnit?: string }[];
     location: { latitude: number; longitude: number };
     assignedRiderId?: string;
   };
@@ -48,6 +55,7 @@ interface BranchProfile {
     children: { id: string; code: string; name: string; city: string }[];
   };
   manager: { id: string; email?: string; phone?: string } | null;
+  partner: { id: string; email?: string; phone?: string } | null;
   staff: { id: string; email?: string; phone?: string }[];
   machines: {
     id: string;
@@ -263,6 +271,7 @@ export function BranchesBoard() {
     dailyQuotaOrders: '',
     dailyQuotaWeightKg: '',
     commissionRate: '',
+    serviceRadiusKm: '',
     isActive: true,
   });
   const [addressForm, setAddressForm] = useState<BranchAddressValue>({
@@ -294,8 +303,10 @@ export function BranchesBoard() {
   }, []);
 
   const loadMeta = useCallback(async () => {
+    // Parent-branch options must include HQ, so this uses the dedicated
+    // /admin/branches/parents list rather than /admin/branches (which excludes HQ).
     const [branches, shops, riders] = await Promise.all([
-      adminFetch<Array<{ _id: string; code: string; name: string }>>('/admin/branches'),
+      adminFetch<Array<{ _id: string; code: string; name: string }>>('/admin/branches/parents'),
       adminFetch<{ shops: Array<{ _id: string; email?: string }> }>('/admin/shops'),
       adminFetch<Array<{ userId: string; email?: string; firstName?: string; lastName?: string; isOnline: boolean }>>(
         '/admin/riders',
@@ -353,6 +364,7 @@ export function BranchesBoard() {
       dailyQuotaOrders: String(profile.branch.dailyQuotaOrders),
       dailyQuotaWeightKg: String(profile.branch.dailyQuotaWeightKg),
       commissionRate: String(Math.round((profile.branch.commissionRate ?? 0.2) * 100)),
+      serviceRadiusKm: String(profile.branch.serviceRadiusKm ?? 10),
       isActive: profile.branch.isActive,
     });
     setAddressForm({
@@ -548,6 +560,9 @@ export function BranchesBoard() {
             : {}),
           isActive: editForm.isActive,
           ...(commissionPct !== undefined ? { commissionRate: commissionPct / 100 } : {}),
+          ...(numericField(editForm.serviceRadiusKm) !== undefined
+            ? { serviceRadiusKm: numericField(editForm.serviceRadiusKm) }
+            : {}),
           line1: addressForm.line1,
           city: addressForm.city,
           province: addressForm.province,
@@ -1040,7 +1055,15 @@ export function BranchesBoard() {
                       </div>
                     </div>
 
-                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                      <div className="rounded-lg border border-border/60 p-3">
+                        <p className="dc-label">Partner owner</p>
+                        <p className="mt-2 text-sm font-medium text-slate-900">
+                          {profile.partner
+                            ? (profile.partner.email ?? profile.partner.phone ?? profile.partner.id)
+                            : '—'}
+                        </p>
+                      </div>
                       <div className="rounded-lg border border-border/60 p-3">
                         <p className="dc-label">Manager</p>
                         <p className="mt-2 text-sm font-medium text-slate-900">
@@ -1061,7 +1084,7 @@ export function BranchesBoard() {
                           </ul>
                         )}
                       </div>
-                      <div className="rounded-lg border border-border/60 p-3 sm:col-span-2 xl:col-span-1">
+                      <div className="rounded-lg border border-border/60 p-3">
                         <p className="dc-label">Assigned rider</p>
                         {assignedRider ? (
                           <p className="mt-2 flex items-center gap-2 text-sm font-medium text-slate-900">
@@ -1277,6 +1300,26 @@ export function BranchesBoard() {
                             }
                           />
                           <p className="mt-1 text-xs text-muted">Platform fee on laundry subtotal. Default 20%.</p>
+                        </div>
+                        <div>
+                          <label htmlFor="edit-radius" className="form-label">
+                            Service radius (km)
+                          </label>
+                          <input
+                            id="edit-radius"
+                            type="number"
+                            min="1"
+                            max="50"
+                            step="1"
+                            className="input-field"
+                            value={editForm.serviceRadiusKm}
+                            onChange={(e) =>
+                              setEditForm((f) => ({ ...f, serviceRadiusKm: e.target.value }))
+                            }
+                          />
+                          <p className="mt-1 text-xs text-muted">
+                            Riders and dispatch only consider this shop within this distance from a pickup.
+                          </p>
                         </div>
                       </div>
 

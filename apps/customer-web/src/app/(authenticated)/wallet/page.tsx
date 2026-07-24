@@ -67,15 +67,20 @@ export default function WalletPage() {
     let cancelled = false;
     (async () => {
       try {
-        await api.post(`/payments/${topupPaymentId}/sync`, {});
-        if (!cancelled) {
+        const res = await api.post<{ status: string }>(`/payments/${topupPaymentId}/sync`, {});
+        if (cancelled) return;
+        if (res.data.status === 'paid') {
           setTopUpSuccess('Top-up confirmed. Your wallet balance has been updated.');
-          await reload();
-          window.history.replaceState({}, '', '/wallet');
+        } else if (res.data.status === 'failed') {
+          setTopUpSuccess('Payment did not go through. No funds were added — please try again.');
+        } else {
+          setTopUpSuccess("We haven't received confirmation yet — this can take a moment. Refresh if your balance doesn't update.");
         }
+        await reload();
+        window.history.replaceState({}, '', '/wallet');
       } catch {
         if (!cancelled) {
-          setTopUpSuccess('Payment received — refreshing balance…');
+          setTopUpSuccess("Couldn't confirm your payment right now — refreshing your balance. If it doesn't update, check back in a few minutes.");
           await reload();
         }
       }

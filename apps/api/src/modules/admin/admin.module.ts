@@ -23,6 +23,7 @@ import { Promotion, PromotionSchema } from './schemas/promotion.schema';
 import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
 import { Review, ReviewSchema } from '../reviews/schemas/review.schema';
 import { PartnerModule } from '../partner/partner.module';
+import { ServiceAreasModule } from '../service-areas/service-areas.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { PartnerModule } from '../partner/partner.module';
     PromotionsModule,
     CatalogModule,
     PartnerModule,
+    ServiceAreasModule,
   ],
   controllers: [AdminController, MaintenanceController],
   providers: [AdminService, AdminOperationsService, AdminDispatchService, MaintenanceService],

@@ -19,7 +19,6 @@ export function useCustomerQuery<T>(fetcher: () => Promise<T>, deps: React.Depen
       setData(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load data');
-      setData(null);
     } finally {
       setLoading(false);
     }

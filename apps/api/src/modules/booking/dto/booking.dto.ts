@@ -1,6 +1,6 @@
 import { BookingType } from '@lunara/types';
 import { BAG_SIZES } from '@lunara/utils';
-import { IsArray, IsDateString, IsEnum, IsIn, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsDateString, IsEnum, IsIn, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 
 const BAG_SIZE_IDS = BAG_SIZES.map((b) => b.id);
 
@@ -20,9 +20,29 @@ export class BookingQuoteDto {
   @IsString()
   customServiceId?: string;
 
-  /** Flat platform-wide bag size — see @lunara/utils BAG_SIZES. */
+  /** Flat platform-wide bag size — see @lunara/utils BAG_SIZES. Required only when the resolved
+   * branch is in FLAT_BAG pricing mode. */
+  @IsOptional()
   @IsIn(BAG_SIZE_IDS)
-  bagSizeId!: string;
+  bagSizeId?: string;
+
+  /** Customer-entered weight — required when the resolved branch is in PER_KG pricing mode. */
+  @IsOptional()
+  @IsNumber()
+  @Min(0.1)
+  enteredWeightKg?: number;
+
+  /** Customer-entered load count — required when the resolved branch is in PER_LOAD pricing mode. */
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  enteredLoadCount?: number;
+
+  /** Customer-entered piece count — required when the resolved branch is in PER_PIECE pricing mode. */
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  enteredPieceCount?: number;
 
   @IsOptional()
   @IsArray()

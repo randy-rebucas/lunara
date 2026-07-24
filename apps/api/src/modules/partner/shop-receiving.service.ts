@@ -3,13 +3,16 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { OrderStatus, UserRole } from '@lunara/types';
 import {
+  BranchPricingMode,
   canTransitionOrderStatus,
+  computeServiceSubtotal,
   getShopReceivingStepIndex,
   SHOP_RECEIVING_STEPS,
 } from '@lunara/utils';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { TrackingGateway } from '../realtime/tracking.gateway';
+import { BranchesService } from '../branches/branches.service';
 import {
   ConfirmShopItemsDto,
   ReceiveLaundryDto,
@@ -28,6 +31,7 @@ export class ShopReceivingService {
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     private trackingGateway: TrackingGateway,
+    private branchesService: BranchesService,
   ) {}
 
   async getReceiving(orderId: string, partnerUserId: string, role: UserRole) {
@@ -94,11 +98,59 @@ export class ShopReceivingService {
       order.laundryProcessing = { completedSteps: [], ironingSkipped: false };
     }
     order.laundryProcessing.verifiedWeightKg = dto.verifiedWeightKg;
+    order.pickup.actualWeightKg = dto.verifiedWeightKg;
+    order.pickup.actualLoadCount = dto.verifiedLoadCount;
+    order.pickup.actualPieceCount = dto.verifiedPieceCount;
+
+    // PER_KG/PER_LOAD/PER_PIECE orders were only estimated at booking time — finalize the real
+    // price now that the shop has physically weighed/counted the laundry, using the rates
+    // snapshotted at booking time (not the branch's possibly-since-changed live rates).
+    if (order.pricingMode && order.pricingMode !== BranchPricingMode.FLAT_BAG) {
+      const finalServiceSubtotal = computeServiceSubtotal(order.pricingMode, order.pricingSnapshot, {
+        weightKg: dto.verifiedWeightKg,
+        loadCount: dto.verifiedLoadCount,
+        pieceCount: dto.verifiedPieceCount,
+      });
+      const addonsSubtotal = order.addons.reduce((sum, a) => sum + a.price, 0);
+      const finalTotal = finalServiceSubtotal + addonsSubtotal + order.deliveryFee - order.discount;
+
+      let finalPartnerPayout: number | undefined;
+      if (order.branchId && order.pricingModel === 'commission') {
+        const branch = await this.branchesService.getActivePartnerShop(order.branchId.toString());
+        const baseAddonsSum = await order.addons.reduce(async (accPromise, a) => {
+          const acc = await accPromise;
+          const basePrice = await this.branchesService.resolveBranchAddonPrice(branch, a.id);
+          return acc + basePrice;
+        }, Promise.resolve(0));
+        finalPartnerPayout = Math.round(
+          finalServiceSubtotal * (1 - branch.commissionRate) + baseAddonsSum,
+        );
+      }
+
+      order.finalServiceSubtotal = finalServiceSubtotal;
+      order.finalTotal = finalTotal;
+      order.finalPartnerPayout = finalPartnerPayout;
+      order.pickup.priceConfirmedAt = new Date();
+
+      // Settlement/revenue/payout calculations read subtotal/total/baseSubtotal directly and have
+      // no notion of "final" pricing — snapshot the booking-time estimate for display, then
+      // overwrite the authoritative fields so every downstream calculation picks up the real
+      // amount automatically. (Whether/how the customer's already-captured payment is adjusted
+      // for the difference is a separate payments-module concern, not handled here.)
+      order.estimatedSubtotal = order.subtotal;
+      order.estimatedTotal = order.total;
+      order.estimatedBaseSubtotal = order.baseSubtotal;
+      order.subtotal = finalServiceSubtotal + addonsSubtotal;
+      order.total = finalTotal;
+      if (finalPartnerPayout != null) order.baseSubtotal = finalPartnerPayout;
+    }
+
     await order.save();
 
     this.trackingGateway.emitOrderEvent(orderId, 'shopWeightVerified', {
       message: 'Shop verified laundry weight',
       verifiedWeightKg: dto.verifiedWeightKg,
+      finalTotal: order.finalTotal,
     });
     this.emitPipeline(order);
 
@@ -188,10 +240,17 @@ export class ShopReceivingService {
         _id: order._id.toString(),
         status: order.status,
         bookingType: order.bookingType,
-        total: order.total,
+        // Before finalization these are the same value; after, `total` has been overwritten with
+        // the finalized amount (see verifyWeight), so fall back to the pre-finalization snapshot.
+        total: order.estimatedTotal ?? order.total,
         estimatedWeightKg: order.estimatedWeightKg,
+        estimatedLoadCount: order.estimatedLoadCount,
+        estimatedPieceCount: order.estimatedPieceCount,
         branchName: order.branchName,
         pickup: order.pickup,
+        pricingMode: order.pricingMode,
+        finalServiceSubtotal: order.finalServiceSubtotal,
+        finalTotal: order.finalTotal,
       },
       shopReceiving: order.shopReceiving,
       workflowSteps: SHOP_RECEIVING_STEPS.map((s) => s.label),

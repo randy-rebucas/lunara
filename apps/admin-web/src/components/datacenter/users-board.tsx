@@ -219,6 +219,7 @@ export function UsersBoard() {
   const [search, setSearch] = useState('');
   const [limit, setLimit] = useState(50);
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('');
+  const [departmentFilter, setDepartmentFilter] = useState('');
   const [statusTab, setStatusTab] = useState<StatusTab>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -260,13 +261,19 @@ export function UsersBoard() {
     return users.filter((u) => new Date(u.createdAt) >= startOfMonth).length;
   }, [users]);
 
+  const departmentOptions = useMemo(() => {
+    const depts = new Set(users.map((u) => u.department).filter((d): d is string => !!d));
+    return [...depts].sort((a, b) => a.localeCompare(b));
+  }, [users]);
+
   const searched = useMemo(() => {
     let list = users;
     if (roleFilter) list = list.filter((u) => u.role === roleFilter);
+    if (departmentFilter) list = list.filter((u) => u.department === departmentFilter);
     if (statusTab === 'active') list = list.filter((u) => u.isActive);
     if (statusTab === 'inactive') list = list.filter((u) => !u.isActive);
     return filterBySearch(list, search, [(u) => u.email, (u) => u.phone, (u) => u.role, (u) => u._id]);
-  }, [users, search, roleFilter, statusTab]);
+  }, [users, search, roleFilter, departmentFilter, statusTab]);
 
   const visible = useMemo(() => searched.slice(0, limit), [searched, limit]);
 
@@ -369,8 +376,9 @@ export function UsersBoard() {
   }
 
   function exportSelected() {
-    const ids = checkedIds.size > 0 ? checkedIds : new Set(visible.map((u) => u._id));
-    const rows = visible.filter((u) => ids.has(u._id));
+    // With nothing checked, export every row matching the active filters/search — not just the
+    // current page's `limit`-capped `visible` slice, which would silently truncate the export.
+    const rows = checkedIds.size > 0 ? users.filter((u) => checkedIds.has(u._id)) : searched;
     exportCsv(
       `users-${new Date().toISOString().slice(0, 10)}.csv`,
       ['Email', 'Phone', 'Role', 'Department', 'Branch', 'Status', 'Last login', 'Joined'],
@@ -470,6 +478,15 @@ export function UsersBoard() {
       value: r,
       label: r.charAt(0).toUpperCase() + r.slice(1) + 's',
       count: counts[r] ?? 0,
+    })),
+  ];
+
+  const departmentFilterOptions = [
+    { value: '', label: 'All departments', count: users.length },
+    ...departmentOptions.map((d) => ({
+      value: d,
+      label: d,
+      count: users.filter((u) => u.department === d).length,
     })),
   ];
 
@@ -648,6 +665,10 @@ export function UsersBoard() {
                   onFilterChange={(v) => setRoleFilter(v as RoleFilter)}
                   filterOptions={roleFilterOptions}
                   filterLabel="Role"
+                  filter2Value={departmentOptions.length > 0 ? departmentFilter : undefined}
+                  onFilter2Change={departmentOptions.length > 0 ? setDepartmentFilter : undefined}
+                  filter2Options={departmentOptions.length > 0 ? departmentFilterOptions : undefined}
+                  filter2Label="Department"
                 />
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   {checkedIds.size > 0 ? (
@@ -1025,7 +1046,7 @@ export function UsersBoard() {
                               ))}
                             </ul>
                             <Link href="/audit-log" className="link-primary text-xs font-medium">
-                              View full audit log →
+                              View full audit log{activity.data.total > activity.data.items.length ? ` (${activity.data.total} total)` : ''} →
                             </Link>
                           </>
                         ) : null}

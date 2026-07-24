@@ -54,6 +54,7 @@ interface RiderApplicationDetail {
   declarationAccepted: boolean;
   message?: string;
   status: string;
+  rejectionReason?: string;
   createdAt?: string;
 }
 
@@ -86,7 +87,10 @@ export default function RiderApplicationReviewPage() {
     try {
       await adminFetch(`/rider-applications/${id}/status`, {
         method: 'PATCH',
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({
+          status,
+          rejectionReason: status === 'rejected' ? rejectReason.trim() : undefined,
+        }),
       });
       setRejecting(false);
       setRejectReason('');
@@ -162,21 +166,25 @@ export default function RiderApplicationReviewPage() {
                   { label: 'Civil status', value: formatSlugLabel(data.civilStatus) },
                   {
                     label: 'Address',
-                    value: [data.address.street, data.address.barangay, data.address.cityMunicipality, data.address.province]
-                      .filter(Boolean)
-                      .join(', '),
+                    value: [
+                      data.address.street,
+                      data.address.barangay,
+                      data.address.cityMunicipality,
+                      data.address.province,
+                      data.address.postalCode,
+                    ].filter(Boolean).join(', '),
                   },
                   {
                     label: 'Emergency contact',
-                    value: `${data.emergencyContact.fullName} (${data.emergencyContact.relationship}) · ${data.emergencyContact.contactNumber}`,
+                    value: `${data.emergencyContact.fullName} (${data.emergencyContact.relationship}) · ${data.emergencyContact.contactNumber} · ${data.emergencyContact.address}`,
                   },
                   {
                     label: 'Vehicle',
-                    value: `${formatSlugLabel(data.vehicle.type)} · ${data.vehicle.make} ${data.vehicle.model} · ${data.vehicle.plateNumber}`,
+                    value: `${formatSlugLabel(data.vehicle.type)} · ${data.vehicle.color} ${data.vehicle.make} ${data.vehicle.model} (${data.vehicle.yearModel}) · ${data.vehicle.plateNumber}`,
                   },
                   {
                     label: 'License',
-                    value: `${data.license.number} · exp ${new Date(data.license.expirationDate).toLocaleDateString()}`,
+                    value: `${data.license.number} · exp ${new Date(data.license.expirationDate).toLocaleDateString()}${data.license.restrictionCode ? ` · restriction ${data.license.restrictionCode}` : ''}`,
                   },
                 ].map(({ label, value }) => (
                   <div key={label} className="col-span-2 bg-surface px-3 py-2.5">
@@ -189,6 +197,12 @@ export default function RiderApplicationReviewPage() {
                 <div className="mt-3 border-t border-border/60 pt-3">
                   <p className="dc-label">Message</p>
                   <p className="mt-1 text-sm text-slate-900">{data.message}</p>
+                </div>
+              )}
+              {data.status === 'rejected' && data.rejectionReason && (
+                <div className="mt-3 border-t border-border/60 pt-3">
+                  <p className="dc-label">Rejection reason</p>
+                  <p className="mt-1 text-sm text-slate-900">{data.rejectionReason}</p>
                 </div>
               )}
             </OpsPanel>
@@ -220,7 +234,7 @@ export default function RiderApplicationReviewPage() {
                       <button
                         type="button"
                         className="btn-primary btn-sm bg-red-600 hover:bg-red-700"
-                        disabled={actionBusy}
+                        disabled={actionBusy || !rejectReason.trim()}
                         onClick={() => setStatus('rejected')}
                       >
                         {actionBusy ? 'Saving…' : 'Confirm reject'}

@@ -55,6 +55,7 @@ export default function ProfileScreen() {
   const [editingAddress, setEditingAddress] = useState<CustomerAddress | null>(null);
   const [addressSaving, setAddressSaving] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [actioningAddressId, setActioningAddressId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError('');
@@ -173,11 +174,14 @@ export default function ProfileScreen() {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
+          setActioningAddressId(address._id);
           try {
             await apiFetch(`/addresses/${address._id}`, { method: 'DELETE' });
             await load();
           } catch (e) {
             Alert.alert('Could not delete', e instanceof Error ? e.message : 'Try again');
+          } finally {
+            setActioningAddressId(null);
           }
         },
       },
@@ -186,6 +190,7 @@ export default function ProfileScreen() {
 
   async function setDefaultAddress(address: CustomerAddress) {
     if (address.isDefault) return;
+    setActioningAddressId(address._id);
     try {
       await apiFetch(`/addresses/${address._id}`, {
         method: 'PATCH',
@@ -194,6 +199,8 @@ export default function ProfileScreen() {
       await load();
     } catch (e) {
       Alert.alert('Could not update', e instanceof Error ? e.message : 'Try again');
+    } finally {
+      setActioningAddressId(null);
     }
   }
 
@@ -274,9 +281,9 @@ export default function ProfileScreen() {
             <Text style={styles.sectionTitle}>Personal details</Text>
             <Card style={styles.sectionCard}>
               <Text style={styles.fieldLabel}>First name</Text>
-              <Input value={firstName} onChangeText={setFirstName} placeholder="First name" />
+              <Input value={firstName} onChangeText={setFirstName} placeholder="First name" maxLength={80} />
               <Text style={[styles.fieldLabel, styles.fieldLabelSpaced]}>Last name</Text>
-              <Input value={lastName} onChangeText={setLastName} placeholder="Last name" />
+              <Input value={lastName} onChangeText={setLastName} placeholder="Last name" maxLength={80} />
               {profileError ? <Text style={styles.inlineError}>{profileError}</Text> : null}
               {profileSaved ? (
                 <Text style={styles.inlineSuccess}>Profile saved</Text>
@@ -373,16 +380,28 @@ export default function ProfileScreen() {
                     {!address.isDefault ? (
                       <Pressable
                         onPress={() => setDefaultAddress(address)}
-                        style={({ pressed }) => [styles.actionChip, pressed && styles.actionChipPressed]}
+                        disabled={actioningAddressId === address._id}
+                        style={({ pressed }) => [
+                          styles.actionChip,
+                          pressed && styles.actionChipPressed,
+                          actioningAddressId === address._id && styles.actionChipDisabled,
+                        ]}
                         accessibilityRole="button"
                         accessibilityLabel={`Set ${address.label} as default address`}
                       >
-                        <Text style={styles.actionChipText}>Set default</Text>
+                        <Text style={styles.actionChipText}>
+                          {actioningAddressId === address._id ? 'Working…' : 'Set default'}
+                        </Text>
                       </Pressable>
                     ) : null}
                     <Pressable
                       onPress={() => openEditAddress(address)}
-                      style={({ pressed }) => [styles.actionChip, pressed && styles.actionChipPressed]}
+                      disabled={actioningAddressId === address._id}
+                      style={({ pressed }) => [
+                        styles.actionChip,
+                        pressed && styles.actionChipPressed,
+                        actioningAddressId === address._id && styles.actionChipDisabled,
+                      ]}
                       accessibilityRole="button"
                       accessibilityLabel={`Edit ${address.label}`}
                     >
@@ -390,15 +409,19 @@ export default function ProfileScreen() {
                     </Pressable>
                     <Pressable
                       onPress={() => confirmDeleteAddress(address)}
+                      disabled={actioningAddressId === address._id}
                       style={({ pressed }) => [
                         styles.actionChip,
                         styles.actionChipDanger,
                         pressed && styles.actionChipPressed,
+                        actioningAddressId === address._id && styles.actionChipDisabled,
                       ]}
                       accessibilityRole="button"
                       accessibilityLabel={`Delete ${address.label}`}
                     >
-                      <Text style={[styles.actionChipText, styles.actionChipDangerText]}>Delete</Text>
+                      <Text style={[styles.actionChipText, styles.actionChipDangerText]}>
+                        {actioningAddressId === address._id ? 'Working…' : 'Delete'}
+                      </Text>
                     </Pressable>
                   </View>
                 </Card>
@@ -600,6 +623,7 @@ const styles = StyleSheet.create({
   actionChipDanger: { borderColor: colors.destructive + '33' },
   actionChipDangerText: { color: colors.destructive },
   actionChipPressed: { opacity: 0.85 },
+  actionChipDisabled: { opacity: 0.5 },
   prefRow: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' },
   prefRowPressed: { opacity: 0.85 },
   prefRowBorder: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.md, marginTop: spacing.md },

@@ -21,6 +21,25 @@ export class MessagingService {
     private readonly notificationDispatch: NotificationDispatchService,
   ) {}
 
+  /**
+   * A shop's conversation is keyed by its owning partner's userId. Staff accounts don't have
+   * one of their own — resolve to their branch's partner so the whole shop (owner + staff)
+   * shares one conversation with support, instead of each staff login getting its own thread.
+   */
+  async resolveConversationOwnerId(userId: string, role: string): Promise<string> {
+    if (role === 'staff') {
+      const staffUser = await this.userModel.findById(userId).select('branchId').lean();
+      if (staffUser?.branchId) {
+        const branch = await this.branchModel
+          .findById(staffUser.branchId)
+          .select('partnerUserId')
+          .lean();
+        if (branch?.partnerUserId) return branch.partnerUserId.toString();
+      }
+    }
+    return userId;
+  }
+
   async getOrCreateConversation(partnerId: string) {
     const pid = new Types.ObjectId(partnerId);
     const existing = await this.conversationModel.findOne({ partnerId: pid }).lean();
@@ -156,22 +175,23 @@ export class MessagingService {
       .lean();
 
     const partnerIds = convos.map((c) => c.partnerId);
+    const lastMessageIds = convos.map((c) => c.lastMessageId).filter(Boolean);
 
-    const [users, branches] = await Promise.all([
+    const [users, branches, lastMessages] = await Promise.all([
       this.userModel.find({ _id: { $in: partnerIds } }).lean(),
       this.branchModel.find({ partnerUserId: { $in: partnerIds } }).lean(),
+      lastMessageIds.length > 0
+        ? this.messageModel.find({ _id: { $in: lastMessageIds } }).lean()
+        : Promise.resolve([]),
     ]);
 
     const userMap = new Map(users.map((u) => [u._id.toString(), u]));
     const branchMap = new Map(branches.map((b) => [b.partnerUserId.toString(), b]));
+    const lastMessageMap = new Map(lastMessages.map((m) => [m._id.toString(), m]));
 
-    return Promise.all(
-      convos.map(async (c) => {
-        let lastMessage;
-        if (c.lastMessageId) {
-          const msg = await this.messageModel.findById(c.lastMessageId).lean();
-          if (msg) lastMessage = this.toWire(msg);
-        }
+    return convos.map((c) => {
+        const msg = c.lastMessageId ? lastMessageMap.get(c.lastMessageId.toString()) : undefined;
+        const lastMessage = msg ? this.toWire(msg) : undefined;
         const pid = c.partnerId.toString();
         const user = userMap.get(pid);
         const branch = branchMap.get(pid);
@@ -193,8 +213,7 @@ export class MessagingService {
           createdAt: (c as any).createdAt?.toISOString() ?? '',
           updatedAt: (c as any).updatedAt?.toISOString() ?? '',
         };
-      }),
-    );
+      });
   }
 
   async getConversationDetail(conversationId: string) {

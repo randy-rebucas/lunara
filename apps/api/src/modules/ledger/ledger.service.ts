@@ -391,31 +391,35 @@ export class LedgerService {
    * row here means that flow partially failed (source updated, ledger post didn't).
    */
   async getReconciliationTransactions(limit = 300) {
-    const perTypeLimit = Math.ceil(limit / 4);
-
+    // Fetch up to `limit` from each type (not an equal 1/4 share each) — types have very
+    // different volumes (payments vastly outnumber settlements/withdrawals/refunds), so an
+    // equal per-type quota would silently truncate high-volume payments to a much shorter
+    // recency window than low-volume types, skewing "most recent N overall" and the
+    // matched/unmatched mix away from true recency. The merge+sort+slice below still
+    // produces exactly the true top `limit` by date across all types.
     const [payments, settlements, withdrawals, refunds] = await Promise.all([
       this.paymentModel
         .find({ status: 'paid' })
         .sort({ paidAt: -1 })
-        .limit(perTypeLimit)
+        .limit(limit)
         .select('amount method orderId purpose paidAt receiptCode')
         .lean(),
       this.settlementModel
         .find({ status: 'paid' })
         .sort({ paidAt: -1 })
-        .limit(perTypeLimit)
+        .limit(limit)
         .select('partnerPayout partnerId paidAt')
         .lean(),
       this.withdrawalModel
         .find({ status: 'paid' })
         .sort({ processedAt: -1 })
-        .limit(perTypeLimit)
+        .limit(limit)
         .select('amount method riderUserId processedAt')
         .lean(),
       this.refundModel
         .find({ status: { $in: [RefundStatus.PROCESSED, RefundStatus.CLOSED] }, processedAt: { $ne: null } })
         .sort({ processedAt: -1 })
-        .limit(perTypeLimit)
+        .limit(limit)
         .select('approvedAmount requestedAmount orderId processedAt')
         .lean(),
     ]);

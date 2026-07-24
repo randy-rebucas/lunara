@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@lunara/ui';
 import { isValidPhilippineMobile } from '@lunara/utils';
 import { fetchOnboardingStatus, getOnboardingPath } from '@lunara/hooks/onboarding';
@@ -14,7 +14,7 @@ import { Input } from '../../../components/ui/input';
 type OtpStep = 'phone' | 'code';
 
 export default function LoginPage() {
-  const { login, loginWithOtp, requestOtp, api } = useAuthContext();
+  const { login, loginWithOtp, requestOtp, api, isAuthenticated } = useAuthContext();
   const router = useRouter();
   const [mode, setMode] = useState<'password' | 'otp'>('password');
   const [otpStep, setOtpStep] = useState<OtpStep>('phone');
@@ -25,6 +25,13 @@ export default function LoginPage() {
   const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    fetchOnboardingStatus(api)
+      .then((status) => router.replace(getOnboardingPath(status)))
+      .catch(() => {});
+  }, [isAuthenticated, api, router]);
 
   async function handlePasswordSubmit(e: React.FormEvent) {
     e.preventDefault();

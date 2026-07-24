@@ -513,7 +513,7 @@ export default function StaffOrderProcessingPage() {
               setLoading(true);
               setError('');
               try {
-                await partnerFetch(`/partner/orders/${id}/customer-pickup/complete`, { method: 'POST' });
+                await partnerFetch(`/orders/${id}/customer-pickup/complete`, { method: 'POST' });
                 await reload();
               } catch (e) {
                 setError(e instanceof Error ? e.message : 'Failed to confirm collection');

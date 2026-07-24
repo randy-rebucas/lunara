@@ -87,10 +87,13 @@ export class RiderApplicationsService {
     return { success: true, data: this.serialize(application) };
   }
 
-  async updateStatus(id: string, status: RiderApplicationStatus) {
+  async updateStatus(id: string, status: RiderApplicationStatus, rejectionReason?: string) {
+    const isRejected = status === RiderApplicationStatus.REJECTED;
     const application = await this.riderApplicationModel.findByIdAndUpdate(
       id,
-      { status },
+      isRejected
+        ? { $set: { status, rejectionReason } }
+        : { $set: { status }, $unset: { rejectionReason: '' } },
       { new: true },
     );
     if (!application) throw new NotFoundException('Application not found');
@@ -123,6 +126,7 @@ export class RiderApplicationsService {
       declarationAccepted: application.declarationAccepted,
       message: application.message,
       status: application.status,
+      rejectionReason: application.rejectionReason,
       createdAt: application.createdAt,
       updatedAt: application.updatedAt,
     };

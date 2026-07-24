@@ -22,7 +22,6 @@ interface CashRemittance {
   remittanceMode: 'net_of_fee' | 'full_amount';
   status: string;
   submittedAt?: string;
-  remittedAt?: string;
   transactionId?: string;
   proofImageUrl?: string;
 }
@@ -117,6 +116,13 @@ export default function RiderProfileReviewPage() {
   const [remittancesLoading, setRemittancesLoading] = useState(false);
   const [remittancesError, setRemittancesError] = useState('');
   const [verifyBusy, setVerifyBusy] = useState(false);
+  const [copiedId, setCopiedId] = useState(false);
+
+  function copyRiderId(id: string) {
+    navigator.clipboard.writeText(id).catch(() => {});
+    setCopiedId(true);
+    setTimeout(() => setCopiedId(false), 1500);
+  }
 
   async function reviewDocument(type: string, status: 'approved' | 'rejected', reason?: string) {
     if (!userId) return;
@@ -469,10 +475,30 @@ export default function RiderProfileReviewPage() {
                     },
                     { label: 'OR/CR',   value: data.orCrNumber ?? '—' },
                     {
+                      label: 'Rider ID',
+                      value: (
+                        <span className="inline-flex flex-wrap items-center gap-1.5">
+                          <span className="text-code">{data.riderId}</span>
+                          <button
+                            type="button"
+                            className="link-primary text-xs font-medium"
+                            onClick={() => copyRiderId(data.riderId)}
+                          >
+                            {copiedId ? 'Copied' : 'Copy'}
+                          </button>
+                        </span>
+                      ),
+                    },
+                    {
                       label: 'Address',
                       value: data.homeAddress?.line1
-                        ? [data.homeAddress.line1, data.homeAddress.line2, data.homeAddress.city]
-                            .filter(Boolean).join(', ')
+                        ? [
+                            data.homeAddress.line1,
+                            data.homeAddress.line2,
+                            data.homeAddress.city,
+                            data.homeAddress.province,
+                            data.homeAddress.postalCode,
+                          ].filter(Boolean).join(', ')
                         : '—',
                     },
                   ].map(({ label, value }) => (

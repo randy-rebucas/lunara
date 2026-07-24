@@ -19,7 +19,7 @@ export function useAsyncQuery<T>(fetcher: () => Promise<T>, deps: React.Dependen
       setData(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load data');
-      setData(null);
+      // Keep any previously loaded data on screen; only the initial load has none yet.
     } finally {
       setLoading(false);
     }

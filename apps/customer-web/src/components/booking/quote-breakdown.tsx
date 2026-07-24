@@ -1,5 +1,5 @@
 import type { QuoteBreakdown } from '@lunara/utils';
-import { formatCurrency } from '@lunara/utils';
+import { BranchPricingMode, formatCurrency } from '@lunara/utils';
 
 function BreakdownRow({
   label,
@@ -36,16 +36,41 @@ export function QuoteBreakdownPanel({
   showMinimumWarning = true,
   totalLabel = 'Estimated total',
 }: QuoteBreakdownPanelProps) {
+  const serviceLabel =
+    quote.pricingMode === BranchPricingMode.FLAT_BAG
+      ? `${quote.serviceLabel} — ${quote.bagLabel} bag`
+      : quote.serviceLabel;
+  const serviceDetail =
+    quote.pricingMode === BranchPricingMode.FLAT_BAG
+      ? `Up to ${quote.weightKg} kg`
+      : quote.pricingMode === BranchPricingMode.PER_PIECE
+        ? `${quote.pieceCount ?? 0} pieces (estimated)`
+        : `${quote.weightKg} kg (estimated)`;
   return (
     <dl className="space-y-2">
       <BreakdownRow
-        label={`${quote.serviceLabel} — ${quote.bagLabel} bag`}
-        detail={`Up to ${quote.weightKg} kg`}
+        label={serviceLabel}
+        detail={serviceDetail}
         value={formatCurrency(quote.serviceSubtotal)}
       />
-      {quote.addons.map((addon) => (
-        <BreakdownRow key={addon.id} label={addon.label} value={formatCurrency(addon.price)} />
-      ))}
+      {quote.addons.map((addon) => {
+        const detail =
+          addon.unit === BranchPricingMode.PER_KG
+            ? `${addon.quantity ?? 0} kg`
+            : addon.unit === BranchPricingMode.PER_LOAD
+              ? `×${addon.quantity ?? 0} load${addon.quantity === 1 ? '' : 's'}`
+              : addon.unit === BranchPricingMode.PER_PIECE
+                ? `×${addon.quantity ?? 0} piece${addon.quantity === 1 ? '' : 's'}`
+                : undefined;
+        return (
+          <BreakdownRow
+            key={addon.id}
+            label={addon.label}
+            detail={detail}
+            value={formatCurrency(addon.price)}
+          />
+        );
+      })}
       <div className="border-t border-border/30 pt-2">
         <BreakdownRow label="Delivery fee" value={formatCurrency(quote.deliveryFee)} />
       </div>

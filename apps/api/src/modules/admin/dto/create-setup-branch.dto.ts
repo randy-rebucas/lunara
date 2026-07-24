@@ -1,4 +1,4 @@
-import { IsArray, IsEnum, IsNumber, IsOptional, IsString, Max, Min, MinLength } from 'class-validator';
+import { IsArray, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, Max, Min, MinLength } from 'class-validator';
 
 export class CreateSetupBranchDto {
   @IsString()
@@ -13,12 +13,15 @@ export class CreateSetupBranchDto {
   branchType!: 'franchise' | 'partner_shop';
 
   @IsString()
+  @IsNotEmpty()
   line1!: string;
 
   @IsString()
+  @IsNotEmpty()
   city!: string;
 
   @IsString()
+  @IsNotEmpty()
   province!: string;
 
   @IsArray()

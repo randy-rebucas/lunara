@@ -24,7 +24,7 @@ export function useNotifications(limit = 30) {
       setItems(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load notifications');
-      setItems([]);
+      // Keep any previously loaded items on screen — only the initial load has none yet.
     } finally {
       setLoading(false);
     }

@@ -15,16 +15,21 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BookingType, PaymentMethod } from '@lunara/types';
 import {
+  BOOKING_MACHINE_LOAD_INFO,
   BOOKING_MIN_ORDER_AMOUNT,
+  BranchPricingMode,
+  estimateMachineLoads,
   EXPRESS_RETURN_ADDON_ID,
   formatMachineLoadLabel,
   calculateQuote,
   formatCurrency,
   formatAddressTypeLabel,
   isExpressReturnAllowed,
+  getTodayScheduleSummary,
   type BagSizeId,
   type BagSizeOption,
   type BookingAddonOption,
+  type BranchHoliday,
   type CashTiming,
   type LaundryServiceOption,
   isPickupSlotBookable,
@@ -37,6 +42,7 @@ import { BookingProgress } from '../src/components/booking-progress';
 import { Button } from '../src/components/ui/button';
 import { ScheduleSupportPrompt } from '../src/components/schedule-support-prompt';
 import { PickupSchedulePicker } from '../src/components/pickup-schedule-picker';
+import { BranchPickerSheet } from '../src/components/branch-picker-sheet';
 import { PaymentMethodPicker } from '../src/components/payment-method-picker';
 import { getCustomerClientOrigin } from '../src/lib/client-origin';
 import {
@@ -97,13 +103,38 @@ interface ShopServiceOption {
   label: string;
   description?: string;
   basePricePerKg: number;
+  basePricePerLoad?: number;
+  basePricePerPiece?: number;
+  pricingUnit?: BranchPricingMode;
   customerPricePerKg: number;
   isCustom?: boolean;
   customServiceId?: string;
 }
 
+interface ShopAddonOption {
+  slug: string;
+  label: string;
+  description?: string;
+  basePrice: number;
+  customerPrice: number;
+  pricingUnit?: BranchPricingMode;
+  isCustom?: boolean;
+  customAddonId?: string;
+}
+
+interface ShopBranchVariant {
+  branchId: string;
+  name: string;
+  isMainShop: boolean;
+  distanceKm: number;
+  distanceLabel: string;
+}
+
 interface ShopOption {
   branchId: string;
+  partnerUserId: string;
+  mainShopId: string;
+  isMainShop: boolean;
   code: string;
   name: string;
   city: string;
@@ -112,7 +143,12 @@ interface ShopOption {
   withinRadius: boolean;
   capacityAvailable: boolean;
   logoUrl?: string;
+  pricingMode: BranchPricingMode;
+  operatingHours: { isClosed: boolean; openTime: string; closeTime: string }[];
+  holidays: BranchHoliday[];
   services: ShopServiceOption[];
+  addons: ShopAddonOption[];
+  branches: ShopBranchVariant[];
 }
 
 const STEP_ICON: Record<BookingStep, keyof typeof Ionicons.glyphMap> = {
@@ -158,10 +194,12 @@ export default function BookScreen() {
   const [config, setConfig] = useState<BookingConfig | null>(null);
   const [addresses, setAddresses] = useState<AddressOption[]>([]);
   const [slots, setSlots] = useState<PickupSlot[]>([]);
+  const [holidays, setHolidays] = useState<BranchHoliday[]>([]);
   const [areaLabel, setAreaLabel] = useState('');
   const [dispatchNote, setDispatchNote] = useState('');
   const [shopOptions, setShopOptions] = useState<ShopOption[]>([]);
   const [shopsLoading, setShopsLoading] = useState(false);
+  const [branchSheetShopId, setBranchSheetShopId] = useState<string | null>(null);
   const [quote, setQuote] = useState<QuoteBreakdown | null>(null);
   const [promoLoading, setPromoLoading] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.GCASH);
@@ -242,7 +280,12 @@ export default function BookScreen() {
     }
   }, [shopOptions, shopsLoading]);
 
-  const selectedShop = shopOptions.find((s) => s.branchId === form.branchId);
+  // A partner's other branches are listed under `shop.branches[]`, keyed by the nearest branch's
+  // id (`shop.branchId`) — picking a non-nearest variant via BranchPickerSheet still needs to
+  // resolve back to that shop's pricing/services (the API doesn't expose per-variant pricing).
+  const selectedShop = shopOptions.find(
+    (s) => s.branchId === form.branchId || s.branches.some((b) => b.branchId === form.branchId),
+  );
 
   const services = useMemo(() => {
     if (selectedShop) {
@@ -253,32 +296,108 @@ export default function BookScreen() {
           label: s.label,
           description: s.description ?? catalogMatch?.description ?? '',
           pricePerKg: s.customerPricePerKg,
+          basePricePerLoad: s.basePricePerLoad,
+          basePricePerPiece: s.basePricePerPiece,
+          pricingUnit: s.pricingUnit ?? (s.isCustom ? BranchPricingMode.PER_KG : BranchPricingMode.FLAT_BAG),
           minWeightKg: catalogMatch?.minWeightKg ?? 5,
           isCustom: s.isCustom ?? false,
           customServiceId: s.customServiceId,
         };
       });
     }
-    return (config?.services ?? []).map((s) => ({ ...s, isCustom: false, customServiceId: undefined }));
+    return (config?.services ?? []).map((s) => ({
+      ...s,
+      basePricePerLoad: undefined,
+      basePricePerPiece: undefined,
+      pricingUnit: BranchPricingMode.FLAT_BAG,
+      isCustom: false,
+      customServiceId: undefined,
+    }));
   }, [config, selectedShop]);
 
+  const addons = useMemo(() => {
+    if (selectedShop) {
+      return selectedShop.addons.map((a) => {
+        const catalogMatch = config?.addons.find((ca) => ca.id === a.slug);
+        return {
+          id: a.slug,
+          label: a.label,
+          description: a.description ?? catalogMatch?.description ?? '',
+          price: a.customerPrice,
+          pricingUnit: a.pricingUnit ?? BranchPricingMode.FLAT_BAG,
+          imageUrl: catalogMatch?.imageUrl,
+          isCustom: a.isCustom ?? false,
+        };
+      });
+    }
+    return (config?.addons ?? []).map((a) => ({
+      ...a,
+      pricingUnit: BranchPricingMode.FLAT_BAG,
+      isCustom: false,
+    }));
+  }, [config, selectedShop]);
+
+  // Each service on a shop can bill in its own unit now, so this must be resolved per selected
+  // service (and re-derived whenever bookingType/customServiceId changes), not once per shop.
+  // Custom services are always priced per-kg (see partner-web services page).
+  const selectedShopService = form.customServiceId
+    ? selectedShop?.services.find((s) => s.customServiceId === form.customServiceId)
+    : selectedShop?.services.find((s) => s.type === form.bookingType && !s.isCustom);
+  const shopPricingMode =
+    selectedShopService?.pricingUnit ??
+    (form.customServiceId ? BranchPricingMode.PER_KG : BranchPricingMode.FLAT_BAG);
+
   const localQuote = useMemo(() => {
-    if (!form.bookingType || !form.bagSizeId) return null;
+    if (!form.bookingType) return null;
     const catalogService = config?.services.find((s) => s.type === form.bookingType);
-    const shopService = form.customServiceId
-      ? selectedShop?.services.find((s) => s.customServiceId === form.customServiceId)
-      : selectedShop?.services.find((s) => s.type === form.bookingType && !s.isCustom);
+    const shopService = selectedShopService;
     const service =
       catalogService && shopService ? { ...catalogService, label: shopService.label } : catalogService;
+
+    const enteredWeightKg = Number(form.enteredWeightKg) || undefined;
+    const enteredLoadCount = Number(form.enteredLoadCount) || undefined;
+    const enteredPieceCount = Number(form.enteredPieceCount) || undefined;
+
+    if (shopPricingMode === BranchPricingMode.FLAT_BAG) {
+      if (!form.bagSizeId) return null;
+    } else if (shopPricingMode === BranchPricingMode.PER_KG) {
+      if (!enteredWeightKg) return null;
+    } else if (shopPricingMode === BranchPricingMode.PER_PIECE) {
+      if (!enteredPieceCount) return null;
+    } else if (!enteredWeightKg && !enteredLoadCount) {
+      return null;
+    }
+
+    // Shop-specific addon prices/units when a shop is chosen — falls back to the flat global
+    // catalog before a shop is picked, matching the `addons` render list below.
+    const addonOptions = selectedShop
+      ? selectedShop.addons.map((a) => ({
+          id: a.slug,
+          label: a.label,
+          description: a.description ?? '',
+          price: a.customerPrice,
+          pricingUnit: a.pricingUnit ?? BranchPricingMode.FLAT_BAG,
+        }))
+      : config?.addons;
+
     try {
       return calculateQuote(
         {
           bookingType: form.bookingType,
-          bagSizeId: form.bagSizeId,
+          bagSizeId: form.bagSizeId || undefined,
           addonIds: form.addonIds,
+          pricingMode: shopPricingMode,
+          rates: {
+            basePricePerKg: shopService?.basePricePerKg,
+            basePricePerLoad: shopService?.basePricePerLoad,
+            basePricePerPiece: shopService?.basePricePerPiece,
+          },
+          enteredWeightKg,
+          enteredLoadCount,
+          enteredPieceCount,
         },
         service,
-        config?.addons,
+        addonOptions,
       );
     } catch {
       return null;
@@ -287,24 +406,32 @@ export default function BookScreen() {
     form.bookingType,
     form.customServiceId,
     form.bagSizeId,
+    form.enteredWeightKg,
+    form.enteredLoadCount,
+    form.enteredPieceCount,
     form.addonIds,
     config?.services,
     config?.addons,
     selectedShop,
+    selectedShopService,
+    shopPricingMode,
   ]);
 
   const loadAvailability = useCallback(
-    async (addressId: string) => {
+    async (addressId: string, branchId?: string) => {
       setAvailabilityError('');
       setAvailabilityLoading(true);
       try {
+        const branchParam = branchId ? `&branchId=${encodeURIComponent(branchId)}` : '';
         const avail = await apiFetch<{
           areaLabel: string;
           slots: PickupSlot[];
+          holidays?: BranchHoliday[];
           dispatchNote?: string;
-        }>(`/booking/availability?addressId=${encodeURIComponent(addressId)}`);
+        }>(`/booking/availability?addressId=${encodeURIComponent(addressId)}${branchParam}`);
         setAreaLabel(avail.areaLabel);
         setSlots(avail.slots);
+        setHolidays(avail.holidays ?? []);
         setDispatchNote(avail.dispatchNote ?? '');
         setForm((f) => {
           const stillValid = avail.slots.some(
@@ -348,7 +475,20 @@ export default function BookScreen() {
     if (!form.addressId) return;
     loadAvailability(form.addressId);
     loadShops(form.addressId);
-  }, [form.addressId, loadAvailability, loadShops]);
+    // Reset when the address changes — the branch-scoped effect below re-applies
+    // form.branchId once a shop is (re)selected for the new address.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.addressId]);
+
+  // Once a specific shop is chosen, pickup slots must reflect that shop's own hours instead of
+  // the network-wide union offered before a shop was picked — otherwise a slot can look bookable
+  // here but get rejected at checkout once validated against the actual shop's operatingHours.
+  useEffect(() => {
+    if (!form.addressId || form.autoDispatch) return;
+    if (!form.branchId) return;
+    loadAvailability(form.addressId, form.branchId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.branchId, form.autoDispatch]);
 
   useEffect(() => {
     if (step !== 'confirm') return;
@@ -378,7 +518,10 @@ export default function BookScreen() {
           bookingType: form.bookingType,
           ...(form.branchId ? { branchId: form.branchId } : {}),
           ...(form.customServiceId ? { customServiceId: form.customServiceId } : {}),
-          bagSizeId: form.bagSizeId,
+          ...(form.bagSizeId ? { bagSizeId: form.bagSizeId } : {}),
+          ...(Number(form.enteredWeightKg) ? { enteredWeightKg: Number(form.enteredWeightKg) } : {}),
+          ...(Number(form.enteredLoadCount) ? { enteredLoadCount: Number(form.enteredLoadCount) } : {}),
+          ...(Number(form.enteredPieceCount) ? { enteredPieceCount: Number(form.enteredPieceCount) } : {}),
           addonIds: form.addonIds,
           ...(form.scheduledPickupAt ? { scheduledPickupAt: form.scheduledPickupAt } : {}),
           ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}),
@@ -447,9 +590,27 @@ export default function BookScreen() {
       setError('Select a pickup slot');
       return;
     }
-    if (step === 'weight' && !form.bagSizeId) {
-      setError('Choose a bag size');
-      return;
+    if (step === 'weight') {
+      if (shopPricingMode === BranchPricingMode.FLAT_BAG && !form.bagSizeId) {
+        setError('Choose a bag size');
+        return;
+      }
+      if (shopPricingMode === BranchPricingMode.PER_KG && !Number(form.enteredWeightKg)) {
+        setError('Enter the estimated weight');
+        return;
+      }
+      if (
+        shopPricingMode === BranchPricingMode.PER_LOAD &&
+        !Number(form.enteredWeightKg) &&
+        !Number(form.enteredLoadCount)
+      ) {
+        setError('Enter the estimated weight or load count');
+        return;
+      }
+      if (shopPricingMode === BranchPricingMode.PER_PIECE && !Number(form.enteredPieceCount)) {
+        setError('Enter the piece count');
+        return;
+      }
     }
     if (step === 'review') {
       try {
@@ -496,6 +657,13 @@ export default function BookScreen() {
     placingOrderRef.current = true;
     setLoading(true);
     setError('');
+
+    // Order creation and payment initiation are two separate API calls — if the order is
+    // created but the payment step then fails, the order still exists as a real PENDING order
+    // (not nothing), so retrying from scratch would create a *duplicate*. Route to the existing
+    // standalone checkout screen (which already knows how to load/retry payment for an existing
+    // order) instead of just showing a generic failure and leaving an orphaned order behind.
+    let createdOrderId: string | null = null;
     try {
       const order = await apiFetch<{ _id: string; total: number }>('/booking/orders', {
         method: 'POST',
@@ -503,13 +671,18 @@ export default function BookScreen() {
           bookingType: form.bookingType,
           ...(form.branchId ? { branchId: form.branchId } : {}),
           ...(form.customServiceId ? { customServiceId: form.customServiceId } : {}),
-          bagSizeId: form.bagSizeId,
+          ...(form.bagSizeId ? { bagSizeId: form.bagSizeId } : {}),
+          ...(Number(form.enteredWeightKg) ? { enteredWeightKg: Number(form.enteredWeightKg) } : {}),
+          ...(Number(form.enteredLoadCount) ? { enteredLoadCount: Number(form.enteredLoadCount) } : {}),
+          ...(Number(form.enteredPieceCount) ? { enteredPieceCount: Number(form.enteredPieceCount) } : {}),
           addonIds: form.addonIds,
           pickupAddressId: form.addressId,
           scheduledPickupAt: form.scheduledPickupAt,
           ...(form.couponCode.trim() ? { couponCode: form.couponCode.trim() } : {}),
         }),
       });
+      createdOrderId = order._id;
+
       const payment = await apiFetch<{
         paid?: boolean;
         checkoutUrl?: string;
@@ -559,17 +732,27 @@ export default function BookScreen() {
         return;
       }
 
-      placingOrderRef.current = false;
-      setError('Payment could not be started');
+      Alert.alert(
+        'Order created',
+        'We could not start payment automatically. Continue to checkout to complete payment for this order.',
+        [{ text: 'Go to checkout', onPress: () => router.replace(`/checkout/${order._id}`) }],
+      );
     } catch (e) {
-      placingOrderRef.current = false;
-      setError(e instanceof Error ? e.message : 'Booking failed');
+      if (createdOrderId) {
+        Alert.alert(
+          'Order created',
+          'Your order was created, but we could not start payment. Continue to checkout to complete payment.',
+          [{ text: 'Go to checkout', onPress: () => router.replace(`/checkout/${createdOrderId}`) }],
+        );
+      } else {
+        setError(e instanceof Error ? e.message : 'Booking failed');
+      }
     } finally {
+      placingOrderRef.current = false;
       setLoading(false);
     }
   }
 
-  const addons = config?.addons ?? [];
   const activeQuote = quote ?? localQuote;
   const reviewBlocked = step === 'review' && activeQuote ? !activeQuote.meetsMinimum : false;
   const insufficientWallet =
@@ -706,11 +889,41 @@ export default function BookScreen() {
                 <Text style={styles.sub}>No partner shops are available near this address yet.</Text>
               ) : (
                 shopOptions.map((shop) => {
-                  const selected = !form.autoDispatch && form.branchId === shop.branchId;
-                  const cheapest = shop.services.reduce<ShopServiceOption | null>(
-                    (min, s) => (!min || s.customerPricePerKg < min.customerPricePerKg ? s : min),
+                  const selected =
+                    !form.autoDispatch &&
+                    (form.branchId === shop.branchId ||
+                      shop.branches.some((b) => b.branchId === form.branchId));
+                  // Services on the same shop can each bill in a different unit now, so
+                  // "cheapest" is computed per-service in its own unit, not one shop-wide unit.
+                  const flatBagFrom = config?.bagSizes?.length
+                    ? Math.min(...config.bagSizes.map((b) => b.price))
+                    : undefined;
+                  const candidates = shop.services
+                    .map((s) => {
+                      const unit = s.pricingUnit ?? BranchPricingMode.FLAT_BAG;
+                      if (unit === BranchPricingMode.PER_LOAD && s.basePricePerLoad != null) {
+                        return { amount: s.basePricePerLoad, suffix: ' / load' };
+                      }
+                      if (unit === BranchPricingMode.PER_PIECE && s.basePricePerPiece != null) {
+                        return { amount: s.basePricePerPiece, suffix: ' / piece' };
+                      }
+                      if (unit === BranchPricingMode.FLAT_BAG && flatBagFrom != null) {
+                        return { amount: flatBagFrom, suffix: '' };
+                      }
+                      if (unit === BranchPricingMode.PER_KG) {
+                        return { amount: s.customerPricePerKg, suffix: ' / kg' };
+                      }
+                      return null;
+                    })
+                    .filter((c): c is { amount: number; suffix: string } => c != null);
+                  const cheapestCandidate = candidates.reduce<{ amount: number; suffix: string } | null>(
+                    (min, c) => (!min || c.amount < min.amount ? c : min),
                     null,
                   );
+                  const startingPriceLabel = cheapestCandidate
+                    ? `From ${formatCurrency(cheapestCandidate.amount)}${cheapestCandidate.suffix}`
+                    : null;
+                  const schedule = getTodayScheduleSummary(shop.operatingHours, shop.holidays);
                   const disabled = !shop.withinRadius || !shop.capacityAvailable;
                   return (
                     <Pressable
@@ -750,10 +963,22 @@ export default function BookScreen() {
                       <Text style={styles.optionSub}>
                         {shop.city} · {shop.distanceLabel}
                       </Text>
-                      {cheapest ? (
-                        <Text style={styles.optionPrice}>
-                          From {formatCurrency(cheapest.customerPricePerKg)} / kg
-                        </Text>
+                      <Text style={schedule.isOpenNow ? styles.scheduleOpen : styles.scheduleClosed}>
+                        {schedule.label}
+                      </Text>
+                      {shop.branches.length > 1 ? (
+                        <Pressable
+                          onPress={() => setBranchSheetShopId(shop.branchId)}
+                          hitSlop={8}
+                          accessibilityRole="button"
+                        >
+                          <Text style={styles.optionBranchLink}>
+                            {shop.branches.length} branches near you — choose one
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                      {startingPriceLabel ? (
+                        <Text style={styles.optionPrice}>{startingPriceLabel}</Text>
                       ) : null}
                       {!shop.capacityAvailable ? (
                         <Text style={styles.optionGpsMissing}>Currently at capacity</Text>
@@ -809,7 +1034,13 @@ export default function BookScreen() {
                     </View>
                     <Text style={styles.optionSub}>{s.description}</Text>
                     <Text style={styles.optionPrice}>
-                      {formatCurrency(s.pricePerKg)} / kg · min {s.minWeightKg} kg
+                      {s.pricingUnit === BranchPricingMode.PER_LOAD && s.basePricePerLoad != null
+                        ? `${formatCurrency(s.basePricePerLoad)} / load`
+                        : s.pricingUnit === BranchPricingMode.PER_PIECE && s.basePricePerPiece != null
+                          ? `${formatCurrency(s.basePricePerPiece)} / piece`
+                          : s.pricingUnit === BranchPricingMode.FLAT_BAG
+                            ? 'Priced by bag size'
+                            : `${formatCurrency(s.pricePerKg)} / kg · min ${s.minWeightKg} kg`}
                     </Text>
                   </Pressable>
                 );
@@ -842,6 +1073,7 @@ export default function BookScreen() {
                   slots={slots}
                   selectedStartAt={form.scheduledPickupAt}
                   onSelectStartAt={(startAt) => setForm((f) => ({ ...f, scheduledPickupAt: startAt }))}
+                  holidays={holidays}
                 />
               ) : null}
               {showScheduleSupport ? (
@@ -853,7 +1085,7 @@ export default function BookScreen() {
             </View>
           )}
 
-          {step === 'weight' && (
+          {step === 'weight' && shopPricingMode === BranchPricingMode.FLAT_BAG && (
             <View>
               <StepHeading step="weight" title="Choose a bag size" />
               <Text style={styles.sub}>
@@ -890,6 +1122,89 @@ export default function BookScreen() {
             </View>
           )}
 
+          {step === 'weight' && shopPricingMode === BranchPricingMode.PER_KG && (
+            <View>
+              <StepHeading step="weight" title="Estimate your weight" />
+              <Text style={styles.sub}>
+                This shop charges per kilo. Enter an estimate now — we&apos;ll confirm the actual
+                weight and final price at pickup. Min order{' '}
+                {formatCurrency(config?.minOrderAmount ?? BOOKING_MIN_ORDER_AMOUNT)}.
+              </Text>
+              <TextInput
+                style={styles.weightInput}
+                keyboardType="decimal-pad"
+                placeholder="e.g. 6"
+                value={form.enteredWeightKg}
+                onChangeText={(v) => setForm((f) => ({ ...f, enteredWeightKg: v }))}
+              />
+              <Text style={styles.optionSub}>kg</Text>
+              {localQuote ? (
+                <Text style={styles.optionPrice}>
+                  Estimated: {formatCurrency(localQuote.serviceSubtotal)}
+                </Text>
+              ) : null}
+            </View>
+          )}
+
+          {step === 'weight' && shopPricingMode === BranchPricingMode.PER_LOAD && (
+            <View>
+              <StepHeading step="weight" title="Estimate your load count" />
+              <Text style={styles.sub}>
+                This shop charges per machine load. Enter your estimated weight (or load count
+                directly) — we&apos;ll confirm the actual load count and final price at pickup.{' '}
+                {BOOKING_MACHINE_LOAD_INFO} Min order{' '}
+                {formatCurrency(config?.minOrderAmount ?? BOOKING_MIN_ORDER_AMOUNT)}.
+              </Text>
+              <TextInput
+                style={styles.weightInput}
+                keyboardType="decimal-pad"
+                placeholder="Estimated weight (kg)"
+                value={form.enteredWeightKg}
+                onChangeText={(v) =>
+                  setForm((f) => ({
+                    ...f,
+                    enteredWeightKg: v,
+                    enteredLoadCount: v ? String(estimateMachineLoads(Number(v) || 0)) : '',
+                  }))
+                }
+              />
+              <Text style={styles.optionSub}>
+                {form.enteredLoadCount
+                  ? `${form.enteredLoadCount} machine load${Number(form.enteredLoadCount) === 1 ? '' : 's'}`
+                  : 'kg'}
+              </Text>
+              {localQuote ? (
+                <Text style={styles.optionPrice}>
+                  Estimated: {formatCurrency(localQuote.serviceSubtotal)}
+                </Text>
+              ) : null}
+            </View>
+          )}
+
+          {step === 'weight' && shopPricingMode === BranchPricingMode.PER_PIECE && (
+            <View>
+              <StepHeading step="weight" title="Estimate your piece count" />
+              <Text style={styles.sub}>
+                This shop charges per piece. Enter an estimated piece count now — we&apos;ll
+                confirm the actual count and final price at pickup. Min order{' '}
+                {formatCurrency(config?.minOrderAmount ?? BOOKING_MIN_ORDER_AMOUNT)}.
+              </Text>
+              <TextInput
+                style={styles.weightInput}
+                keyboardType="number-pad"
+                placeholder="e.g. 4"
+                value={form.enteredPieceCount}
+                onChangeText={(v) => setForm((f) => ({ ...f, enteredPieceCount: v }))}
+              />
+              <Text style={styles.optionSub}>pieces</Text>
+              {localQuote ? (
+                <Text style={styles.optionPrice}>
+                  Estimated: {formatCurrency(localQuote.serviceSubtotal)}
+                </Text>
+              ) : null}
+            </View>
+          )}
+
           {step === 'addons' && (
             <View>
               <StepHeading step="addons" title="Add-ons (optional)" />
@@ -900,6 +1215,14 @@ export default function BookScreen() {
                   const selected = form.addonIds.includes(a.id);
                   const isExpressReturn = a.id === EXPRESS_RETURN_ADDON_ID;
                   const disabled = isExpressReturn && !expressReturnAllowed;
+                  const unitSuffix =
+                    a.pricingUnit === BranchPricingMode.PER_KG
+                      ? ' / kg'
+                      : a.pricingUnit === BranchPricingMode.PER_LOAD
+                        ? ' / load'
+                        : a.pricingUnit === BranchPricingMode.PER_PIECE
+                          ? ' / piece'
+                          : '';
                   return (
                     <Pressable
                       key={a.id}
@@ -933,7 +1256,10 @@ export default function BookScreen() {
                           <View style={styles.addonRow}>
                             <Text style={styles.optionTitle}>{a.label}</Text>
                             <View style={styles.addonRight}>
-                              <Text style={styles.addonPrice}>+{formatCurrency(a.price)}</Text>
+                              <Text style={styles.addonPrice}>
+                                +{formatCurrency(a.price)}
+                                {unitSuffix}
+                              </Text>
                               {selected ? (
                                 <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
                               ) : null}
@@ -951,6 +1277,21 @@ export default function BookScreen() {
                   );
                 })
               )}
+              {shopPricingMode !== BranchPricingMode.PER_PIECE &&
+              form.addonIds.some(
+                (id) => addons.find((a) => a.id === id)?.pricingUnit === BranchPricingMode.PER_PIECE,
+              ) ? (
+                <View style={{ marginTop: 12 }}>
+                  <Text style={styles.optionSub}>Piece count (for the per-piece add-on above)</Text>
+                  <TextInput
+                    style={styles.weightInput}
+                    keyboardType="number-pad"
+                    placeholder="e.g. 4"
+                    value={form.enteredPieceCount}
+                    onChangeText={(v) => setForm((f) => ({ ...f, enteredPieceCount: v }))}
+                  />
+                </View>
+              ) : null}
             </View>
           )}
 
@@ -1000,16 +1341,28 @@ export default function BookScreen() {
               <View style={styles.estimateCard}>
                 <View style={styles.estimateRow}>
                   <Text style={styles.estimateLabel}>
-                    {activeQuote.serviceLabel} — {activeQuote.bagLabel} bag
+                    {activeQuote.pricingMode === BranchPricingMode.FLAT_BAG
+                      ? `${activeQuote.serviceLabel} — ${activeQuote.bagLabel} bag`
+                      : activeQuote.serviceLabel}
                   </Text>
                   <Text>{formatCurrency(activeQuote.serviceSubtotal)}</Text>
                 </View>
-                {activeQuote.addons.map((a) => (
-                  <View key={a.id} style={styles.estimateRow}>
-                    <Text style={styles.estimateLabelMuted}>{a.label}</Text>
-                    <Text style={styles.estimateLabelMuted}>{formatCurrency(a.price)}</Text>
-                  </View>
-                ))}
+                {activeQuote.addons.map((a) => {
+                  const detail =
+                    a.unit === BranchPricingMode.PER_KG
+                      ? `${a.label} (${a.quantity ?? 0} kg)`
+                      : a.unit === BranchPricingMode.PER_LOAD
+                        ? `${a.label} (×${a.quantity ?? 0} load${a.quantity === 1 ? '' : 's'})`
+                        : a.unit === BranchPricingMode.PER_PIECE
+                          ? `${a.label} (×${a.quantity ?? 0} piece${a.quantity === 1 ? '' : 's'})`
+                          : a.label;
+                  return (
+                    <View key={a.id} style={styles.estimateRow}>
+                      <Text style={styles.estimateLabelMuted}>{detail}</Text>
+                      <Text style={styles.estimateLabelMuted}>{formatCurrency(a.price)}</Text>
+                    </View>
+                  );
+                })}
                 <View style={[styles.estimateRow, styles.estimateDivider]}>
                   <Text style={styles.estimateLabel}>Delivery fee</Text>
                   <Text>{formatCurrency(activeQuote.deliveryFee)}</Text>
@@ -1048,17 +1401,34 @@ export default function BookScreen() {
                   {form.autoDispatch ? "Lunara's pick (best available)" : selectedShop?.name ?? 'Selected shop'}
                 </Text>
                 <Text style={styles.summaryLine}>
-                  <Text style={styles.summaryMuted}>Bag size: </Text>
-                  {activeQuote.bagLabel} (up to {activeQuote.weightKg} kg)
+                  <Text style={styles.summaryMuted}>
+                    {activeQuote.pricingMode === BranchPricingMode.FLAT_BAG
+                      ? 'Bag size: '
+                      : activeQuote.pricingMode === BranchPricingMode.PER_PIECE
+                        ? 'Estimated pieces: '
+                        : 'Estimated weight: '}
+                  </Text>
+                  {activeQuote.pricingMode === BranchPricingMode.FLAT_BAG
+                    ? `${activeQuote.bagLabel} (up to ${activeQuote.weightKg} kg)`
+                    : activeQuote.pricingMode === BranchPricingMode.PER_PIECE
+                      ? `${activeQuote.pieceCount ?? form.enteredPieceCount} pieces`
+                      : `${activeQuote.weightKg} kg`}
                 </Text>
                 <Text style={styles.summaryLine}>
                   <Text style={styles.summaryMuted}>Pickup: </Text>
                   {slots.find((s) => s.startAt === form.scheduledPickupAt)?.label ?? 'Selected slot'}
                 </Text>
                 <Text style={styles.summaryLine}>
-                  <Text style={styles.summaryMuted}>Total: </Text>
+                  <Text style={styles.summaryMuted}>
+                    {activeQuote.isEstimate ? 'Estimated total: ' : 'Total: '}
+                  </Text>
                   <Text style={styles.summaryTotal}>{formatCurrency(activeQuote.total)}</Text>
                 </Text>
+                {activeQuote.isEstimate ? (
+                  <Text style={styles.optionSub}>
+                    We&apos;ll confirm the actual weight/load count and final price at pickup.
+                  </Text>
+                ) : null}
               </View>
               <Text style={styles.confirmNote}>
                 {form.autoDispatch
@@ -1097,6 +1467,19 @@ export default function BookScreen() {
             )}
           </View>
         </ScrollView>
+
+      <BranchPickerSheet
+        visible={branchSheetShopId !== null}
+        shopName={shopOptions.find((s) => s.branchId === branchSheetShopId)?.name ?? ''}
+        branches={shopOptions.find((s) => s.branchId === branchSheetShopId)?.branches ?? []}
+        selectedBranchId={form.branchId}
+        onSelect={(branchId) => {
+          setReorderNotice('');
+          setForm((f) => ({ ...f, branchId, autoDispatch: false }));
+          setBranchSheetShopId(null);
+        }}
+        onClose={() => setBranchSheetShopId(null)}
+      />
     </View>
   );
 }
@@ -1148,6 +1531,15 @@ const styles = StyleSheet.create({
   optionPrice: { marginTop: spacing.sm - 2, fontSize: 13, color: colors.primary, fontWeight: '500' },
   optionGps: { marginTop: spacing.sm - 2, fontSize: 12, color: colors.accentDark, fontWeight: '500' },
   optionGpsMissing: { marginTop: spacing.sm - 2, fontSize: 12, color: colors.warning, fontWeight: '500' },
+  scheduleOpen: { marginTop: spacing.xs, fontSize: 12, color: colors.accentDark, fontWeight: '500' },
+  scheduleClosed: { marginTop: spacing.xs, fontSize: 12, color: colors.mutedForeground, fontWeight: '500' },
+  optionBranchLink: {
+    marginTop: spacing.sm - 2,
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
   addressLabelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
   defaultBadge: {
     backgroundColor: colors.primaryLight,
@@ -1210,6 +1602,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.foreground,
     backgroundColor: colors.surfaceMuted,
+  },
+  weightInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    fontSize: 16,
+    color: colors.foreground,
+    backgroundColor: colors.surface,
+    marginBottom: spacing.sm,
   },
   promoApplyBtn: {
     backgroundColor: colors.secondary,

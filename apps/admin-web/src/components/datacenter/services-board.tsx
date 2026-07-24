@@ -195,7 +195,6 @@ export function ServicesBoard() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="badge-neutral">Polling</span>
             <span className="dc-sublabel tabular-nums" title="Last data refresh">
               Updated {updatedLabel}
             </span>

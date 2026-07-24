@@ -14,12 +14,12 @@ import {
   getInitialProcessingStepForOrder,
   getProcessingStep,
   isPartnerLaundryProcessingStatus,
-  LAUNDRY_PROCESSING_STEPS,
   LAUNDRY_PROCESSING_STATUSES,
   normalizeProcessingStepId,
 } from '@lunara/utils';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
 import { UserProfile, UserProfileDocument } from '../users/schemas/user-profile.schema';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { RiderAssignmentService } from '../riders/rider-assignment.service';
@@ -95,6 +95,7 @@ export class PartnerOperationsService {
   constructor(
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
     @InjectModel(Branch.name) private branchModel: Model<BranchDocument>,
     @InjectModel(ShopInventoryItem.name) private inventoryModel: Model<ShopInventoryDocument>,
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
@@ -209,10 +210,12 @@ export class PartnerOperationsService {
     return new Map(branches.map((b) => [b._id.toString(), b.commissionRate ?? 0.2]));
   }
 
-  async ensureInventorySeeded() {
-    const count = await this.inventoryModel.countDocuments();
+  async ensureInventorySeeded(branchId: Types.ObjectId) {
+    const count = await this.inventoryModel.countDocuments({ branchId });
     if (count === 0) {
-      await this.inventoryModel.insertMany(DEFAULT_INVENTORY);
+      await this.inventoryModel.insertMany(
+        DEFAULT_INVENTORY.map((item) => ({ ...item, branchId })),
+      );
     }
   }
 
@@ -241,8 +244,6 @@ export class PartnerOperationsService {
   }
 
   async getDashboard(userId: string, role: UserRole) {
-    await this.ensureInventorySeeded();
-
     const { filter: scopeFilter, shop } = await this.dashboardScopeFilter(userId, role);
     const revenueFilter = await this.revenueOrderFilter(userId, role);
 
@@ -262,6 +263,7 @@ export class PartnerOperationsService {
     if (role !== UserRole.ADMIN) {
       partnerBranches = await this.resolvePartnerBranches(userId, role);
       staffBranchIds = partnerBranches.map((b) => b._id);
+      await Promise.all(staffBranchIds.map((branchId) => this.ensureInventorySeeded(branchId)));
     }
 
     const [
@@ -295,6 +297,7 @@ export class PartnerOperationsService {
         : this.userModel.countDocuments({ role: UserRole.STAFF, isActive: true }),
       this.inventoryModel.countDocuments({
         $expr: { $lte: ['$quantity', '$lowStockThreshold'] },
+        ...(staffBranchIds ? { branchId: { $in: staffBranchIds } } : {}),
       }),
       this.orderModel.find(incomingBase).sort({ updatedAt: -1 }).limit(8),
     ]);
@@ -501,7 +504,7 @@ export class PartnerOperationsService {
     };
   }
 
-  async getOrderHistory(userId: string, role: UserRole, status?: string) {
+  async getOrderHistory(userId: string, role: UserRole, status?: string, customerId?: string) {
     const HISTORY_STATUSES = [
       OrderStatus.DELIVERED,
       OrderStatus.COMPLETED,
@@ -519,6 +522,9 @@ export class PartnerOperationsService {
       const branchId = await resolvePortalBranchId(this.userModel, userId, role);
       applyStaffBranchFilter(filter, role, branchId);
     }
+    if (customerId && Types.ObjectId.isValid(customerId)) {
+      filter.customerId = new Types.ObjectId(customerId);
+    }
     const orders = await this.orderModel
       .find(filter)
       .sort({ updatedAt: -1 })
@@ -528,6 +534,13 @@ export class PartnerOperationsService {
       this.paymentModel,
       orders.map((o) => o._id),
     );
+    const customers = await this.customerModel
+      .find({ userId: { $in: orders.map((o) => o.customerId) } })
+      .select('userId firstName lastName')
+      .lean();
+    const customerNameById = new Map(
+      customers.map((c) => [c.userId.toString(), [c.firstName, c.lastName].filter(Boolean).join(' ')]),
+    );
     return {
       success: true,
       data: orders.map((o) => {
@@ -535,6 +548,7 @@ export class PartnerOperationsService {
         return {
           _id: o._id,
           status: o.status,
+          customerName: customerNameById.get(o.customerId.toString()) || null,
           totalAmount: o.total,
           paymentMethod: payment?.method ?? null,
           createdAt: o.createdAt,
@@ -722,9 +736,13 @@ export class PartnerOperationsService {
     };
   }
 
-  async assignStaff(orderId: string, staffId: string, partnerUserId: string) {
+  async assignStaff(orderId: string, staffId: string, partnerUserId: string, role: UserRole) {
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
+
+    if (role === UserRole.PARTNER && order.partnerId && order.partnerId.toString() !== partnerUserId) {
+      throw new NotFoundException('Order not found');
+    }
 
     if (!INCOMING_STATUSES.includes(order.status)) {
       throw new BadRequestException('Order is not available for staff assignment');
@@ -807,15 +825,24 @@ export class PartnerOperationsService {
     };
   }
 
-  async getInventory() {
-    await this.ensureInventorySeeded();
-    const items = await this.inventoryModel.find().sort({ category: 1, name: 1 });
+  async getInventory(userId: string, role: UserRole) {
+    const branches = await this.resolvePartnerBranches(userId, role);
+    const branchIds = branches.map((b) => b._id);
+    if (branchIds.length === 0) return { success: true, data: [] };
+    await Promise.all(branchIds.map((branchId) => this.ensureInventorySeeded(branchId)));
+    const items = await this.inventoryModel
+      .find({ branchId: { $in: branchIds } })
+      .sort({ category: 1, name: 1 });
     return { success: true, data: items.map((i) => this.formatInventoryItem(i)) };
   }
 
-  async updateInventory(itemId: string, dto: UpdateInventoryDto) {
+  async updateInventory(userId: string, role: UserRole, itemId: string, dto: UpdateInventoryDto) {
+    const branches = await this.resolvePartnerBranches(userId, role);
+    const branchIds = new Set(branches.map((b) => b._id.toString()));
     const item = await this.inventoryModel.findById(itemId);
-    if (!item) throw new NotFoundException('Inventory item not found');
+    if (!item || !branchIds.has(item.branchId?.toString())) {
+      throw new NotFoundException('Inventory item not found');
+    }
     if (dto.quantity != null) item.quantity = dto.quantity;
     if (dto.lowStockThreshold != null) item.lowStockThreshold = dto.lowStockThreshold;
     await item.save();
@@ -867,7 +894,6 @@ export class PartnerOperationsService {
         averageOrderValue: completed.length ? Math.round(revenue / completed.length) : 0,
         ordersByStatus: byStatus,
         completedByService: byBooking,
-        processingStepsCompleted: LAUNDRY_PROCESSING_STEPS.length,
       },
     };
   }
@@ -889,8 +915,7 @@ export class PartnerOperationsService {
     const weekStart = new Date(startOfDay);
     weekStart.setDate(weekStart.getDate() - 6);
 
-    const [today, week, month, recentCompleted, allTimeSummary] = await Promise.all([
-      this.orderModel.find({ ...baseFilter, updatedAt: { $gte: startOfDay } }),
+    const [week, month, recentCompleted, allTimeSummary] = await Promise.all([
       this.orderModel.find({ ...baseFilter, updatedAt: { $gte: weekStart } }),
       this.orderModel.find({ ...baseFilter, updatedAt: { $gte: startOfMonth } }),
       this.orderModel.find(baseFilter).sort({ updatedAt: -1 }).limit(200),
@@ -934,6 +959,9 @@ export class PartnerOperationsService {
       ]),
     ]);
 
+    // `week` already covers today's range too (weekStart <= startOfDay always) — no need for a
+    // separate query.
+    const today = week.filter((o) => o.updatedAt >= startOfDay);
     const todayTotal = today.reduce((s, o) => s + o.total, 0);
     const weekTotal = week.reduce((s, o) => s + o.total, 0);
     const monthTotal = month.reduce((s, o) => s + o.total, 0);
@@ -961,15 +989,14 @@ export class PartnerOperationsService {
     };
 
     const last7: { date: string; revenue: number; payout: number; orders: number; _dayOrders: { total: number; subtotal?: number; baseSubtotal?: number; pricingModel?: string; branchId?: Types.ObjectId }[] }[] = [];
+    // `week` (fetched above) already spans this exact 7-day window — partition it in memory by
+    // the same [d, next) boundaries instead of re-querying the DB once per day.
     for (let i = 6; i >= 0; i--) {
       const d = new Date(startOfDay);
       d.setDate(d.getDate() - i);
       const next = new Date(d);
       next.setDate(next.getDate() + 1);
-      const dayOrders = await this.orderModel.find({
-        ...baseFilter,
-        updatedAt: { $gte: d, $lt: next },
-      });
+      const dayOrders = week.filter((o) => o.updatedAt >= d && o.updatedAt < next);
       const dayRevenue = dayOrders.reduce((s, o) => s + o.total, 0);
       last7.push({
         date: d.toISOString().slice(0, 10),
@@ -1376,8 +1403,21 @@ export class PartnerOperationsService {
       this.paymentModel,
       orders.map((o) => o._id),
     );
+    const staffIds = [
+      ...new Set(
+        orders
+          .map((o) => o.laundryProcessing?.assignedStaffId?.toString())
+          .filter((id): id is string => !!id),
+      ),
+    ];
+    const staffEmailById = staffIds.length
+      ? new Map(
+          (await this.userModel.find({ _id: { $in: staffIds } }).select('email'))
+            .map((s) => [s._id.toString(), s.email] as const),
+        )
+      : undefined;
     return Promise.all(
-      orders.map((o) => this.summarizeIncoming(o, options, paymentsByOrderId)),
+      orders.map((o) => this.summarizeIncoming(o, options, paymentsByOrderId, staffEmailById)),
     );
   }
 
@@ -1388,6 +1428,7 @@ export class PartnerOperationsService {
       viewerRole?: UserRole;
     },
     paymentsByOrderId?: Map<string, PaymentDocument>,
+    staffEmailById?: Map<string, string | undefined>,
   ) {
     const storedStep = normalizeProcessingStepId(order.laundryProcessing?.currentStepId);
     const initialStep = getInitialProcessingStepForOrder(order.status);
@@ -1401,10 +1442,13 @@ export class PartnerOperationsService {
         : formatPartnerPreProcessingLabel(order.status));
     let assignedStaffEmail: string | undefined;
     if (order.laundryProcessing?.assignedStaffId) {
-      const staff = await this.userModel
-        .findById(order.laundryProcessing.assignedStaffId)
-        .select('email');
-      assignedStaffEmail = staff?.email;
+      const staffId = order.laundryProcessing.assignedStaffId.toString();
+      if (staffEmailById) {
+        assignedStaffEmail = staffEmailById.get(staffId);
+      } else {
+        const staff = await this.userModel.findById(staffId).select('email');
+        assignedStaffEmail = staff?.email;
+      }
     }
 
     const sla = computePickupSla({

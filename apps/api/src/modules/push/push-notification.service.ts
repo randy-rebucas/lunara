@@ -128,6 +128,9 @@ export class PushNotificationService {
     return Object.fromEntries(rows.map((r) => [r._id, r.count]));
   }
 
+  // FCM's multicast API caps a single request at 500 tokens.
+  private static readonly FCM_BATCH_SIZE = 500;
+
   private async sendToTokens(
     tokenDocs: PushTokenDocument[],
     payload: PushPayload,
@@ -143,43 +146,53 @@ export class PushNotificationService {
     const data = stringifyPushData(payload.data);
     let sent = 0;
 
-    for (const doc of tokenDocs) {
-      try {
-        await messaging.send({
-          token: doc.token,
+    // Sending one-token-at-a-time here would mean a broadcast to "all users" issues one
+    // sequential network round-trip per device inside a single HTTP request — for a large
+    // audience that can run long enough to time out the admin's request entirely. FCM's
+    // sendEachForMulticast batches up to 500 tokens per call, so a broadcast to N devices is
+    // ceil(N/500) round-trips instead of N.
+    for (let i = 0; i < tokenDocs.length; i += PushNotificationService.FCM_BATCH_SIZE) {
+      const batch = tokenDocs.slice(i, i + PushNotificationService.FCM_BATCH_SIZE);
+      const response = await messaging.sendEachForMulticast({
+        tokens: batch.map((doc) => doc.token),
+        notification: {
+          title: payload.title,
+          body: payload.body,
+        },
+        data,
+        android: {
+          priority: 'high',
           notification: {
-            title: payload.title,
-            body: payload.body,
+            channelId: payload.channelId ?? 'default',
+            priority: 'high' as const,
           },
-          data,
-          android: {
-            priority: 'high',
-            notification: {
-              channelId: payload.channelId ?? 'default',
-              priority: 'high' as const,
+        },
+        apns: {
+          payload: {
+            aps: {
+              sound: 'default',
             },
           },
-          apns: {
-            payload: {
-              aps: {
-                sound: 'default',
-              },
-            },
-          },
-        });
-        sent += 1;
-      } catch (err: unknown) {
-        const code =
-          typeof err === 'object' && err !== null && 'code' in err
-            ? String((err as { code?: string }).code)
-            : '';
-        if (isInvalidFcmTokenError(code)) {
-          await this.pushTokenModel.deleteOne({ _id: doc._id });
-          this.logger.debug(`Pruned invalid push token for user ${doc.userId}`);
-        } else {
-          this.logger.warn(`FCM send failed: ${code || err}`);
-        }
-      }
+        },
+      });
+
+      sent += response.successCount;
+      await Promise.all(
+        response.responses.map(async (result, idx) => {
+          if (result.success) return;
+          const doc = batch[idx];
+          const code =
+            typeof result.error === 'object' && result.error !== null && 'code' in result.error
+              ? String((result.error as { code?: string }).code)
+              : '';
+          if (isInvalidFcmTokenError(code)) {
+            await this.pushTokenModel.deleteOne({ _id: doc._id });
+            this.logger.debug(`Pruned invalid push token for user ${doc.userId}`);
+          } else {
+            this.logger.warn(`FCM send failed: ${code || result.error}`);
+          }
+        }),
+      );
     }
 
     return sent;

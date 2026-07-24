@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { EmptyState } from '../empty-state';
 import { LiveBadge } from '../ui/stat-card';
 import { adminFetch } from '../../lib/admin-api';
-import { formatOrderId } from '../../lib/format-label';
+import { formatOrderId, formatSlugLabel } from '../../lib/format-label';
 import { isAdminRealtimeConnected } from '../../lib/admin-realtime';
 import { useAdminQuery } from '../../lib/use-admin-query';
 import {
@@ -22,6 +22,7 @@ interface IncomingOrder {
   status: string;
   statusLabel: string;
   branchName?: string;
+  scheduledPickupAt?: string | null;
   canAssignShop: boolean;
   awaitingPartnerAccept?: boolean;
   canAssignPickupRider: boolean;
@@ -41,11 +42,11 @@ interface ShopCapacity {
 
 interface RiderBoardRow {
   riderId: string;
-  userId: string;
   rider: string;
   boardStatus: 'Available' | 'Pickup' | 'Delivery' | 'Offline';
   isOnline: boolean;
   activeOrderId?: string;
+  vehicleType?: string;
 }
 
 interface BranchEvaluation {
@@ -83,6 +84,16 @@ const RIDER_STATUS_CLASS: Record<string, string> = {
   Delivery: 'badge-primary',
   Offline: 'badge-neutral',
 };
+
+function formatShortDateTime(iso?: string | null): string {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
 
 function queueStatusTone(status: string): string {
   if (status === 'pending' || status === 'pending_dispatch') return 'badge-warning';
@@ -485,7 +496,14 @@ export function DispatchBoard() {
                             <td className="max-w-[8rem] truncate text-muted" title={row.area}>
                               {row.area}
                             </td>
-                            <td className="whitespace-nowrap tabular-nums">{row.weightKg} kg</td>
+                            <td className="whitespace-nowrap tabular-nums">
+                              {row.weightKg} kg
+                              {row.scheduledPickupAt ? (
+                                <p className="text-xs font-normal text-muted">
+                                  ↑ {formatShortDateTime(row.scheduledPickupAt)}
+                                </p>
+                              ) : null}
+                            </td>
                             <td>
                               <span className={`${queueStatusTone(row.status)} whitespace-nowrap capitalize`}>
                                 {row.statusLabel}
@@ -692,7 +710,14 @@ export function DispatchBoard() {
                           aria-hidden
                         />
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-slate-900">{r.rider}</p>
+                          <p className="truncate text-sm font-medium text-slate-900">
+                            {r.rider}
+                            {r.vehicleType ? (
+                              <span className="ml-1.5 text-xs font-normal text-muted capitalize">
+                                {formatSlugLabel(r.vehicleType)}
+                              </span>
+                            ) : null}
+                          </p>
                           {r.activeOrderId ? (
                             <Link href={`/orders/${r.activeOrderId}`} className="link-primary text-code text-xs">
                               {formatOrderId(r.activeOrderId)}

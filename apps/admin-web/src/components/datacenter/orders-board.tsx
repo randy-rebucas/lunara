@@ -31,7 +31,8 @@ interface OrderRow {
   slaLabel?: string;
   operationsConflict?: boolean;
   createdAt?: string;
-  updatedAt?: string;
+  dispatchStatus?: string;
+  partnerAcceptedAt?: string | null;
   paymentMethod?: string;
   paymentStatus?: string;
   paymentReceiptCode?: string;
@@ -136,6 +137,17 @@ function slaBadgeClass(status?: string) {
   if (status === 'breached') return 'badge-danger';
   if (status === 'warning') return 'badge-warning';
   return 'badge-neutral';
+}
+
+const AWAITING_PARTNER_STATUSES = ['shop_assigned', 'confirmed', 'ready_for_delivery'];
+
+function isAwaitingPartnerAccept(o: OrderRow): boolean {
+  return (
+    !!o.branchName &&
+    o.dispatchStatus === 'dispatched' &&
+    !o.partnerAcceptedAt &&
+    AWAITING_PARTNER_STATUSES.includes(o.status)
+  );
 }
 
 function formatShortDateTime(iso?: string | null): string {
@@ -563,6 +575,14 @@ export function OrdersBoard() {
                                 {o.operationsConflict ? (
                                   <span className="badge-danger">Conflict</span>
                                 ) : null}
+                                {isAwaitingPartnerAccept(o) ? (
+                                  <span
+                                    className="badge-neutral"
+                                    title="Partner must accept the order in the partner portal before a rider can be assigned"
+                                  >
+                                    Awaiting partner
+                                  </span>
+                                ) : null}
                                 {o.slaStatus === 'breached' || o.slaStatus === 'warning' ? (
                                   <span className={`${slaBadgeClass(o.slaStatus)} whitespace-nowrap`}>
                                     {o.slaLabel}
@@ -603,6 +623,11 @@ export function OrdersBoard() {
                       <span className={`${statusBadgeClass(selected.status)} capitalize`}>
                         {formatSlugLabel(selected.status)}
                       </span>
+                      {isAwaitingPartnerAccept(selected) ? (
+                        <span className="badge-neutral" title="Partner must accept the order in the partner portal before a rider can be assigned">
+                          Awaiting partner
+                        </span>
+                      ) : null}
                     </div>
                     <button
                       type="button"

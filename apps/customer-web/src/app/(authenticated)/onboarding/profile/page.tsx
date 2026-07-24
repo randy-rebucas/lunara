@@ -23,10 +23,12 @@ export default function OnboardingProfilePage() {
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    fetchOnboardingStatus(api).then((status) => {
-      if (!status.needsProfile && status.needsAddress) router.replace('/onboarding/address');
-      if (status.isComplete) router.replace('/dashboard');
-    });
+    fetchOnboardingStatus(api)
+      .then((status) => {
+        if (!status.needsProfile && status.needsAddress) router.replace('/onboarding/address');
+        if (status.isComplete) router.replace('/dashboard');
+      })
+      .catch(() => {});
   }, [isAuthenticated, api, router]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -63,12 +65,14 @@ export default function OnboardingProfilePage() {
                 value={form.firstName}
                 onChange={(e) => setForm({ ...form, firstName: e.target.value })}
                 required
+                maxLength={80}
               />
               <Input
                 placeholder="Last name"
                 value={form.lastName}
                 onChange={(e) => setForm({ ...form, lastName: e.target.value })}
                 required
+                maxLength={80}
               />
             </div>
             {user?.email && (

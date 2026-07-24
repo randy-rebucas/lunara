@@ -39,6 +39,7 @@ interface PartnerApplicationDetail {
   declarationAccepted: boolean;
   message?: string;
   status: string;
+  rejectionReason?: string;
   createdAt?: string;
 }
 
@@ -71,7 +72,10 @@ export default function PartnerApplicationReviewPage() {
     try {
       await adminFetch(`/partner-applications/${id}/status`, {
         method: 'PATCH',
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({
+          status,
+          rejectionReason: status === 'rejected' ? rejectReason.trim() : undefined,
+        }),
       });
       setRejecting(false);
       setRejectReason('');
@@ -145,9 +149,13 @@ export default function PartnerApplicationReviewPage() {
                   { label: 'Business type', value: formatSlugLabel(data.businessType) },
                   {
                     label: 'Address',
-                    value: [data.address.street, data.address.barangay, data.address.cityMunicipality, data.address.province]
-                      .filter(Boolean)
-                      .join(', '),
+                    value: [
+                      data.address.street,
+                      data.address.barangay,
+                      data.address.cityMunicipality,
+                      data.address.province,
+                      data.address.postalCode,
+                    ].filter(Boolean).join(', '),
                   },
                   { label: 'Daily capacity', value: `${data.operations.dailyCapacityKg} kg` },
                   { label: 'Service radius', value: `${data.operations.serviceRadiusKm} km` },
@@ -163,6 +171,12 @@ export default function PartnerApplicationReviewPage() {
                 <div className="mt-3 border-t border-border/60 pt-3">
                   <p className="dc-label">Message</p>
                   <p className="mt-1 text-sm text-slate-900">{data.message}</p>
+                </div>
+              )}
+              {data.status === 'rejected' && data.rejectionReason && (
+                <div className="mt-3 border-t border-border/60 pt-3">
+                  <p className="dc-label">Rejection reason</p>
+                  <p className="mt-1 text-sm text-slate-900">{data.rejectionReason}</p>
                 </div>
               )}
             </OpsPanel>
@@ -194,7 +208,7 @@ export default function PartnerApplicationReviewPage() {
                       <button
                         type="button"
                         className="btn-primary btn-sm bg-red-600 hover:bg-red-700"
-                        disabled={actionBusy}
+                        disabled={actionBusy || !rejectReason.trim()}
                         onClick={() => setStatus('rejected')}
                       >
                         {actionBusy ? 'Saving…' : 'Confirm reject'}

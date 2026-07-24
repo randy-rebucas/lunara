@@ -93,7 +93,11 @@ export function resolveRiderNotificationRoute(
     return { kind: 'pickup', orderId };
   }
 
-  return { kind: 'pickup', orderId };
+  // An order-related notification whose type/status doesn't match a known pickup or delivery
+  // pattern (e.g. a future notification type, or a reassignment) — guessing 'pickup' here could
+  // route the rider to a leg they were never assigned, which fails with a generic load error.
+  // No confident route is safer than a wrong one: skip navigation, tapping still marks it read.
+  return null;
 }
 
 export function formatNotificationTime(iso: string): string {

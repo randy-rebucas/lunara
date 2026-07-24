@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@lunara/ui';
 import { formatPhone, isValidPhilippineMobile } from '@lunara/utils';
 import { fetchOnboardingStatus, getOnboardingPath } from '@lunara/hooks/onboarding';
@@ -15,7 +15,7 @@ import { Input } from '../../../components/ui/input';
 type Step = 'phone' | 'otp';
 
 export default function SignUpPage() {
-  const { signupWithOtp, requestOtp, api } = useAuthContext();
+  const { signupWithOtp, requestOtp, api, isAuthenticated } = useAuthContext();
   const router = useRouter();
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
@@ -23,6 +23,13 @@ export default function SignUpPage() {
   const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    fetchOnboardingStatus(api)
+      .then((status) => router.replace(getOnboardingPath(status)))
+      .catch(() => {});
+  }, [isAuthenticated, api, router]);
 
   async function handleSendOtp(e?: React.FormEvent) {
     e?.preventDefault();

@@ -76,6 +76,6 @@ export class PartnerApplicationsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.STAFF)
   updateStatus(@Param('id') id: string, @Body() dto: UpdatePartnerApplicationStatusDto) {
-    return this.partnerApplicationsService.updateStatus(id, dto.status);
+    return this.partnerApplicationsService.updateStatus(id, dto.status, dto.rejectionReason);
   }
 }

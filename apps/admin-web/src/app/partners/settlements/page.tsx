@@ -50,21 +50,20 @@ function CreateSettlementModal({
   onCreated: () => void;
 }) {
   const [step, setStep] = useState<'select' | 'confirm'>('select');
-  const [orders, setOrders] = useState<UnsettledOrder[] | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [adminNote, setAdminNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const loadOrders = useCallback(
+    () => adminFetch<UnsettledOrder[]>(`/admin/partners/${partnerId}/unsettled-orders`),
+    [partnerId],
+  );
+  const { data: orders, error: loadError } = useAdminQuery(loadOrders, [partnerId]);
+
   useEffect(() => {
-    adminFetch<UnsettledOrder[]>(`/admin/partners/${partnerId}/unsettled-orders`)
-      .then((res) => {
-        setOrders(res);
-        setSelected(new Set(res.map((o) => o.orderId)));
-      })
-      .catch((e) => setLoadError(e instanceof Error ? e.message : 'Failed to load orders'));
-  }, [partnerId]);
+    if (orders) setSelected(new Set(orders.map((o) => o.orderId)));
+  }, [orders]);
 
   const selectedOrders = orders?.filter((o) => selected.has(o.orderId)) ?? [];
   const totalGross  = selectedOrders.reduce((s, o) => s + o.amount, 0);

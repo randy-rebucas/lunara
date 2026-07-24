@@ -4,6 +4,7 @@ import {
   IsBoolean,
   IsEnum,
   IsMongoId,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
@@ -49,14 +50,17 @@ export class UpdateBranchDto {
 
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
   line1?: string;
 
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
   city?: string;
 
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
   province?: string;
 
   @IsOptional()

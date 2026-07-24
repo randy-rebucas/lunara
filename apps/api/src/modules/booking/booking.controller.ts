@@ -28,11 +28,16 @@ export class BookingController {
   getAvailability(
     @Req() req: { user: { sub: string } },
     @Query('addressId') addressId: string,
+    @Query('branchId') branchId?: string,
   ) {
     if (!addressId?.trim()) {
       throw new BadRequestException('Select a pickup address first');
     }
-    return this.bookingService.getAvailability(req.user.sub, addressId.trim());
+    const trimmedBranchId = branchId?.trim() || undefined;
+    if (trimmedBranchId && !Types.ObjectId.isValid(trimmedBranchId)) {
+      throw new BadRequestException('Invalid branch id');
+    }
+    return this.bookingService.getAvailability(req.user.sub, addressId.trim(), trimmedBranchId);
   }
 
   @Get('shops')
@@ -50,11 +55,17 @@ export class BookingController {
   @Post('quote')
   @Roles(UserRole.CUSTOMER)
   quote(
-    @Req() req: { user: { sub: string } },
+    @Req() req: { user: { sub: string }; headers: Record<string, string | undefined> },
     @Query('addressId') addressId: string,
     @Body() dto: BookingQuoteDto,
   ) {
-    return this.bookingService.quote(req.user.sub, addressId, dto);
+    // Same stale/malformed-header guard as createOrder — never crash a quote preview.
+    const rawPartnerContextId = req.headers['x-lunara-partner-id']?.trim() || undefined;
+    const partnerContextId =
+      rawPartnerContextId && Types.ObjectId.isValid(rawPartnerContextId)
+        ? rawPartnerContextId
+        : undefined;
+    return this.bookingService.quote(req.user.sub, addressId, dto, partnerContextId);
   }
 
   @Post('orders')

@@ -355,9 +355,12 @@ export class ProcessingService {
     if (!trimmed) throw new BadRequestException('Search query is required');
 
     const tag = await this.laundryTagsService.findByCode(trimmed);
+    // Shelf slots are free-typed at assignment time (no case normalization there either), so match
+    // case-insensitively here — tag codes don't need this, `findByCode` already normalizes those.
+    const escapedForRegex = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const filter: Record<string, unknown> = tag?.currentOrderId
       ? { _id: tag.currentOrderId }
-      : { 'laundryProcessing.shelfSlot': trimmed };
+      : { 'laundryProcessing.shelfSlot': new RegExp(`^${escapedForRegex}$`, 'i') };
 
     if (role === UserRole.PARTNER) {
       filter.partnerId = new Types.ObjectId(userId);
@@ -447,7 +450,6 @@ export class ProcessingService {
     paymentsByOrderId?: Map<string, PaymentDocument>,
   ) {
     const currentStepId = order.laundryProcessing?.currentStepId
-      ?? getInitialProcessingStepForOrder(order.status)
       ?? getInitialProcessingStepForOrder(order.status)
       ?? 'received';
     const step = getProcessingStep(currentStepId as LaundryProcessingStepId);

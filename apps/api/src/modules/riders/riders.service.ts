@@ -539,12 +539,7 @@ export class RidersService {
         branchName: task.branchName,
         cancelledAt: task.updatedAt,
         leg:
-          task.deliveryRiderId?.toString() === userId &&
-          task.pickupRiderId?.toString() !== userId
-            ? ('delivery' as const)
-            : task.deliveryRiderId?.toString() === userId
-              ? ('delivery' as const)
-              : ('pickup' as const),
+          task.deliveryRiderId?.toString() === userId ? ('delivery' as const) : ('pickup' as const),
       })),
     };
   }
@@ -626,7 +621,11 @@ export class RidersService {
     rider.documents = nextDocuments;
     await rider.save();
     if (previousDocument) {
-      await this.cloudinaryStorageService.deleteFile('lunara/rider-documents', previousDocument.fileUrl, 'private');
+      // Best-effort cleanup of the superseded file: the new document is already saved and
+      // authoritative, so a failure to delete the old blob must not fail this request.
+      await this.cloudinaryStorageService
+        .deleteFile('lunara/rider-documents', previousDocument.fileUrl, 'private')
+        .catch(() => {});
     }
 
     return this.getMe(userId);

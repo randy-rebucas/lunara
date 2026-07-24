@@ -4,20 +4,22 @@ import { Model, Types } from 'mongoose';
 import { BookingType, OrderStatus, UserRole, type DayOperatingHours, type OperatingHours } from '@lunara/types';
 import {
   applyShopMarkup,
+  BranchPricingMode,
   DEFAULT_OPERATING_HOURS,
   distanceKm,
   estimateTurnaroundHours,
   formatDistanceKm,
+  getTodayScheduleSummary,
   buildPartnerCoverageNotice,
   rankBranchesForDispatch,
   resolveCoordinates,
   scoreBranchPerformance,
-  validateServiceArea,
   type PartnerCoverageInfo,
 } from '@lunara/utils';
 import { Address, AddressDocument } from '../addresses/schemas/address.schema';
 import { CloudinaryStorageService } from '../../common/storage/cloudinary-storage.service';
 import { CatalogService } from '../catalog/catalog.service';
+import { ServiceAreasService } from '../service-areas/service-areas.service';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { Rider, RiderDocument } from '../riders/schemas/rider.schema';
 import { RiderAssignmentService } from '../riders/rider-assignment.service';
@@ -115,16 +117,37 @@ export class BranchesService {
     private trackingGateway: TrackingGateway,
     private catalogService: CatalogService,
     private cloudinaryStorageService: CloudinaryStorageService,
+    private serviceAreasService: ServiceAreasService,
     @Inject(forwardRef(() => RiderAssignmentService))
     private riderAssignmentService: RiderAssignmentService,
   ) {}
 
+  /** What unit this specific service bills the customer in — per-service `pricingUnit` override,
+   * falling back to the branch-level `pricingMode` for services configured before per-service
+   * units existed. */
+  resolveServicePricingUnit(branch: BranchDocument, bookingType: BookingType): BranchPricingMode {
+    const override = branch.servicePricing?.find((p) => p.serviceType === bookingType);
+    return override?.pricingUnit ?? branch.pricingMode ?? BranchPricingMode.FLAT_BAG;
+  }
+
   /** Shop's own price/kg for a service; falls back to the global catalog price when not customized. */
   async resolveBranchServicePrice(branch: BranchDocument, bookingType: BookingType) {
     const override = branch.servicePricing?.find((p) => p.serviceType === bookingType);
-    if (override) return override.basePricePerKg;
+    if (override?.basePricePerKg != null) return override.basePricePerKg;
     const service = await this.catalogService.findActiveByType(bookingType);
     return service?.pricePerKg ?? 0;
+  }
+
+  /** Holidays set directly on this branch, or inherited from the partner's main shop when this
+   * branch hasn't defined its own (per-partner holiday model — set once on the main shop, applies
+   * network-wide for that partner unless a specific branch opts to override it). */
+  async resolveBranchHolidays(branch: BranchDocument) {
+    if (branch.holidays?.length) return branch.holidays;
+    if (branch.isMainShop) return [];
+    const mainShop = await this.branchModel
+      .findOne({ partnerUserId: branch.partnerUserId, isMainShop: true, isActive: true })
+      .lean();
+    return mainShop?.holidays ?? [];
   }
 
   /** Shop's own price for an add-on; falls back to the global catalog price when not customized.
@@ -145,6 +168,37 @@ export class BranchesService {
     return addon?.price ?? 0;
   }
 
+  /** What unit this add-on bills the customer in — custom add-ons (branch-owned) are always flat. */
+  resolveAddonPricingUnit(branch: BranchDocument, addonSlug: string): BranchPricingMode {
+    if (addonSlug.startsWith(CUSTOM_ADDON_ID_PREFIX)) return BranchPricingMode.FLAT_BAG;
+    const override = branch.addonPricing?.find((p) => p.addonSlug === addonSlug);
+    return override?.pricingUnit ?? BranchPricingMode.FLAT_BAG;
+  }
+
+  /** The rate to bill at for this add-on's own pricing unit — the per-kg/load/piece override when
+   * set, or the flat/global price as fallback (mirrors resolveBranchAddonPrice for the flat case). */
+  async resolveAddonRateForUnit(
+    branch: BranchDocument,
+    addonSlug: string,
+    unit: BranchPricingMode,
+  ): Promise<number> {
+    if (addonSlug.startsWith(CUSTOM_ADDON_ID_PREFIX)) {
+      return this.resolveBranchAddonPrice(branch, addonSlug);
+    }
+    const override = branch.addonPricing?.find((p) => p.addonSlug === addonSlug);
+    switch (unit) {
+      case BranchPricingMode.PER_KG:
+        return override?.basePricePerKg ?? 0;
+      case BranchPricingMode.PER_LOAD:
+        return override?.basePricePerLoad ?? 0;
+      case BranchPricingMode.PER_PIECE:
+        return override?.basePricePerPiece ?? 0;
+      case BranchPricingMode.FLAT_BAG:
+      default:
+        return this.resolveBranchAddonPrice(branch, addonSlug);
+    }
+  }
+
   /** Branch's own active custom add-ons, shaped like BookingAddonOption for use alongside the
    * global catalog list in the booking quote/order path. */
   async listCustomAddonOptions(branch: BranchDocument) {
@@ -160,18 +214,22 @@ export class BranchesService {
     }));
   }
 
-  private async serializeShopPricing(branch: BranchDocument) {
+  private async serializeShopPricing(branch: BranchDocument, includeHidden = false) {
     const services = await this.catalogService.listActiveServices();
     const hidden = new Set(branch.hiddenServiceTypes ?? []);
     const globalItems = await Promise.all(
       services
-        .filter((service) => !hidden.has(service.type))
+        .filter((service) => includeHidden || !hidden.has(service.type))
         .map(async (service) => {
           const basePricePerKg = await this.resolveBranchServicePrice(branch, service.type);
+          const override = branch.servicePricing?.find((p) => p.serviceType === service.type);
           return {
             type: service.type,
             label: service.label,
             basePricePerKg,
+            basePricePerLoad: override?.basePricePerLoad,
+            basePricePerPiece: override?.basePricePerPiece,
+            pricingUnit: override?.pricingUnit ?? branch.pricingMode ?? BranchPricingMode.FLAT_BAG,
             customerPricePerKg: applyShopMarkup(basePricePerKg),
             isCustom: false,
           };
@@ -195,19 +253,26 @@ export class BranchesService {
     return [...globalItems, ...customItems];
   }
 
-  private async serializeShopAddonPricing(branch: BranchDocument) {
+  private async serializeShopAddonPricing(branch: BranchDocument, includeHidden = false) {
     const addons = await this.catalogService.listActiveAddons();
     const hidden = new Set(branch.hiddenAddonSlugs ?? []);
     const globalItems = await Promise.all(
       addons
-        .filter((addon) => !hidden.has(addon.id))
+        .filter((addon) => includeHidden || !hidden.has(addon.id))
         .map(async (addon) => {
           const basePrice = await this.resolveBranchAddonPrice(branch, addon.id);
+          const override = branch.addonPricing?.find((p) => p.addonSlug === addon.id);
+          const pricingUnit = override?.pricingUnit ?? BranchPricingMode.FLAT_BAG;
+          const activeRate = await this.resolveAddonRateForUnit(branch, addon.id, pricingUnit);
           return {
             slug: addon.id,
             label: addon.label,
             basePrice,
-            customerPrice: applyShopMarkup(basePrice),
+            basePricePerKg: override?.basePricePerKg,
+            basePricePerLoad: override?.basePricePerLoad,
+            basePricePerPiece: override?.basePricePerPiece,
+            pricingUnit,
+            customerPrice: applyShopMarkup(activeRate),
             isCustom: false,
           };
         }),
@@ -373,11 +438,11 @@ export class BranchesService {
   }
 
   async updateHiddenCatalog(branchId: string, dto: UpdateBranchHiddenCatalogDto) {
-    const branch = await this.branchModel.findById(branchId);
+    const update: Record<string, unknown> = {};
+    if (dto.hiddenServiceTypes !== undefined) update.hiddenServiceTypes = dto.hiddenServiceTypes;
+    if (dto.hiddenAddonSlugs !== undefined) update.hiddenAddonSlugs = dto.hiddenAddonSlugs;
+    const branch = await this.branchModel.findByIdAndUpdate(branchId, { $set: update }, { new: true });
     if (!branch) throw new NotFoundException('Branch not found');
-    if (dto.hiddenServiceTypes !== undefined) branch.hiddenServiceTypes = dto.hiddenServiceTypes;
-    if (dto.hiddenAddonSlugs !== undefined) branch.hiddenAddonSlugs = dto.hiddenAddonSlugs;
-    await branch.save();
     return {
       success: true,
       data: {
@@ -546,6 +611,9 @@ export class BranchesService {
         const todaysOrders = await this.countTodaysOrders(branch._id);
         const services = await this.serializeShopPricing(branch);
         const addons = await this.serializeShopAddonPricing(branch);
+        const holidays = await this.resolveBranchHolidays(branch);
+        const operatingHours =
+          branch.operatingHours?.length === 7 ? branch.operatingHours : DEFAULT_OPERATING_HOURS;
         return {
           branchId: branch._id.toString(),
           partnerUserId: branch.partnerUserId.toString(),
@@ -559,6 +627,10 @@ export class BranchesService {
           capacityAvailable:
             activeOrders < branch.maxActiveOrders && todaysOrders < branch.dailyQuotaOrders,
           logoUrl: branch.logoUrl,
+          pricingMode: branch.pricingMode ?? BranchPricingMode.FLAT_BAG,
+          operatingHours,
+          holidays,
+          todaySchedule: getTodayScheduleSummary(operatingHours, holidays),
           services,
           addons,
         };
@@ -617,7 +689,13 @@ export class BranchesService {
     return branch;
   }
 
-  async getShopPricing(branchId: string) {
+  /**
+   * `includeHidden` controls whether services/add-ons the shop has hidden are included in the
+   * response: false (default) for the customer-facing "what does this shop offer" view, true for
+   * the partner's own pricing editor — which needs to see hidden items too so it can toggle them
+   * back on (a hidden item that's filtered out can never be un-hidden from that UI again).
+   */
+  async getShopPricing(branchId: string, includeHidden = false) {
     const branch = await this.branchModel.findById(branchId);
     if (!branch || !branch.isActive || branch.branchType !== 'partner_shop') {
       throw new NotFoundException('Shop not found');
@@ -625,8 +703,9 @@ export class BranchesService {
     return {
       success: true,
       data: {
-        services: await this.serializeShopPricing(branch),
-        addons: await this.serializeShopAddonPricing(branch),
+        pricingMode: branch.pricingMode,
+        services: await this.serializeShopPricing(branch, includeHidden),
+        addons: await this.serializeShopAddonPricing(branch, includeHidden),
         hiddenServiceTypes: branch.hiddenServiceTypes ?? [],
         hiddenAddonSlugs: branch.hiddenAddonSlugs ?? [],
       },
@@ -635,20 +714,102 @@ export class BranchesService {
 
   async updateServicePricing(
     branchId: string,
-    pricing: { serviceType: BookingType; basePricePerKg: number }[],
+    pricing: {
+      serviceType: BookingType;
+      basePricePerKg?: number;
+      basePricePerLoad?: number;
+      basePricePerPiece?: number;
+      pricingUnit?: BranchPricingMode;
+    }[],
   ) {
-    const branch = await this.branchModel.findById(branchId);
+    const rateKeyByUnit: Partial<Record<BranchPricingMode, 'basePricePerKg' | 'basePricePerLoad' | 'basePricePerPiece'>> = {
+      [BranchPricingMode.PER_KG]: 'basePricePerKg',
+      [BranchPricingMode.PER_LOAD]: 'basePricePerLoad',
+      [BranchPricingMode.PER_PIECE]: 'basePricePerPiece',
+    };
+    for (const row of pricing) {
+      const rateKey = row.pricingUnit ? rateKeyByUnit[row.pricingUnit] : undefined;
+      if (rateKey && row[rateKey] == null) {
+        const modeLabel = { basePricePerKg: 'per-kg', basePricePerLoad: 'per-load', basePricePerPiece: 'per-piece' }[
+          rateKey
+        ];
+        throw new BadRequestException(`Set a ${modeLabel} rate before switching this service to that unit`);
+      }
+    }
+    // Atomic $set instead of load-then-save: this endpoint is fired alongside addon-pricing and
+    // hidden-catalog updates in parallel from the partner-web save button, and load/save races on
+    // Mongoose's version key when two of those land on the same document at once.
+    const branch = await this.branchModel.findByIdAndUpdate(
+      branchId,
+      { $set: { servicePricing: pricing } },
+      { new: true },
+    );
     if (!branch) throw new NotFoundException('Branch not found');
-    branch.servicePricing = pricing;
-    await branch.save();
     return { success: true, data: await this.serializeShopPricing(branch) };
   }
 
-  async updateAddonPricing(branchId: string, pricing: { addonSlug: string; basePrice: number }[]) {
+  async updatePricingMode(branchId: string, pricingMode: BranchPricingMode) {
     const branch = await this.branchModel.findById(branchId);
     if (!branch) throw new NotFoundException('Branch not found');
-    branch.addonPricing = pricing;
+    const rateKeyByMode: Partial<Record<BranchPricingMode, 'basePricePerKg' | 'basePricePerLoad' | 'basePricePerPiece'>> = {
+      [BranchPricingMode.PER_KG]: 'basePricePerKg',
+      [BranchPricingMode.PER_LOAD]: 'basePricePerLoad',
+      [BranchPricingMode.PER_PIECE]: 'basePricePerPiece',
+    };
+    const rateKey = rateKeyByMode[pricingMode];
+    if (rateKey) {
+      const activeTypes = (await this.catalogService.listActiveServices())
+        .map((s) => s.type)
+        .filter((t) => !(branch.hiddenServiceTypes ?? []).includes(t));
+      const missing = activeTypes.some((type) => {
+        const rate = branch.servicePricing?.find((p) => p.serviceType === type)?.[rateKey];
+        return rate == null;
+      });
+      if (missing) {
+        const modeLabel = { basePricePerKg: 'per-kg', basePricePerLoad: 'per-load', basePricePerPiece: 'per-piece' }[
+          rateKey
+        ];
+        throw new BadRequestException(
+          `Set a ${modeLabel} rate for every offered service before switching to this pricing mode`,
+        );
+      }
+    }
+    branch.pricingMode = pricingMode;
     await branch.save();
+    return { success: true, data: { pricingMode: branch.pricingMode } };
+  }
+
+  async updateAddonPricing(
+    branchId: string,
+    pricing: {
+      addonSlug: string;
+      basePrice: number;
+      basePricePerKg?: number;
+      basePricePerLoad?: number;
+      basePricePerPiece?: number;
+      pricingUnit?: BranchPricingMode;
+    }[],
+  ) {
+    const rateKeyByUnit: Partial<Record<BranchPricingMode, 'basePricePerKg' | 'basePricePerLoad' | 'basePricePerPiece'>> = {
+      [BranchPricingMode.PER_KG]: 'basePricePerKg',
+      [BranchPricingMode.PER_LOAD]: 'basePricePerLoad',
+      [BranchPricingMode.PER_PIECE]: 'basePricePerPiece',
+    };
+    for (const row of pricing) {
+      const rateKey = row.pricingUnit ? rateKeyByUnit[row.pricingUnit] : undefined;
+      if (rateKey && row[rateKey] == null) {
+        const modeLabel = { basePricePerKg: 'per-kg', basePricePerLoad: 'per-load', basePricePerPiece: 'per-piece' }[
+          rateKey
+        ];
+        throw new BadRequestException(`Set a ${modeLabel} rate before switching this add-on to that unit`);
+      }
+    }
+    const branch = await this.branchModel.findByIdAndUpdate(
+      branchId,
+      { $set: { addonPricing: pricing } },
+      { new: true },
+    );
+    if (!branch) throw new NotFoundException('Branch not found');
     return { success: true, data: await this.serializeShopAddonPricing(branch) };
   }
 
@@ -906,7 +1067,7 @@ export class BranchesService {
     latitude?: number;
     longitude?: number;
   }): Promise<PartnerCoverageInfo> {
-    const area = validateServiceArea({
+    const area = await this.serviceAreasService.resolveAreaForAddress({
       line1: address.line1 ?? '',
       city: address.city,
       province: address.province,

@@ -9,7 +9,13 @@ import { Card, CardBody, SectionPanel } from '../../components/ui/card';
 import { PageHeader } from '../../components/ui/page-header';
 import { useProtectedPage } from '../../hooks/use-protected-page';
 import { isPartnerRole, partnerFetch, removeShopLogo, uploadShopLogo } from '../../lib/partner-api';
-import type { DayOperatingHours, OperatingHours, PartnerPortalSettings, PartnerSettingsData } from '@lunara/types';
+import type {
+  BranchHoliday,
+  DayOperatingHours,
+  OperatingHours,
+  PartnerPortalSettings,
+  PartnerSettingsData,
+} from '@lunara/types';
 import { usePartnerQuery } from '../../lib/use-partner-query';
 
 function SettingToggle({
@@ -418,6 +424,9 @@ export default function PartnerSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [logoBusy, setLogoBusy] = useState(false);
   const [hoursDraft, setHoursDraft] = useState<OperatingHours | null>(null);
+  const [holidaysDraft, setHolidaysDraft] = useState<BranchHoliday[] | null>(null);
+  const [newHolidayDate, setNewHolidayDate] = useState('');
+  const [newHolidayLabel, setNewHolidayLabel] = useState('');
   const [payoutDraft, setPayoutDraft] = useState<{
     method: PayoutMethod | '';
     gcashNumber: string;
@@ -471,6 +480,12 @@ export default function PartnerSettingsPage() {
     }
   }, [data, hoursDraft]);
 
+  useEffect(() => {
+    if (data && holidaysDraft === null) {
+      setHolidaysDraft(data.branch.holidays);
+    }
+  }, [data, holidaysDraft]);
+
   function updateHoursDraftDay(dayIndex: number, patch: Partial<DayOperatingHours>) {
     setHoursDraft((prev) => {
       if (!prev) return prev;
@@ -496,6 +511,42 @@ export default function PartnerSettingsPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function saveHolidays(next: BranchHoliday[]) {
+    setSaving(true);
+    try {
+      await partnerFetch<PartnerSettingsData>('/partner/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({ holidays: next }),
+      });
+      await reload();
+      toast.success('Holidays saved');
+      setHolidaysDraft(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not save holidays');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function addHoliday() {
+    if (!newHolidayDate || !holidaysDraft) return;
+    if (holidaysDraft.some((h) => h.date === newHolidayDate)) return;
+    const next = [...holidaysDraft, { date: newHolidayDate, label: newHolidayLabel.trim() || undefined }].sort(
+      (a, b) => a.date.localeCompare(b.date),
+    );
+    setHolidaysDraft(next);
+    setNewHolidayDate('');
+    setNewHolidayLabel('');
+    void saveHolidays(next);
+  }
+
+  function removeHoliday(date: string) {
+    if (!holidaysDraft) return;
+    const next = holidaysDraft.filter((h) => h.date !== date);
+    setHolidaysDraft(next);
+    void saveHolidays(next);
   }
 
   async function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -717,6 +768,81 @@ export default function PartnerSettingsPage() {
                     ) : null}
                   </div>
                 ) : null}
+              </SectionPanel>
+            )}
+
+            {/* Holidays sub-section of Hours tab */}
+            {activeTab === 'hours' && branch && (
+              <SectionPanel
+                title="Holidays"
+                description={
+                  branch.isMainShop
+                    ? 'One-off closed dates, on top of your weekly hours. These apply to every branch under your account unless a branch sets its own.'
+                    : branch.holidaysInherited
+                      ? "Inherited from your main shop's holiday calendar. Add a date here to override it for this branch only."
+                      : 'This branch has its own holiday calendar, overriding the main shop.'
+                }
+              >
+                <div className="px-6 py-4 sm:px-8">
+                  {holidaysDraft && holidaysDraft.length > 0 ? (
+                    <ul className="divide-y divide-border/60">
+                      {holidaysDraft.map((h) => (
+                        <li key={h.date} className="flex items-center justify-between py-2">
+                          <span className="text-sm text-slate-900">
+                            {h.date}
+                            {h.label ? <span className="ml-2 text-muted">— {h.label}</span> : null}
+                          </span>
+                          {canEdit ? (
+                            <button
+                              type="button"
+                              className="btn-outline btn-sm"
+                              disabled={saving}
+                              onClick={() => removeHoliday(h.date)}
+                            >
+                              Remove
+                            </button>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted">No holidays set.</p>
+                  )}
+
+                  {canEdit ? (
+                    <div className="mt-4 flex flex-wrap items-end gap-3">
+                      <div>
+                        <label className="form-label">Date</label>
+                        <input
+                          type="date"
+                          className="rounded-lg border px-2 py-1 text-sm"
+                          value={newHolidayDate}
+                          disabled={saving}
+                          onChange={(e) => setNewHolidayDate(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="form-label">Label (optional)</label>
+                        <input
+                          type="text"
+                          className="rounded-lg border px-2 py-1 text-sm"
+                          placeholder="e.g. New Year's Day"
+                          value={newHolidayLabel}
+                          disabled={saving}
+                          onChange={(e) => setNewHolidayLabel(e.target.value)}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        className="btn-primary btn-sm"
+                        disabled={saving || !newHolidayDate}
+                        onClick={addHoliday}
+                      >
+                        Add holiday
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
               </SectionPanel>
             )}
 

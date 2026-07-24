@@ -21,6 +21,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { CloudinaryStorageService } from '../../common/storage/cloudinary-storage.service';
 import { MessagingService } from './messaging.service';
+import { SendMessageDto } from './dto/send-message.dto';
 
 const attachmentUploadOptions = {
   storage: memoryStorage(),
@@ -53,7 +54,7 @@ export class MessagingController {
 
   @Get()
   async getConversation(@Req() req: any) {
-    const partnerId = this.resolvePartnerId(req);
+    const partnerId = await this.resolvePartnerId(req);
     const data = await this.messaging.getOrCreateConversation(partnerId);
     return { success: true, data };
   }
@@ -68,7 +69,7 @@ export class MessagingController {
     const user = req.user as { sub: string; role: string };
     // Partners and staff must own the conversation
     if (user.role !== UserRole.ADMIN) {
-      await this.messaging.assertOwnership(id, user.sub);
+      await this.messaging.assertOwnership(id, await this.resolvePartnerId(req));
     }
     const items = await this.messaging.listMessages(id, limit ? Number(limit) : 30, before);
     return { success: true, data: { items } };
@@ -78,12 +79,18 @@ export class MessagingController {
   async sendMessage(
     @Req() req: any,
     @Param('id') id: string,
-    @Body() body: { content?: string; attachments?: any[] },
+    @Body() body: SendMessageDto,
   ) {
     if (!body.content?.trim() && !body.attachments?.length) {
       throw new BadRequestException('Message must have content or at least one attachment');
     }
     const user = req.user as { sub: string; role: string; email?: string };
+    // Partners and staff must own the conversation — mirrors the same check in listMessages;
+    // without it, any authenticated partner/staff user could send into (or mark read) a
+    // conversation belonging to a different partner just by knowing its id.
+    if (user.role !== UserRole.ADMIN) {
+      await this.messaging.assertOwnership(id, await this.resolvePartnerId(req));
+    }
     const senderRole =
       user.role === UserRole.ADMIN ? 'admin' :
       user.role === UserRole.STAFF ? 'staff' : 'partner';
@@ -116,15 +123,18 @@ export class MessagingController {
 
   @Patch(':id/read')
   async markRead(@Req() req: any, @Param('id') id: string) {
-    const user = req.user as { role: string };
+    const user = req.user as { sub: string; role: string };
+    if (user.role !== UserRole.ADMIN) {
+      await this.messaging.assertOwnership(id, await this.resolvePartnerId(req));
+    }
     const role = user.role === UserRole.ADMIN ? 'admin' : 'partner';
     await this.messaging.markRead(id, role);
     return { success: true, data: { ok: true } };
   }
 
-  private resolvePartnerId(req: any): string {
+  private resolvePartnerId(req: any): Promise<string> {
     const user = req.user as { sub: string; role: string };
-    return user.sub;
+    return this.messaging.resolveConversationOwnerId(user.sub, user.role);
   }
 }
 
@@ -166,7 +176,7 @@ export class AdminMessagingController {
   async sendMessage(
     @Req() req: any,
     @Param('id') id: string,
-    @Body() body: { content?: string; attachments?: any[] },
+    @Body() body: SendMessageDto,
   ) {
     if (!body.content?.trim() && !body.attachments?.length) {
       throw new BadRequestException('Message must have content or at least one attachment');

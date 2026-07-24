@@ -19,6 +19,28 @@ export interface DayOperatingHours {
 /** Length 7, index = JS `Date.getDay()` (0 = Sunday … 6 = Saturday). */
 export type OperatingHours = DayOperatingHours[];
 
+export interface BranchHoliday {
+  /** ISO date (YYYY-MM-DD), no time component. */
+  date: string;
+  label?: string;
+}
+
+/** Mirrors packages/utils/src/booking.ts's BranchPricingMode — duplicated here (not imported)
+ * so packages/types consumers (e.g. PartnerReceivingView) don't need a @lunara/utils dependency. */
+export enum BranchPricingMode {
+  FLAT_BAG = 'flat_bag',
+  PER_KG = 'per_kg',
+  PER_LOAD = 'per_load',
+  PER_PIECE = 'per_piece',
+}
+
+export interface PricingModeRates {
+  basePricePerKg?: number;
+  basePricePerLoad?: number;
+  basePricePerPiece?: number;
+  minWeightKg?: number;
+}
+
 export interface PartnerPortalSettings {
   acceptingOrders: boolean;
   autoAcceptIncoming: boolean;
@@ -45,6 +67,7 @@ export interface PartnerShopBranchSummary {
   city: string;
   province: string;
   isActive: boolean;
+  isMainShop?: boolean;
   logoUrl?: string;
   maxActiveOrders: number;
   maxWeightCapacityKg: number;
@@ -52,6 +75,11 @@ export interface PartnerShopBranchSummary {
   dailyQuotaWeightKg: number;
   serviceRadiusKm: number;
   operatingHours: OperatingHours;
+  /** This branch's own holidays, or (see `holidaysInherited`) the partner's main-shop holidays. */
+  holidays: BranchHoliday[];
+  /** True when `holidays` was inherited from the partner's main shop because this branch hasn't
+   * defined its own override list. */
+  holidaysInherited: boolean;
 }
 
 export interface PartnerSettingsData {
@@ -235,8 +263,22 @@ export interface PartnerReceivingView {
     bookingType: string;
     total: number;
     estimatedWeightKg?: number;
+    estimatedLoadCount?: number;
+    estimatedPieceCount?: number;
     branchName?: string;
-    pickup?: { actualWeightKg?: number; receiptCode?: string };
+    pickup?: {
+      actualWeightKg?: number;
+      actualLoadCount?: number;
+      actualPieceCount?: number;
+      receiptCode?: string;
+    };
+    /** How the base service is billed for this order — see BranchPricingMode. Unset/'flat_bag'
+     * orders finalize price at booking time; other modes finalize once shop receiving confirms
+     * actual weight/load/piece count (see finalTotal below). */
+    pricingMode?: BranchPricingMode;
+    /** Set once shop receiving finalizes pricing (PER_KG/PER_LOAD/PER_PIECE orders only). */
+    finalServiceSubtotal?: number;
+    finalTotal?: number;
   };
   shopReceiving?: {
     receivedAt?: string;

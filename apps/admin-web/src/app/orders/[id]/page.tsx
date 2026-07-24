@@ -599,23 +599,40 @@ export default function AdminOrderOpsPage() {
                           id="manual-rider"
                           className="input-field disabled:cursor-not-allowed disabled:opacity-50"
                           disabled={!activeMode}
-                          value={riderId || (activeMode === 'assign' ? data.suggestedPickupRiderId ?? '' : '')}
+                          value={
+                            riderId ||
+                            (activeMode === 'assign'
+                              ? (assignType === 'delivery'
+                                  ? data.suggestedDeliveryRiderId
+                                  : data.suggestedPickupRiderId) ?? ''
+                              : '')
+                          }
                           onChange={(e) => setRiderId(e.target.value)}
                         >
                           <option value="">Select rider…</option>
-                          {(assignType === 'delivery'
-                            ? data.deliveryRiderSuggestions?.suggestions
-                            : data.pickupRiderSuggestions?.suggestions
-                          )?.map((s) => (
-                            <option key={s.userId} value={s.userId}>
-                              #{s.rank} {s.email ?? s.userId} — {s.recommendationScore}
-                            </option>
-                          ))}
-                          {data.availableRiders.map((r) => (
-                            <option key={r.userId} value={r.userId}>
-                              {r.email ?? r.userId}{r.isOnline ? ' (online)' : ''}
-                            </option>
-                          ))}
+                          {(() => {
+                            const suggestions =
+                              (assignType === 'delivery'
+                                ? data.deliveryRiderSuggestions?.suggestions
+                                : data.pickupRiderSuggestions?.suggestions) ?? [];
+                            const suggestedIds = new Set(suggestions.map((s) => s.userId));
+                            return (
+                              <>
+                                {suggestions.map((s) => (
+                                  <option key={s.userId} value={s.userId}>
+                                    #{s.rank} {s.email ?? s.userId} — {s.recommendationScore}
+                                  </option>
+                                ))}
+                                {data.availableRiders
+                                  .filter((r) => !suggestedIds.has(r.userId))
+                                  .map((r) => (
+                                    <option key={r.userId} value={r.userId}>
+                                      {r.email ?? r.userId}{r.isOnline ? ' (online)' : ''}
+                                    </option>
+                                  ))}
+                              </>
+                            );
+                          })()}
                         </select>
                       </div>
                     </div>

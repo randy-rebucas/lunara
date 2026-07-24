@@ -1,11 +1,20 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument } from 'mongoose';
+import { HydratedDocument, Types } from 'mongoose';
 
 export type ShopInventoryDocument = HydratedDocument<ShopInventoryItem>;
 
 @Schema({ timestamps: true, collection: 'shop_inventory' })
 export class ShopInventoryItem {
-  @Prop({ required: true, unique: true })
+  /**
+   * Owning branch. Absent on rows created before per-branch scoping shipped — those are
+   * orphaned (no longer returned by any query, which all filter on branchId) rather than
+   * migrated, since there was no reliable way to attribute pre-existing shared rows to one
+   * specific branch.
+   */
+  @Prop({ type: Types.ObjectId, required: true, index: true })
+  branchId!: Types.ObjectId;
+
+  @Prop({ required: true })
   sku!: string;
 
   @Prop({ required: true })
@@ -28,3 +37,8 @@ export class ShopInventoryItem {
 }
 
 export const ShopInventorySchema = SchemaFactory.createForClass(ShopInventoryItem);
+// Replaces the old bare-`sku` unique index — each branch keeps its own SKU namespace now.
+// Mongoose's default autoIndex creates this on startup but does not drop the old single-field
+// unique index on `sku`; that stale index must be dropped manually in any already-deployed
+// database (`db.shop_inventory.dropIndex('sku_1')`) before two branches can share a SKU code.
+ShopInventorySchema.index({ branchId: 1, sku: 1 }, { unique: true });

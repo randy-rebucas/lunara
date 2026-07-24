@@ -7,6 +7,7 @@ import {
   formatPickupSlotTimeWindow,
   isPickupSlotBookable,
   pickupSlotDayKey,
+  type BranchHoliday,
   type PickupSlot,
 } from '@lunara/utils';
 
@@ -15,6 +16,7 @@ interface PickupSchedulePickerProps {
   selectedStartAt: string;
   onSelectStartAt: (startAt: string) => void;
   dayCount?: number;
+  holidays?: BranchHoliday[];
 }
 
 export function PickupSchedulePicker({
@@ -22,10 +24,11 @@ export function PickupSchedulePicker({
   selectedStartAt,
   onSelectStartAt,
   dayCount = PICKUP_SCHEDULE_DAY_COUNT,
+  holidays = [],
 }: PickupSchedulePickerProps) {
   const scheduleDays = useMemo(
-    () => buildPickupScheduleDays(slots, new Date(), dayCount),
-    [slots, dayCount],
+    () => buildPickupScheduleDays(slots, new Date(), dayCount, holidays),
+    [slots, dayCount, holidays],
   );
 
   const [selectedDayKey, setSelectedDayKey] = useState('');
@@ -87,8 +90,11 @@ export function PickupSchedulePicker({
                 {day.isToday && (
                   <span className="mt-1 text-[10px] font-medium text-primary">Today</span>
                 )}
-                {limited && !selected && (
-                  <span className="mt-1 text-[10px] text-amber-800">Full</span>
+                {day.holidayLabel ? (
+                  <span className="mt-1 text-[10px] text-amber-800">Holiday</span>
+                ) : (
+                  limited &&
+                  !selected && <span className="mt-1 text-[10px] text-amber-800">Full</span>
                 )}
               </button>
             );
@@ -102,7 +108,9 @@ export function PickupSchedulePicker({
             ? `Pickup time · ${selectedDay.weekday}, ${selectedDay.monthLabel} ${selectedDay.dayLabel}`
             : 'Pickup time'}
         </p>
-        {timeSlots.length === 0 ? (
+        {selectedDay?.holidayLabel ? (
+          <p className="text-sm text-muted">{selectedDay.holidayLabel}. Choose another day.</p>
+        ) : timeSlots.length === 0 ? (
           <p className="text-sm text-muted">No pickup windows on this day. Choose another day.</p>
         ) : (
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">

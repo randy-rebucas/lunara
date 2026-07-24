@@ -2,6 +2,7 @@ import {
   IsArray,
   IsEnum,
   IsMongoId,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
@@ -26,12 +27,15 @@ export class CreateBranchDto {
   parentBranchId!: string;
 
   @IsString()
+  @IsNotEmpty()
   line1!: string;
 
   @IsString()
+  @IsNotEmpty()
   city!: string;
 
   @IsString()
+  @IsNotEmpty()
   province!: string;
 
   @IsMongoId()

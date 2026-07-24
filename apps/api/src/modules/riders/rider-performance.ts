@@ -39,6 +39,7 @@ export async function buildRiderPerformancePayload(
     totalDeliveryAssignments,
     onTimeDeliveries,
     ratedOrders,
+    deliveriesWithSchedule,
   ] = await Promise.all([
     orderModel.countDocuments({
       pickupRiderId: riderId,
@@ -70,30 +71,34 @@ export async function buildRiderPerformancePayload(
       })
       .select('_id')
       .lean(),
+    orderModel.countDocuments({
+      deliveryRiderId: riderId,
+      status: { $in: [OrderStatus.DELIVERED, OrderStatus.COMPLETED] },
+      scheduledDeliveryAt: { $exists: true },
+      'delivery.deliveredAt': { $exists: true },
+    }),
   ]);
 
   const completedTasks = completedPickups + completedDeliveries;
   const acceptedAssignments = acceptedPickups + acceptedDeliveries;
   const totalAssignments = totalPickupAssignments + totalDeliveryAssignments;
 
+  // `ratedOrders` is every completed delivery assigned to this rider — it's the candidate set a
+  // review could exist for, not the count that actually received one. `ratedDeliveries` below must
+  // come from the aggregate's own count of matched review documents, not ratedOrders.length.
   let customerRating: number | null = null;
+  let ratedDeliveries = 0;
   if (ratedOrders.length > 0) {
     const orderIds = ratedOrders.map((o) => o._id);
-    const agg = await reviewModel.aggregate<{ avg: number }>([
+    const agg = await reviewModel.aggregate<{ avg: number; count: number }>([
       { $match: { orderId: { $in: orderIds } } },
-      { $group: { _id: null, avg: { $avg: '$rating' } } },
+      { $group: { _id: null, avg: { $avg: '$rating' }, count: { $sum: 1 } } },
     ]);
     if (agg[0]?.avg != null) {
       customerRating = Math.round(agg[0].avg * 10) / 10;
+      ratedDeliveries = agg[0].count;
     }
   }
-
-  const deliveriesWithSchedule = await orderModel.countDocuments({
-    deliveryRiderId: riderId,
-    status: { $in: [OrderStatus.DELIVERED, OrderStatus.COMPLETED] },
-    scheduledDeliveryAt: { $exists: true },
-    'delivery.deliveredAt': { $exists: true },
-  });
 
   return {
     completionRate: pct(completedTasks, completedTasks + cancelledTasks),
@@ -105,6 +110,6 @@ export async function buildRiderPerformancePayload(
     acceptedAssignments,
     totalAssignments,
     onTimeDeliveries,
-    ratedDeliveries: ratedOrders.length,
+    ratedDeliveries,
   };
 }

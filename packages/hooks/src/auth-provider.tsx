@@ -9,7 +9,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import type { AuthTokens, User } from '@lunara/types';
+import { UserRole, type AuthTokens, type User } from '@lunara/types';
 import { formatPhone } from '@lunara/utils';
 import { createApiClient } from './api-client';
 import { assertApiUrlConfigured, resolveApiV1BaseUrl } from './api-url';
@@ -205,6 +205,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       const body = await res.json();
       if (!body.success) throw new Error(body.error?.message ?? 'Login failed');
+      // /auth/login is shared across every Lunara account type — reject anything that isn't a
+      // customer account here rather than silently signing a partner/staff/admin/rider into the
+      // customer app under their own credentials.
+      if (body.data.user.role !== UserRole.CUSTOMER) {
+        throw new Error('This account is not a customer account. Use the app for your account type.');
+      }
       persist(authDataFromSession(body.data.user, body.data.tokens));
     },
     [persist],
@@ -219,6 +225,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       const body = await res.json();
       if (!body.success) throw new Error(parseAuthError(body, 'Login failed'));
+      if (body.data.user.role !== UserRole.CUSTOMER) {
+        throw new Error('This account is not a customer account. Use the app for your account type.');
+      }
       persist(authDataFromSession(body.data.user, body.data.tokens));
     },
     [persist],

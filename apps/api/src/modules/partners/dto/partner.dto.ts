@@ -1,4 +1,5 @@
-import { IsBoolean, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsIn, IsOptional, IsString, MinLength, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreatePartnerDto {
   @IsString()
@@ -67,13 +68,17 @@ export class UpdatePartnerBrandConfigDto {
   appDisplayName?: string;
 
   @IsOptional()
+  @ValidateNested()
+  @Type(() => PartnerBrandColorsDto)
   colors?: PartnerBrandColorsDto;
 
   @IsOptional()
+  @ValidateNested()
+  @Type(() => PartnerBrandFontsDto)
   fonts?: PartnerBrandFontsDto;
 
   @IsOptional()
-  @IsString()
+  @IsIn(['draft', 'pending_review', 'live'])
   status?: 'draft' | 'pending_review' | 'live';
 }
 

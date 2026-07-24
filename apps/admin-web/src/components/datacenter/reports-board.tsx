@@ -216,7 +216,6 @@ export function ReportsBoard() {
                 </button>
               ))}
             </div>
-            <span className="badge-neutral">Polling</span>
             <span className="dc-sublabel tabular-nums" title="Last data refresh">
               Updated {updatedLabel}
             </span>

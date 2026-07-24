@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  AppState,
   FlatList,
   Linking,
   Pressable,
@@ -56,6 +57,7 @@ export default function WalletScreen() {
   const [topUpLoading, setTopUpLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [topUpMethod, setTopUpMethod] = useState<PaymentMethod>(PaymentMethod.GCASH);
+  const pendingTopupIdRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     setError('');
@@ -75,6 +77,28 @@ export default function WalletScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // If the customer left a pending top-up's PayMongo checkout in the browser, nudge a sync as
+  // soon as they return to the app instead of relying entirely on a manual pull-to-refresh —
+  // mirrors the pending-payment sync `PaymentCheckout` already does on its own load().
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active' || !pendingTopupIdRef.current) return;
+      const paymentId = pendingTopupIdRef.current;
+      pendingTopupIdRef.current = null;
+      apiFetch<{ status: string }>(`/payments/${paymentId}/sync`, { method: 'POST' })
+        .then((synced) => {
+          void load();
+          if (synced.status === 'paid') {
+            Alert.alert('Top-up confirmed', 'Your wallet balance has been updated.');
+          } else if (synced.status === 'failed') {
+            Alert.alert('Payment did not go through', 'No funds were added — please try again.');
+          }
+        })
+        .catch(() => void load());
+    });
+    return () => sub.remove();
+  }, [apiFetch, load]);
 
   async function onRefresh() {
     setRefreshing(true);
@@ -101,10 +125,11 @@ export default function WalletScreen() {
       );
 
       if (data.checkoutUrl) {
+        pendingTopupIdRef.current = data.payment?._id ?? null;
         await Linking.openURL(data.checkoutUrl);
         Alert.alert(
           'Complete top-up',
-          'Finish payment in your browser, then return here and pull to refresh your balance.',
+          'Finish payment in your browser, then return here — we’ll check your balance automatically.',
         );
         return;
       }

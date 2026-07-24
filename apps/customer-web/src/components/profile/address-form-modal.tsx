@@ -155,6 +155,7 @@ export function AddressFormModal({
                 value={form.label}
                 onChange={(e) => setForm({ ...form, label: e.target.value })}
                 required
+                maxLength={50}
               />
             </div>
 

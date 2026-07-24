@@ -103,7 +103,6 @@ export function CategoriesBoard() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="badge-neutral">Polling</span>
             <span className="dc-sublabel tabular-nums" title="Last data refresh">
               Updated {updatedLabel}
             </span>
@@ -187,6 +186,7 @@ export function CategoriesBoard() {
                         <div className="min-w-0 flex-1">
                           <p
                             className={`truncate text-sm font-medium ${s.isActive ? 'text-slate-900' : 'text-muted'}`}
+                            title={s.description || undefined}
                           >
                             {s.label}
                           </p>

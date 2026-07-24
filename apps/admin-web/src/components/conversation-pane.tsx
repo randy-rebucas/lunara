@@ -89,12 +89,20 @@ export function ConversationPane({ conversationId, onBack }: ConversationPanePro
       return null;
     });
 
+    let cancelled = false;
+
     adminFetch<ConversationDetail>(`/admin/messages/${conversationId}`)
-      .then((d) => setDetail(d))
+      .then((d) => {
+        if (!cancelled) setDetail(d);
+      })
       .catch(() => {});
     adminFetch<{ items: ChatMessage[] }>(`/admin/messages/${conversationId}/messages`)
-      .then((res) => setMessages(res.items))
-      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'));
+      .then((res) => {
+        if (!cancelled) setMessages(res.items);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load');
+      });
 
     adminFetch(`/admin/messages/${conversationId}/read`, { method: 'PATCH' }).catch(() => {});
 
@@ -108,6 +116,7 @@ export function ConversationPane({ conversationId, onBack }: ConversationPanePro
       },
     });
     return () => {
+      cancelled = true;
       unsub();
       leaveAdminConversation(conversationId);
     };

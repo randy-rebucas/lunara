@@ -62,3 +62,52 @@ export function computePickupSla(input: OrderSlaInput): {
 
   return { status: 'ok', dueAt, minutesUntilDue, label: 'Pickup scheduled' };
 }
+
+export interface OrderDeliverySlaInput {
+  status: string;
+  scheduledDeliveryAt?: string | Date;
+  deliveryRiderId?: string;
+  deliveredAt?: string | Date;
+}
+
+const DELIVERY_WARNING_MINUTES = 30;
+const DELIVERY_BREACH_MINUTES = 60;
+
+export function computeDeliverySla(input: OrderDeliverySlaInput): {
+  status: SlaStatus;
+  dueAt: Date | null;
+  minutesUntilDue: number | null;
+  label: string;
+} {
+  if (!input.scheduledDeliveryAt) {
+    return { status: 'not_applicable', dueAt: null, minutesUntilDue: null, label: 'No delivery window' };
+  }
+
+  const dueAt = new Date(input.scheduledDeliveryAt);
+  const now = Date.now();
+  const minutesUntilDue = Math.round((dueAt.getTime() - now) / 60000);
+
+  if (input.deliveredAt || input.status === 'delivered' || input.status === 'completed') {
+    const deliveredMs = input.deliveredAt ? new Date(input.deliveredAt).getTime() : now;
+    if (deliveredMs <= dueAt.getTime() + DELIVERY_BREACH_MINUTES * 60000) {
+      return { status: 'ok', dueAt, minutesUntilDue, label: 'Delivered on track' };
+    }
+    return { status: 'warning', dueAt, minutesUntilDue, label: 'Delivered late' };
+  }
+
+  if (!input.deliveryRiderId) {
+    return { status: 'not_applicable', dueAt: null, minutesUntilDue: null, label: 'No delivery rider yet' };
+  }
+
+  if (minutesUntilDue < -DELIVERY_BREACH_MINUTES) {
+    return { status: 'breached', dueAt, minutesUntilDue, label: 'Delivery SLA breached' };
+  }
+  if (minutesUntilDue < -DELIVERY_WARNING_MINUTES) {
+    return { status: 'warning', dueAt, minutesUntilDue, label: 'Delivery overdue' };
+  }
+  if (minutesUntilDue < DELIVERY_WARNING_MINUTES) {
+    return { status: 'warning', dueAt, minutesUntilDue, label: 'Delivery due soon' };
+  }
+
+  return { status: 'ok', dueAt, minutesUntilDue, label: 'Delivery on track' };
+}

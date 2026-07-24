@@ -25,6 +25,18 @@ export class DayOperatingHoursDto {
   closeTime!: string;
 }
 
+const DATE_YYYY_MM_DD = /^\d{4}-\d{2}-\d{2}$/;
+
+export class BranchHolidayDto {
+  @IsString()
+  @Matches(DATE_YYYY_MM_DD, { message: 'date must be in "YYYY-MM-DD" format' })
+  date!: string;
+
+  @IsOptional()
+  @IsString()
+  label?: string;
+}
+
 export class UpdatePartnerSettingsDto {
   @IsOptional()
   @IsBoolean()
@@ -90,4 +102,12 @@ export class UpdatePartnerSettingsDto {
   @ValidateNested({ each: true })
   @Type(() => DayOperatingHoursDto)
   operatingHours?: DayOperatingHoursDto[];
+
+  /** One-off closed dates. Only meaningful set on the partner's main shop — see
+   * BranchesService.resolveBranchHolidays for the inheritance rule. */
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BranchHolidayDto)
+  holidays?: BranchHolidayDto[];
 }

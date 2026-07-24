@@ -1,5 +1,6 @@
 import { RefreshControl, StyleSheet } from 'react-native';
 import { useState } from 'react';
+import { DataLoadState } from '../../src/components/data-load-state';
 import { DealsCarousel } from '../../src/components/deals-carousel';
 import { HomeActiveOrders } from '../../src/components/home-active-orders';
 import { HomeQuickActions } from '../../src/components/home-quick-actions';
@@ -11,7 +12,7 @@ import { useHomeDashboard } from '../../src/hooks/use-home-dashboard';
 import { spacing, colors } from '../../src/theme';
 
 export default function HomeScreen() {
-  const { user, profile, activeOrders, loading, refresh } = useHomeDashboard();
+  const { user, profile, activeOrders, loading, error, refresh } = useHomeDashboard();
   const [refreshing, setRefreshing] = useState(false);
 
   async function onRefresh() {
@@ -33,6 +34,7 @@ export default function HomeScreen() {
       }
     >
       <HomeWelcomeBanner profile={profile} user={user} />
+      <DataLoadState loading={false} error={error} onRetry={refresh} />
       <HomeQuickActions firstActiveOrderId={activeOrders[0]?._id} />
       <DealsCarousel />
       <HomeReferralPromo />

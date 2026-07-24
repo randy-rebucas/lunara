@@ -17,10 +17,7 @@ export function DataPageStatus({
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted">
-        <span
-          className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary/30 border-t-primary"
-          aria-hidden
-        />
+        <img src="/images/washing-machine-preloader.svg" alt="" className="h-6 w-6" aria-hidden />
         {loadingMessage}
       </div>
     );

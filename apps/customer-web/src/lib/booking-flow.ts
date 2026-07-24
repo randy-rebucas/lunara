@@ -32,6 +32,12 @@ export interface BookingFormState {
   autoDispatch: boolean;
   scheduledPickupAt: string;
   bagSizeId: BagSizeId | '';
+  /** Customer-entered weight (kg) — used for shops in PER_KG or PER_LOAD pricing mode. */
+  enteredWeightKg: string;
+  /** Customer-entered load count — used for shops in PER_LOAD pricing mode. */
+  enteredLoadCount: string;
+  /** Customer-entered piece count — used for shops in PER_PIECE pricing mode. */
+  enteredPieceCount: string;
   addonIds: string[];
   couponCode: string;
   orderId: string;
@@ -45,6 +51,9 @@ export const initialBookingForm: BookingFormState = {
   autoDispatch: false,
   scheduledPickupAt: '',
   bagSizeId: '',
+  enteredWeightKg: '',
+  enteredLoadCount: '',
+  enteredPieceCount: '',
   addonIds: [],
   couponCode: '',
   orderId: '',

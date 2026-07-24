@@ -87,7 +87,7 @@ export class AdminDispatchService {
     const customerMap = new Map(customers.map((c) => [c._id.toString(), c]));
     const addressMap = new Map(addresses.map((a) => [a._id.toString(), a]));
 
-    return orders.map((order) => {
+    const rows = orders.map((order) => {
       const cid = order.customerId.toString();
       const customer = customerMap.get(cid);
       const address = addressMap.get(order.pickupAddressId);
@@ -102,9 +102,7 @@ export class AdminDispatchService {
         status: order.status,
         statusLabel: order.status.replace(/_/g, ' '),
         branchName: order.branchName,
-        bookingType: order.bookingType,
         scheduledPickupAt: order.scheduledPickupAt,
-        partnerAcceptedAt: order.partnerAcceptedAt,
         canAssignShop: order.status === OrderStatus.PENDING_DISPATCH,
         awaitingPartnerAccept:
           !!order.branchId &&
@@ -122,6 +120,10 @@ export class AdminDispatchService {
         priority: this.incomingPriority(order.status),
       };
     });
+
+    // Stable-sort by triage priority; ties keep the original oldest-first order.
+    rows.sort((a, b) => a.priority - b.priority);
+    return rows.map(({ priority, ...row }) => row);
   }
 
   private incomingPriority(status: string): number {
@@ -173,12 +175,10 @@ export class AdminDispatchService {
 
       return {
         riderId: r._id.toString(),
-        userId: uid,
         rider: name,
         boardStatus,
         isOnline: r.isOnline,
         activeOrderId: (deliveryOrder ?? pickupOrder)?._id.toString(),
-        activeOrderStatus: (deliveryOrder ?? pickupOrder)?.status,
         vehicleType: r.vehicleType,
       };
     });

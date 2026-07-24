@@ -355,9 +355,6 @@ export default function EarningsScreen() {
                 <Text style={styles.errorText}>{error}</Text>
               </View>
             ) : null}
-            {data.recentEarnings.length > 0 ? (
-              <View style={styles.breakdownCard} />
-            ) : null}
           </>
         }
         renderItem={renderEarningItem}

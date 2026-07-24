@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@lunara/ui';
 import { fetchOnboardingStatus, getOnboardingPath } from '@lunara/hooks/onboarding';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
@@ -11,7 +11,7 @@ import { FormError } from '../../../components/marketing/marketing-design';
 import { Input } from '../../../components/ui/input';
 
 export default function RegisterPage() {
-  const { register, api } = useAuthContext();
+  const { register, api, isAuthenticated } = useAuthContext();
   const router = useRouter();
   const searchParams = useSearchParams();
   const referralCode = searchParams.get('ref') ?? undefined;
@@ -23,16 +23,31 @@ export default function RegisterPage() {
     password: '',
   });
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    fetchOnboardingStatus(api)
+      .then((status) => router.replace(getOnboardingPath(status)))
+      .catch(() => {});
+  }, [isAuthenticated, api, router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+    if (!form.email.trim() && !form.phone.trim()) {
+      setError('Enter an email address or phone number so you can sign in later.');
+      return;
+    }
+    setSubmitting(true);
     try {
       await register({ ...form, referralCode });
       const status = await fetchOnboardingStatus(api);
       router.push(getOnboardingPath(status));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -74,8 +89,8 @@ export default function RegisterPage() {
           required
         />
         {error && <FormError>{error}</FormError>}
-        <Button type="submit" className="w-full" size="lg">
-          Register
+        <Button type="submit" className="w-full" size="lg" disabled={submitting}>
+          {submitting ? 'Creating account…' : 'Register'}
         </Button>
       </form>
       <p className="mt-6 text-center text-sm text-muted">

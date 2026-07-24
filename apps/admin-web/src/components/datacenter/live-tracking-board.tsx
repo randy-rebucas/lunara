@@ -52,7 +52,7 @@ interface LiveOrder {
   vehicleType: string | null;
   plateNumber: string | null;
   createdAt: string;
-  slaPickupDueAt: string | null;
+  sla: { status: string; label: string };
   timeline: { status: string; timestamp: string }[];
 }
 
@@ -84,19 +84,16 @@ function timeAgo(value?: string | Date | null): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-function humanizeMinutes(minutes: number): string {
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 48) return `${hours}h`;
-  return `${Math.round(hours / 24)}d`;
+const COMPASS_POINTS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+
+function compassLabel(headingDeg: number): string {
+  return COMPASS_POINTS[Math.round(((headingDeg % 360) + 360) % 360 / 45) % 8];
 }
 
-function slaLabel(dueAt: string | null): { text: string; tone: string } | null {
-  if (!dueAt) return null;
-  const diffMin = Math.round((new Date(dueAt).getTime() - Date.now()) / 60_000);
-  if (diffMin < 0) return { text: `Overdue ${humanizeMinutes(Math.abs(diffMin))}`, tone: 'badge-danger' };
-  if (diffMin <= 15) return { text: `Due in ${humanizeMinutes(diffMin)}`, tone: 'badge-warning' };
-  return { text: `Due in ${humanizeMinutes(diffMin)}`, tone: 'badge-neutral' };
+function slaBadgeClass(status: string): string {
+  if (status === 'breached') return 'badge-danger';
+  if (status === 'warning') return 'badge-warning';
+  return 'badge-neutral';
 }
 
 function statusTone(status: string): string {
@@ -412,13 +409,12 @@ export function LiveTrackingBoard() {
                           <th scope="col">Rider</th>
                           <th scope="col">Shop</th>
                           <th scope="col">Status</th>
-                          <th scope="col">Pickup SLA</th>
+                          <th scope="col">SLA</th>
                           <th scope="col" className="text-right">Amount</th>
                         </tr>
                       </thead>
                       <tbody>
                         {filteredOrders.map((o) => {
-                          const sla = o.leg === 'pickup' ? slaLabel(o.slaPickupDueAt) : null;
                           const selected = selectedOrder?._id === o._id;
                           return (
                             <tr
@@ -443,7 +439,13 @@ export function LiveTrackingBoard() {
                                   {formatSlugLabel(o.status)}
                                 </span>
                               </td>
-                              <td>{sla ? <span className={sla.tone}>{sla.text}</span> : <span className="text-muted">—</span>}</td>
+                              <td>
+                                {o.sla.status === 'not_applicable' ? (
+                                  <span className="text-muted">—</span>
+                                ) : (
+                                  <span className={slaBadgeClass(o.sla.status)}>{o.sla.label}</span>
+                                )}
+                              </td>
                               <td className="text-right text-sm font-medium tabular-nums">{formatPeso(o.total)}</td>
                             </tr>
                           );
@@ -554,6 +556,12 @@ export function LiveTrackingBoard() {
                       <>
                         <RailRow label="Shift" value={<span className="capitalize">{selectedRider.shiftStatus}</span>} />
                         <RailRow label="Last GPS fix" value={timeAgo(selectedRider.recordedAt)} />
+                        {selectedRider.speed != null ? (
+                          <RailRow label="Speed" value={`${Math.round(selectedRider.speed * 3.6)} km/h`} />
+                        ) : null}
+                        {selectedRider.heading != null ? (
+                          <RailRow label="Heading" value={`${compassLabel(selectedRider.heading)} (${Math.round(selectedRider.heading)}°)`} />
+                        ) : null}
                         {!ordersByRider.get(selectedRider.userId) ? (
                           <p className="pt-1 text-xs text-muted">No active assignment right now.</p>
                         ) : null}

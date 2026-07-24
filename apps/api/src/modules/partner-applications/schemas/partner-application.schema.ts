@@ -120,6 +120,9 @@ export class PartnerApplication {
   @Prop({ required: true, enum: PartnerApplicationStatus, default: PartnerApplicationStatus.PENDING })
   status!: PartnerApplicationStatus;
 
+  @Prop({ trim: true, maxlength: 1000 })
+  rejectionReason?: string;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

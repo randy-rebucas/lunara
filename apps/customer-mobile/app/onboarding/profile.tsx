@@ -31,15 +31,17 @@ export default function OnboardingProfileScreen() {
       router.replace('/(auth)/signup');
       return;
     }
-    fetchOnboardingStatus(apiFetch).then((status) => {
-      if (!status.needsProfile && status.needsAddress) {
-        router.replace('/onboarding/address');
-      } else if (status.isComplete) {
-        router.replace('/(tabs)');
-      } else {
-        setChecking(false);
-      }
-    });
+    fetchOnboardingStatus(apiFetch)
+      .then((status) => {
+        if (!status.needsProfile && status.needsAddress) {
+          router.replace('/onboarding/address');
+        } else if (status.isComplete) {
+          router.replace('/(tabs)');
+        } else {
+          setChecking(false);
+        }
+      })
+      .catch(() => setChecking(false));
   }, [apiFetch, router, tokens?.accessToken]);
 
   async function handleSubmit() {
@@ -50,12 +52,16 @@ export default function OnboardingProfileScreen() {
     setError('');
     setSubmitting(true);
     try {
+      // `email` is intentionally NOT sent here: UpdateCustomerDto has no email field (email lives
+      // on the User model, a different module), and the API's global ValidationPipe uses
+      // forbidNonWhitelisted — sending it rejects the entire request with a 400, which was
+      // blocking onboarding completion outright for anyone who filled in this optional field.
+      // See docs/audits/customer-mobile/onboarding.md, Finding #1.
       await apiFetch('/customers/me', {
         method: 'PATCH',
         body: JSON.stringify({
           firstName: firstName.trim(),
           lastName: lastName.trim(),
-          ...(email.trim() ? { email: email.trim() } : {}),
         }),
       });
       const status = await fetchOnboardingStatus(apiFetch);
@@ -89,6 +95,7 @@ export default function OnboardingProfileScreen() {
             value={firstName}
             onChangeText={setFirstName}
             autoCapitalize="words"
+            maxLength={80}
           />
 
           <Text style={styles.inputLabel}>Last name</Text>
@@ -98,6 +105,7 @@ export default function OnboardingProfileScreen() {
             value={lastName}
             onChangeText={setLastName}
             autoCapitalize="words"
+            maxLength={80}
           />
 
           <Text style={styles.inputLabel}>

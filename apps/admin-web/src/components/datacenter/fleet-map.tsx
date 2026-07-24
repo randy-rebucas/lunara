@@ -29,6 +29,7 @@ export interface FleetMapBranch {
   id: string;
   name: string;
   code: string;
+  city?: string;
   lat: number;
   lng: number;
 }
@@ -169,7 +170,11 @@ export function FleetMap({
         >
           <FitOnce points={fitPoints} />
           {branches.map((b) => (
-            <AdvancedMarker key={b.id} position={{ lat: b.lat, lng: b.lng }} title={`${b.name} (${b.code})`}>
+            <AdvancedMarker
+              key={b.id}
+              position={{ lat: b.lat, lng: b.lng }}
+              title={`${b.name} (${b.code})${b.city ? ` — ${b.city}` : ''}`}
+            >
               <ShopPin />
             </AdvancedMarker>
           ))}

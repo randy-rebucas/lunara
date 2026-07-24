@@ -30,10 +30,12 @@ export default function OnboardingAddressPage() {
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    fetchOnboardingStatus(api).then((status) => {
-      if (status.needsProfile) router.replace('/onboarding/profile');
-      if (status.isComplete) router.replace('/dashboard');
-    });
+    fetchOnboardingStatus(api)
+      .then((status) => {
+        if (status.needsProfile) router.replace('/onboarding/profile');
+        if (status.isComplete) router.replace('/dashboard');
+      })
+      .catch(() => {});
   }, [isAuthenticated, api, router]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -65,6 +67,7 @@ export default function OnboardingAddressPage() {
               value={form.label}
               onChange={(e) => setForm({ ...form, label: e.target.value })}
               required
+              maxLength={50}
             />
             <Input
               placeholder="Street address"

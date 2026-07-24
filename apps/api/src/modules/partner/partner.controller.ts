@@ -4,6 +4,7 @@ import {
   Controller,
   Delete,
   Get,
+  NotFoundException,
   Param,
   Patch,
   Post,
@@ -17,7 +18,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
-import { UserRole } from '@lunara/types';
+import { OrderStatus, UserRole } from '@lunara/types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -29,7 +30,7 @@ import { LaundryService, LaundryServiceDocument } from '../catalog/schemas/laund
 import { LaundryAddon, LaundryAddonDocument } from '../catalog/schemas/laundry-addon.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { BranchesService } from '../branches/branches.service';
-import { UpdateBranchPricingDto } from '../branches/dto/update-branch-pricing.dto';
+import { UpdateBranchPricingDto, UpdateBranchPricingModeDto } from '../branches/dto/update-branch-pricing.dto';
 import { UpdateBranchAddonPricingDto } from '../branches/dto/update-branch-addon-pricing.dto';
 import { CreateBranchCustomServiceDto } from '../branches/dto/create-branch-custom-service.dto';
 import { UpdateBranchCustomServiceDto } from '../branches/dto/update-branch-custom-service.dto';
@@ -48,6 +49,7 @@ import { ShopReceivingService } from './shop-receiving.service';
 import { PartnerNotificationsService } from './partner-notifications.service';
 import { PartnerSettingsService } from './partner-settings.service';
 import { PartnerProfileService } from './partner-profile.service';
+import { resolvePortalBranchId } from './partner-access';
 import { UpdatePartnerSettingsDto } from './dto/update-partner-settings.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import {
@@ -108,7 +110,7 @@ export class PartnerController {
     if (req.user.role !== UserRole.ADMIN) {
       await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
     }
-    return this.branchesService.getShopPricing(id);
+    return this.branchesService.getShopPricing(id, true);
   }
 
   @Patch('branches/:id/pricing')
@@ -122,6 +124,19 @@ export class PartnerController {
       await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
     }
     return this.branchesService.updateServicePricing(id, dto.servicePricing);
+  }
+
+  @Patch('branches/:id/pricing-mode')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  async updateOwnBranchPricingMode(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('id') id: string,
+    @Body() dto: UpdateBranchPricingModeDto,
+  ) {
+    if (req.user.role !== UserRole.ADMIN) {
+      await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
+    }
+    return this.branchesService.updatePricingMode(id, dto.pricingMode);
   }
 
   @Patch('branches/:id/addon-pricing')
@@ -231,12 +246,17 @@ export class PartnerController {
   }
 
   @Get('branches/:id/machines')
-  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
   async listOwnBranchMachines(
     @Req() req: { user: { sub: string; role: UserRole } },
     @Param('id') id: string,
   ) {
-    if (req.user.role !== UserRole.ADMIN) {
+    if (req.user.role === UserRole.STAFF) {
+      const staffBranchId = await resolvePortalBranchId(this.userModel, req.user.sub, req.user.role);
+      if (!staffBranchId || staffBranchId.toString() !== id) {
+        throw new NotFoundException('Branch not found');
+      }
+    } else if (req.user.role !== UserRole.ADMIN) {
       await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
     }
     return this.branchesService.listMachines(id);
@@ -463,22 +483,26 @@ export class PartnerController {
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   assignStaff(
     @Param('orderId') orderId: string,
-    @Req() req: { user: { sub: string } },
+    @Req() req: { user: { sub: string; role: UserRole } },
     @Body() dto: AssignStaffDto,
   ) {
-    return this.operationsService.assignStaff(orderId, dto.staffId, req.user.sub);
+    return this.operationsService.assignStaff(orderId, dto.staffId, req.user.sub, req.user.role);
   }
 
   @Get('inventory')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
-  getInventory() {
-    return this.operationsService.getInventory();
+  getInventory(@Req() req: { user: { sub: string; role: UserRole } }) {
+    return this.operationsService.getInventory(req.user.sub, req.user.role);
   }
 
   @Patch('inventory/:id')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
-  updateInventory(@Param('id') id: string, @Body() dto: UpdateInventoryDto) {
-    return this.operationsService.updateInventory(id, dto);
+  updateInventory(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('id') id: string,
+    @Body() dto: UpdateInventoryDto,
+  ) {
+    return this.operationsService.updateInventory(req.user.sub, req.user.role, id, dto);
   }
 
   @Get('reports')
@@ -567,8 +591,9 @@ export class PartnerController {
   getOrderHistory(
     @Req() req: { user: { sub: string; role: UserRole } },
     @Query('status') status?: string,
+    @Query('customerId') customerId?: string,
   ) {
-    return this.operationsService.getOrderHistory(req.user.sub, req.user.role, status);
+    return this.operationsService.getOrderHistory(req.user.sub, req.user.role, status, customerId);
   }
 
   @Get('orders/queue')
@@ -700,7 +725,7 @@ export class PartnerController {
   async getCustomers(@Req() req: { user: { sub: string; role: UserRole } }) {
     const { sub, role } = req.user;
     const matchStage: Record<string, unknown> = {
-      status: { $in: ['completed', 'delivered', 'customer_pickup_complete'] },
+      status: { $in: [OrderStatus.COMPLETED, OrderStatus.DELIVERED, OrderStatus.CUSTOMER_PICKUP] },
     };
     if (role === UserRole.PARTNER) {
       matchStage.partnerId = new Types.ObjectId(sub);
@@ -716,12 +741,16 @@ export class PartnerController {
         totalSpent: { $sum: '$totalAmount' },
         lastOrderAt: { $max: '$createdAt' },
       }},
-      { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'customer' } },
-      { $unwind: { path: '$customer', preserveNullAndEmptyArrays: false } },
+      { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' } },
+      { $unwind: { path: '$user', preserveNullAndEmptyArrays: false } },
+      { $lookup: { from: 'customers', localField: '_id', foreignField: 'userId', as: 'customer' } },
+      { $unwind: { path: '$customer', preserveNullAndEmptyArrays: true } },
       { $project: {
         customerId: '$_id',
-        name: { $concat: [{ $ifNull: ['$customer.firstName', ''] }, ' ', { $ifNull: ['$customer.lastName', ''] }] },
-        phone: '$customer.phone',
+        name: { $trim: { input: {
+          $concat: [{ $ifNull: ['$customer.firstName', ''] }, ' ', { $ifNull: ['$customer.lastName', ''] }],
+        } } },
+        phone: '$user.phone',
         totalOrders: 1,
         totalSpent: 1,
         lastOrderAt: 1,

@@ -41,15 +41,17 @@ export default function OnboardingAddressScreen() {
       router.replace('/(auth)/signup');
       return;
     }
-    fetchOnboardingStatus(apiFetch).then((status) => {
-      if (status.needsProfile) {
-        router.replace('/onboarding/profile');
-      } else if (status.isComplete) {
-        router.replace('/(tabs)');
-      } else {
-        setChecking(false);
-      }
-    });
+    fetchOnboardingStatus(apiFetch)
+      .then((status) => {
+        if (status.needsProfile) {
+          router.replace('/onboarding/profile');
+        } else if (status.isComplete) {
+          router.replace('/(tabs)');
+        } else {
+          setChecking(false);
+        }
+      })
+      .catch(() => setChecking(false));
   }, [apiFetch, router, tokens?.accessToken]);
 
   function clearAddressFields() {

@@ -26,7 +26,6 @@ interface Shop {
   planPrice: number;
   planRenewsAt?: string;
   trialEndsAt?: string;
-  staffCount: number;
   totalOrders: number;
   revenue: number;
   orders30d: number;
@@ -1134,7 +1133,7 @@ export function PartnersBoard() {
   const load = useCallback(async () => {
     const [res, branches] = await Promise.all([
       adminFetch<{ shops: Shop[] }>('/admin/shops'),
-      adminFetch<ParentBranch[]>('/admin/branches'),
+      adminFetch<ParentBranch[]>('/admin/branches/parents'),
     ]);
     setParentBranches(branches);
     setLastUpdated(new Date());

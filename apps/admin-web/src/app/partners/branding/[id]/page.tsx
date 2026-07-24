@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { adminFetch, adminUpload } from '../../../../lib/admin-api';
+import { useAdminQuery } from '../../../../lib/use-admin-query';
 
 interface PartnerBrandConfig {
   domain?: string;
@@ -55,41 +56,27 @@ const COLOR_FIELDS = [
 
 export default function PartnerBrandingDetailPage() {
   const params = useParams<{ id: string }>();
-  const [partner, setPartner] = useState<PartnerRecord | null>(null);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
+  const [actionError, setActionError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const load = useCallback(async () => {
-    try {
-      const data = await adminFetch<PartnerRecord>(`/admin/partners/${params.id}`);
-      setPartner(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load partner');
-    } finally {
-      setLoading(false);
-    }
-  }, [params.id]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const load = useCallback(() => adminFetch<PartnerRecord>(`/admin/partners/${params.id}`), [params.id]);
+  const { data: partner, loading, error, setData } = useAdminQuery(load, [params.id]);
 
   async function saveBranding(update: Partial<PartnerBrandConfig>) {
     if (!partner) return;
     setSaving(true);
-    setError('');
+    setActionError('');
     setSuccess('');
     try {
       const updated = await adminFetch<PartnerRecord>(`/admin/partners/${partner._id}/branding`, {
         method: 'PATCH',
         body: JSON.stringify(update),
       });
-      setPartner(updated);
+      setData(updated);
       setSuccess('Saved');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save');
+      setActionError(err instanceof Error ? err.message : 'Failed to save');
     } finally {
       setSaving(false);
     }
@@ -97,15 +84,23 @@ export default function PartnerBrandingDetailPage() {
 
   async function toggleActive() {
     if (!partner) return;
+    if (
+      partner.isActive &&
+      !window.confirm(
+        `Deactivate ${partner.legalName}'s brand? Their custom domain will immediately stop resolving to this branding and fall back to the default Lunara app.`,
+      )
+    ) {
+      return;
+    }
     setSaving(true);
     try {
       const updated = await adminFetch<PartnerRecord>(`/admin/partners/${partner._id}/active`, {
         method: 'PATCH',
         body: JSON.stringify({ isActive: !partner.isActive }),
       });
-      setPartner(updated);
+      setData(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update status');
+      setActionError(err instanceof Error ? err.message : 'Failed to update status');
     } finally {
       setSaving(false);
     }
@@ -114,7 +109,7 @@ export default function PartnerBrandingDetailPage() {
   async function uploadAsset(field: (typeof ASSET_FIELDS)[number]['key'], file: File) {
     if (!partner) return;
     setSaving(true);
-    setError('');
+    setActionError('');
     try {
       const formData = new FormData();
       formData.append('asset', file);
@@ -122,16 +117,16 @@ export default function PartnerBrandingDetailPage() {
         `/admin/partners/${partner._id}/branding/assets/${field}`,
         formData,
       );
-      setPartner(updated);
+      setData(updated);
       setSuccess('Saved');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to upload asset');
+      setActionError(err instanceof Error ? err.message : 'Failed to upload asset');
     } finally {
       setSaving(false);
     }
   }
 
-  if (loading) return <p className="text-sm text-muted">Loading…</p>;
+  if (loading && !partner) return <p className="text-sm text-muted">Loading…</p>;
   if (!partner) return <div className="alert-error">{error || 'Partner not found'}</div>;
 
   const brand = partner.brandConfig;
@@ -151,7 +146,7 @@ export default function PartnerBrandingDetailPage() {
         </button>
       </div>
 
-      {error ? <div className="alert-error mb-4" role="alert">{error}</div> : null}
+      {actionError ? <div className="alert-error mb-4" role="alert">{actionError}</div> : null}
       {success ? <div className="mb-4 rounded-lg bg-emerald-50 px-4 py-2 text-sm text-emerald-700">{success}</div> : null}
 
       {/* App identity */}

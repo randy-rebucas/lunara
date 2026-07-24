@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
+import { Alert, AppState, Linking, StyleSheet, Text, View } from 'react-native';
 import { PaymentMethod } from '@lunara/types';
 import { formatCurrency } from '@lunara/utils';
 import { useAuthStore } from '../store/auth';
@@ -42,6 +42,7 @@ export function PaymentCheckout({ orderId, onPaid }: PaymentCheckoutProps) {
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
   const payingRef = useRef(false);
+  const awaitingReturnRef = useRef(false);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
@@ -82,6 +83,22 @@ export function PaymentCheckout({ orderId, onPaid }: PaymentCheckoutProps) {
     load();
   }, [load]);
 
+  // `load()` already syncs a pending payment once on mount, but this screen has no working
+  // pull-to-refresh (the "then return here and pull to refresh" instruction below was a dead
+  // end — `KeyboardSafeScrollView` doesn't support `refreshControl`, and the checkout screen
+  // doesn't pass one anyway) and doesn't automatically re-run when the customer comes back from
+  // the PayMongo checkout in their browser. Re-trigger it once when the app returns to the
+  // foreground after a checkout was actually started, mirroring the same fix applied to the
+  // wallet top-up flow (`docs/audits/customer-mobile/wallet.md`, Finding #1).
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active' || !awaitingReturnRef.current) return;
+      awaitingReturnRef.current = false;
+      void load();
+    });
+    return () => sub.remove();
+  }, [load]);
+
   async function handlePay() {
     if (payingRef.current) return;
     payingRef.current = true;
@@ -115,20 +132,20 @@ export function PaymentCheckout({ orderId, onPaid }: PaymentCheckoutProps) {
       }
 
       if (payment.checkoutUrl) {
+        awaitingReturnRef.current = true;
         await Linking.openURL(payment.checkoutUrl);
         Alert.alert(
           'Complete payment',
-          'Finish payment in your browser, then return here and pull to refresh.',
+          'Finish payment in your browser, then return here — we’ll check your payment automatically.',
         );
         return;
       }
 
-      payingRef.current = false;
       setError('Payment could not be started');
     } catch (e) {
-      payingRef.current = false;
       setError(e instanceof Error ? e.message : 'Payment failed');
     } finally {
+      payingRef.current = false;
       setPaying(false);
     }
   }

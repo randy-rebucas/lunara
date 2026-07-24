@@ -82,10 +82,13 @@ export class PartnerApplicationsService {
     return { success: true, data: this.serialize(application) };
   }
 
-  async updateStatus(id: string, status: PartnerApplicationStatus) {
+  async updateStatus(id: string, status: PartnerApplicationStatus, rejectionReason?: string) {
+    const isRejected = status === PartnerApplicationStatus.REJECTED;
     const application = await this.partnerApplicationModel.findByIdAndUpdate(
       id,
-      { status },
+      isRejected
+        ? { $set: { status, rejectionReason } }
+        : { $set: { status }, $unset: { rejectionReason: '' } },
       { new: true },
     );
     if (!application) throw new NotFoundException('Application not found');
@@ -115,6 +118,7 @@ export class PartnerApplicationsService {
       declarationAccepted: application.declarationAccepted,
       message: application.message,
       status: application.status,
+      rejectionReason: application.rejectionReason,
       createdAt: application.createdAt,
       updatedAt: application.updatedAt,
     };

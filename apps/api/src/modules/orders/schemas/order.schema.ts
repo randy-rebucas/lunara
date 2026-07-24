@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 import { BookingType, OrderStatus } from '@lunara/types';
+import { BranchPricingMode } from '@lunara/utils';
 
 export type OrderDocument = HydratedDocument<Order>;
 
@@ -57,6 +58,18 @@ class OrderPickup {
   @Prop()
   actualWeightKg?: number;
 
+  /** PER_LOAD orders only — actual load count confirmed at pickup. */
+  @Prop()
+  actualLoadCount?: number;
+
+  /** PER_PIECE orders only — actual piece count confirmed at pickup. */
+  @Prop()
+  actualPieceCount?: number;
+
+  /** When the partner confirmed actual weight/load count and finalized pricing. Unset = still an estimate. */
+  @Prop()
+  priceConfirmedAt?: Date;
+
   /** Last 4 digits of customer phone for rider verification. */
   @Prop()
   verificationHint?: string;
@@ -72,6 +85,21 @@ class OrderPickup {
 
   @Prop()
   droppedAtShop?: Date;
+}
+
+@Schema({ _id: false })
+class OrderPricingSnapshot {
+  @Prop()
+  basePricePerKg?: number;
+
+  @Prop()
+  basePricePerLoad?: number;
+
+  @Prop()
+  basePricePerPiece?: number;
+
+  @Prop()
+  minWeightKg?: number;
 }
 
 @Schema({ _id: false })
@@ -293,10 +321,10 @@ export class Order {
   @Prop()
   operationsConflictNote?: string;
 
-  @Prop({ type: Types.ObjectId })
+  @Prop({ type: Types.ObjectId, index: true })
   pickupRiderId?: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId })
+  @Prop({ type: Types.ObjectId, index: true })
   deliveryRiderId?: Types.ObjectId;
 
   @Prop({ required: true, enum: OrderStatus, default: OrderStatus.PENDING, index: true })
@@ -320,16 +348,60 @@ export class Order {
   @Prop()
   scheduledDeliveryAt?: Date;
 
-  /** Nominal weight from the chosen bag's capacity — for dispatch capacity scoring/display, not billing. */
+  /** Nominal weight from the chosen bag's capacity (FLAT_BAG), or customer-entered estimate (PER_KG/PER_LOAD)
+   * — for dispatch capacity scoring/display, and as the pre-confirmation estimate for non-flat modes. */
   @Prop()
   estimatedWeightKg?: number;
 
-  /** Flat bag size the customer selected and paid for (see @lunara/utils BAG_SIZES). */
+  /** PER_LOAD orders only — customer-entered/derived estimated load count. */
+  @Prop()
+  estimatedLoadCount?: number;
+
+  /** PER_PIECE orders only — customer-entered estimated piece count. */
+  @Prop()
+  estimatedPieceCount?: number;
+
+  /** Flat bag size the customer selected and paid for (see @lunara/utils BAG_SIZES). Unset for PER_KG/PER_LOAD/PER_PIECE orders. */
   @Prop()
   bagSizeId?: string;
 
   @Prop()
   bagSizeLabel?: string;
+
+  /** Branch's pricing mode at booking time — snapshotted so later branch-mode changes never
+   * retroactively affect an in-flight order. */
+  @Prop({ enum: BranchPricingMode, default: BranchPricingMode.FLAT_BAG })
+  pricingMode!: BranchPricingMode;
+
+  /** Branch's own rates at booking time (PER_KG/PER_LOAD only) — the source of truth for pickup-time
+   * finalization, since the branch's live rates may have changed since booking. */
+  @Prop({ type: OrderPricingSnapshot })
+  pricingSnapshot?: OrderPricingSnapshot;
+
+  /** Set once the partner confirms actual weight/load/piece count at pickup (non-FLAT_BAG orders
+   * only). `subtotal`/`total`/`baseSubtotal` below are overwritten with these values at that point
+   * so settlement/revenue/payout calculations (which read those fields directly) automatically
+   * reflect the finalized amount — these `final*` fields are kept as a record of what was applied. */
+  @Prop()
+  finalServiceSubtotal?: number;
+
+  @Prop()
+  finalTotal?: number;
+
+  @Prop()
+  finalPartnerPayout?: number;
+
+  /** Snapshot of subtotal/total/baseSubtotal as they were at booking time, taken right before
+   * they're overwritten with finalized values — lets the customer/partner UI keep showing "was
+   * estimated at ₱X" after finalization. Unset for FLAT_BAG orders (never overwritten). */
+  @Prop()
+  estimatedSubtotal?: number;
+
+  @Prop()
+  estimatedTotal?: number;
+
+  @Prop()
+  estimatedBaseSubtotal?: number;
 
   @Prop({ type: [OrderAddon], default: [] })
   addons!: OrderAddon[];

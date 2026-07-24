@@ -8,13 +8,18 @@ import { Button } from '@lunara/ui';
 import { ButtonLink } from '../ui/button-link';
 import { buttonResponsiveClass } from '../ui/button-layout';
 import {
+  BOOKING_MACHINE_LOAD_INFO,
   BOOKING_MIN_ORDER_AMOUNT,
+  BranchPricingMode,
+  estimateMachineLoads,
   formatMachineLoadLabel,
   calculateQuote,
   formatCurrency,
+  getTodayScheduleSummary,
   type BagSizeId,
   type BagSizeOption,
   type BookingAddonOption,
+  type BranchHoliday,
   type LaundryServiceOption,
   type PartnerCoverageInfo,
   isPickupSlotBookable,
@@ -25,6 +30,7 @@ import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { OrderPartnerCoverageNotice } from '../order-partner-coverage-notice';
 import { ScheduleSupportPrompt } from '../schedule-support-prompt';
 import { formatAvailabilityLoadError } from '../../lib/booking-availability-error';
+import { loadCustomerSettings } from '../../lib/customer-settings';
 import {
   BOOKING_STEPS,
   initialBookingForm,
@@ -73,6 +79,9 @@ interface ShopServiceOption {
   label: string;
   description?: string;
   basePricePerKg: number;
+  basePricePerLoad?: number;
+  basePricePerPiece?: number;
+  pricingUnit?: BranchPricingMode;
   customerPricePerKg: number;
   isCustom?: boolean;
   customServiceId?: string;
@@ -84,6 +93,7 @@ interface ShopAddonOption {
   description?: string;
   basePrice: number;
   customerPrice: number;
+  pricingUnit?: BranchPricingMode;
   isCustom?: boolean;
   customAddonId?: string;
 }
@@ -97,6 +107,9 @@ interface ShopOption {
   distanceLabel: string;
   withinRadius: boolean;
   capacityAvailable: boolean;
+  pricingMode: BranchPricingMode;
+  operatingHours: { isClosed: boolean; openTime: string; closeTime: string }[];
+  holidays: BranchHoliday[];
   services: ShopServiceOption[];
   addons: ShopAddonOption[];
 }
@@ -210,6 +223,152 @@ function SummaryRow({ label, value, emphasis }: { label: string; value: string; 
   );
 }
 
+/** Simple drawn laundry-bag icon — no photo assets exist for bag sizes, so the visual scales
+ * purely from the tier index (0 = smallest … 3 = largest) via the wrapping box's pixel size. */
+function BagIcon({ sizePx }: { sizePx: number }) {
+  return (
+    <svg
+      width={sizePx}
+      height={sizePx}
+      viewBox="0 0 64 64"
+      fill="none"
+      className="text-primary transition-all duration-300"
+    >
+      <path
+        d="M18 24 L20 12 a12 12 0 0 1 24 0 L46 24"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+        fill="none"
+      />
+      <path
+        d="M14 24 H50 L47 56 a4 4 0 0 1 -4 4 H21 a4 4 0 0 1 -4 -4 Z"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinejoin="round"
+        fill="currentColor"
+        fillOpacity="0.08"
+      />
+    </svg>
+  );
+}
+
+const BAG_ICON_SIZES = [56, 72, 88, 104];
+
+function BagWeightSlider({
+  bagSizes,
+  enteredWeightKg,
+  onChange,
+}: {
+  bagSizes: BagSizeOption[];
+  enteredWeightKg: string;
+  onChange: (raw: string, bagId: BagSizeId | undefined) => void;
+}) {
+  if (bagSizes.length === 0) return null;
+  const maxKg = bagSizes[bagSizes.length - 1].capacityKg;
+  const weight = Number(enteredWeightKg) || 0;
+
+  function weightToBag(w: number): BagSizeOption | undefined {
+    if (w <= 0) return undefined;
+    return bagSizes.find((bag) => w <= bag.capacityKg) ?? bagSizes[bagSizes.length - 1];
+  }
+
+  return (
+    <div className="panel">
+      <label className="form-label" htmlFor="bag-weight-slider">
+        Not sure? Drag to your estimated weight (kg)
+      </label>
+      <input
+        id="bag-weight-slider"
+        type="range"
+        min={0}
+        max={maxKg}
+        step={0.5}
+        className="mt-2 w-full accent-primary"
+        value={weight}
+        onChange={(e) => {
+          const raw = e.target.value;
+          onChange(raw, weightToBag(Number(raw))?.id);
+        }}
+      />
+      <div className="mt-1 flex justify-between text-xs text-muted">
+        <span>0 kg</span>
+        <span className="font-medium text-primary">{weight > 0 ? `${weight} kg` : 'Drag to estimate'}</span>
+        <span>{maxKg} kg</span>
+      </div>
+    </div>
+  );
+}
+
+/** Estimated-weight slider for the per-kg/per-load steps (no bag tiers involved — just a plain
+ * weight readout). Caps the slider at `maxKg`, but the value can still be typed higher if a
+ * customer's actual load exceeds it — dragging the handle to the end just means "at least maxKg". */
+function WeightSlider({
+  id,
+  value,
+  maxKg = 30,
+  onChange,
+}: {
+  id: string;
+  value: string;
+  maxKg?: number;
+  onChange: (raw: string) => void;
+}) {
+  const weight = Number(value) || 0;
+  return (
+    <div>
+      <input
+        id={id}
+        type="range"
+        min={0}
+        max={maxKg}
+        step={0.5}
+        className="mt-2 w-full accent-primary"
+        value={Math.min(weight, maxKg)}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <div className="mt-1 flex items-center justify-between text-xs text-muted">
+        <span>0 kg</span>
+        <span className="font-medium text-primary">
+          {weight > 0 ? `${weight} kg` : 'Drag to estimate'}
+        </span>
+        <span>{weight > maxKg ? `${weight} kg` : `${maxKg}+ kg`}</span>
+      </div>
+    </div>
+  );
+}
+
+function BagPreviewCard({
+  bagSizes,
+  bagSizeId,
+}: {
+  bagSizes: BagSizeOption[];
+  bagSizeId: BagSizeId | '';
+}) {
+  const index = bagSizes.findIndex((b) => b.id === bagSizeId);
+  const bag = index >= 0 ? bagSizes[index] : undefined;
+  const sizePx = BAG_ICON_SIZES[Math.max(index, 0)] ?? BAG_ICON_SIZES[0];
+
+  return (
+    <div className="panel flex flex-col items-center justify-center gap-3 py-8 text-center">
+      <div className="flex h-28 w-28 items-center justify-center">
+        <BagIcon sizePx={sizePx} />
+      </div>
+      {bag ? (
+        <>
+          <p className="text-lg font-semibold text-slate-900">{bag.label}</p>
+          <p className="text-sm text-muted">
+            Up to {bag.capacityKg} kg · {formatMachineLoadLabel(bag.capacityKg)}
+          </p>
+          <p className="text-2xl font-bold text-primary">{formatCurrency(bag.price)}</p>
+        </>
+      ) : (
+        <p className="text-sm text-muted">Pick a bag size or drag the slider to preview it here.</p>
+      )}
+    </div>
+  );
+}
+
 function getNextStepLabel(step: BookingStep): string {
   switch (step) {
     case 'address':
@@ -253,7 +412,7 @@ function canProceedStep(
         )
       );
     case 'weight':
-      return Boolean(form.bagSizeId);
+      return Boolean(localQuote);
     case 'addons':
       return Boolean(localQuote?.meetsMinimum);
     case 'review':
@@ -356,10 +515,20 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
     ...initialBookingForm,
     couponCode: initialCouponCode?.trim().toUpperCase() ?? '',
   }));
+  const [showDistanceHints, setShowDistanceHints] = useState(
+    () => loadCustomerSettings().showBranchDistanceHints,
+  );
+
+  useEffect(() => {
+    const sync = () => setShowDistanceHints(loadCustomerSettings().showBranchDistanceHints);
+    window.addEventListener('lunara-customer-settings', sync);
+    return () => window.removeEventListener('lunara-customer-settings', sync);
+  }, []);
   const [config, setConfig] = useState<BookingConfig | null>(null);
   const [configLoading, setConfigLoading] = useState(true);
   const [addresses, setAddresses] = useState<AddressOption[]>([]);
   const [slots, setSlots] = useState<PickupSlot[]>([]);
+  const [holidays, setHolidays] = useState<BranchHoliday[]>([]);
   const [areaLabel, setAreaLabel] = useState('');
   const [dispatchNote, setDispatchNote] = useState('');
   const [availableServices, setAvailableServices] = useState<BookingType[]>([]);
@@ -374,6 +543,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
   const [partnerCoverage, setPartnerCoverage] = useState<PartnerCoverageInfo | null>(null);
   const [coverageAddressId, setCoverageAddressId] = useState('');
   const [reorderNotice, setReorderNotice] = useState('');
+  const [addressesError, setAddressesError] = useState('');
   const reorderAppliedRef = useRef(false);
   const pendingRebookBranchRef = useRef<string | null>(null);
   const selectedAddressIdRef = useRef(form.addressId);
@@ -391,7 +561,11 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
     api
       .get<AddressOption[]>('/addresses')
       .then((res) => setAddresses(res.data))
-      .catch(() => {});
+      .catch((err) =>
+        setAddressesError(
+          err instanceof Error ? err.message : 'Could not load your saved addresses',
+        ),
+      );
   }, [api]);
 
   useEffect(() => {
@@ -447,29 +621,84 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
   }, [shopOptions, shopsLoading]);
 
   const selectedShop = shopOptions.find((s) => s.branchId === form.branchId);
+  // Each service on a shop can bill in its own unit now, so this must be resolved per selected
+  // service (and re-derived whenever bookingType/customServiceId changes), not once per shop.
+  // Custom services are always priced per-kg (see partner-web services page).
+  const selectedShopService = form.customServiceId
+    ? selectedShop?.services.find((s) => s.customServiceId === form.customServiceId)
+    : selectedShop?.services.find((s) => s.type === form.bookingType && !s.isCustom);
+  const shopPricingMode =
+    selectedShopService?.pricingUnit ??
+    (form.customServiceId ? BranchPricingMode.PER_KG : BranchPricingMode.FLAT_BAG);
 
   const localQuote = useMemo(() => {
-    if (!form.bookingType || !form.bagSizeId) return null;
+    if (!form.bookingType) return null;
     const catalogService = config?.services.find((s) => s.type === form.bookingType);
-    const shopService = form.customServiceId
-      ? selectedShop?.services.find((s) => s.customServiceId === form.customServiceId)
-      : selectedShop?.services.find((s) => s.type === form.bookingType && !s.isCustom);
+    const shopService = selectedShopService;
     const service =
       catalogService && shopService ? { ...catalogService, label: shopService.label } : catalogService;
+
+    const enteredWeightKg = Number(form.enteredWeightKg) || undefined;
+    const enteredLoadCount = Number(form.enteredLoadCount) || undefined;
+    const enteredPieceCount = Number(form.enteredPieceCount) || undefined;
+
+    if (shopPricingMode === BranchPricingMode.FLAT_BAG) {
+      if (!form.bagSizeId) return null;
+    } else if (shopPricingMode === BranchPricingMode.PER_KG) {
+      if (!enteredWeightKg) return null;
+    } else if (shopPricingMode === BranchPricingMode.PER_PIECE) {
+      if (!enteredPieceCount) return null;
+    } else if (!enteredWeightKg && !enteredLoadCount) {
+      return null;
+    }
+
+    // Shop-specific addon prices/units when a shop is chosen — falls back to the flat global
+    // catalog before a shop is picked, matching the `addons` render list below.
+    const addonOptions = selectedShop
+      ? selectedShop.addons.map((a) => ({
+          id: a.slug,
+          label: a.label,
+          description: a.description ?? '',
+          price: a.customerPrice,
+          pricingUnit: a.pricingUnit ?? BranchPricingMode.FLAT_BAG,
+        }))
+      : config?.addons;
+
     try {
       return calculateQuote(
         {
           bookingType: form.bookingType,
-          bagSizeId: form.bagSizeId,
+          bagSizeId: form.bagSizeId || undefined,
           addonIds: form.addonIds,
+          pricingMode: shopPricingMode,
+          rates: {
+            basePricePerKg: shopService?.basePricePerKg,
+            basePricePerLoad: shopService?.basePricePerLoad,
+            basePricePerPiece: shopService?.basePricePerPiece,
+          },
+          enteredWeightKg,
+          enteredLoadCount,
+          enteredPieceCount,
         },
         service,
-        config?.addons,
+        addonOptions,
       );
     } catch {
       return null;
     }
-  }, [form.bookingType, form.customServiceId, form.bagSizeId, form.addonIds, config, selectedShop]);
+  }, [
+    form.bookingType,
+    form.customServiceId,
+    form.bagSizeId,
+    form.enteredWeightKg,
+    form.enteredLoadCount,
+    form.enteredPieceCount,
+    form.addonIds,
+    config,
+    selectedShop,
+    selectedShopService,
+    shopPricingMode,
+  ]);
 
   const loadAvailability = useCallback(
     async (addressId: string) => {
@@ -481,6 +710,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
         areaLabel: string;
         availableServices: BookingType[];
         slots: PickupSlot[];
+        holidays?: BranchHoliday[];
         dispatchNote?: string;
         partnerCoverage?: PartnerCoverageInfo;
       }>(`/booking/availability?addressId=${encodeURIComponent(addressId)}`);
@@ -490,6 +720,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
       setAreaLabel(res.data.areaLabel);
       setAvailableServices(res.data.availableServices);
       setSlots(res.data.slots);
+      setHolidays(res.data.holidays ?? []);
       setDispatchNote(res.data.dispatchNote ?? '');
       setPartnerCoverage(res.data.partnerCoverage ?? null);
       setCoverageAddressId(addressId);
@@ -569,7 +800,10 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
         bookingType: form.bookingType,
         ...(form.branchId ? { branchId: form.branchId } : {}),
         ...(form.customServiceId ? { customServiceId: form.customServiceId } : {}),
-        bagSizeId: form.bagSizeId,
+        ...(form.bagSizeId ? { bagSizeId: form.bagSizeId } : {}),
+        ...(Number(form.enteredWeightKg) ? { enteredWeightKg: Number(form.enteredWeightKg) } : {}),
+        ...(Number(form.enteredLoadCount) ? { enteredLoadCount: Number(form.enteredLoadCount) } : {}),
+        ...(Number(form.enteredPieceCount) ? { enteredPieceCount: Number(form.enteredPieceCount) } : {}),
         addonIds: form.addonIds,
         ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}),
       },
@@ -665,7 +899,10 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
         bookingType: form.bookingType,
         ...(form.branchId ? { branchId: form.branchId } : {}),
         ...(form.customServiceId ? { customServiceId: form.customServiceId } : {}),
-        bagSizeId: form.bagSizeId,
+        ...(form.bagSizeId ? { bagSizeId: form.bagSizeId } : {}),
+        ...(Number(form.enteredWeightKg) ? { enteredWeightKg: Number(form.enteredWeightKg) } : {}),
+        ...(Number(form.enteredLoadCount) ? { enteredLoadCount: Number(form.enteredLoadCount) } : {}),
+        ...(Number(form.enteredPieceCount) ? { enteredPieceCount: Number(form.enteredPieceCount) } : {}),
         addonIds: form.addonIds,
         pickupAddressId: form.addressId,
         scheduledPickupAt: form.scheduledPickupAt,
@@ -689,13 +926,23 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
           label: s.label,
           description: s.description ?? catalogMatch?.description ?? '',
           pricePerKg: s.customerPricePerKg,
+          basePricePerLoad: s.basePricePerLoad,
+          basePricePerPiece: s.basePricePerPiece,
+          pricingUnit: s.pricingUnit ?? (s.isCustom ? BranchPricingMode.PER_KG : BranchPricingMode.FLAT_BAG),
           minWeightKg: catalogMatch?.minWeightKg ?? 5,
           isCustom: s.isCustom ?? false,
           customServiceId: s.customServiceId,
         };
       });
     }
-    return (config?.services ?? []).map((s) => ({ ...s, isCustom: false, customServiceId: undefined }));
+    return (config?.services ?? []).map((s) => ({
+      ...s,
+      basePricePerLoad: undefined,
+      basePricePerPiece: undefined,
+      pricingUnit: BranchPricingMode.FLAT_BAG,
+      isCustom: false,
+      customServiceId: undefined,
+    }));
   }, [config, selectedShop]);
 
   const addons = useMemo(() => {
@@ -707,12 +954,17 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
           label: a.label,
           description: a.description ?? catalogMatch?.description ?? '',
           price: a.customerPrice,
+          pricingUnit: a.pricingUnit ?? BranchPricingMode.FLAT_BAG,
           imageUrl: catalogMatch?.imageUrl,
           isCustom: a.isCustom ?? false,
         };
       });
     }
-    return (config?.addons ?? []).map((a) => ({ ...a, isCustom: false }));
+    return (config?.addons ?? []).map((a) => ({
+      ...a,
+      pricingUnit: BranchPricingMode.FLAT_BAG,
+      isCustom: false,
+    }));
   }, [config, selectedShop]);
   const activeQuote = quote ?? localQuote;
   const selectedAddress = addresses.find((a) => a._id === form.addressId);
@@ -743,7 +995,9 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
               {dispatchNote}
             </div>
           )}
-          {addresses.length === 0 ? (
+          {addressesError ? (
+            <div className="panel text-sm text-red-600">{addressesError}</div>
+          ) : addresses.length === 0 ? (
             <div className="panel text-sm text-muted">
               No addresses saved.{' '}
               <Link href="/onboarding/address" className="link-primary">
@@ -820,11 +1074,38 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
           ) : (
             <div className="list-stack">
               {shopOptions.map((shop) => {
-                const cheapest = shop.services.reduce<ShopServiceOption | null>(
-                  (min, s) => (!min || s.customerPricePerKg < min.customerPricePerKg ? s : min),
+                // Services on the same shop can each bill in a different unit now, so "cheapest"
+                // is computed per-service in its own unit rather than assuming one shop-wide unit.
+                const flatBagFrom = config?.bagSizes?.length
+                  ? Math.min(...config.bagSizes.map((b) => b.price))
+                  : undefined;
+                const candidates = shop.services
+                  .map((s) => {
+                    const unit = s.pricingUnit ?? BranchPricingMode.FLAT_BAG;
+                    if (unit === BranchPricingMode.PER_LOAD && s.basePricePerLoad != null) {
+                      return { amount: s.basePricePerLoad, suffix: ' / load' };
+                    }
+                    if (unit === BranchPricingMode.PER_PIECE && s.basePricePerPiece != null) {
+                      return { amount: s.basePricePerPiece, suffix: ' / piece' };
+                    }
+                    if (unit === BranchPricingMode.FLAT_BAG && flatBagFrom != null) {
+                      return { amount: flatBagFrom, suffix: '' };
+                    }
+                    if (unit === BranchPricingMode.PER_KG) {
+                      return { amount: s.customerPricePerKg, suffix: ' / kg' };
+                    }
+                    return null;
+                  })
+                  .filter((c): c is { amount: number; suffix: string } => c != null);
+                const cheapestCandidate = candidates.reduce<{ amount: number; suffix: string } | null>(
+                  (min, c) => (!min || c.amount < min.amount ? c : min),
                   null,
                 );
+                const startingPriceLabel = cheapestCandidate
+                  ? `From ${formatCurrency(cheapestCandidate.amount)}${cheapestCandidate.suffix}`
+                  : null;
                 const disabled = !shop.withinRadius || !shop.capacityAvailable;
+                const schedule = getTodayScheduleSummary(shop.operatingHours, shop.holidays);
                 return (
                   <SelectableOption
                     key={shop.branchId}
@@ -837,12 +1118,14 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                   >
                     <p className="font-medium text-slate-900">{shop.name}</p>
                     <p className="mt-1 text-sm text-muted">
-                      {shop.city} · {shop.distanceLabel}
+                      {shop.city}
+                      {showDistanceHints ? ` · ${shop.distanceLabel}` : ''}
                     </p>
-                    {cheapest && (
-                      <p className="mt-2 text-sm font-medium text-primary">
-                        From {formatCurrency(cheapest.customerPricePerKg)} / kg
-                      </p>
+                    <p className={`mt-1 text-xs font-medium ${schedule.isOpenNow ? 'text-accent' : 'text-muted'}`}>
+                      {schedule.label}
+                    </p>
+                    {startingPriceLabel && (
+                      <p className="mt-2 text-sm font-medium text-primary">{startingPriceLabel}</p>
                     )}
                     {!shop.capacityAvailable && (
                       <p className="mt-2 text-xs text-amber-700">Currently at capacity</p>
@@ -895,7 +1178,13 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                   </p>
                   <p className="mt-1 text-sm text-muted">{s.description}</p>
                   <p className="mt-2 text-sm font-medium text-primary">
-                    {formatCurrency(s.pricePerKg)} / kg · min {s.minWeightKg} kg
+                    {s.pricingUnit === BranchPricingMode.PER_LOAD && s.basePricePerLoad != null
+                      ? `${formatCurrency(s.basePricePerLoad)} / load`
+                      : s.pricingUnit === BranchPricingMode.PER_PIECE && s.basePricePerPiece != null
+                        ? `${formatCurrency(s.basePricePerPiece)} / piece`
+                        : s.pricingUnit === BranchPricingMode.FLAT_BAG
+                          ? 'Priced by bag size'
+                          : `${formatCurrency(s.pricePerKg)} / kg · min ${s.minWeightKg} kg`}
                   </p>
                   {disabled && (
                     <p className="mt-2 text-xs text-amber-700">Not available in your area</p>
@@ -932,42 +1221,147 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
               onSelectStartAt={(startAt) =>
                 setForm((f) => ({ ...f, scheduledPickupAt: startAt }))
               }
+              holidays={holidays}
             />
           )}
         </section>
       )}
 
-      {step === 'weight' && (
+      {step === 'weight' && shopPricingMode === BranchPricingMode.FLAT_BAG && (
         <section>
           <StepHeader
             title="Choose a bag size"
-            description="Same flat price everywhere — pick the bag that fits your load. We'll confirm actual weight at pickup."
+            description="Same flat price everywhere — drag the slider to your estimated weight and we'll pick the bag that fits. We'll confirm actual weight at pickup."
           />
-          <div className="list-stack">
-            {(config?.bagSizes ?? []).map((bag) => {
-              const selected = form.bagSizeId === bag.id;
-              return (
-                <button
-                  key={bag.id}
-                  type="button"
-                  onClick={() => setForm((f) => ({ ...f, bagSizeId: bag.id }))}
-                  className={`panel w-full text-left transition-colors ${
-                    selected ? 'ring-2 ring-primary' : 'hover:bg-slate-50'
-                  }`}
-                  aria-pressed={selected}
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-base font-semibold text-slate-900">{bag.label}</p>
-                      <p className="mt-1 text-sm text-muted">
-                        Up to {bag.capacityKg} kg · {formatMachineLoadLabel(bag.capacityKg)}
-                      </p>
-                    </div>
-                    <p className="text-xl font-bold text-primary">{formatCurrency(bag.price)}</p>
-                  </div>
-                </button>
-              );
-            })}
+          <div className="grid gap-6 sm:grid-cols-[1.3fr_1fr]">
+            <div>
+              <BagWeightSlider
+                bagSizes={config?.bagSizes ?? []}
+                enteredWeightKg={form.enteredWeightKg}
+                onChange={(raw, bagId) =>
+                  setForm((f) => ({ ...f, enteredWeightKg: raw, bagSizeId: bagId ?? f.bagSizeId }))
+                }
+              />
+              <div className="list-stack mt-4">
+                {(config?.bagSizes ?? []).map((bag) => {
+                  const selected = form.bagSizeId === bag.id;
+                  return (
+                    <button
+                      key={bag.id}
+                      type="button"
+                      onClick={() => setForm((f) => ({ ...f, bagSizeId: bag.id }))}
+                      className={`panel w-full text-left transition-colors ${
+                        selected ? 'ring-2 ring-primary' : 'hover:bg-slate-50'
+                      }`}
+                      aria-pressed={selected}
+                    >
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className="text-base font-semibold text-slate-900">
+                            {bag.label}
+                            {selected && form.enteredWeightKg && (
+                              <span className="badge-accent ml-2 text-xs">Recommended</span>
+                            )}
+                          </p>
+                          <p className="mt-1 text-sm text-muted">
+                            Up to {bag.capacityKg} kg · {formatMachineLoadLabel(bag.capacityKg)}
+                          </p>
+                        </div>
+                        <p className="text-xl font-bold text-primary">{formatCurrency(bag.price)}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <BagPreviewCard bagSizes={config?.bagSizes ?? []} bagSizeId={form.bagSizeId} />
+          </div>
+        </section>
+      )}
+
+      {step === 'weight' && shopPricingMode === BranchPricingMode.PER_KG && (
+        <section>
+          <StepHeader
+            title="Estimate your weight"
+            description="This shop charges per kilo. Enter an estimate now — we'll confirm the actual weight and final price at pickup."
+          />
+          <div className="panel">
+            <label className="form-label" htmlFor="entered-weight">
+              Estimated weight (kg)
+            </label>
+            <WeightSlider
+              id="entered-weight"
+              value={form.enteredWeightKg}
+              onChange={(raw) => setForm((f) => ({ ...f, enteredWeightKg: raw }))}
+            />
+            {localQuote && (
+              <p className="mt-3 text-sm font-medium text-primary">
+                Estimated: {formatCurrency(localQuote.serviceSubtotal)}
+              </p>
+            )}
+          </div>
+        </section>
+      )}
+
+      {step === 'weight' && shopPricingMode === BranchPricingMode.PER_LOAD && (
+        <section>
+          <StepHeader
+            title="Estimate your load count"
+            description={`This shop charges per machine load. Enter your estimated weight (or load count directly) — we'll confirm the actual load count and final price at pickup. ${BOOKING_MACHINE_LOAD_INFO}`}
+          />
+          <div className="panel">
+            <label className="form-label" htmlFor="entered-weight-load">
+              Estimated weight (kg)
+            </label>
+            <WeightSlider
+              id="entered-weight-load"
+              value={form.enteredWeightKg}
+              onChange={(v) =>
+                setForm((f) => ({
+                  ...f,
+                  enteredWeightKg: v,
+                  enteredLoadCount: v ? String(estimateMachineLoads(Number(v) || 0)) : '',
+                }))
+              }
+            />
+            <p className="mt-2 text-sm text-muted">
+              {form.enteredLoadCount
+                ? `${form.enteredLoadCount} machine load${Number(form.enteredLoadCount) === 1 ? '' : 's'}`
+                : 'kg'}
+            </p>
+            {localQuote && (
+              <p className="mt-3 text-sm font-medium text-primary">
+                Estimated: {formatCurrency(localQuote.serviceSubtotal)}
+              </p>
+            )}
+          </div>
+        </section>
+      )}
+
+      {step === 'weight' && shopPricingMode === BranchPricingMode.PER_PIECE && (
+        <section>
+          <StepHeader
+            title="Estimate your piece count"
+            description="This shop charges per piece. Enter an estimated piece count now — we'll confirm the actual count and final price at pickup."
+          />
+          <div className="panel">
+            <label className="form-label" htmlFor="entered-pieces">
+              Estimated pieces
+            </label>
+            <input
+              id="entered-pieces"
+              type="number"
+              min={0}
+              step="1"
+              className="input-field w-40"
+              value={form.enteredPieceCount}
+              onChange={(e) => setForm((f) => ({ ...f, enteredPieceCount: e.target.value }))}
+            />
+            {localQuote && (
+              <p className="mt-3 text-sm font-medium text-primary">
+                Estimated: {formatCurrency(localQuote.serviceSubtotal)}
+              </p>
+            )}
           </div>
         </section>
       )}
@@ -990,6 +1384,14 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
             <div className="list-stack">
               {addons.map((a) => {
                 const selected = form.addonIds.includes(a.id);
+                const unitSuffix =
+                  a.pricingUnit === BranchPricingMode.PER_KG
+                    ? ' / kg'
+                    : a.pricingUnit === BranchPricingMode.PER_LOAD
+                      ? ' / load'
+                      : a.pricingUnit === BranchPricingMode.PER_PIECE
+                        ? ' / piece'
+                        : '';
                 return (
                   <SelectableOption
                     key={a.id}
@@ -1013,6 +1415,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                         </span>
                         <span className="shrink-0 font-medium text-primary">
                           +{formatCurrency(a.price)}
+                          {unitSuffix}
                         </span>
                       </div>
                       <p className="mt-1 text-sm text-muted">{a.description}</p>
@@ -1022,6 +1425,25 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
               })}
             </div>
           )}
+          {shopPricingMode !== BranchPricingMode.PER_PIECE &&
+            form.addonIds.some(
+              (id) => addons.find((a) => a.id === id)?.pricingUnit === BranchPricingMode.PER_PIECE,
+            ) && (
+              <div className="panel mt-3">
+                <label className="form-label" htmlFor="addon-piece-count">
+                  Piece count{' '}
+                  <span className="font-normal text-muted">(for the per-piece add-on above)</span>
+                </label>
+                <input
+                  id="addon-piece-count"
+                  type="number"
+                  min={0}
+                  className="input-field mt-1 w-32"
+                  value={form.enteredPieceCount}
+                  onChange={(e) => setForm((f) => ({ ...f, enteredPieceCount: e.target.value }))}
+                />
+              </div>
+            )}
         </section>
       )}
 
@@ -1064,7 +1486,22 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                 label="Pickup"
                 value={selectedSlot?.label ?? 'Selected slot'}
               />
-              <SummaryRow label="Bag size" value={`${activeQuote.bagLabel} (up to ${activeQuote.weightKg} kg)`} />
+              <SummaryRow
+                label={
+                  activeQuote.pricingMode === BranchPricingMode.FLAT_BAG
+                    ? 'Bag size'
+                    : activeQuote.pricingMode === BranchPricingMode.PER_PIECE
+                      ? 'Estimated pieces'
+                      : 'Estimated weight'
+                }
+                value={
+                  activeQuote.pricingMode === BranchPricingMode.FLAT_BAG
+                    ? `${activeQuote.bagLabel} (up to ${activeQuote.weightKg} kg)`
+                    : activeQuote.pricingMode === BranchPricingMode.PER_PIECE
+                      ? `${activeQuote.pieceCount ?? form.enteredPieceCount} pieces`
+                      : `${activeQuote.weightKg} kg`
+                }
+              />
               {activeQuote.addons.length > 0 && (
                 <SummaryRow
                   label="Add-ons"
@@ -1079,7 +1516,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
               )}
               <div className="border-t border-border/30 pt-3">
                 <SummaryRow
-                  label="Estimated total"
+                  label={activeQuote.isEstimate ? 'Estimated total' : 'Total'}
                   value={formatCurrency(activeQuote.total)}
                   emphasis
                 />
@@ -1090,7 +1527,10 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
             {form.autoDispatch
               ? 'After payment, Lunara dispatches your order to the best available shop nearby.'
               : `Your order goes straight to ${selectedShop?.name ?? 'your selected shop'} after payment.`}{' '}
-            Pickup riders are notified once dispatched. Final amount may adjust after weigh-in.
+            Pickup riders are notified once dispatched.
+            {activeQuote.isEstimate
+              ? ' Final amount may adjust once the shop confirms the actual weight/load/piece count.'
+              : ''}
           </p>
         </section>
       )}

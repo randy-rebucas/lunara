@@ -54,6 +54,7 @@ import { UpdatePartnerProfileDto } from './dto/update-partner-profile.dto';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { CreateRiderDto } from './dto/create-rider.dto';
 import { RiderAnnouncementDto } from './dto/rider-announcement.dto';
+import { BroadcastDto } from './dto/broadcast.dto';
 import { UpdatePromotionDto } from './dto/update-promotion.dto';
 import { UpdateLaundryAddonDto } from './dto/update-laundry-addon.dto';
 import { UpdateLaundryServiceDto } from './dto/update-laundry-service.dto';
@@ -62,6 +63,8 @@ import { CloudinaryStorageService } from '../../common/storage/cloudinary-storag
 import { PartnerOperationsService } from '../partner/partner-operations.service';
 import { CreateSettlementDto } from '../partner/dto/create-settlement.dto';
 import { PushNotificationService } from '../push/push-notification.service';
+import { ServiceAreasService } from '../service-areas/service-areas.service';
+import { CreateServiceAreaDto, UpdateServiceAreaDto } from '../service-areas/dto/service-area.dto';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -83,6 +86,7 @@ export class AdminController {
     private readonly partnerOperationsService: PartnerOperationsService,
     private readonly cloudinaryStorageService: CloudinaryStorageService,
     private readonly pushService: PushNotificationService,
+    private readonly serviceAreasService: ServiceAreasService,
   ) {}
 
   @Get('sos/active')
@@ -595,9 +599,29 @@ export class AdminController {
     return this.catalogService.updateAddon(id, dto);
   }
 
+  @Get('service-areas')
+  getServiceAreas() {
+    return this.serviceAreasService.listAll().then((data) => ({ success: true, data }));
+  }
+
+  @Post('service-areas')
+  createServiceArea(@Body() dto: CreateServiceAreaDto) {
+    return this.serviceAreasService.create(dto).then((data) => ({ success: true, data }));
+  }
+
+  @Patch('service-areas/:id')
+  updateServiceArea(@Param('id') id: string, @Body() dto: UpdateServiceAreaDto) {
+    return this.serviceAreasService.update(id, dto).then((data) => ({ success: true, data }));
+  }
+
+  @Delete('service-areas/:id')
+  deleteServiceArea(@Param('id') id: string) {
+    return this.serviceAreasService.delete(id);
+  }
+
   @Post('broadcast')
   async broadcast(
-    @Body() dto: { title: string; body: string; audience?: 'all' | UserRole },
+    @Body() dto: BroadcastDto,
     @Req() req: { user: { sub: string } },
   ) {
     const audience = dto.audience ?? 'all';

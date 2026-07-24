@@ -37,6 +37,14 @@ interface OrderDetail {
   bookingType: string;
   estimatedWeightKg?: number;
   bagSizeLabel?: string;
+  /** How the base service is billed — 'flat_bag' (or unset) orders are final at booking time;
+   * other modes are estimated until the shop confirms actual weight/load/piece count. */
+  pricingMode?: string;
+  finalTotal?: number;
+  finalServiceSubtotal?: number;
+  /** Booking-time estimate, snapshotted right before `total` is overwritten with the finalized
+   * amount — use this (not `total`) to show "was estimated at ₱X" once finalized. */
+  estimatedTotal?: number;
   scheduledPickupAt: string;
   createdAt?: string;
   pickup?: {
@@ -127,6 +135,8 @@ export default function OrderTrackPage() {
   const [loadError, setLoadError] = useState('');
   const [pageLoading, setPageLoading] = useState(true);
   const [cancelling, setCancelling] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [signing, setSigning] = useState(false);
 
   const pushNotification = useCallback((message: string) => {
     setNotifications((prev) => [
@@ -219,12 +229,15 @@ export default function OrderTrackPage() {
 
   async function handleVerify() {
     setDeliveryError('');
+    setVerifying(true);
     try {
       await api.post(`/orders/${id}/delivery/verify`, { code: verifyCode });
       setVerifyCode('');
       reload();
     } catch (e) {
       setDeliveryError(e instanceof Error ? e.message : 'Verification failed');
+    } finally {
+      setVerifying(false);
     }
   }
 
@@ -250,11 +263,14 @@ export default function OrderTrackPage() {
 
   async function handleSign() {
     setDeliveryError('');
+    setSigning(true);
     try {
       await api.post(`/orders/${id}/delivery/sign`, { signatureName });
       reload();
     } catch (e) {
       setDeliveryError(e instanceof Error ? e.message : 'Sign failed');
+    } finally {
+      setSigning(false);
     }
   }
 
@@ -306,6 +322,9 @@ export default function OrderTrackPage() {
       }
     : null;
 
+  const isPriceFinalized = order.pricingMode !== undefined && order.pricingMode !== 'flat_bag';
+  const displayTotal = isPriceFinalized && order.finalTotal != null ? order.finalTotal : order.total;
+
   return (
     <PageShell>
       <Link href="/orders" className="text-sm text-muted transition-colors hover:text-primary">
@@ -316,13 +335,25 @@ export default function OrderTrackPage() {
           <div>
             <h1 className="text-2xl font-bold">Track order</h1>
             <p className="mt-1 capitalize text-slate-600">
-              {order.bookingType.replace(/_/g, ' ')} · {formatCurrency(order.total)}
+              {order.bookingType.replace(/_/g, ' ')} · {formatCurrency(displayTotal)}
+              {isPriceFinalized && order.finalTotal == null ? ' (estimated)' : ''}
               {order.bagSizeLabel
                 ? ` · ${order.bagSizeLabel} bag`
                 : order.estimatedWeightKg
                   ? ` · ~${order.estimatedWeightKg} kg`
                   : ''}
             </p>
+            {isPriceFinalized && order.finalTotal == null ? (
+              <p className="mt-1 text-xs text-muted">
+                Estimated total — we&apos;ll confirm the final price once the shop weighs your order.
+              </p>
+            ) : null}
+            {isPriceFinalized && order.finalTotal != null ? (
+              <p className="mt-1 text-xs text-muted">
+                Final price confirmed by the shop (was estimated at{' '}
+                {formatCurrency(order.estimatedTotal ?? order.total)}).
+              </p>
+            ) : null}
           </div>
           <div className="text-right">
             <p className="text-sm font-medium text-primary">{timeline.currentStepLabel}</p>
@@ -433,8 +464,8 @@ export default function OrderTrackPage() {
               onChange={(e) => setVerifyCode(e.target.value)}
               maxLength={4}
             />
-            <Button className="mt-3 w-full" size="lg" onClick={handleVerify}>
-              Verify
+            <Button className="mt-3 w-full" size="lg" disabled={verifying} onClick={handleVerify}>
+              {verifying ? 'Verifying…' : 'Verify'}
             </Button>
           </div>
         )}
@@ -451,8 +482,8 @@ export default function OrderTrackPage() {
               value={signatureName}
               onChange={(e) => setSignatureName(e.target.value)}
             />
-            <Button className="mt-3 w-full" size="lg" onClick={handleSign}>
-              Sign & confirm
+            <Button className="mt-3 w-full" size="lg" disabled={signing} onClick={handleSign}>
+              {signing ? 'Signing…' : 'Sign & confirm'}
             </Button>
           </div>
         )}
