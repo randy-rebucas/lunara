@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter, type Href } from 'expo-router';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { appConfig } from '@lunara/config';
 import { Screen } from '../src/components/ui/screen';
@@ -191,6 +192,8 @@ const contactStyles = StyleSheet.create({
 // ── Support screen ────────────────────────────────────────────────────────────
 
 export default function SupportScreen() {
+  const router = useRouter();
+
   function contactSupport() {
     void Linking.openURL(`mailto:${appConfig.supportEmail}?subject=Lunara%20Rider%20Support`);
   }
@@ -215,6 +218,26 @@ export default function SupportScreen() {
 
       {/* ── Contact ── */}
       <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>CONTACT US</Text>
+      <ContactCard
+        icon="clipboard-outline"
+        iconBg={colors.primaryLight}
+        iconColor={colors.primary}
+        title="Report an issue"
+        hint="Damaged item, delivery delay, or anything else — tracked by dispatch."
+        actionLabel="Report an issue"
+        actionIcon="arrow-forward-outline"
+        onPress={() => router.push('/report-issue' as Href)}
+      />
+      <ContactCard
+        icon="list-outline"
+        iconBg={colors.accentLight}
+        iconColor={colors.accentDark}
+        title="My reports"
+        hint="View the status of issues you've reported."
+        actionLabel="View reports"
+        actionIcon="arrow-forward-outline"
+        onPress={() => router.push('/my-reports' as Href)}
+      />
       <ContactCard
         icon="mail-outline"
         iconBg={colors.primaryLight}

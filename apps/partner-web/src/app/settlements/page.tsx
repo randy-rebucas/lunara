@@ -9,6 +9,7 @@ import { PageHeader } from '../../components/ui/page-header';
 import { useRequirePartner } from '../../hooks/use-protected-page';
 import { formatPeso } from '../../lib/format-peso';
 import { exportCsv } from '../../lib/export-csv';
+import { exportPdf } from '../../lib/export-pdf';
 import { partnerFetch } from '../../lib/partner-api';
 import { usePartnerQuery } from '../../lib/use-partner-query';
 
@@ -109,6 +110,29 @@ export default function SettlementsPage() {
             }}
           >
             Export CSV
+          </button>
+          <button
+            type="button"
+            className="btn-outline btn-sm"
+            disabled={!data?.length}
+            onClick={() => {
+              if (!data) return;
+              exportPdf(
+                'settlements.pdf',
+                ['Period', 'Orders', 'Revenue (₱)', 'Lunara Fee (₱)', 'Payout (₱)', 'Status'],
+                data.map((s) => [
+                  formatDateRange(s.periodStart, s.periodEnd),
+                  s.totalOrders,
+                  s.totalAmount,
+                  s.lunaraFee ?? '',
+                  s.partnerPayout ?? s.totalAmount,
+                  s.status,
+                ]),
+                'Settlements',
+              );
+            }}
+          >
+            Export PDF
           </button>
           <button type="button" className="btn-outline btn-sm" onClick={() => reload()}>
             Refresh

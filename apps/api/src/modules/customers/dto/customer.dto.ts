@@ -1,4 +1,4 @@
-import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class UpdateCustomerDto {
   @IsOptional()
@@ -12,4 +12,8 @@ export class UpdateCustomerDto {
   @MinLength(1)
   @MaxLength(80)
   lastName?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isBusiness?: boolean;
 }

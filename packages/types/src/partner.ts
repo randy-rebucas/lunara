@@ -131,6 +131,7 @@ export interface PartnerOrderSummary {
   paymentReceiptCode?: string;
   cashTiming?: 'pickup' | 'delivery';
   paymentLabel?: string;
+  subscriptionId?: string;
 }
 
 export interface PartnerQueueOrder {
@@ -161,11 +162,13 @@ export interface PartnerStaffMember {
   branchId?: string;
   branchName?: string;
   branchCode?: string;
+  canManageSettings?: boolean;
 }
 
 export interface PartnerOwnProfile {
   displayName?: string;
   avatarUrl?: string;
+  canManageSettings?: boolean;
 }
 
 export interface PartnerInventoryItem {
@@ -179,6 +182,16 @@ export interface PartnerInventoryItem {
   isLowStock?: boolean;
 }
 
+export interface PartnerReportBranchBreakdown {
+  branchId: string;
+  branchName: string;
+  branchCode: string;
+  totalOrders: number;
+  completedOrders: number;
+  revenue: number;
+  payout: number;
+}
+
 export interface PartnerReportData {
   periodDays: number;
   from: string;
@@ -189,6 +202,7 @@ export interface PartnerReportData {
   averageOrderValue: number;
   ordersByStatus: Record<string, number>;
   completedByService: Record<string, number>;
+  byBranch?: PartnerReportBranchBreakdown[];
 }
 
 export interface PartnerRevenueDailyPoint {
@@ -196,6 +210,15 @@ export interface PartnerRevenueDailyPoint {
   revenue: number;
   payout: number;
   orders: number;
+}
+
+export interface PartnerRevenueBranchBreakdown {
+  branchId: string;
+  branchName: string;
+  branchCode: string;
+  monthOrders: number;
+  monthRevenue: number;
+  monthPayout: number;
 }
 
 export interface PartnerRevenueData {
@@ -219,6 +242,7 @@ export interface PartnerRevenueData {
   allTimePayout: number;
   daily: PartnerRevenueDailyPoint[];
   recentOrders: PartnerOrderDetail[];
+  byBranch?: PartnerRevenueBranchBreakdown[];
 }
 
 export interface PartnerSettlement {
@@ -384,6 +408,7 @@ export interface PartnerProcessingView {
     estimatedWeightKg?: number;
     fulfillmentType?: 'delivery' | 'customer_pickup';
     customerPickupAt?: string;
+    subscriptionId?: string;
     pickup?: { actualWeightKg?: number; receiptCode?: string; droppedAtShop?: string };
   };
   currentStep: { id: string; label: string; description?: string; orderStatus?: string };

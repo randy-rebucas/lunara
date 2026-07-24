@@ -1,11 +1,12 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@lunara/ui';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { AuthLoading } from '../../../components/auth-loading';
 import { DataPageStatus } from '../../../components/data-page-status';
 import { PageShell } from '../../../components/page-shell';
+import { ShareInviteCard } from '../../../components/share/share-sections';
 import { Card, CardBody } from '../../../components/ui/card';
 import { PageHeader } from '../../../components/ui/page-header';
 import { useProtectedPage } from '../../../hooks/use-protected-page';
@@ -56,6 +57,21 @@ export default function RewardsPage() {
   const [redeemingId, setRedeemingId] = useState<string | null>(null);
   const [redeemMessage, setRedeemMessage] = useState('');
   const [redeemError, setRedeemError] = useState('');
+  const [referralCode, setReferralCode] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!ready) return;
+    let cancelled = false;
+    api
+      .get<{ referralCode: string }>('/rewards/me/referral-code')
+      .then((res) => {
+        if (!cancelled) setReferralCode(res.data.referralCode);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, api]);
 
   const load = useCallback(async () => {
     if (!ready) {
@@ -138,6 +154,16 @@ export default function RewardsPage() {
               </div>
             </CardBody>
           </Card>
+
+          <ShareInviteCard
+            title="Referral program"
+            description={
+              referralCode
+                ? `Share your code ${referralCode} — you both earn 100 loyalty points when they complete their first order.`
+                : 'Invite friends and earn 100 loyalty points per referral when they complete their first order.'
+            }
+            referralCode={referralCode}
+          />
 
           {redeemMessage && (
             <div className="mt-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">

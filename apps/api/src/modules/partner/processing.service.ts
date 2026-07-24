@@ -483,6 +483,7 @@ export class ProcessingService {
         bookingType: order.bookingType,
         total: order.total,
         estimatedWeightKg: order.estimatedWeightKg,
+        subscriptionId: order.subscriptionId?.toString(),
         pickup: order.pickup,
       },
       processing: order.laundryProcessing,
@@ -519,6 +520,7 @@ export class ProcessingService {
         bookingType: order.bookingType,
         total: order.total,
         estimatedWeightKg: order.estimatedWeightKg,
+        subscriptionId: order.subscriptionId?.toString(),
         pickup: order.pickup,
       },
       processing: {

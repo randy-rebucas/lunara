@@ -10,6 +10,7 @@ import { PageHeader } from '../../components/ui/page-header';
 import { useRequirePartner } from '../../hooks/use-protected-page';
 import { formatChartDate, formatChartDay, formatPeso } from '../../lib/format-peso';
 import { exportCsv } from '../../lib/export-csv';
+import { exportPdf } from '../../lib/export-pdf';
 import { partnerFetch } from '../../lib/partner-api';
 import { usePartnerQuery } from '../../lib/use-partner-query';
 
@@ -84,6 +85,22 @@ export default function RevenuePage() {
               }}
             >
               Export CSV
+            </button>
+            <button
+              type="button"
+              className="btn-outline btn-sm"
+              disabled={!data}
+              onClick={() => {
+                if (!data) return;
+                exportPdf(
+                  'revenue-daily.pdf',
+                  ['Date', 'Revenue (₱)', 'Payout (₱)', 'Orders'],
+                  data.daily.map((d) => [d.date, d.revenue, d.payout ?? d.revenue, d.orders]),
+                  'Daily revenue',
+                );
+              }}
+            >
+              Export PDF
             </button>
             <Link href="/reports" className="btn-outline btn-sm">
               Full reports →
@@ -206,6 +223,37 @@ export default function RevenuePage() {
             </table>
             </div>
           </div>
+
+          {data.byBranch && data.byBranch.length > 0 && (
+            <div className="mt-10">
+              <h3 className="font-medium text-slate-900">By branch (month to date)</h3>
+              <p className="mt-1 text-sm text-muted">Same month total above, split out per branch you own.</p>
+              <div className="mt-3 overflow-x-auto rounded-lg border border-border">
+                <table className="w-full text-sm">
+                  <thead className="bg-surface-muted/60 text-left text-xs uppercase text-muted">
+                    <tr>
+                      <th className="px-3 py-2">Branch</th>
+                      <th className="px-3 py-2 text-right">Orders</th>
+                      <th className="px-3 py-2 text-right">Revenue</th>
+                      <th className="px-3 py-2 text-right">Payout</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.byBranch.map((b) => (
+                      <tr key={b.branchId} className="border-t border-border">
+                        <td className="px-3 py-2">
+                          {b.branchName} <span className="text-muted-foreground">({b.branchCode})</span>
+                        </td>
+                        <td className="px-3 py-2 text-right">{b.monthOrders}</td>
+                        <td className="px-3 py-2 text-right">{formatPeso(b.monthRevenue)}</td>
+                        <td className="px-3 py-2 text-right">{formatPeso(b.monthPayout)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Per-order payment breakdown */}
           {data.recentOrders?.length > 0 && (

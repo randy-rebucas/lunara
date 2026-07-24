@@ -26,6 +26,11 @@ export class Customer {
   @Prop({ type: Types.ObjectId })
   referredBy?: Types.ObjectId;
 
+  /** Customer self-identifies as booking for a business — unlocks the consolidated
+   * monthly order/spend summary. Not a verified/billing entity, just a UI flag for now. */
+  @Prop({ default: false })
+  isBusiness!: boolean;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

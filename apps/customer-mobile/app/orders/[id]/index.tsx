@@ -21,10 +21,13 @@ import {
   formatOrderStatusLabel,
   formatPaymentMethodLabel,
   formatPaymentStatusLabel,
+  type BranchHoliday,
+  type PickupSlot,
 } from '@lunara/utils';
 import { Button } from '../../../src/components/ui/button';
 import { Card } from '../../../src/components/ui/card';
 import { Input } from '../../../src/components/ui/input';
+import { PickupSchedulePicker } from '../../../src/components/pickup-schedule-picker';
 import { colors, radius, spacing, typography } from '../../../src/theme';
 import { useOrderTrackingSocket } from '../../../src/hooks/use-order-tracking-socket';
 import { DataLoadState } from '../../../src/components/data-load-state';
@@ -34,6 +37,15 @@ import { branchTypeLabel } from '../../../src/components/nearest-branches';
 import { formatOrderNumber } from '../../../src/lib/active-order';
 import { resolveMediaUrl } from '../../../src/lib/media-url';
 import { useAuthStore } from '../../../src/store/auth';
+
+const RESCHEDULABLE_STATUSES: string[] = [
+  OrderStatus.PENDING,
+  OrderStatus.PENDING_DISPATCH,
+  OrderStatus.SHOP_ASSIGNED,
+  OrderStatus.CONFIRMED,
+  OrderStatus.RIDER_ASSIGNED_PICKUP,
+  OrderStatus.RIDER_ASSIGNED,
+];
 
 interface OrderDetail {
   _id: string;
@@ -51,9 +63,13 @@ interface OrderDetail {
    * amount — use this (not `total`) to show "was estimated at ₱X" once finalized. */
   estimatedTotal?: number;
   scheduledPickupAt?: string;
+  pickupAddressId?: string;
+  branchId?: string;
   branchName?: string;
   branchCode?: string;
   branchLogoUrl?: string;
+  bagSizeId?: string;
+  addons?: { id: string }[];
   pickup?: { receiptCode?: string };
   delivery?: { receiptCode?: string; signatureName?: string };
   statusHistory: { status: string; timestamp: string; note?: string }[];
@@ -109,6 +125,18 @@ export default function OrderTrackScreen() {
   const [reviewComment, setReviewComment] = useState('');
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewError, setReviewError] = useState('');
+  const [rescheduleModalOpen, setRescheduleModalOpen] = useState(false);
+  const [rescheduleSlots, setRescheduleSlots] = useState<PickupSlot[]>([]);
+  const [rescheduleHolidays, setRescheduleHolidays] = useState<BranchHoliday[]>([]);
+  const [rescheduleSelectedStartAt, setRescheduleSelectedStartAt] = useState('');
+  const [rescheduleLoading, setRescheduleLoading] = useState(false);
+  const [rescheduleSubmitting, setRescheduleSubmitting] = useState(false);
+  const [rescheduleError, setRescheduleError] = useState('');
+  const [subscribeFrequencyDays, setSubscribeFrequencyDays] = useState(7);
+  const [subscribing, setSubscribing] = useState(false);
+  const [subscribed, setSubscribed] = useState(false);
+  const [subscribeError, setSubscribeError] = useState('');
+  const [subscribeDismissed, setSubscribeDismissed] = useState(false);
   const justBooked = booked === '1';
 
   const notificationSeq = useRef(0);
@@ -283,6 +311,78 @@ export default function OrderTrackScreen() {
     }
   }
 
+  async function openRescheduleModal() {
+    if (!order) return;
+    setRescheduleError('');
+    setRescheduleSelectedStartAt('');
+    setRescheduleModalOpen(true);
+    if (!order.pickupAddressId) {
+      setRescheduleError('Could not load pickup slots for this order.');
+      return;
+    }
+    setRescheduleLoading(true);
+    try {
+      const branchParam = order.branchId ? `&branchId=${encodeURIComponent(order.branchId)}` : '';
+      const avail = await apiFetch<{
+        slots: PickupSlot[];
+        holidays?: BranchHoliday[];
+      }>(`/booking/availability?addressId=${encodeURIComponent(order.pickupAddressId)}${branchParam}`);
+      setRescheduleSlots(avail.slots);
+      setRescheduleHolidays(avail.holidays ?? []);
+    } catch (e) {
+      setRescheduleError(e instanceof Error ? e.message : 'Could not load pickup slots');
+      setRescheduleSlots([]);
+    } finally {
+      setRescheduleLoading(false);
+    }
+  }
+
+  async function handleSubmitReschedule() {
+    if (!id || !rescheduleSelectedStartAt) return;
+    setRescheduleSubmitting(true);
+    setRescheduleError('');
+    try {
+      await apiFetch(`/orders/${id}/reschedule`, {
+        method: 'PATCH',
+        body: JSON.stringify({ scheduledPickupAt: rescheduleSelectedStartAt }),
+      });
+      setRescheduleModalOpen(false);
+      await load();
+      pushNotification('Pickup rescheduled');
+    } catch (e) {
+      setRescheduleError(e instanceof Error ? e.message : 'Could not reschedule pickup');
+    } finally {
+      setRescheduleSubmitting(false);
+    }
+  }
+
+  async function handleSubscribe() {
+    if (!order?.scheduledPickupAt || !order.pickupAddressId) return;
+    setSubscribing(true);
+    setSubscribeError('');
+    try {
+      const nextRunAt = new Date(order.scheduledPickupAt);
+      nextRunAt.setDate(nextRunAt.getDate() + subscribeFrequencyDays);
+      await apiFetch('/subscriptions', {
+        method: 'POST',
+        body: JSON.stringify({
+          bookingType: order.bookingType,
+          ...(order.branchId ? { branchId: order.branchId } : {}),
+          ...(order.bagSizeId ? { bagSizeId: order.bagSizeId } : {}),
+          addonIds: order.addons?.map((a) => a.id) ?? [],
+          pickupAddressId: order.pickupAddressId,
+          scheduledPickupAt: nextRunAt.toISOString(),
+          frequencyDays: subscribeFrequencyDays,
+        }),
+      });
+      setSubscribed(true);
+    } catch (e) {
+      setSubscribeError(e instanceof Error ? e.message : 'Could not set up recurring pickup');
+    } finally {
+      setSubscribing(false);
+    }
+  }
+
   if (pageLoading || loadError || !order) {
     return (
       <View style={styles.centered}>
@@ -315,6 +415,7 @@ export default function OrderTrackScreen() {
     timeline.isTerminal && order.status === OrderStatus.COMPLETED;
   const showLostItemHint =
     order.status === OrderStatus.DELIVERED || order.status === OrderStatus.COMPLETED;
+  const canReschedule = RESCHEDULABLE_STATUSES.includes(order.status);
   const isCashPending =
     order.paymentMethod === PaymentMethod.CASH &&
     order.paymentStatus === PaymentStatus.PENDING;
@@ -359,6 +460,25 @@ export default function OrderTrackScreen() {
                 : ''}
           </Text>
         </View>
+        {order.scheduledPickupAt ? (
+          <View style={styles.metaRow}>
+            <Ionicons name="calendar-outline" size={13} color={colors.mutedForeground} />
+            <Text style={styles.meta}>
+              Pickup: {new Date(order.scheduledPickupAt).toLocaleString('en-PH', {
+                month: 'short',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+              })}
+            </Text>
+          </View>
+        ) : null}
+        {canReschedule ? (
+          <Pressable onPress={openRescheduleModal} style={styles.rescheduleLink} hitSlop={4}>
+            <Ionicons name="time-outline" size={14} color={colors.primary} />
+            <Text style={styles.rescheduleLinkText}>Reschedule pickup</Text>
+          </Pressable>
+        ) : null}
         {isPriceFinalized && order.finalTotal == null ? (
           <Text style={styles.estimateNote}>
             Estimated total — we&apos;ll confirm the final price once the shop weighs your order.
@@ -376,6 +496,56 @@ export default function OrderTrackScreen() {
         </View>
         <Text style={styles.progressLabel}>{timeline.progressPercent}% complete</Text>
       </Card>
+
+      {justBooked && !subscribeDismissed ? (
+        <Card style={styles.pendingCard}>
+          {subscribed ? (
+            <Text style={styles.pendingText}>
+              Recurring pickup set up — we&apos;ll auto-book your next order.
+            </Text>
+          ) : (
+            <>
+              <View style={styles.cardHeaderRow}>
+                <Ionicons name="repeat-outline" size={18} color={colors.primary} />
+                <Text style={styles.pendingTitle}>Make this a recurring pickup?</Text>
+              </View>
+              <View style={styles.subscribeRow}>
+                {[
+                  { label: 'Weekly', days: 7 },
+                  { label: 'Biweekly', days: 14 },
+                  { label: 'Monthly', days: 30 },
+                ].map((opt) => (
+                  <Pressable
+                    key={opt.days}
+                    onPress={() => setSubscribeFrequencyDays(opt.days)}
+                    style={[
+                      styles.actionChip,
+                      subscribeFrequencyDays === opt.days && styles.actionChipSelected,
+                    ]}
+                  >
+                    <Text style={styles.actionChipText}>{opt.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              {subscribeError ? <Text style={styles.error}>{subscribeError}</Text> : null}
+              <View style={styles.subscribeRow}>
+                <Button
+                  label={subscribing ? 'Setting up…' : 'Subscribe'}
+                  onPress={handleSubscribe}
+                  disabled={subscribing}
+                  style={styles.pendingBtn}
+                />
+                <Button
+                  label="No thanks"
+                  variant="outline"
+                  onPress={() => setSubscribeDismissed(true)}
+                  style={styles.pendingBtn}
+                />
+              </View>
+            </>
+          )}
+        </Card>
+      ) : null}
 
       {order.status === OrderStatus.PENDING && (
         <Card style={styles.pendingCard}>
@@ -643,6 +813,51 @@ export default function OrderTrackScreen() {
       )}
 
       <Modal
+        visible={rescheduleModalOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setRescheduleModalOpen(false)}
+      >
+        <View style={styles.sheetOverlay}>
+          <Pressable style={styles.sheetBackdrop} onPress={() => setRescheduleModalOpen(false)} />
+          <View style={styles.sheetPanel}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.cardHeaderRow}>
+              <Ionicons name="time-outline" size={18} color={colors.primary} />
+              <Text style={styles.actionTitle}>Reschedule pickup</Text>
+            </View>
+
+            {rescheduleLoading ? (
+              <Text style={styles.meta}>Loading available pickup slots…</Text>
+            ) : rescheduleSlots.length > 0 ? (
+              <PickupSchedulePicker
+                slots={rescheduleSlots}
+                selectedStartAt={rescheduleSelectedStartAt}
+                onSelectStartAt={setRescheduleSelectedStartAt}
+                holidays={rescheduleHolidays}
+              />
+            ) : !rescheduleError ? (
+              <Text style={styles.meta}>No pickup slots available for this address.</Text>
+            ) : null}
+
+            {rescheduleError ? (
+              <View style={styles.errorRow}>
+                <Ionicons name="alert-circle-outline" size={14} color={colors.destructive} />
+                <Text style={styles.error}>{rescheduleError}</Text>
+              </View>
+            ) : null}
+
+            <Button
+              label={rescheduleSubmitting ? 'Saving…' : 'Confirm new pickup time'}
+              onPress={handleSubmitReschedule}
+              disabled={rescheduleSubmitting || !rescheduleSelectedStartAt}
+              style={styles.actionBtn}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
         visible={reviewModalOpen}
         transparent
         animationType="slide"
@@ -764,6 +979,14 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.lg },
   meta: { color: colors.muted, fontSize: 13, textTransform: 'capitalize' },
   estimateNote: { color: colors.muted, fontSize: 12, marginTop: spacing.xs },
+  rescheduleLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: spacing.sm,
+    alignSelf: 'flex-start',
+  },
+  rescheduleLinkText: { color: colors.primary, fontSize: 13, fontWeight: '600' },
   progressTrack: {
     marginTop: spacing.md,
     height: 8,
@@ -786,7 +1009,18 @@ const styles = StyleSheet.create({
   },
   pendingTitle: { fontWeight: '600', color: colors.warning },
   pendingText: { marginTop: spacing.sm, fontSize: 13, color: colors.warning, lineHeight: 20 },
-  pendingBtn: { marginTop: spacing.md },
+  pendingBtn: { marginTop: spacing.md, flex: 1 },
+  subscribeCard: { marginTop: spacing.lg },
+  subscribeRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md, flexWrap: 'wrap' },
+  actionChip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.full,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+  },
+  actionChipSelected: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
+  actionChipText: { fontSize: 13, fontWeight: '600', color: colors.foreground },
   banner: {
     marginTop: spacing.lg,
     backgroundColor: colors.warningBg,

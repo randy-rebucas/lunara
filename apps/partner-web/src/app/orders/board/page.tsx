@@ -50,7 +50,14 @@ function OrderCard({
   return (
     <div className="card p-3">
       <Link href={`/orders/${order._id}`} className="block hover:text-primary">
-        <p className="font-medium capitalize text-slate-900">{order.bookingType.replace(/_/g, ' ')}</p>
+        <div className="flex items-center gap-2">
+          <p className="font-medium capitalize text-slate-900">{order.bookingType.replace(/_/g, ' ')}</p>
+          {order.subscriptionId && (
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+              Recurring
+            </span>
+          )}
+        </div>
         <p className="mt-1 text-sm font-semibold text-primary">{formatPeso(order.total)}</p>
         {order.currentStepLabel && (
           <p className="mt-1 text-xs text-muted">{order.currentStepLabel}</p>

@@ -1,7 +1,7 @@
 'use client';
 
 import { appConfig, getShareWebsiteUrl } from '@lunara/config';
-import { buildAppSharePayload } from '@lunara/utils';
+import { buildAppSharePayload, buildReferralSharePayload } from '@lunara/utils';
 import { Card, CardBody } from '../ui/card';
 import { SocialSharePanel } from '../share/social-share-panel';
 
@@ -16,13 +16,17 @@ function shareBaseUrl() {
 interface ShareInviteCardProps {
   title?: string;
   description?: string;
+  referralCode?: string | null;
 }
 
 export function ShareInviteCard({
   title = 'Share Lunara',
   description = 'Tell friends about pickup & delivery laundry in Metro Manila.',
+  referralCode,
 }: ShareInviteCardProps) {
-  const payload = buildAppSharePayload(shareBaseUrl(), appConfig.name);
+  const payload = referralCode
+    ? buildReferralSharePayload(referralCode, shareBaseUrl(), appConfig.name)
+    : buildAppSharePayload(shareBaseUrl(), appConfig.name);
 
   return (
     <Card className="mt-10 border-secondary/20 bg-cyan-50/40">

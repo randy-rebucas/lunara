@@ -1,4 +1,4 @@
-import { IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class CreateStaffDto {
   @IsEmail()
@@ -21,4 +21,8 @@ export class CreateStaffDto {
   @IsOptional()
   @IsString()
   branchId?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  canManageSettings?: boolean;
 }

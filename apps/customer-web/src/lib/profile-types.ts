@@ -14,12 +14,40 @@ export interface CustomerAddress {
   isDefault: boolean;
 }
 
+export interface FavoriteBranch {
+  branchId: string;
+  code: string;
+  name: string;
+  city: string;
+  logoUrl?: string;
+  favoritedAt: string;
+}
+
+export interface BusinessSummaryMonth {
+  month: string;
+  orderCount: number;
+  totalSpend: number;
+}
+
+export interface BusinessSummary {
+  months: BusinessSummaryMonth[];
+  totalOrders: number;
+  totalSpend: number;
+}
+
+export interface ImpactSummary {
+  totalWeightKg: number;
+  orderCount: number;
+  estimatedCo2SavedKg: number;
+}
+
 export interface CustomerProfile {
   _id?: string;
   firstName: string;
   lastName: string;
   avatarUrl?: string;
   loyaltyPoints?: number;
+  isBusiness?: boolean;
 }
 
 export interface AddressFormValues {

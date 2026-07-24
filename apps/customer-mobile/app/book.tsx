@@ -199,6 +199,7 @@ export default function BookScreen() {
   const [dispatchNote, setDispatchNote] = useState('');
   const [shopOptions, setShopOptions] = useState<ShopOption[]>([]);
   const [shopsLoading, setShopsLoading] = useState(false);
+  const [favoriteBranchIds, setFavoriteBranchIds] = useState<Set<string>>(new Set());
   const [branchSheetShopId, setBranchSheetShopId] = useState<string | null>(null);
   const [quote, setQuote] = useState<QuoteBreakdown | null>(null);
   const [promoLoading, setPromoLoading] = useState(false);
@@ -232,7 +233,34 @@ export default function BookScreen() {
       .catch((e) =>
         setAddressesError(e instanceof Error ? e.message : 'Could not load addresses'),
       );
+    apiFetch<{ branchId: string }[]>('/favorites')
+      .then((list) => setFavoriteBranchIds(new Set(list.map((f) => f.branchId))))
+      .catch(() => {});
   }, [apiFetch, reorderParam]);
+
+  async function toggleFavoriteBranch(branchId: string) {
+    const isFavorited = favoriteBranchIds.has(branchId);
+    setFavoriteBranchIds((prev) => {
+      const next = new Set(prev);
+      if (isFavorited) next.delete(branchId);
+      else next.add(branchId);
+      return next;
+    });
+    try {
+      if (isFavorited) {
+        await apiFetch(`/favorites/${branchId}`, { method: 'DELETE' });
+      } else {
+        await apiFetch('/favorites', { method: 'POST', body: JSON.stringify({ branchId }) });
+      }
+    } catch {
+      setFavoriteBranchIds((prev) => {
+        const next = new Set(prev);
+        if (isFavorited) next.add(branchId);
+        else next.delete(branchId);
+        return next;
+      });
+    }
+  }
 
   // "Reorder" from order history: prefill the same shop, service, bag size, and add-ons once
   // addresses have loaded (needed to check the order's old pickup address is still valid).
@@ -956,9 +984,27 @@ export default function BookScreen() {
                           )}
                           <Text style={styles.optionTitle}>{shop.name}</Text>
                         </View>
-                        {selected ? (
-                          <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
-                        ) : null}
+                        <View style={styles.optionTopRowActions}>
+                          <Pressable
+                            onPress={() => toggleFavoriteBranch(shop.branchId)}
+                            hitSlop={8}
+                            accessibilityRole="button"
+                            accessibilityLabel={
+                              favoriteBranchIds.has(shop.branchId)
+                                ? `Remove ${shop.name} from favorites`
+                                : `Add ${shop.name} to favorites`
+                            }
+                          >
+                            <Ionicons
+                              name={favoriteBranchIds.has(shop.branchId) ? 'heart' : 'heart-outline'}
+                              size={18}
+                              color={favoriteBranchIds.has(shop.branchId) ? colors.destructive : colors.mutedForeground}
+                            />
+                          </Pressable>
+                          {selected ? (
+                            <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                          ) : null}
+                        </View>
                       </View>
                       <Text style={styles.optionSub}>
                         {shop.city} · {shop.distanceLabel}
@@ -1514,6 +1560,7 @@ const styles = StyleSheet.create({
   optionDisabled: { opacity: 0.4 },
   optionPressed: { opacity: 0.9 },
   optionTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  optionTopRowActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   optionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexShrink: 1 },
   optionCheck: { marginLeft: 'auto' },
   shopLogo: { width: 32, height: 32, borderRadius: radius.sm, backgroundColor: colors.surface },

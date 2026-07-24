@@ -193,11 +193,15 @@ export async function removeOwnAvatar(): Promise<PartnerOwnProfile> {
 
 export async function updateStaffProfile(
   staffId: string,
-  displayName: string,
+  displayName?: string,
+  canManageSettings?: boolean,
 ): Promise<PartnerOwnProfile> {
   return partnerFetch<PartnerOwnProfile>(`/partner/staff/${staffId}/profile`, {
     method: 'PATCH',
-    body: JSON.stringify({ displayName }),
+    body: JSON.stringify({
+      ...(displayName !== undefined ? { displayName } : {}),
+      ...(canManageSettings !== undefined ? { canManageSettings } : {}),
+    }),
   });
 }
 

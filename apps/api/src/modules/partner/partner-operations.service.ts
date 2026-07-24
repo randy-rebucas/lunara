@@ -608,7 +608,7 @@ export class PartnerOperationsService {
   }
 
   private formatStaffMember(
-    user: Pick<UserDocument, '_id' | 'email' | 'phone' | 'createdAt' | 'branchId'>,
+    user: Pick<UserDocument, '_id' | 'email' | 'phone' | 'createdAt' | 'branchId' | 'canManageSettings'>,
     jobMap: Map<string, number>,
     profileMap?: Map<string, Pick<UserProfile, 'displayName' | 'avatarUrl'>>,
     branchMap?: Map<string, { name: string; code: string }>,
@@ -626,6 +626,7 @@ export class PartnerOperationsService {
       branchId: user.branchId?.toString(),
       branchName: branch?.name,
       branchCode: branch?.code,
+      canManageSettings: user.canManageSettings ?? false,
     };
   }
 
@@ -635,7 +636,7 @@ export class PartnerOperationsService {
       role === UserRole.PARTNER ? { $in: ownedBranchIds } : await this.resolvePartnerBranchId(userId, role);
     const staff = await this.userModel
       .find({ role: UserRole.STAFF, isActive: true, branchId: branchFilter })
-      .select('email phone createdAt branchId')
+      .select('email phone createdAt branchId canManageSettings')
       .sort({ email: 1 });
 
     const branchIdsForJobs = role === UserRole.PARTNER ? ownedBranchIds : undefined;
@@ -683,6 +684,7 @@ export class PartnerOperationsService {
       role: UserRole.STAFF,
       branchId,
       isActive: true,
+      canManageSettings: dto.canManageSettings ?? false,
     });
 
     const displayName = dto.displayName?.trim();
@@ -882,6 +884,39 @@ export class PartnerOperationsService {
       {} as Record<string, number>,
     );
 
+    // Combined totals above already roll up across every branch this partner owns — this
+    // breakdown just splits that same data back out per branch for multi-branch partners.
+    let byBranch: {
+      branchId: string;
+      branchName: string;
+      branchCode: string;
+      totalOrders: number;
+      completedOrders: number;
+      revenue: number;
+      payout: number;
+    }[] = [];
+    if (role === UserRole.PARTNER && branches.length > 1) {
+      byBranch = branches.map((branch) => {
+        const branchIdStr = branch._id.toString();
+        const branchOrders = orders.filter((o) => o.branchId?.toString() === branchIdStr);
+        const branchCompleted = branchOrders.filter((o) => COMPLETED_STATUSES.includes(o.status));
+        const branchRevenue = branchCompleted.reduce((sum, o) => sum + o.total, 0);
+        const branchFee = branchCompleted.reduce(
+          (sum, o) => sum + this.computeOrderFee(o, commissionRateByBranchId),
+          0,
+        );
+        return {
+          branchId: branchIdStr,
+          branchName: branch.name,
+          branchCode: branch.code,
+          totalOrders: branchOrders.length,
+          completedOrders: branchCompleted.length,
+          revenue: branchRevenue,
+          payout: branchRevenue - branchFee,
+        };
+      });
+    }
+
     return {
       success: true,
       data: {
@@ -894,6 +929,7 @@ export class PartnerOperationsService {
         averageOrderValue: completed.length ? Math.round(revenue / completed.length) : 0,
         ordersByStatus: byStatus,
         completedByService: byBooking,
+        byBranch,
       },
     };
   }
@@ -1061,6 +1097,32 @@ export class PartnerOperationsService {
       };
     });
 
+    // Same month-to-date figures as `month`/`monthTotal` above, just split per branch for
+    // multi-branch partners — the combined totals already roll up across all owned branches.
+    let byBranch: {
+      branchId: string;
+      branchName: string;
+      branchCode: string;
+      monthOrders: number;
+      monthRevenue: number;
+      monthPayout: number;
+    }[] = [];
+    if (role === UserRole.PARTNER && branches.length > 1) {
+      byBranch = branches.map((branch) => {
+        const branchIdStr = branch._id.toString();
+        const branchOrders = month.filter((o) => o.branchId?.toString() === branchIdStr);
+        const breakdown = periodBreakdown(branchOrders);
+        return {
+          branchId: branchIdStr,
+          branchName: branch.name,
+          branchCode: branch.code,
+          monthOrders: branchOrders.length,
+          monthRevenue: breakdown.gross,
+          monthPayout: breakdown.payout,
+        };
+      });
+    }
+
     return {
       success: true,
       data: {
@@ -1084,6 +1146,7 @@ export class PartnerOperationsService {
         allTimePayout,
         daily: last7,
         recentOrders,
+        byBranch,
       },
     };
   }
@@ -1511,6 +1574,7 @@ export class PartnerOperationsService {
               : undefined,
       ...paymentSummary,
       paymentLabel,
+      subscriptionId: order.subscriptionId?.toString(),
     };
   }
 }

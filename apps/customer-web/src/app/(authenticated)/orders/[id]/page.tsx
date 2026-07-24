@@ -19,6 +19,7 @@ import {
   type PartnerCoverageInfo,
 } from '@lunara/utils';
 import { PaymentReceipt, type PaymentReceiptData } from '../../../../components/payment/payment-receipt';
+import { RescheduleOrderModal } from '../../../../components/orders/reschedule-order-modal';
 import { HandoffQrCard } from '../../../../components/handoff-qr-card';
 import { OrderPartnerCoverageNotice } from '../../../../components/order-partner-coverage-notice';
 import { PageShell } from '../../../../components/page-shell';
@@ -46,6 +47,10 @@ interface OrderDetail {
    * amount — use this (not `total`) to show "was estimated at ₱X" once finalized. */
   estimatedTotal?: number;
   scheduledPickupAt: string;
+  pickupAddressId?: string;
+  branchId?: string;
+  bagSizeId?: string;
+  addons?: { id: string }[];
   createdAt?: string;
   pickup?: {
     receiptCode?: string;
@@ -115,6 +120,15 @@ function formatTime() {
   return new Date().toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' });
 }
 
+const RESCHEDULABLE_STATUSES: string[] = [
+  OrderStatus.PENDING,
+  OrderStatus.PENDING_DISPATCH,
+  OrderStatus.SHOP_ASSIGNED,
+  OrderStatus.CONFIRMED,
+  OrderStatus.RIDER_ASSIGNED_PICKUP,
+  OrderStatus.RIDER_ASSIGNED,
+];
+
 export default function OrderTrackPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -137,6 +151,12 @@ export default function OrderTrackPage() {
   const [cancelling, setCancelling] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [signing, setSigning] = useState(false);
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [subscribeFrequencyDays, setSubscribeFrequencyDays] = useState(7);
+  const [subscribing, setSubscribing] = useState(false);
+  const [subscribed, setSubscribed] = useState(false);
+  const [subscribeError, setSubscribeError] = useState('');
+  const [subscribeDismissed, setSubscribeDismissed] = useState(false);
 
   const pushNotification = useCallback((message: string) => {
     setNotifications((prev) => [
@@ -241,6 +261,30 @@ export default function OrderTrackPage() {
     }
   }
 
+  async function handleSubscribe() {
+    if (!order?.scheduledPickupAt || !order.pickupAddressId) return;
+    setSubscribing(true);
+    setSubscribeError('');
+    try {
+      const nextRunAt = new Date(order.scheduledPickupAt);
+      nextRunAt.setDate(nextRunAt.getDate() + subscribeFrequencyDays);
+      await api.post('/subscriptions', {
+        bookingType: order.bookingType,
+        ...(order.branchId ? { branchId: order.branchId } : {}),
+        ...(order.bagSizeId ? { bagSizeId: order.bagSizeId } : {}),
+        addonIds: order.addons?.map((a) => a.id) ?? [],
+        pickupAddressId: order.pickupAddressId,
+        scheduledPickupAt: nextRunAt.toISOString(),
+        frequencyDays: subscribeFrequencyDays,
+      });
+      setSubscribed(true);
+    } catch (e) {
+      setSubscribeError(e instanceof Error ? e.message : 'Could not set up recurring pickup');
+    } finally {
+      setSubscribing(false);
+    }
+  }
+
   async function handleCancelPendingDispatch() {
     if (
       !window.confirm(
@@ -324,6 +368,7 @@ export default function OrderTrackPage() {
 
   const isPriceFinalized = order.pricingMode !== undefined && order.pricingMode !== 'flat_bag';
   const displayTotal = isPriceFinalized && order.finalTotal != null ? order.finalTotal : order.total;
+  const canReschedule = RESCHEDULABLE_STATUSES.includes(order.status);
 
   return (
     <PageShell>
@@ -354,6 +399,26 @@ export default function OrderTrackPage() {
                 {formatCurrency(order.estimatedTotal ?? order.total)}).
               </p>
             ) : null}
+            {order.scheduledPickupAt ? (
+              <p className="mt-2 text-xs text-slate-500">
+                Pickup:{' '}
+                {new Date(order.scheduledPickupAt).toLocaleString('en-PH', {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                })}
+              </p>
+            ) : null}
+            {canReschedule ? (
+              <button
+                type="button"
+                className="mt-1 text-xs font-medium text-primary hover:underline"
+                onClick={() => setRescheduleOpen(true)}
+              >
+                Reschedule pickup
+              </button>
+            ) : null}
           </div>
           <div className="text-right">
             <p className="text-sm font-medium text-primary">{timeline.currentStepLabel}</p>
@@ -378,6 +443,54 @@ export default function OrderTrackPage() {
             coverage={order.partnerCoverage}
             className="mt-4"
           />
+        )}
+
+        {justBooked && !subscribeDismissed && (
+          <div className="mt-4 rounded-lg bg-primary/5 p-4 ring-1 ring-primary/15">
+            {subscribed ? (
+              <p className="text-sm text-slate-700">
+                Recurring pickup set up — we&apos;ll auto-book your next order.
+              </p>
+            ) : (
+              <>
+                <p className="text-sm font-medium text-primary">Make this a recurring pickup?</p>
+                <div className="mt-3 flex gap-2">
+                  {[
+                    { label: 'Weekly', days: 7 },
+                    { label: 'Biweekly', days: 14 },
+                    { label: 'Monthly', days: 30 },
+                  ].map((opt) => (
+                    <button
+                      key={opt.days}
+                      type="button"
+                      onClick={() => setSubscribeFrequencyDays(opt.days)}
+                      className={`rounded-full px-3 py-1.5 text-xs font-medium ring-1 ${
+                        subscribeFrequencyDays === opt.days
+                          ? 'bg-primary text-white ring-primary'
+                          : 'bg-surface text-muted ring-border'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                {subscribeError && <p className="mt-2 text-sm text-red-600">{subscribeError}</p>}
+                <div className="mt-4 flex gap-2">
+                  <Button type="button" size="sm" disabled={subscribing} onClick={handleSubscribe}>
+                    {subscribing ? 'Setting up…' : 'Subscribe'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSubscribeDismissed(true)}
+                  >
+                    No thanks
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
         )}
 
         {order.status === OrderStatus.PENDING && (
@@ -557,6 +670,19 @@ export default function OrderTrackPage() {
             Dashboard
           </ButtonLink>
         </div>
+
+        {rescheduleOpen && (
+          <RescheduleOrderModal
+            orderId={id}
+            pickupAddressId={order.pickupAddressId}
+            branchId={order.branchId}
+            onClose={() => setRescheduleOpen(false)}
+            onRescheduled={() => {
+              setRescheduleOpen(false);
+              reload();
+            }}
+          />
+        )}
     </PageShell>
   );
 }

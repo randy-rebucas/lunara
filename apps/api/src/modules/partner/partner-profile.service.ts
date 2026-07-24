@@ -69,14 +69,22 @@ export class PartnerProfileService {
     role: UserRole,
   ) {
     await this.assertOwnsStaff(partnerUserId, staffUserId, role);
+
+    if (dto.canManageSettings !== undefined) {
+      await this.userModel.updateOne(
+        { _id: staffUserId },
+        { canManageSettings: dto.canManageSettings },
+      );
+    }
+
     if (dto.displayName === undefined) {
       const profile = await this.userProfileModel
         .findOne({ userId: new Types.ObjectId(staffUserId) })
         .lean();
-      return { success: true, data: formatProfile(profile) };
+      return { success: true, data: { ...formatProfile(profile), canManageSettings: dto.canManageSettings } };
     }
     const profile = await this.upsertProfile(staffUserId, { displayName: dto.displayName });
-    return { success: true, data: formatProfile(profile) };
+    return { success: true, data: { ...formatProfile(profile), canManageSettings: dto.canManageSettings } };
   }
 
   async updateStaffAvatar(

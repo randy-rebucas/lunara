@@ -23,6 +23,7 @@ import { PartnerProfileService } from './partner-profile.service';
 import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
 import { LedgerModule } from '../ledger/ledger.module';
 import { LaundryTagsModule } from '../laundry-tags/laundry-tags.module';
+import { PromotionsModule } from '../promotions/promotions.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { LaundryTagsModule } from '../laundry-tags/laundry-tags.module';
     LedgerModule,
     BranchesModule,
     LaundryTagsModule,
+    PromotionsModule,
   ],
   controllers: [PartnerController],
   providers: [

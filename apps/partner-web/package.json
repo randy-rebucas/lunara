@@ -16,6 +16,8 @@
     "@lunara/types": "*",
     "@lunara/ui": "*",
     "@lunara/utils": "*",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "jsqr": "^1.4.0",
     "next": "^15.3.3",
     "react": "^19.1.0",

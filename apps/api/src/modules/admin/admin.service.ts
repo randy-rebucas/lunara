@@ -927,6 +927,101 @@ export class AdminService {
     };
   }
 
+  private static readonly QUALITY_ALERT_RATING_THRESHOLD = 3.5;
+  private static readonly QUALITY_ALERT_MIN_REVIEWS = 5;
+
+  /** Shops and riders whose rolling average rating has dropped below a fixed threshold —
+   * simple flagging, not a configurable rules engine. Requires a minimum review count so a
+   * single bad review doesn't flag an otherwise-fine shop/rider. */
+  async getQualityAlerts() {
+    const { QUALITY_ALERT_RATING_THRESHOLD: THRESHOLD, QUALITY_ALERT_MIN_REVIEWS: MIN_REVIEWS } =
+      AdminService;
+
+    const [shopRatingStats, riderRatingStats] = await Promise.all([
+      this.reviewModel.aggregate<{ _id: Types.ObjectId; avgRating: number; reviewCount: number }>([
+        { $match: { partnerId: { $exists: true, $ne: null } } },
+        { $group: { _id: '$partnerId', avgRating: { $avg: '$rating' }, reviewCount: { $sum: 1 } } },
+      ]),
+      this.reviewModel.aggregate<{ _id: Types.ObjectId; avgRating: number; reviewCount: number }>([
+        {
+          $lookup: {
+            from: 'orders',
+            localField: 'orderId',
+            foreignField: '_id',
+            as: 'order',
+          },
+        },
+        { $unwind: '$order' },
+        { $match: { 'order.deliveryRiderId': { $exists: true, $ne: null } } },
+        {
+          $group: {
+            _id: '$order.deliveryRiderId',
+            avgRating: { $avg: '$rating' },
+            reviewCount: { $sum: 1 },
+          },
+        },
+      ]),
+    ]);
+
+    const flaggedShops = shopRatingStats.filter(
+      (s) => s.avgRating < THRESHOLD && s.reviewCount >= MIN_REVIEWS,
+    );
+    const flaggedRiders = riderRatingStats.filter(
+      (r) => r.avgRating < THRESHOLD && r.reviewCount >= MIN_REVIEWS,
+    );
+
+    const [partners, riders] = await Promise.all([
+      this.userModel
+        .find({ _id: { $in: flaggedShops.map((s) => s._id) } })
+        .select('email businessName ownerName'),
+      this.userModel.find({ _id: { $in: flaggedRiders.map((r) => r._id) } }).select('email'),
+    ]);
+    const partnerById = new Map(partners.map((p) => [p._id.toString(), p]));
+    const riderById = new Map(riders.map((r) => [r._id.toString(), r]));
+
+    const branches = await this.branchModel
+      .find({ partnerUserId: { $in: flaggedShops.map((s) => s._id) } })
+      .select('partnerUserId name')
+      .sort({ isMainShop: -1 });
+    const branchNameByPartnerId = new Map<string, string>();
+    for (const b of branches) {
+      const key = b.partnerUserId.toString();
+      if (!branchNameByPartnerId.has(key)) branchNameByPartnerId.set(key, b.name);
+    }
+
+    return {
+      success: true,
+      data: {
+        threshold: THRESHOLD,
+        minReviews: MIN_REVIEWS,
+        shops: flaggedShops
+          .map((s) => {
+            const id = s._id.toString();
+            const partner = partnerById.get(id);
+            return {
+              partnerId: id,
+              shopName: branchNameByPartnerId.get(id) ?? partner?.businessName ?? partner?.email ?? id,
+              avgRating: Math.round(s.avgRating * 10) / 10,
+              reviewCount: s.reviewCount,
+            };
+          })
+          .sort((a, b) => a.avgRating - b.avgRating),
+        riders: flaggedRiders
+          .map((r) => {
+            const id = r._id.toString();
+            const rider = riderById.get(id);
+            return {
+              riderId: id,
+              riderEmail: rider?.email ?? id,
+              avgRating: Math.round(r.avgRating * 10) / 10,
+              reviewCount: r.reviewCount,
+            };
+          })
+          .sort((a, b) => a.avgRating - b.avgRating),
+      },
+    };
+  }
+
   async updatePartnerProfile(id: string, dto: UpdatePartnerProfileDto) {
     const partner = await this.userModel.findOne({ _id: id, role: UserRole.PARTNER });
     if (!partner) {

@@ -3,6 +3,7 @@ import { useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
+  Image,
   Linking,
   Pressable,
   RefreshControl,
@@ -11,7 +12,7 @@ import {
   View,
 } from 'react-native';
 import { appConfig, getShareWebsiteUrl } from '@lunara/config';
-import { buildAppSharePayload, formatAddressTypeLabel } from '@lunara/utils';
+import { buildAppSharePayload, formatAddressTypeLabel, formatCurrency } from '@lunara/utils';
 import Constants from 'expo-constants';
 import { AddressFormModal } from '../../src/components/address-form-modal';
 import { ProfileAvatar } from '../../src/components/profile-avatar';
@@ -27,9 +28,13 @@ import {
   addressToForm,
   encodeAddressLine2,
   type AddressFormValues,
+  type BusinessSummary,
   type CustomerAddress,
   type CustomerProfile,
+  type FavoriteBranch,
+  type ImpactSummary,
 } from '../../src/lib/profile-types';
+import { resolveMediaUrl } from '../../src/lib/media-url';
 import { useAuthStore } from '../../src/store/auth';
 import { colors, radius, spacing, typography } from '../../src/theme';
 
@@ -56,24 +61,70 @@ export default function ProfileScreen() {
   const [addressSaving, setAddressSaving] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [actioningAddressId, setActioningAddressId] = useState<string | null>(null);
+  const [favorites, setFavorites] = useState<FavoriteBranch[]>([]);
+  const [actioningFavoriteId, setActioningFavoriteId] = useState<string | null>(null);
+  const [businessSaving, setBusinessSaving] = useState(false);
+  const [businessSummary, setBusinessSummary] = useState<BusinessSummary | null>(null);
+  const [impact, setImpact] = useState<ImpactSummary | null>(null);
 
   const load = useCallback(async () => {
     setError('');
     try {
-      const [profileData, addressList] = await Promise.all([
+      const [profileData, addressList, favoriteList, impactData] = await Promise.all([
         apiFetch<CustomerProfile>('/customers/me'),
         apiFetch<CustomerAddress[]>('/addresses'),
+        apiFetch<FavoriteBranch[]>('/favorites'),
+        apiFetch<ImpactSummary>('/customers/me/impact'),
       ]);
       setProfile(profileData);
       setFirstName(profileData.firstName);
       setLastName(profileData.lastName);
       setAddresses(addressList);
+      setFavorites(favoriteList);
+      setImpact(impactData);
+      if (profileData.isBusiness) {
+        apiFetch<BusinessSummary>('/customers/me/business-summary')
+          .then(setBusinessSummary)
+          .catch(() => {});
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load profile');
     } finally {
       setLoading(false);
     }
   }, [apiFetch]);
+
+  async function toggleBusiness() {
+    if (!profile) return;
+    const next = !profile.isBusiness;
+    setBusinessSaving(true);
+    try {
+      const updated = await apiFetch<CustomerProfile>('/customers/me', {
+        method: 'PATCH',
+        body: JSON.stringify({ isBusiness: next }),
+      });
+      setProfile(updated);
+      if (next) {
+        apiFetch<BusinessSummary>('/customers/me/business-summary')
+          .then(setBusinessSummary)
+          .catch(() => {});
+      } else {
+        setBusinessSummary(null);
+      }
+    } finally {
+      setBusinessSaving(false);
+    }
+  }
+
+  async function removeFavorite(branchId: string) {
+    setActioningFavoriteId(branchId);
+    try {
+      await apiFetch(`/favorites/${branchId}`, { method: 'DELETE' });
+      setFavorites((prev) => prev.filter((f) => f.branchId !== branchId));
+    } finally {
+      setActioningFavoriteId(null);
+    }
+  }
 
   useEffect(() => {
     load();
@@ -294,7 +345,53 @@ export default function ProfileScreen() {
                 disabled={profileSaving}
                 style={styles.sectionBtn}
               />
+              <Pressable
+                onPress={toggleBusiness}
+                disabled={businessSaving}
+                style={({ pressed }) => [styles.prefRow, pressed && styles.prefRowPressed]}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: Boolean(profile?.isBusiness) }}
+              >
+                <Ionicons name="briefcase-outline" size={20} color={colors.secondary} />
+                <View style={styles.prefCopy}>
+                  <Text style={styles.prefTitle}>Business account</Text>
+                  <Text style={styles.prefHint}>Unlock a monthly order & spend summary</Text>
+                </View>
+                <Ionicons
+                  name={profile?.isBusiness ? 'toggle' : 'toggle-outline'}
+                  size={28}
+                  color={profile?.isBusiness ? colors.primary : colors.mutedForeground}
+                />
+              </Pressable>
             </Card>
+
+            {impact ? (
+              <Card style={styles.sectionCard}>
+                <Text style={styles.sectionTitle}>Your impact</Text>
+                <Text style={styles.prefHint}>
+                  {impact.totalWeightKg} kg laundered across {impact.orderCount} completed orders —
+                  an estimated {impact.estimatedCo2SavedKg} kg CO2 saved vs. average home washing.
+                </Text>
+              </Card>
+            ) : null}
+
+            {profile?.isBusiness && businessSummary ? (
+              <Card style={styles.sectionCard}>
+                <Text style={styles.sectionTitle}>Business summary</Text>
+                <Text style={styles.prefHint}>
+                  Last 12 months: {businessSummary.totalOrders} orders ·{' '}
+                  {formatCurrency(businessSummary.totalSpend)}
+                </Text>
+                {businessSummary.months.map((m) => (
+                  <View key={m.month} style={styles.businessRow}>
+                    <Text style={styles.businessRowLabel}>{m.month}</Text>
+                    <Text style={styles.businessRowMeta}>
+                      {m.orderCount} orders · {formatCurrency(m.totalSpend)}
+                    </Text>
+                  </View>
+                ))}
+              </Card>
+            ) : null}
 
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Saved addresses</Text>
@@ -428,6 +525,48 @@ export default function ProfileScreen() {
               ))
             )}
 
+            <Text style={[styles.sectionTitle, styles.sectionTitleSpaced]}>Favorite shops</Text>
+            {favorites.length === 0 ? (
+              <Card muted style={styles.emptyAddressCard}>
+                <Text style={styles.emptyTitle}>No favorites yet</Text>
+                <Text style={styles.emptyHint}>
+                  Tap the heart on a shop while booking to save it here.
+                </Text>
+              </Card>
+            ) : (
+              favorites.map((shop) => (
+                <Card key={shop.branchId} style={styles.addressCard}>
+                  <View style={styles.addressTop}>
+                    {shop.logoUrl ? (
+                      <Image
+                        source={{ uri: resolveMediaUrl(shop.logoUrl) }}
+                        style={styles.favoriteLogo}
+                      />
+                    ) : (
+                      <View style={styles.favoriteLogoFallback}>
+                        <Ionicons name="storefront-outline" size={18} color={colors.primary} />
+                      </View>
+                    )}
+                    <View style={styles.addressMain}>
+                      <Text style={styles.addressLabel}>{shop.name}</Text>
+                      <Text style={styles.addressMeta}>
+                        {shop.code} · {shop.city}
+                      </Text>
+                    </View>
+                    <Pressable
+                      onPress={() => removeFavorite(shop.branchId)}
+                      disabled={actioningFavoriteId === shop.branchId}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remove ${shop.name} from favorites`}
+                    >
+                      <Ionicons name="heart" size={22} color={colors.destructive} />
+                    </Pressable>
+                  </View>
+                </Card>
+              ))
+            )}
+
             <Text style={[styles.sectionTitle, styles.sectionTitleSpaced]}>Help & account</Text>
             <Card muted style={styles.sectionCard}>
               <Pressable
@@ -453,6 +592,19 @@ export default function ProfileScreen() {
                 <View style={styles.prefCopy}>
                   <Text style={styles.prefTitle}>Refund requests</Text>
                   <Text style={styles.prefHint}>View status from submission through payout</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.prefRow, styles.prefRowBorder, pressed && styles.prefRowPressed]}
+                onPress={() => router.push('/subscriptions' as Href)}
+                accessibilityRole="button"
+                accessibilityLabel="Recurring pickups"
+              >
+                <Ionicons name="repeat-outline" size={20} color={colors.primary} />
+                <View style={styles.prefCopy}>
+                  <Text style={styles.prefTitle}>Recurring pickups</Text>
+                  <Text style={styles.prefHint}>Manage your subscribed pickup schedules</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
               </Pressable>
@@ -586,6 +738,26 @@ const styles = StyleSheet.create({
   emptyTitle: { ...typography.body, fontWeight: '600' },
   emptyHint: { ...typography.caption, textAlign: 'center', marginTop: spacing.xs, marginBottom: spacing.lg },
   addressCard: { marginBottom: spacing.sm },
+  businessRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    marginTop: spacing.xs,
+  },
+  businessRowLabel: { fontSize: 13, fontWeight: '600', color: colors.foreground },
+  businessRowMeta: { fontSize: 12, color: colors.muted },
+  favoriteLogo: { width: 36, height: 36, borderRadius: radius.md, marginRight: spacing.sm },
+  favoriteLogoFallback: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.md,
+    marginRight: spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primaryLight,
+  },
   addressTop: { flexDirection: 'row' },
   addressMain: { flex: 1 },
   addressLabelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },

@@ -18,7 +18,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { DeliveryService } from '../riders/delivery.service';
 import { HandoffQrService } from '../handoff/handoff-qr.service';
 import { CustomerSignDeliveryDto, CustomerVerifyDeliveryDto } from './dto/delivery.dto';
-import { AssignRiderDto, UpdateOrderStatusDto } from './dto/order.dto';
+import { AssignRiderDto, RescheduleOrderDto, UpdateOrderStatusDto } from './dto/order.dto';
 import { OrdersService } from './orders.service';
 
 @Controller('orders')
@@ -96,6 +96,16 @@ export class OrdersController {
   @Roles(UserRole.CUSTOMER)
   cancel(@Param('id') id: string, @Req() req: { user: { sub: string } }) {
     return this.ordersService.cancelByCustomer(req.user.sub, id);
+  }
+
+  @Patch(':id/reschedule')
+  @Roles(UserRole.CUSTOMER)
+  reschedule(
+    @Param('id') id: string,
+    @Body() dto: RescheduleOrderDto,
+    @Req() req: { user: { sub: string } },
+  ) {
+    return this.ordersService.rescheduleByCustomer(req.user.sub, id, dto.scheduledPickupAt);
   }
 
   @Post(':id/assign-rider')

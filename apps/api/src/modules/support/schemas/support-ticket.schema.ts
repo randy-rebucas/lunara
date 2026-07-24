@@ -20,6 +20,8 @@ export enum TicketType {
   GENERAL = 'general',
   LOST_ITEM = 'lost_item',
   AREA_COVERAGE = 'area_coverage',
+  DAMAGED_ITEM = 'damaged_item',
+  DELIVERY_DELAY = 'delivery_delay',
 }
 
 export enum TicketOutcome {
@@ -77,6 +79,11 @@ export class SupportTicket {
 
   @Prop({ type: Types.ObjectId })
   customerId?: Types.ObjectId;
+
+  /** Set when this ticket was filed by a rider (damaged item / delivery delay / other issue)
+   * rather than a customer. */
+  @Prop({ type: Types.ObjectId })
+  riderId?: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId })
   orderId?: Types.ObjectId;

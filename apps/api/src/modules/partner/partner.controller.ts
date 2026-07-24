@@ -49,6 +49,7 @@ import { ShopReceivingService } from './shop-receiving.service';
 import { PartnerNotificationsService } from './partner-notifications.service';
 import { PartnerSettingsService } from './partner-settings.service';
 import { PartnerProfileService } from './partner-profile.service';
+import { PromotionsService } from '../promotions/promotions.service';
 import { resolvePortalBranchId } from './partner-access';
 import { UpdatePartnerSettingsDto } from './dto/update-partner-settings.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -93,7 +94,14 @@ export class PartnerController {
     private readonly orderModel: Model<Record<string, unknown>>,
     private readonly cloudinaryStorageService: CloudinaryStorageService,
     private readonly branchesService: BranchesService,
+    private readonly promotionsService: PromotionsService,
   ) {}
+
+  @Get('promotions')
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
+  getActivePromotions() {
+    return this.promotionsService.listActivePromotionsForPartner();
+  }
 
   @Get('branches')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
@@ -309,7 +317,7 @@ export class PartnerController {
   }
 
   @Patch('settings')
-  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
   updateSettings(
     @Req() req: { user: { sub: string; role: UserRole } },
     @Body() dto: UpdatePartnerSettingsDto,

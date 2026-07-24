@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useState } from 'react';
 import { Button } from '@lunara/ui';
-import { formatAddressTypeLabel } from '@lunara/utils';
+import { formatAddressTypeLabel, formatCurrency } from '@lunara/utils';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { AuthLoading } from '../../../components/auth-loading';
 import { DataPageStatus } from '../../../components/data-page-status';
@@ -16,7 +16,14 @@ import { FormLabel, Input } from '../../../components/ui/input';
 import { PageHeader } from '../../../components/ui/page-header';
 import { useProtectedPage } from '../../../hooks/use-protected-page';
 import { useCustomerQuery } from '../../../lib/use-customer-query';
-import type { AddressFormValues, CustomerAddress, CustomerProfile } from '../../../lib/profile-types';
+import type {
+  AddressFormValues,
+  BusinessSummary,
+  CustomerAddress,
+  CustomerProfile,
+  FavoriteBranch,
+  ImpactSummary,
+} from '../../../lib/profile-types';
 
 export default function ProfilePage() {
   const { api, user, logout } = useAuthContext();
@@ -31,15 +38,34 @@ export default function ProfilePage() {
   const [addressSaving, setAddressSaving] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [actioningAddressId, setActioningAddressId] = useState<string | null>(null);
+  const [actioningFavoriteId, setActioningFavoriteId] = useState<string | null>(null);
+  const [businessSaving, setBusinessSaving] = useState(false);
 
   const load = useCallback(async () => {
-    const [profileRes, addressesRes] = await Promise.all([
+    const [profileRes, addressesRes, favoritesRes, impactRes] = await Promise.all([
       api.get<CustomerProfile>('/customers/me'),
       api.get<CustomerAddress[]>('/addresses'),
+      api.get<FavoriteBranch[]>('/favorites'),
+      api.get<ImpactSummary>('/customers/me/impact'),
     ]);
     setFirstName(profileRes.data.firstName);
     setLastName(profileRes.data.lastName);
-    return { profile: profileRes.data, addresses: addressesRes.data };
+    let businessSummary: BusinessSummary | null = null;
+    if (profileRes.data.isBusiness) {
+      try {
+        const summaryRes = await api.get<BusinessSummary>('/customers/me/business-summary');
+        businessSummary = summaryRes.data;
+      } catch {
+        businessSummary = null;
+      }
+    }
+    return {
+      profile: profileRes.data,
+      addresses: addressesRes.data,
+      favorites: favoritesRes.data,
+      impact: impactRes.data,
+      businessSummary,
+    };
   }, [api]);
 
   const { data, loading, error, reload } = useCustomerQuery(load, [ready, api]);
@@ -50,6 +76,30 @@ export default function ProfilePage() {
 
   const profile = data?.profile ?? null;
   const addresses = data?.addresses ?? [];
+  const favorites = data?.favorites ?? [];
+  const impact = data?.impact ?? null;
+  const businessSummary = data?.businessSummary ?? null;
+
+  async function removeFavorite(branchId: string) {
+    setActioningFavoriteId(branchId);
+    try {
+      await api.delete(`/favorites/${branchId}`);
+      await reload();
+    } finally {
+      setActioningFavoriteId(null);
+    }
+  }
+
+  async function toggleBusiness() {
+    if (!profile) return;
+    setBusinessSaving(true);
+    try {
+      await api.patch('/customers/me', { isBusiness: !profile.isBusiness });
+      await reload();
+    } finally {
+      setBusinessSaving(false);
+    }
+  }
 
   async function uploadAvatar(file: File) {
     setAvatarUploading(true);
@@ -194,9 +244,56 @@ export default function ProfilePage() {
                 <Button onClick={saveProfile} disabled={profileSaving}>
                   {profileSaving ? 'Saving…' : 'Save profile'}
                 </Button>
+                <div className="flex items-center justify-between border-t border-border pt-4">
+                  <div>
+                    <p className="font-medium text-slate-900">Business account</p>
+                    <p className="text-sm text-muted">Unlock a monthly order &amp; spend summary</p>
+                  </div>
+                  <Button variant="outline" size="sm" disabled={businessSaving} onClick={toggleBusiness}>
+                    {businessSaving ? 'Saving…' : profile?.isBusiness ? 'Enabled' : 'Enable'}
+                  </Button>
+                </div>
               </CardBody>
             </Card>
           </section>
+
+          {impact && (
+            <section className="mt-8">
+              <h2 className="text-lg font-semibold tracking-tight">Your impact</h2>
+              <Card className="mt-4">
+                <CardBody>
+                  <p className="text-sm text-muted">
+                    {impact.totalWeightKg} kg laundered across {impact.orderCount} completed orders — an
+                    estimated {impact.estimatedCo2SavedKg} kg CO2 saved vs. average home washing.
+                  </p>
+                </CardBody>
+              </Card>
+            </section>
+          )}
+
+          {profile?.isBusiness && businessSummary && (
+            <section className="mt-8">
+              <h2 className="text-lg font-semibold tracking-tight">Business summary</h2>
+              <Card className="mt-4">
+                <CardBody>
+                  <p className="text-sm text-muted">
+                    Last 12 months: {businessSummary.totalOrders} orders ·{' '}
+                    {formatCurrency(businessSummary.totalSpend)}
+                  </p>
+                  <div className="mt-4 list-stack-sm">
+                    {businessSummary.months.map((m) => (
+                      <div key={m.month} className="flex justify-between border-t border-border pt-2 text-sm">
+                        <span className="font-medium text-slate-900">{m.month}</span>
+                        <span className="text-muted">
+                          {m.orderCount} orders · {formatCurrency(m.totalSpend)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </CardBody>
+              </Card>
+            </section>
+          )}
 
           <section className="mt-8">
             <div className="mb-4 flex items-center justify-between gap-4">
@@ -286,6 +383,40 @@ export default function ProfilePage() {
           </section>
 
           <section className="mt-8">
+            <h2 className="text-lg font-semibold tracking-tight">Favorite shops</h2>
+            {favorites.length === 0 ? (
+              <Card className="mt-4">
+                <CardBody className="text-center text-muted">
+                  No favorites yet. Tap the heart on a shop while booking to save it here.
+                </CardBody>
+              </Card>
+            ) : (
+              <div className="mt-4 list-stack">
+                {favorites.map((shop) => (
+                  <Card key={shop.branchId}>
+                    <CardBody className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-slate-900">{shop.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {shop.code} · {shop.city}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={actioningFavoriteId === shop.branchId}
+                        onClick={() => removeFavorite(shop.branchId)}
+                      >
+                        {actioningFavoriteId === shop.branchId ? 'Working…' : 'Remove'}
+                      </Button>
+                    </CardBody>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="mt-8">
             <h2 className="text-lg font-semibold tracking-tight">Help & account</h2>
             <div className="mt-4 list-stack">
               <Link href="/support">
@@ -301,6 +432,14 @@ export default function ProfilePage() {
                   <CardBody>
                     <p className="font-medium text-slate-900">Refund requests</p>
                     <p className="mt-1 text-sm text-muted">View status from submission through payout</p>
+                  </CardBody>
+                </Card>
+              </Link>
+              <Link href="/subscriptions">
+                <Card className="transition-shadow hover:shadow-[var(--shadow-elevated)]">
+                  <CardBody>
+                    <p className="font-medium text-slate-900">Recurring pickups</p>
+                    <p className="mt-1 text-sm text-muted">Manage your subscribed pickup schedules</p>
                   </CardBody>
                 </Card>
               </Link>

@@ -12,6 +12,10 @@ import { RedisModule } from './common/redis/redis.module';
 import { StorageModule } from './common/storage/storage.module';
 import { UPLOAD_ROOT } from './common/uploads/upload-paths';
 import { AddressesModule } from './modules/addresses/addresses.module';
+import { FavoritesModule } from './modules/favorites/favorites.module';
+import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
+import { IncentiveCampaignsModule } from './modules/incentive-campaigns/incentive-campaigns.module';
+import { BannersModule } from './modules/banners/banners.module';
 import { BookingModule } from './modules/booking/booking.module';
 import { PartnerModule } from './modules/partner/partner.module';
 import { PartnersModule } from './modules/partners/partners.module';
@@ -66,6 +70,10 @@ import { LaundryTagsModule } from './modules/laundry-tags/laundry-tags.module';
     UsersModule,
     CustomersModule,
     AddressesModule,
+    FavoritesModule,
+    SubscriptionsModule,
+    IncentiveCampaignsModule,
+    BannersModule,
     BookingModule,
     PartnerModule,
     PartnersModule,

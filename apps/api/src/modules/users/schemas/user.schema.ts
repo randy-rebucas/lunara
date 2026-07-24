@@ -79,6 +79,12 @@ export class User {
   @Prop()
   deliveryRadiusKm?: number;
 
+  /** Staff-only: when true, this staff account can edit shop settings (hours, machines,
+   * pricing, etc.) in addition to normal order-processing actions. Ignored for PARTNER/ADMIN,
+   * who always have full access. Defaults to view-only. */
+  @Prop({ default: false })
+  canManageSettings!: boolean;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

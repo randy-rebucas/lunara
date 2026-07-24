@@ -540,6 +540,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
   const [stepping, setStepping] = useState(false);
   const [shopOptions, setShopOptions] = useState<ShopOption[]>([]);
   const [shopsLoading, setShopsLoading] = useState(false);
+  const [favoriteBranchIds, setFavoriteBranchIds] = useState<Set<string>>(new Set());
   const [partnerCoverage, setPartnerCoverage] = useState<PartnerCoverageInfo | null>(null);
   const [coverageAddressId, setCoverageAddressId] = useState('');
   const [reorderNotice, setReorderNotice] = useState('');
@@ -566,7 +567,36 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
           err instanceof Error ? err.message : 'Could not load your saved addresses',
         ),
       );
+
+    api
+      .get<{ branchId: string }[]>('/favorites')
+      .then((res) => setFavoriteBranchIds(new Set(res.data.map((f) => f.branchId))))
+      .catch(() => {});
   }, [api]);
+
+  async function toggleFavoriteBranch(branchId: string) {
+    const isFavorited = favoriteBranchIds.has(branchId);
+    setFavoriteBranchIds((prev) => {
+      const next = new Set(prev);
+      if (isFavorited) next.delete(branchId);
+      else next.add(branchId);
+      return next;
+    });
+    try {
+      if (isFavorited) {
+        await api.delete(`/favorites/${branchId}`);
+      } else {
+        await api.post('/favorites', { branchId });
+      }
+    } catch {
+      setFavoriteBranchIds((prev) => {
+        const next = new Set(prev);
+        if (isFavorited) next.add(branchId);
+        else next.delete(branchId);
+        return next;
+      });
+    }
+  }
 
   useEffect(() => {
     selectedAddressIdRef.current = form.addressId;
@@ -1106,34 +1136,51 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                   : null;
                 const disabled = !shop.withinRadius || !shop.capacityAvailable;
                 const schedule = getTodayScheduleSummary(shop.operatingHours, shop.holidays);
+                const isFavorite = favoriteBranchIds.has(shop.branchId);
                 return (
-                  <SelectableOption
-                    key={shop.branchId}
-                    selected={!form.autoDispatch && form.branchId === shop.branchId}
-                    disabled={disabled}
-                    onClick={() => {
-                      setReorderNotice('');
-                      setForm((f) => ({ ...f, branchId: shop.branchId, autoDispatch: false }));
-                    }}
-                  >
-                    <p className="font-medium text-slate-900">{shop.name}</p>
-                    <p className="mt-1 text-sm text-muted">
-                      {shop.city}
-                      {showDistanceHints ? ` · ${shop.distanceLabel}` : ''}
-                    </p>
-                    <p className={`mt-1 text-xs font-medium ${schedule.isOpenNow ? 'text-accent' : 'text-muted'}`}>
-                      {schedule.label}
-                    </p>
-                    {startingPriceLabel && (
-                      <p className="mt-2 text-sm font-medium text-primary">{startingPriceLabel}</p>
-                    )}
-                    {!shop.capacityAvailable && (
-                      <p className="mt-2 text-xs text-amber-700">Currently at capacity</p>
-                    )}
-                    {!shop.withinRadius && (
-                      <p className="mt-2 text-xs text-amber-700">Outside delivery range</p>
-                    )}
-                  </SelectableOption>
+                  <div key={shop.branchId} className="relative">
+                    <SelectableOption
+                      selected={!form.autoDispatch && form.branchId === shop.branchId}
+                      disabled={disabled}
+                      onClick={() => {
+                        setReorderNotice('');
+                        setForm((f) => ({ ...f, branchId: shop.branchId, autoDispatch: false }));
+                      }}
+                    >
+                      <p className="pr-6 font-medium text-slate-900">{shop.name}</p>
+                      <p className="mt-1 text-sm text-muted">
+                        {shop.city}
+                        {showDistanceHints ? ` · ${shop.distanceLabel}` : ''}
+                      </p>
+                      <p className={`mt-1 text-xs font-medium ${schedule.isOpenNow ? 'text-accent' : 'text-muted'}`}>
+                        {schedule.label}
+                      </p>
+                      {startingPriceLabel && (
+                        <p className="mt-2 text-sm font-medium text-primary">{startingPriceLabel}</p>
+                      )}
+                      {!shop.capacityAvailable && (
+                        <p className="mt-2 text-xs text-amber-700">Currently at capacity</p>
+                      )}
+                      {!shop.withinRadius && (
+                        <p className="mt-2 text-xs text-amber-700">Outside delivery range</p>
+                      )}
+                    </SelectableOption>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleFavoriteBranch(shop.branchId);
+                      }}
+                      aria-label={isFavorite ? `Remove ${shop.name} from favorites` : `Add ${shop.name} to favorites`}
+                      className="absolute right-3 top-3 text-lg leading-none"
+                    >
+                      {isFavorite ? (
+                        <span className="text-red-500">♥</span>
+                      ) : (
+                        <span className="text-slate-300 hover:text-slate-400">♡</span>
+                      )}
+                    </button>
+                  </div>
                 );
               })}
             </div>

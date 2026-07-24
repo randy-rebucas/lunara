@@ -384,4 +384,27 @@ export class PromotionsService implements OnModuleInit {
 
     return deals;
   }
+
+  /** Read-only view for partner-web: currently-active platform-wide promotions that could
+   * apply to orders at any shop. Promotions aren't branch-scoped, so this skips the
+   * per-customer new-customer-audience eligibility filtering that listDealsForCustomer does. */
+  async listActivePromotionsForPartner() {
+    const now = new Date();
+    const shared = await this.promotionModel
+      .find({
+        kind: PromotionKind.STANDARD,
+        isActive: true,
+        $and: [
+          { $or: [{ startsAt: { $exists: false } }, { startsAt: null }, { startsAt: { $lte: now } }] },
+          { $or: [{ endsAt: { $exists: false } }, { endsAt: null }, { endsAt: { $gte: now } }] },
+        ],
+      })
+      .sort({ createdAt: -1 });
+
+    const deals = shared
+      .filter((p) => isPromotionActive(p, now))
+      .map((p) => this.serializeDealFromPromotion(p));
+
+    return { success: true, data: deals };
+  }
 }

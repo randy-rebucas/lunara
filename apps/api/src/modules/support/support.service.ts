@@ -16,6 +16,7 @@ import { LedgerService } from '../ledger/ledger.service';
 import { CreateLostItemDto } from './dto/create-lost-item.dto';
 import { CreateAreaRequestDto } from './dto/create-area-request.dto';
 import { CreateTicketDto } from './dto/create-ticket.dto';
+import { CreateRiderIssueDto, RiderIssueType } from './dto/create-rider-issue.dto';
 import { InvestigateAction, InvestigateTicketDto } from './dto/investigate-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
 import {
@@ -115,6 +116,66 @@ export class SupportService {
       data: this.serializeTicket(ticket),
       message: 'Your request was submitted. We will respond as soon as we can.',
     };
+  }
+
+  private static readonly RIDER_ISSUE_TYPE_MAP: Record<RiderIssueType, TicketType> = {
+    [RiderIssueType.DAMAGED_ITEM]: TicketType.DAMAGED_ITEM,
+    [RiderIssueType.DELIVERY_DELAY]: TicketType.DELIVERY_DELAY,
+    [RiderIssueType.OTHER]: TicketType.GENERAL,
+  };
+
+  async createRiderIssueTicket(riderId: string, dto: CreateRiderIssueDto) {
+    let orderId: Types.ObjectId | undefined;
+    if (dto.orderId) {
+      const order = await this.orderModel.findById(dto.orderId);
+      if (!order) throw new NotFoundException('Order not found');
+      const isAssignedRider =
+        order.pickupRiderId?.toString() === riderId || order.deliveryRiderId?.toString() === riderId;
+      if (!isAssignedRider) {
+        throw new ForbiddenException('This order is not assigned to you');
+      }
+      orderId = order._id;
+    }
+
+    const ticket = await this.ticketModel.create({
+      subject: dto.subject.trim(),
+      description: dto.description.trim(),
+      type: SupportService.RIDER_ISSUE_TYPE_MAP[dto.issueType],
+      status: TicketStatus.OPEN,
+      priority: dto.issueType === RiderIssueType.DAMAGED_ITEM ? TicketPriority.HIGH : TicketPriority.MEDIUM,
+      riderId: new Types.ObjectId(riderId),
+      orderId,
+      timeline: [
+        {
+          stage: 'submitted',
+          label: 'Rider submitted issue report',
+          at: new Date(),
+        },
+      ],
+    });
+
+    return {
+      success: true,
+      data: this.serializeTicket(ticket),
+      message: 'Your report was submitted. Dispatch will follow up if needed.',
+    };
+  }
+
+  async listRiderTickets(riderId: string) {
+    const items = await this.ticketModel
+      .find({ riderId: new Types.ObjectId(riderId) })
+      .sort({ updatedAt: -1 })
+      .limit(50);
+    return { success: true, data: items.map((t) => this.serializeTicket(t)) };
+  }
+
+  async getRiderTicket(riderId: string, ticketId: string) {
+    const ticket = await this.ticketModel.findById(ticketId);
+    if (!ticket) throw new NotFoundException('Ticket not found');
+    if (ticket.riderId?.toString() !== riderId) {
+      throw new ForbiddenException('Access denied');
+    }
+    return { success: true, data: this.serializeTicket(ticket) };
   }
 
   async createLostItemComplaint(customerId: string, dto: CreateLostItemDto) {
@@ -559,6 +620,7 @@ export class SupportService {
       type: t.type,
       customerEmail: t.customerEmail,
       customerId: t.customerId?.toString(),
+      riderId: t.riderId?.toString(),
       orderId: t.orderId?.toString(),
       missingItems: t.missingItems,
       investigationStage: t.investigationStage,

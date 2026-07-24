@@ -6,6 +6,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { CreateLostItemDto } from './dto/create-lost-item.dto';
 import { CreateAreaRequestDto } from './dto/create-area-request.dto';
 import { CreateTicketDto } from './dto/create-ticket.dto';
+import { CreateRiderIssueDto } from './dto/create-rider-issue.dto';
 import { SupportService } from './support.service';
 
 @Controller('support')
@@ -50,5 +51,26 @@ export class SupportController {
   @Roles(UserRole.CUSTOMER)
   getMyTicket(@Req() req: { user: { sub: string } }, @Param('id') id: string) {
     return this.supportService.getCustomerTicket(req.user.sub, id);
+  }
+
+  @Post('rider-issues')
+  @Roles(UserRole.RIDER)
+  reportRiderIssue(
+    @Req() req: { user: { sub: string } },
+    @Body() dto: CreateRiderIssueDto,
+  ) {
+    return this.supportService.createRiderIssueTicket(req.user.sub, dto);
+  }
+
+  @Get('rider-issues')
+  @Roles(UserRole.RIDER)
+  listMyRiderIssues(@Req() req: { user: { sub: string } }) {
+    return this.supportService.listRiderTickets(req.user.sub);
+  }
+
+  @Get('rider-issues/:id')
+  @Roles(UserRole.RIDER)
+  getMyRiderIssue(@Req() req: { user: { sub: string } }, @Param('id') id: string) {
+    return this.supportService.getRiderTicket(req.user.sub, id);
   }
 }

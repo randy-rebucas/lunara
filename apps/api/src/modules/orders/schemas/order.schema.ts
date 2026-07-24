@@ -258,6 +258,11 @@ export class Order {
   @Prop({ type: Types.ObjectId })
   partnerId?: Types.ObjectId;
 
+  /** Set when this order was auto-created by a customer's recurring pickup subscription
+   * rather than placed manually — lets partner-web flag it as a recurring order. */
+  @Prop({ type: Types.ObjectId, ref: 'Subscription' })
+  subscriptionId?: Types.ObjectId;
+
   @Prop({ type: Types.ObjectId, index: true })
   branchId?: Types.ObjectId;
 

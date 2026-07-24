@@ -82,7 +82,7 @@ export class PartnerSettingsService {
 
   async getSettings(userId: string, role: UserRole) {
     const branch = await this.resolveBranch(userId, role);
-    const canEdit = role === UserRole.PARTNER || role === UserRole.ADMIN;
+    const canEdit = await this.resolveCanEdit(userId, role);
     const settings = normalizePortalSettings(branch.toObject().portalSettings);
     return {
       success: true,
@@ -94,6 +94,14 @@ export class PartnerSettingsService {
         canEdit,
       },
     };
+  }
+
+  /** PARTNER/ADMIN always have full settings access; STAFF only if explicitly granted via
+   * User.canManageSettings (defaults to false — view-only). */
+  private async resolveCanEdit(userId: string, role: UserRole): Promise<boolean> {
+    if (role === UserRole.PARTNER || role === UserRole.ADMIN) return true;
+    const staff = await this.userModel.findById(userId).select('canManageSettings').lean();
+    return Boolean(staff?.canManageSettings);
   }
 
   private stripPayoutDetails(settings: PartnerPortalSettings): PartnerPortalSettings {
@@ -110,8 +118,12 @@ export class PartnerSettingsService {
   }
 
   async updateSettings(userId: string, role: UserRole, dto: UpdatePartnerSettingsDto) {
-    if (role !== UserRole.PARTNER && role !== UserRole.ADMIN) {
-      throw new ForbiddenException('Only shop partners can update settings');
+    if (!(await this.resolveCanEdit(userId, role))) {
+      throw new ForbiddenException(
+        role === UserRole.STAFF
+          ? 'You do not have permission to edit shop settings'
+          : 'Only shop partners can update settings',
+      );
     }
 
     const branch = await this.resolveBranch(userId, role);

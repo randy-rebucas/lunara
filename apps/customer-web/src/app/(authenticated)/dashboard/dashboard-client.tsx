@@ -11,6 +11,7 @@ import { DataPageStatus } from '../../../components/data-page-status';
 import { PageShell } from '../../../components/page-shell';
 import { ReviewNotifications } from '../../../components/review/review-notifications';
 import { DealsCarousel } from '../../../components/deals/deals-carousel';
+import { BannerStrip } from '../../../components/marketing/banner-strip';
 import { ShareInviteCard } from '../../../components/share/share-sections';
 import { ButtonLink } from '../../../components/ui/button-link';
 import { Card, CardBody } from '../../../components/ui/card';
@@ -98,6 +99,10 @@ export function DashboardClient() {
       </div>
 
       <ReviewNotifications />
+
+      <div className="mt-6">
+        <BannerStrip />
+      </div>
 
       <DealsCarousel />
 

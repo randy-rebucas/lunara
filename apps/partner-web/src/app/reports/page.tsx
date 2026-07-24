@@ -10,11 +10,24 @@ import { PageHeader } from '../../components/ui/page-header';
 import { useRequirePartner } from '../../hooks/use-protected-page';
 import { formatPeso } from '../../lib/format-peso';
 import { exportCsv } from '../../lib/export-csv';
+import { exportPdf } from '../../lib/export-pdf';
 import { partnerFetch } from '../../lib/partner-api';
 import { usePartnerQuery } from '../../lib/use-partner-query';
 
 function sortedEntries(data: Record<string, number>) {
   return Object.entries(data).sort((a, b) => b[1] - a[1]);
+}
+
+function reportRows(report: PartnerReportData): (string | number)[][] {
+  return [
+    ['Total orders', report.totalOrders],
+    ['Completed orders', report.completedOrders],
+    ['Total revenue (₱)', report.revenue],
+    ['Total payout (₱)', report.payout],
+    ['Avg order value (₱)', report.averageOrderValue],
+    ...Object.entries(report.ordersByStatus ?? {}).map(([k, v]) => [`Status: ${k}`, v] as [string, number]),
+    ...Object.entries(report.completedByService ?? {}).map(([k, v]) => [`Service: ${k}`, v] as [string, number]),
+  ];
 }
 
 function ReportList({
@@ -81,22 +94,26 @@ export default function ReportsPage() {
               disabled={!report}
               onClick={() => {
                 if (!report) return;
-                exportCsv(
-                  `report-${days}d.csv`,
-                  ['Metric', 'Value'],
-                  [
-                    ['Total orders', report.totalOrders],
-                    ['Completed orders', report.completedOrders],
-                    ['Total revenue (₱)', report.revenue],
-                    ['Total payout (₱)', report.payout],
-                    ['Avg order value (₱)', report.averageOrderValue],
-                    ...Object.entries(report.ordersByStatus ?? {}).map(([k, v]) => [`Status: ${k}`, v]),
-                    ...Object.entries(report.completedByService ?? {}).map(([k, v]) => [`Service: ${k}`, v]),
-                  ],
-                );
+                exportCsv(`report-${days}d.csv`, ['Metric', 'Value'], reportRows(report));
               }}
             >
               Export CSV
+            </button>
+            <button
+              type="button"
+              className="btn-outline btn-sm"
+              disabled={!report}
+              onClick={() => {
+                if (!report) return;
+                exportPdf(
+                  `report-${days}d.pdf`,
+                  ['Metric', 'Value'],
+                  reportRows(report),
+                  `Operational report — last ${days} days`,
+                );
+              }}
+            >
+              Export PDF
             </button>
             <Link href="/revenue" className="btn-outline btn-sm">
               Revenue →
@@ -160,6 +177,41 @@ export default function ReportsPage() {
               emptyLabel="No completed orders in this period."
             />
           </div>
+
+          {report.byBranch && report.byBranch.length > 0 && (
+            <div className="mt-8">
+              <h3 className="font-medium text-slate-900">By branch</h3>
+              <p className="mt-1 text-sm text-muted">
+                Same totals above, split out per branch you own.
+              </p>
+              <div className="mt-3 overflow-x-auto rounded-lg border border-border">
+                <table className="w-full text-sm">
+                  <thead className="bg-surface-muted/60 text-left text-xs uppercase text-muted">
+                    <tr>
+                      <th className="px-3 py-2">Branch</th>
+                      <th className="px-3 py-2 text-right">Orders</th>
+                      <th className="px-3 py-2 text-right">Completed</th>
+                      <th className="px-3 py-2 text-right">Revenue</th>
+                      <th className="px-3 py-2 text-right">Payout</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.byBranch.map((b) => (
+                      <tr key={b.branchId} className="border-t border-border">
+                        <td className="px-3 py-2">
+                          {b.branchName} <span className="text-muted-foreground">({b.branchCode})</span>
+                        </td>
+                        <td className="px-3 py-2 text-right">{b.totalOrders}</td>
+                        <td className="px-3 py-2 text-right">{b.completedOrders}</td>
+                        <td className="px-3 py-2 text-right">{formatPeso(b.revenue)}</td>
+                        <td className="px-3 py-2 text-right">{formatPeso(b.payout)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

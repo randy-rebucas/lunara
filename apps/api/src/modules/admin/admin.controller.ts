@@ -320,6 +320,11 @@ export class AdminController {
     return this.adminService.getShops();
   }
 
+  @Get('quality-alerts')
+  getQualityAlerts() {
+    return this.adminService.getQualityAlerts();
+  }
+
   @Get('shops/:id/detail')
   getShopDetail(@Param('id') id: string) {
     return this.adminService.getShopDetail(id);

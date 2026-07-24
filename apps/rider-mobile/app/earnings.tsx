@@ -16,6 +16,65 @@ import { colors, radius, shadow, spacing, typography } from '../src/theme';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
+interface IncentiveCampaign {
+  _id: string;
+  title: string;
+  description?: string;
+  bonusAmount: number;
+  thresholdDeliveries: number;
+  endsAt: string;
+  deliveryCount: number;
+  credited: boolean;
+}
+
+function IncentiveCampaignCard({ campaign }: { campaign: IncentiveCampaign }) {
+  const progress = Math.min(1, campaign.deliveryCount / campaign.thresholdDeliveries);
+  return (
+    <View style={incentiveStyles.card}>
+      <View style={incentiveStyles.headerRow}>
+        <Text style={incentiveStyles.title}>{campaign.title}</Text>
+        <Text style={incentiveStyles.bonus}>{formatCurrency(campaign.bonusAmount)}</Text>
+      </View>
+      {campaign.description ? (
+        <Text style={incentiveStyles.description}>{campaign.description}</Text>
+      ) : null}
+      <View style={incentiveStyles.progressTrack}>
+        <View style={[incentiveStyles.progressFill, { width: `${progress * 100}%` }]} />
+      </View>
+      <Text style={incentiveStyles.progressLabel}>
+        {campaign.credited
+          ? 'Bonus credited!'
+          : `${campaign.deliveryCount} / ${campaign.thresholdDeliveries} deliveries`}
+      </Text>
+    </View>
+  );
+}
+
+const incentiveStyles = StyleSheet.create({
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    marginBottom: spacing.sm,
+    ...shadow.card,
+  },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  title: { fontSize: 14, fontWeight: '700', color: colors.foreground, flex: 1 },
+  bonus: { fontSize: 14, fontWeight: '800', color: colors.accentDark },
+  description: { ...typography.bodySm, marginTop: spacing.xs },
+  progressTrack: {
+    marginTop: spacing.sm,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.surfaceMuted,
+    overflow: 'hidden',
+  },
+  progressFill: { height: '100%', backgroundColor: colors.accent },
+  progressLabel: { ...typography.caption, marginTop: spacing.xs },
+});
+
 // ── Period card ───────────────────────────────────────────────────────────────
 
 function PeriodCard({
@@ -216,6 +275,7 @@ export default function EarningsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [campaigns, setCampaigns] = useState<IncentiveCampaign[]>([]);
 
   const load = useCallback(async () => {
     setError('');
@@ -227,6 +287,9 @@ export default function EarningsScreen() {
     } finally {
       setLoading(false);
     }
+    riderFetch<IncentiveCampaign[]>('/riders/incentive-campaigns')
+      .then(setCampaigns)
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -346,6 +409,16 @@ export default function EarningsScreen() {
                 iconColor={colors.accentDark}
               />
             </View>
+
+            {/* ── Incentives ── */}
+            {campaigns.length > 0 ? (
+              <>
+                <Text style={styles.sectionLabel}>ACTIVE INCENTIVES</Text>
+                {campaigns.map((c) => (
+                  <IncentiveCampaignCard key={c._id} campaign={c} />
+                ))}
+              </>
+            ) : null}
 
             {/* ── Breakdown header ── */}
             <Text style={styles.sectionLabel}>EARNINGS BREAKDOWN</Text>

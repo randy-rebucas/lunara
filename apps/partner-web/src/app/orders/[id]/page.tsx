@@ -233,11 +233,20 @@ export default function StaffOrderProcessingPage() {
         backHref={backHref}
         backLabel={`Back to ${backLabel}`}
         badge={
-          socketLive ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              Live
-            </span>
+          socketLive || view.order.subscriptionId ? (
+            <div className="flex items-center gap-2">
+              {socketLive && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  Live
+                </span>
+              )}
+              {view.order.subscriptionId && (
+                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                  Recurring
+                </span>
+              )}
+            </div>
           ) : undefined
         }
         description={

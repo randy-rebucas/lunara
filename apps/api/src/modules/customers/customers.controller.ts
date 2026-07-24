@@ -74,4 +74,14 @@ export class CustomersController {
   getOnboarding(@Req() req: { user: { sub: string } }) {
     return this.customersService.getOnboardingStatus(req.user.sub);
   }
+
+  @Get('me/business-summary')
+  getBusinessSummary(@Req() req: { user: { sub: string } }) {
+    return this.customersService.getBusinessSummary(req.user.sub);
+  }
+
+  @Get('me/impact')
+  getImpact(@Req() req: { user: { sub: string } }) {
+    return this.customersService.getImpactSummary(req.user.sub);
+  }
 }

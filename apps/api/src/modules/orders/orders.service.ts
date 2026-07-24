@@ -66,6 +66,7 @@ export interface BookingOrderPayload {
   pricingModel?: 'shop_markup' | 'commission';
   pricingMode?: BranchPricingMode;
   pricingSnapshot?: PricingModeRates;
+  subscriptionId?: string;
 }
 
 @Injectable()
@@ -183,6 +184,7 @@ export class OrdersService {
     const order = await this.orderModel.create({
       customerId: new Types.ObjectId(customerId),
       partnerId: payload.partnerId ? new Types.ObjectId(payload.partnerId) : undefined,
+      subscriptionId: payload.subscriptionId ? new Types.ObjectId(payload.subscriptionId) : undefined,
       branchId: payload.branchId ? new Types.ObjectId(payload.branchId) : undefined,
       branchCode: payload.branchCode,
       branchName: payload.branchName,
@@ -416,6 +418,47 @@ export class OrdersService {
     }
 
     throw new BadRequestException('This order can no longer be cancelled');
+  }
+
+  private readonly RESCHEDULABLE_STATUSES = [
+    OrderStatus.PENDING,
+    OrderStatus.PENDING_DISPATCH,
+    OrderStatus.SHOP_ASSIGNED,
+    OrderStatus.CONFIRMED,
+    OrderStatus.RIDER_ASSIGNED_PICKUP,
+    OrderStatus.RIDER_ASSIGNED,
+  ];
+
+  async rescheduleByCustomer(customerId: string, orderId: string, scheduledPickupAt: string) {
+    const order = await this.orderModel.findById(orderId);
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.customerId.toString() !== customerId) {
+      throw new ForbiddenException();
+    }
+
+    if (!this.RESCHEDULABLE_STATUSES.includes(order.status) || order.pickup?.collectedAt) {
+      throw new BadRequestException(
+        'This order can no longer be rescheduled — the rider is already on the way or it has been picked up',
+      );
+    }
+
+    const nextPickupAt = new Date(scheduledPickupAt);
+    if (Number.isNaN(nextPickupAt.getTime()) || nextPickupAt.getTime() <= Date.now()) {
+      throw new BadRequestException('Please choose a future pickup date and time');
+    }
+
+    order.scheduledPickupAt = nextPickupAt;
+    order.statusHistory.push({
+      status: order.status,
+      timestamp: new Date(),
+      note: `Pickup rescheduled by customer to ${nextPickupAt.toISOString()}`,
+      updatedBy: customerId,
+    });
+    await order.save();
+
+    this.trackingGateway.emitOrderStatus(order._id.toString(), order.status);
+
+    return { success: true, data: order };
   }
 
   async updateStatus(id: string, dto: UpdateOrderStatusDto, updatedBy: string) {

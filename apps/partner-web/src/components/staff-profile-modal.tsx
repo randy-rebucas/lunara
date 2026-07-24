@@ -17,6 +17,7 @@ export function StaffProfileModal({
   const [nameDraft, setNameDraft] = useState(staff.displayName ?? '');
   const [saving, setSaving] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
+  const [permissionSaving, setPermissionSaving] = useState(false);
 
   async function handleSaveName() {
     const trimmed = nameDraft.trim();
@@ -30,6 +31,19 @@ export function StaffProfileModal({
       toast.error(err instanceof Error ? err.message : 'Could not update name');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleTogglePermission() {
+    setPermissionSaving(true);
+    try {
+      await updateStaffProfile(staff._id, undefined, !staff.canManageSettings);
+      await onSaved();
+      toast.success('Permission updated');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not update permission');
+    } finally {
+      setPermissionSaving(false);
     }
   }
 
@@ -87,6 +101,23 @@ export function StaffProfileModal({
             onChange={(e) => setNameDraft(e.target.value)}
           />
         </label>
+
+        <div className="mt-4 flex items-center justify-between rounded-lg border border-border p-3">
+          <div>
+            <p className="text-sm font-medium text-slate-900">Settings access</p>
+            <p className="text-xs text-muted">
+              {staff.canManageSettings ? 'Can edit shop settings' : 'View-only — cannot edit shop settings'}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn-outline btn-sm"
+            disabled={permissionSaving}
+            onClick={() => void handleTogglePermission()}
+          >
+            {permissionSaving ? 'Saving…' : staff.canManageSettings ? 'Revoke' : 'Grant'}
+          </button>
+        </div>
 
         <div className="mt-6 flex justify-end gap-2">
           <button type="button" className="btn-ghost" onClick={onClose}>
