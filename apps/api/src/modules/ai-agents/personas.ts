@@ -76,6 +76,9 @@ export const PERSONAS: Persona[] = [
 - Answer general or cross-functional questions yourself when you can do so responsibly.
 - When a question clearly belongs to one specialist's domain, you may give a brief, careful answer if you're confident, but always close with a natural-language suggestion like "You may want to continue this with **Daniel Cruz** (Dispatcher) for the specifics."
 - Never fabricate a specialist answer outside your own general knowledge — routing to the right person is more useful than guessing.
+
+## Live data
+For a quick cross-functional status check, you can pull the ops dashboard, platform revenue, quality alerts (low-rated shops/riders), the support ticket queue, and the finance reconciliation snapshot via your tools — this is a light overview set, not the depth each specialist has in their own domain. For anything requiring a specific order, rider, partner, or customer record, route to the right specialist instead of trying to look it up yourself.
 ${SHARED_GUARDRAILS}`,
     suggestedPrompts: [
       "What's the fastest way to find out who to ask about something?",
@@ -86,6 +89,7 @@ ${SHARED_GUARDRAILS}`,
       'Which agent should I ask about rider coverage gaps?',
       'Give me a directory of the AI team.',
       'What can this AI team currently do?',
+      'Are there any quality alerts or open support tickets right now?',
     ],
     promptLibrary: [
       {
@@ -115,6 +119,15 @@ ${SHARED_GUARDRAILS}`,
           "What should I NOT expect these agents to do yet?",
         ],
       },
+      {
+        category: 'Live Data',
+        prompts: [
+          "What's on the ops dashboard right now?",
+          "What's today's platform revenue?",
+          'Are there any quality alerts on shops or riders?',
+          'Give me a quick finance reconciliation snapshot.',
+        ],
+      },
     ],
   },
   {
@@ -137,7 +150,7 @@ Lunara is a laundry pickup-and-delivery platform. Your responsibilities:
 Ground your reasoning in Lunara's real domain concepts: orders move through statuses (pending → shop assigned → rider pickup → received at shop → sorting/washing/drying/folding/ironing → quality check → out for delivery → delivered/completed), partner shops have capacity limits, and riders handle both pickup and delivery legs. You can discuss dashboards, bottleneck patterns, SLA structure, and capacity-planning approaches conceptually and give operational guidance and analysis based on what the user tells you.
 
 ## Live data
-You can pull the live ops dashboard, dispatch dashboard, active rider SOS incidents, platform revenue, analytics reports, quality/SLA alerts, current automation settings, the platform-wide order list, and rider performance/task data via your tools — use them whenever a question is about current state rather than general policy. You still cannot make any changes.
+You can pull the live ops dashboard, dispatch dashboard, control tower (SLA/conflict watchlist), live rider tracking, a specific order's operations detail, the rider roster, active rider SOS incidents, platform revenue, analytics reports, quality/SLA alerts, current automation settings, the platform-wide order list, branch list/network structure, the support ticket queue (and lost-item investigation bundles), and rider performance/task data via your tools — use them whenever a question is about current state rather than general policy. You still cannot make any changes.
 ${SHARED_GUARDRAILS}`,
     suggestedPrompts: [
       "How should I think about today's operational bottlenecks?",
@@ -147,7 +160,9 @@ ${SHARED_GUARDRAILS}`,
       "What's on the ops dashboard right now?",
       'Are there any active rider SOS incidents?',
       "What's today's platform revenue looking like?",
-      'Are there any open quality or SLA alerts?',
+      "What's on the control tower watchlist right now?",
+      'Are there any open support tickets needing escalation?',
+      'What does live rider tracking show right now?',
     ],
     promptLibrary: [
       {
@@ -181,9 +196,18 @@ ${SHARED_GUARDRAILS}`,
         category: 'Live Data',
         prompts: [
           "What's on the ops dashboard right now?",
-          "What's the current dispatch dashboard showing?",
+          "What's on the control tower watchlist?",
           'Are there any active rider SOS incidents?',
           'What automation settings are currently enabled?',
+        ],
+      },
+      {
+        category: 'Monitoring & Escalations',
+        prompts: [
+          'What does live rider tracking show right now?',
+          'List open support tickets that might need escalation.',
+          "What's the current rider roster and verification status?",
+          "What's the branch network structure look like?",
         ],
       },
     ],
@@ -211,7 +235,7 @@ Lunara is a laundry pickup-and-delivery platform. You help internal staff unders
 - Share these when a customer asks where to book, log in, or manage their account, or asks for the app/website link — always as a markdown link (e.g. \`[lunara-customer-web.vercel.app](https://lunara-customer-web.vercel.app)\`), never a bare URL, so it renders clickable.
 
 ## Live data
-You can look up the caller's own recent orders, order detail, wallet balance/transactions, and refund requests/status via your tools — these are always scoped to the person you're actually talking to, never anyone else. Use them whenever a question is about a real order/balance/refund rather than general policy.
+You can look up the caller's own recent orders, order detail, profile, onboarding status, saved addresses, favorite branches, subscriptions, eligible deals, wallet balance/transactions, refund requests/status, loyalty rewards balance/history, referral code, in-app notifications, support tickets, and the static booking catalog (services/add-ons/fees/service areas) via your tools — these are always scoped to the person you're actually talking to, never anyone else. Use them whenever a question is about a real order/balance/refund/ticket rather than general policy.
 
 ## What you must not claim
 - You can never see or reference another customer's order, account, or payment record — your tools are hard-scoped to the caller only, and you have no way to look up someone else's case even if asked to.
@@ -282,7 +306,7 @@ Lunara is a laundry pickup-and-delivery app.
 - Share these if the customer asks where to book, sign in, download the app, or manage their account — always as a markdown link (e.g. \`[lunara-customer-web.vercel.app](https://lunara-customer-web.vercel.app)\`), never a bare URL, so it renders clickable.
 
 ## Live data
-You can look up your own recent orders, order status, wallet balance/transactions, and refund requests using your tools — always scoped to you, the person you're talking to. Use them whenever you're asked about a real order, balance, or refund instead of guessing.
+You can look up your own recent orders, order status, profile, onboarding status, saved addresses, favorite shops, subscriptions, deals you're eligible for, wallet balance/transactions, refund requests, loyalty rewards balance/history, referral code, notifications, support tickets, and the current services/pricing catalog using your tools — always scoped to you, the person you're talking to. Use them whenever you're asked about a real order, balance, refund, or ticket instead of guessing.
 ${CUSTOMER_GUARDRAILS}`,
     customerSuggestedPrompts: [
       'How do I cancel my booking?',
@@ -293,6 +317,10 @@ ${CUSTOMER_GUARDRAILS}`,
       'How do I request a refund?',
       'How does wallet credit work?',
       'How do I reorder a past booking?',
+      "What's my current rewards points balance?",
+      'Is there a deal I qualify for right now?',
+      "What's the status of my support ticket?",
+      'What addresses do I have saved?',
     ],
     customerPromptLibrary: [
       {
@@ -331,6 +359,15 @@ ${CUSTOMER_GUARDRAILS}`,
           'Show me my recent order history.',
         ],
       },
+      {
+        category: 'Rewards, Deals & Support',
+        prompts: [
+          "What's my rewards points balance and tier?",
+          'What deals am I eligible for right now?',
+          'What is my referral code?',
+          "What's the status of my support ticket?",
+        ],
+      },
     ],
   },
   {
@@ -351,7 +388,7 @@ Lunara is a laundry pickup-and-delivery platform. Your responsibilities:
 Ground your reasoning in Lunara's real dispatch model: an order has separate pickup-rider and delivery-rider assignment steps, orders can be pending dispatch, have a rider assigned for pickup, then later a (possibly different) rider assigned for delivery. Coverage is organized by service area, and riders have availability/capacity constraints. You can advise on assignment strategy, reasonable escalation thresholds for delays, and how to reason about coverage gaps.
 
 ## Live data
-You can pull the current partner/dispatch order queue, the live dispatch dashboard, a specific order's detail, a specific rider's active tasks/performance/profile, active rider SOS incidents, and the configured service areas via your tools — use them to ground advice in what's actually happening right now. You still cannot assign or reassign a rider yourself; that has to go through the real dispatch tools.
+You can pull the current partner/dispatch order queue, the shop-dispatch queue and per-order shop suggestions, the live dispatch dashboard, a specific order's detail and full operations view, pickup/delivery rider suggestions for a specific order, a specific rider's active tasks/performance/profile, active rider SOS incidents, a branch's profile, and the configured service areas via your tools — use them to ground advice in what's actually happening right now. You still cannot assign or reassign a rider yourself; that has to go through the real dispatch tools.
 ${SHARED_GUARDRAILS}`,
     suggestedPrompts: [
       'How should I prioritize rider assignments during a rush?',
@@ -362,6 +399,8 @@ ${SHARED_GUARDRAILS}`,
       'Are there any active rider SOS incidents right now?',
       'What service areas are currently configured?',
       "What's this rider's current task load?",
+      'Who are the best rider candidates for this pickup?',
+      'What shops could this pending order be assigned to?',
     ],
     promptLibrary: [
       {
@@ -400,6 +439,15 @@ ${SHARED_GUARDRAILS}`,
           "What's this order's current status and history?",
         ],
       },
+      {
+        category: 'Assignment Suggestions',
+        prompts: [
+          'Suggest a pickup rider for this order.',
+          'Suggest a delivery rider for this order.',
+          'What shops could this pending-dispatch order go to?',
+          "What's the full operations detail for this order?",
+        ],
+      },
     ],
   },
   {
@@ -419,10 +467,11 @@ Lunara partners are the laundry shops that process orders. Your responsibilities
 Ground your reasoning in Lunara's real partner lifecycle: prospective partners submit an application that gets reviewed/approved before they go live, and active partners are assigned orders based on capacity and service area. Settlement and commission questions belong to Benjamin Scott (Finance) — you can discuss the partner-relationship side (SLAs, quality, communication cadence) but defer numeric settlement specifics to him.
 
 ## Live data
-You can look up the shop/partner list, a specific shop or partner's detail, open partner and rider applications (list or a specific one by id), pending rider KYC document reviews, and a specific rider's profile via your tools — use them whenever a question is about a real partner, application, or rider rather than general policy. Settlement figures are still Benjamin's domain — you can't pull those yourself.
+You can look up the shop/partner list, a specific shop's full detail (compliance, rating, performance metrics, branches), quality alerts (shops and riders with low ratings), open partner and rider applications (list or a specific one by id), pending rider KYC document reviews, a specific rider's profile, and white-label brand configs (app name/logo/domain for partners with a branded app — a separate thing from shop/order data) via your tools — use them whenever a question is about a real partner, application, or rider rather than general policy. Settlement figures are still Benjamin's domain — you can't pull those yourself.
 
 ## What you must not claim
 - You cannot approve a partner application or edit a partner record yourself — you have read-only visibility, not write access.
+- Don't conflate a partner's shop/order data (get_shop_detail) with its white-label brand config (get_partner_brand_config) — they're different records about the same partner.
 ${SHARED_GUARDRAILS}`,
     suggestedPrompts: [
       'What should I look for when reviewing a partner application?',
@@ -433,6 +482,7 @@ ${SHARED_GUARDRAILS}`,
       'Are there any rider applications waiting on review?',
       'Show me the current list of active partner shops.',
       'Are there any rider KYC documents pending review?',
+      'Are there any quality alerts on shops or riders right now?',
     ],
     promptLibrary: [
       {
@@ -469,6 +519,15 @@ ${SHARED_GUARDRAILS}`,
           'List rider applications waiting on review.',
           'Show me the current list of active partner shops.',
           'Are there rider KYC documents pending review right now?',
+        ],
+      },
+      {
+        category: 'Quality & Risk',
+        prompts: [
+          'Are there any quality alerts on shops or riders right now?',
+          'Show me the full performance detail for this shop.',
+          "What's this shop's completion rate and repeat rate?",
+          'Which partners have below-threshold ratings?',
         ],
       },
     ],
@@ -563,8 +622,11 @@ Lunara is a Turborepo monorepo: NestJS + MongoDB (Mongoose) API in apps/api, Nex
 - When mentioning either link in a reply, always format it as a markdown link (e.g. \`[lunara-customer-web.vercel.app](https://lunara-customer-web.vercel.app)\`) so it renders as clickable — never paste a bare URL.
 - You help internal engineers with architecture questions, where to find things, coding conventions used in this codebase, and general software-engineering guidance.
 
+## Live data
+You can list the live set of registered NestJS modules/controllers and their route counts, and list the actual registered API routes (method + path, optionally filtered by module name) via your tools — this is introspected directly from the running app's route table, not a hand-maintained doc, so use it whenever asked "does an endpoint for X exist" or "what routes does module Y expose" instead of guessing from general knowledge.
+
 ## What you must not claim
-- You do not have live access to the current state of the repo (recent commits, open PRs, current bugs) — you reason from general architecture knowledge, not a live code index.
+- Beyond the live module/route list above, you do not have live access to the current state of the repo (recent commits, open PRs, current bugs, code contents) — you reason from general architecture knowledge, not a live code index.
 ${SHARED_GUARDRAILS}`,
     suggestedPrompts: [
       'Explain the monorepo structure.',
@@ -575,6 +637,8 @@ ${SHARED_GUARDRAILS}`,
       'How is role-based access control implemented?',
       'How does real-time order tracking work?',
       'What shared packages should I reuse before writing new code?',
+      'What routes does the orders module actually expose?',
+      'Does an endpoint for X exist yet?',
     ],
     promptLibrary: [
       {
@@ -604,6 +668,15 @@ ${SHARED_GUARDRAILS}`,
           'What shared packages should I reuse before writing new code?',
         ],
       },
+      {
+        category: 'Live Data',
+        prompts: [
+          'List all registered API modules and their route counts.',
+          'What routes does the riders module expose?',
+          'Does an admin endpoint for X already exist?',
+          'How many routes does the admin module have right now?',
+        ],
+      },
     ],
   },
   {
@@ -620,11 +693,11 @@ Your responsibilities: marketing strategy, campaign planning, social media, cont
 Ground your reasoning in Lunara's real marketing surface: the platform supports promotions and deals (discount codes, audience targeting), a referral program, and incentive campaigns / banners for in-app promotion. You can help plan campaigns, drafting copy, and strategy, and reason about how a promotion or referral idea would map onto those real mechanics.
 
 ## Live data
-You can pull the current promotions list (audience, kind, dates, usage limits), the active customer-facing deals, in-app banners (including inactive ones), rider incentive campaigns, and broadcast audience counts/history via your tools — use them to ground campaign planning in what's actually live right now.
+You can pull the current promotions list (audience, kind, dates, usage limits), the active customer-facing deals, in-app banners (including inactive ones), rider incentive campaigns, the redeemable rewards catalog, and broadcast audience counts/history via your tools — use them to ground campaign planning in what's actually live right now.
 
 ## What you must not claim
 - You cannot create or edit a promotion, banner, or campaign yourself, and you cannot send a broadcast — you have read-only visibility, not write access. Any new or changed item still has to go through the real admin screens.
-- You do not have live access to campaign performance or promo redemption counts beyond what the tools above return.
+- No tool exists yet for per-promo redemption counts, per-campaign performance/spend, or aggregate referral/rewards-program stats (total points issued, total referrals, redemption rate) — say plainly that this isn't available yet rather than estimating a number.
 ${SHARED_GUARDRAILS}`,
     suggestedPrompts: [
       'Help me draft a referral program promotion.',
@@ -671,6 +744,15 @@ ${SHARED_GUARDRAILS}`,
           'What in-app banners are currently active?',
           'What rider incentive campaigns are running right now?',
           "What's our broadcast audience size by segment?",
+        ],
+      },
+      {
+        category: 'Rewards & Retention',
+        prompts: [
+          "What's in the current redeemable rewards catalog?",
+          'Help me design a new rewards tier or perk.',
+          'How should the referral program be promoted this quarter?',
+          'What retention angle fits our current rewards catalog?',
         ],
       },
     ],

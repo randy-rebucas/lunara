@@ -15,7 +15,7 @@ export function buildLedgerTools(ledger: LedgerService): ToolSpec[] {
       description:
         'Get the full revenue reconciliation snapshot: P&L summary, cash flow, settlements, rider withdrawals, wallet totals, and spot-check drifts.',
       input_schema: { type: 'object', properties: {} },
-      personas: ['benjamin'],
+      personas: ['benjamin', 'aurora'],
       handler: async () => ledger.getReconciliation(),
     },
     {

@@ -1,10 +1,12 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { DiscoveryModule } from '@nestjs/core';
 import { AiConversation, AiConversationSchema } from './schemas/ai-conversation.schema';
 import { AiMessage, AiMessageSchema } from './schemas/ai-message.schema';
 import { AiAgentsController } from './ai-agents.controller';
 import { AiAgentsService } from './ai-agents.service';
 import { AiToolRegistry } from './tools/registry';
+import { ApiSurfaceService } from './tools/api-surface.service';
 import { OrdersModule } from '../orders/orders.module';
 import { RidersModule } from '../riders/riders.module';
 import { LedgerModule } from '../ledger/ledger.module';
@@ -19,6 +21,16 @@ import { PartnersModule } from '../partners/partners.module';
 import { IncentiveCampaignsModule } from '../incentive-campaigns/incentive-campaigns.module';
 import { BannersModule } from '../banners/banners.module';
 import { SettingsModule } from '../settings/settings.module';
+import { CustomersModule } from '../customers/customers.module';
+import { AddressesModule } from '../addresses/addresses.module';
+import { FavoritesModule } from '../favorites/favorites.module';
+import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
+import { PromotionsModule } from '../promotions/promotions.module';
+import { RewardsModule } from '../rewards/rewards.module';
+import { ReviewsModule } from '../reviews/reviews.module';
+import { SupportModule } from '../support/support.module';
+import { BookingModule } from '../booking/booking.module';
+import { BranchesModule } from '../branches/branches.module';
 
 @Module({
   imports: [
@@ -40,9 +52,20 @@ import { SettingsModule } from '../settings/settings.module';
     IncentiveCampaignsModule,
     BannersModule,
     SettingsModule,
+    CustomersModule,
+    AddressesModule,
+    FavoritesModule,
+    SubscriptionsModule,
+    PromotionsModule,
+    RewardsModule,
+    ReviewsModule,
+    SupportModule,
+    BookingModule,
+    BranchesModule,
+    DiscoveryModule,
   ],
   controllers: [AiAgentsController],
-  providers: [AiAgentsService, AiToolRegistry],
+  providers: [AiAgentsService, AiToolRegistry, ApiSurfaceService],
   exports: [AiAgentsService],
 })
 export class AiAgentsModule {}

@@ -6,6 +6,9 @@ import { WalletsService } from '../../wallets/wallets.service';
 import { RefundsService } from '../../refunds/refunds.service';
 import { AdminService } from '../../admin/admin.service';
 import { AdminDispatchService } from '../../admin/admin-dispatch.service';
+import { AdminOperationsService } from '../../admin/admin-operations.service';
+import { BranchesService } from '../../branches/branches.service';
+import { BranchManagementService } from '../../branches/branch-management.service';
 import { RiderSosService } from '../../sos/rider-sos.service';
 import { ServiceAreasService } from '../../service-areas/service-areas.service';
 import { PartnerApplicationsService } from '../../partner-applications/partner-applications.service';
@@ -15,12 +18,24 @@ import { IncentiveCampaignsService } from '../../incentive-campaigns/incentive-c
 import { BannersService } from '../../banners/banners.service';
 import { PushNotificationService } from '../../push/push-notification.service';
 import { SettingsService } from '../../settings/settings.service';
+import { CustomersService } from '../../customers/customers.service';
+import { AddressesService } from '../../addresses/addresses.service';
+import { FavoritesService } from '../../favorites/favorites.service';
+import { SubscriptionsService } from '../../subscriptions/subscriptions.service';
+import { PromotionsService } from '../../promotions/promotions.service';
+import { RewardsService } from '../../rewards/rewards.service';
+import { ReviewsService } from '../../reviews/reviews.service';
+import { SupportService } from '../../support/support.service';
+import { BookingService } from '../../booking/booking.service';
+import { ApiSurfaceService } from './api-surface.service';
 import { buildOrderTools } from './orders.tools';
 import { buildRiderTools } from './riders.tools';
 import { buildLedgerTools } from './ledger.tools';
 import { buildWalletTools } from './wallets.tools';
 import { buildRefundTools } from './refunds.tools';
 import { buildAdminTools } from './admin.tools';
+import { buildAdminOperationsTools } from './admin-operations.tools';
+import { buildBranchTools } from './branches.tools';
 import { buildDispatchTools } from './dispatch.tools';
 import { buildSosTools } from './sos.tools';
 import { buildServiceAreaTools } from './service-areas.tools';
@@ -31,6 +46,16 @@ import { buildIncentiveCampaignTools } from './incentive-campaigns.tools';
 import { buildBannerTools } from './banners.tools';
 import { buildBroadcastTools } from './broadcast.tools';
 import { buildSettingsTools } from './settings.tools';
+import { buildCustomerTools } from './customers.tools';
+import { buildAddressTools } from './addresses.tools';
+import { buildFavoriteTools } from './favorites.tools';
+import { buildSubscriptionTools } from './subscriptions.tools';
+import { buildDealTools } from './deals.tools';
+import { buildRewardTools } from './rewards.tools';
+import { buildNotificationTools } from './notifications.tools';
+import { buildSupportTools } from './support.tools';
+import { buildBookingTools } from './booking.tools';
+import { buildApiSurfaceTools } from './api-surface.tools';
 import { ToolCtx, ToolSpec } from './types';
 
 @Injectable()
@@ -45,6 +70,9 @@ export class AiToolRegistry {
     refunds: RefundsService,
     admin: AdminService,
     dispatch: AdminDispatchService,
+    adminOperations: AdminOperationsService,
+    branches: BranchesService,
+    branchManagement: BranchManagementService,
     sos: RiderSosService,
     serviceAreas: ServiceAreasService,
     partnerApplications: PartnerApplicationsService,
@@ -54,6 +82,16 @@ export class AiToolRegistry {
     banners: BannersService,
     push: PushNotificationService,
     settings: SettingsService,
+    customers: CustomersService,
+    addresses: AddressesService,
+    favorites: FavoritesService,
+    subscriptions: SubscriptionsService,
+    promotions: PromotionsService,
+    rewards: RewardsService,
+    reviews: ReviewsService,
+    support: SupportService,
+    booking: BookingService,
+    apiSurface: ApiSurfaceService,
   ) {
     this.specs = [
       ...buildOrderTools(orders),
@@ -62,6 +100,8 @@ export class AiToolRegistry {
       ...buildWalletTools(wallets),
       ...buildRefundTools(refunds),
       ...buildAdminTools(admin),
+      ...buildAdminOperationsTools(adminOperations),
+      ...buildBranchTools(branches, branchManagement),
       ...buildDispatchTools(dispatch),
       ...buildSosTools(sos),
       ...buildServiceAreaTools(serviceAreas),
@@ -72,6 +112,16 @@ export class AiToolRegistry {
       ...buildBannerTools(banners),
       ...buildBroadcastTools(push),
       ...buildSettingsTools(settings),
+      ...buildCustomerTools(customers),
+      ...buildAddressTools(addresses),
+      ...buildFavoriteTools(favorites),
+      ...buildSubscriptionTools(subscriptions),
+      ...buildDealTools(promotions),
+      ...buildRewardTools(rewards),
+      ...buildNotificationTools(reviews),
+      ...buildSupportTools(support),
+      ...buildBookingTools(booking),
+      ...buildApiSurfaceTools(apiSurface),
     ];
   }
 

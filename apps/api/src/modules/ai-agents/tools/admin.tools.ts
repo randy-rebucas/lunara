@@ -7,14 +7,14 @@ export function buildAdminTools(admin: AdminService): ToolSpec[] {
       name: 'get_ops_dashboard',
       description: 'Get the admin operations dashboard: today/month order volume, status breakdown, and key stats.',
       input_schema: { type: 'object', properties: {} },
-      personas: ['olivia'],
+      personas: ['olivia', 'aurora'],
       handler: async () => admin.getDashboard(),
     },
     {
       name: 'get_revenue',
       description: 'Get platform revenue summary.',
       input_schema: { type: 'object', properties: {} },
-      personas: ['olivia'],
+      personas: ['olivia', 'aurora'],
       handler: async () => admin.getRevenue(),
     },
     {
@@ -31,9 +31,10 @@ export function buildAdminTools(admin: AdminService): ToolSpec[] {
     },
     {
       name: 'get_quality_alerts',
-      description: 'Get current quality/SLA alerts across shops and riders.',
+      description:
+        'Get current quality alerts: shops and riders with low average rating (below threshold, with enough reviews to be meaningful).',
       input_schema: { type: 'object', properties: {} },
-      personas: ['olivia'],
+      personas: ['olivia', 'mia', 'aurora'],
       handler: async () => admin.getQualityAlerts(),
     },
     {
@@ -48,6 +49,20 @@ export function buildAdminTools(admin: AdminService): ToolSpec[] {
       },
       personas: ['olivia'],
       handler: async (input: { status?: string; limit?: number }) => admin.getOrders(input?.status, input?.limit),
+    },
+    {
+      name: 'get_live_tracking',
+      description: 'Get live rider tracking map data: active riders and their current orders/locations.',
+      input_schema: { type: 'object', properties: {} },
+      personas: ['olivia'],
+      handler: async () => admin.getLiveTracking(),
+    },
+    {
+      name: 'get_rider_roster',
+      description: 'List all riders with verification/employment status (roster view).',
+      input_schema: { type: 'object', properties: {} },
+      personas: ['olivia'],
+      handler: async () => admin.getRiders(),
     },
     {
       name: 'get_shops',

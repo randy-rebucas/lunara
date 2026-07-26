@@ -50,6 +50,6 @@ import { ServiceAreasModule } from '../service-areas/service-areas.module';
   ],
   controllers: [AdminController, MaintenanceController],
   providers: [AdminService, AdminOperationsService, AdminDispatchService, MaintenanceService],
-  exports: [AdminService, AdminDispatchService],
+  exports: [AdminService, AdminDispatchService, AdminOperationsService],
 })
 export class AdminModule {}

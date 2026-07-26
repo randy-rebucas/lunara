@@ -14,5 +14,6 @@ import { FavoriteBranch, FavoriteBranchSchema } from './schemas/favorite-branch.
   ],
   controllers: [FavoritesController],
   providers: [FavoritesService],
+  exports: [FavoritesService],
 })
 export class FavoritesModule {}
