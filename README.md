@@ -49,6 +49,7 @@ npm run dev --workspace=@lunara/api
 npm run dev --workspace=@lunara/customer-web
 npm run dev --workspace=@lunara/admin-web
 npm run dev --workspace=@lunara/partner-web
+npm run dev --workspace=@lunara/ai-agents
 
 # Run mobile apps (separate terminals — see Mobile Apps below)
 npm run dev --workspace=@lunara/customer-mobile

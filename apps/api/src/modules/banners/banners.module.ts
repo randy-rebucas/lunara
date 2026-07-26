@@ -8,5 +8,6 @@ import { Banner, BannerSchema } from './schemas/banner.schema';
   imports: [MongooseModule.forFeature([{ name: Banner.name, schema: BannerSchema }])],
   controllers: [BannersController, AdminBannersController],
   providers: [BannersService],
+  exports: [BannersService],
 })
 export class BannersModule {}

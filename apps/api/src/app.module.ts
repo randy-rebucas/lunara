@@ -46,6 +46,7 @@ import { EmailModule } from './common/email/email.module';
 import { AutomationModule } from './modules/automation/automation.module';
 import { AuditLogModule } from './modules/audit/audit-log.module';
 import { LaundryTagsModule } from './modules/laundry-tags/laundry-tags.module';
+import { AiAgentsModule } from './modules/ai-agents/ai-agents.module';
 
 @Module({
   imports: [
@@ -98,6 +99,7 @@ import { LaundryTagsModule } from './modules/laundry-tags/laundry-tags.module';
     AutomationModule,
     AuditLogModule,
     LaundryTagsModule,
+    AiAgentsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

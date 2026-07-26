@@ -1,0 +1,37 @@
+{
+  "name": "@lunara/ai-agents",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3005",
+    "prebuild": "cd ../.. && npm run build --workspace=@lunara/types && npm run build --workspace=@lunara/utils && npm run build --workspace=@lunara/config && npm run build --workspace=@lunara/hooks",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@lunara/brand": "*",
+    "@lunara/config": "*",
+    "@lunara/hooks": "*",
+    "@lunara/types": "*",
+    "@lunara/ui": "*",
+    "@lunara/utils": "*",
+    "lucide-react": "^1.21.0",
+    "next": "^15.3.3",
+    "react-markdown": "^9.0.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.5",
+    "@tailwindcss/postcss": "^4.1.8",
+    "@types/node": "^22.15.30",
+    "@types/react": "^19.1.6",
+    "@types/react-dom": "^19.1.5",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^16.2.6",
+    "tailwindcss": "^4.1.8",
+    "typescript": "^5.8.3"
+  }
+}

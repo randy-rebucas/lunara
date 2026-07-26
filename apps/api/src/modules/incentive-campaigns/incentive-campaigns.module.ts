@@ -24,5 +24,6 @@ import { IncentiveCampaign, IncentiveCampaignSchema } from './schemas/incentive-
   ],
   controllers: [AdminIncentiveCampaignsController, RiderIncentiveCampaignsController],
   providers: [IncentiveCampaignsService, IncentiveCampaignsSchedulerService],
+  exports: [IncentiveCampaignsService],
 })
 export class IncentiveCampaignsModule {}

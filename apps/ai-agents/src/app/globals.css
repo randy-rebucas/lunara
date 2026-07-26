@@ -1,0 +1,46 @@
+@import 'tailwindcss';
+@import '@lunara/ui/globals.css';
+
+@theme {
+  --color-surface: #12142c;
+  --color-surface-muted: #0a0c1e;
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-muted: #94a3b8;
+  --color-muted-foreground: #64748b;
+  --color-destructive: #f87171;
+  --font-sans: var(--font-inter), 'Inter', system-ui, sans-serif;
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 1px 2px -1px rgb(0 0 0 / 0.3);
+  --shadow-elevated: 0 12px 32px -8px rgb(0 0 0 / 0.5);
+}
+
+@layer base {
+  body {
+    @apply bg-surface-muted font-sans text-slate-100 antialiased;
+  }
+
+  ::selection {
+    @apply bg-primary/30 text-white;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl bg-surface shadow-[var(--shadow-card)] ring-1 ring-border;
+  }
+
+  .input-field {
+    @apply w-full rounded-lg bg-slate-950/50 px-4 py-2.5 text-sm text-white ring-1 ring-border transition-shadow placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-indigo-500 to-violet-500 px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-indigo-500/20 transition-opacity hover:opacity-90 disabled:opacity-50;
+  }
+
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-surface px-4 py-2.5 text-sm font-medium text-slate-200 ring-1 ring-border transition-colors hover:bg-white/5 disabled:opacity-50;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-white/5 hover:text-indigo-300;
+  }
+}
