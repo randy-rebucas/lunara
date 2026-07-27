@@ -5,7 +5,7 @@ This guide covers deploying Lunara to production with:
 | Layer | Platform | Apps |
 |-------|----------|------|
 | **Backend** | [Render](https://render.com) | NestJS API (`apps/api`) |
-| **Web frontends** | [Vercel](https://vercel.com) | Customer, Admin, Partner (`apps/*-web`) |
+| **Web frontends** | [Vercel](https://vercel.com) | Customer, Admin, Partner (`apps/*-web`), AI Agents (`apps/ai-agents`) |
 | **Mobile** | [Expo EAS](https://expo.dev/eas) | Customer & Rider apps (see [Mobile apps](#mobile-apps-expo-eas)) |
 
 Managed services you provision separately:
@@ -25,6 +25,7 @@ flowchart LR
         CW[customer-web]
         AW[admin-web]
         PW[partner-web]
+        AI[ai-agents]
     end
 
     subgraph render [Render]
@@ -42,14 +43,20 @@ flowchart LR
         RM[rider-mobile]
     end
 
+    subgraph external [External]
+        CLAUDE[Anthropic Claude API]
+    end
+
     CW --> API
     AW --> API
     PW --> API
+    AI --> API
     CM --> API
     RM --> API
     API --> MONGO
     API --> REDIS
     API --> DISK
+    API --> CLAUDE
 ```
 
 **API base path:** all REST routes live under `/api/v1`.  
@@ -167,6 +174,7 @@ Set these in the Render service **Environment** tab.
 | `STRIPE_SECRET_KEY`, `GCASH_MERCHANT_ID`, `MAYA_PUBLIC_KEY` | Live payments |
 | `TWILIO_*`, `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS` | SMS / email |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `FACEBOOK_*` | OAuth login |
+| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | AI Agents app (`apps/ai-agents`) — required for any agent, including guest Emma, to respond |
 
 See [`.env.example`](../.env.example) for the full list.
 
@@ -204,13 +212,16 @@ Ensure `NEXT_PUBLIC_API_URL` (Vercel) and `EXPO_PUBLIC_API_URL` (mobile) point a
 
 ## 4. Web frontends — Vercel
 
-Deploy **three separate Vercel projects** from the same monorepo — one per Next.js app.
+Deploy **four separate Vercel projects** from the same monorepo — one per Next.js app.
 
 | Vercel project | Root directory | Suggested domain |
 |----------------|----------------|------------------|
 | Customer web | `apps/customer-web` | `app.lunara.example.com` or `lunara.example.com` |
 | Admin web | `apps/admin-web` | `admin.lunara.example.com` |
 | Partner web | `apps/partner-web` | `partner.lunara.example.com` |
+| AI Agents | `apps/ai-agents` | `ai.lunara.example.com` |
+
+AI Agents also has a public, unauthenticated route (`/guest/emma`) — see [AI Agents deployment](./DEPLOYMENT_AI_AGENTS.md) for its specifics (guest throttling, `ANTHROPIC_API_KEY` requirement, guest tool scope).
 
 ### Connect the repo
 
@@ -227,7 +238,7 @@ Vercel detects the Turborepo layout via `turbo.json`. For each project:
 | **Install command** | `cd ../.. && npm ci` |
 | **Build command** | `cd ../.. && npx turbo run build --filter=@lunara/<app-name>` |
 
-Replace `<app-name>` with `customer-web`, `admin-web`, or `partner-web`.
+Replace `<app-name>` with `customer-web`, `admin-web`, `partner-web`, or `ai-agents`.
 
 Turbo builds workspace dependencies (`@lunara/types`, `@lunara/utils`, `@lunara/config`, `@lunara/hooks`, etc.) automatically via `dependsOn: ["^build"]`.
 
@@ -280,9 +291,10 @@ Quick reference for cross-service wiring after deploy:
 | `JWT_SECRET`, `JWT_REFRESH_SECRET` | Render (API) | Secrets |
 | `API_URL` | Render (API) | `https://api.lunara.example.com` |
 | `CUSTOMER_WEB_URL` | Render (API) | `https://lunara.example.com` |
-| `NEXT_PUBLIC_API_URL` | Vercel (all 3 web apps) | Same as `API_URL` |
+| `NEXT_PUBLIC_API_URL` | Vercel (all 4 web apps) | Same as `API_URL` |
 | `EXPO_PUBLIC_API_URL` | EAS / Expo | Same as `API_URL` |
 | `FIREBASE_*` | Render (API) | Service account for push |
+| `ANTHROPIC_API_KEY` | Render (API) | Claude API key — required for `apps/ai-agents` |
 
 ---
 
@@ -316,6 +328,7 @@ Then **rotate or disable** default seed passwords (`password123`) before going l
 2. Sign in (admin: `admin@lunara.dev` after seed — change password).
 3. Confirm API calls succeed (browser Network tab → requests to `/api/v1/...`).
 4. Open **Dispatch** or **Control Tower** (admin) — WebSocket status should connect (live updates without refresh).
+5. On **ai-agents**, confirm both an authenticated persona responds and the public `/guest/emma` chat responds without signing in (see [AI Agents deployment](./DEPLOYMENT_AI_AGENTS.md)).
 
 ### Verify mobile (if applicable)
 
@@ -442,4 +455,5 @@ Connect via **Render → Blueprints → New Blueprint Instance**. Fill in `MONGO
 
 - [Architecture](./ARCHITECTURE.md)
 - [API endpoints](./API_ENDPOINTS.md)
+- [AI Agents deployment](./DEPLOYMENT_AI_AGENTS.md)
 - [README — Quick start & mobile](../README.md)
