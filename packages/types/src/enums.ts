@@ -52,6 +52,24 @@ export enum BookingType {
   CURTAINS = 'curtains',
   SHOES = 'shoes',
   UNIFORMS = 'uniforms',
+  IRONING = 'ironing',
+  RUGS = 'rugs',
+  UPHOLSTERY = 'upholstery',
+  BAGS = 'bags',
+  LEATHER = 'leather',
+  ALTERATION = 'alteration',
+  PREMIUM_WASH_FOLD = 'premium_wash_fold',
+  BABY_CLOTHES_WASH = 'baby_clothes_wash',
+  DELICATES_WASH = 'delicates_wash',
+  COLOR_SEPARATION_WASH = 'color_separation_wash',
+  WHITE_GARMENTS_WASH = 'white_garments_wash',
+  HAND_WASH = 'hand_wash',
+  MACHINE_WASH = 'machine_wash',
+  ECO_FRIENDLY_WASH = 'eco_friendly_wash',
+  HYPOALLERGENIC_WASH = 'hypoallergenic_wash',
+  SANITIZING_DISINFECTION = 'sanitizing_disinfection',
+  WEDDING_GOWN_PRESERVATION = 'wedding_gown_preservation',
+  SPECIALTY_ITEMS = 'specialty_items',
 }
 
 export enum PaymentMethod {
@@ -96,4 +114,21 @@ export enum PromotionAudience {
 export enum PromotionKind {
   STANDARD = 'standard',
   SIGNUP_TEMPLATE = 'signup_template',
+}
+
+export enum ServiceCategory {
+  CORE_LAUNDRY = 'core_laundry',
+  GARMENT_CARE = 'garment_care',
+  HOME_TEXTILES = 'home_textiles',
+  FOOTWEAR_LEATHER = 'footwear_leather',
+  WELLNESS_SANITATION = 'wellness_sanitation',
+  SPECIALTY = 'specialty',
+}
+
+export enum AddonCategory {
+  TREATMENT = 'treatment',
+  PROTECTION = 'protection',
+  FINISHING = 'finishing',
+  SPEED = 'speed',
+  REPAIR = 'repair',
 }

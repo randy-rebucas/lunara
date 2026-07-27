@@ -24,8 +24,7 @@ describe('booking-flow', () => {
   });
 
   it('initialBookingForm has sane defaults', () => {
-    assert.equal(initialBookingForm.bookingType, null);
-    assert.equal(initialBookingForm.bagSizeId, '');
+    assert.deepEqual(initialBookingForm.services, []);
     assert.deepEqual(initialBookingForm.addonIds, []);
   });
 });

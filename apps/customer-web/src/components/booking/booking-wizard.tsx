@@ -9,22 +9,33 @@ import { ButtonLink } from '../ui/button-link';
 import { buttonResponsiveClass } from '../ui/button-layout';
 import {
   BOOKING_MACHINE_LOAD_INFO,
+  BOOKING_MACHINE_LOAD_MIN_KG,
   BOOKING_MIN_ORDER_AMOUNT,
+  BOOKING_MIN_WEIGHT_KG,
+  BOOKING_PER_KG_MAX_KG,
   BranchPricingMode,
   estimateMachineLoads,
   formatMachineLoadLabel,
   calculateQuote,
+  combineServiceQuotes,
   formatCurrency,
   getTodayScheduleSummary,
+  getGarmentCategories,
+  GARMENT_CATALOG,
+  isGarmentPricedBookingType,
+  recommendBagForWeight,
   type BagSizeId,
   type BagSizeOption,
   type BookingAddonOption,
   type BranchHoliday,
+  type GarmentSelection,
   type LaundryServiceOption,
+  type MultiServiceQuoteBreakdown,
   type PartnerCoverageInfo,
   isPickupSlotBookable,
   type PickupSlot,
   type QuoteBreakdown,
+  resolveMediaUrl,
 } from '@lunara/utils';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { OrderPartnerCoverageNotice } from '../order-partner-coverage-notice';
@@ -34,10 +45,12 @@ import { loadCustomerSettings } from '../../lib/customer-settings';
 import {
   BOOKING_STEPS,
   initialBookingForm,
+  newServiceSelection,
   nextStep,
   prevStep,
   type BookingFormState,
   type BookingStep,
+  type ServiceSelectionState,
 } from '../../lib/booking-flow';
 import { PickupSchedulePicker } from './pickup-schedule-picker';
 import { PromoCodeField } from './promo-code-field';
@@ -81,6 +94,9 @@ interface ShopServiceOption {
   basePricePerKg: number;
   basePricePerLoad?: number;
   basePricePerPiece?: number;
+  basePricePerPair?: number;
+  basePricePerItem?: number;
+  fixedPrice?: number;
   pricingUnit?: BranchPricingMode;
   customerPricePerKg: number;
   isCustom?: boolean;
@@ -94,6 +110,7 @@ interface ShopAddonOption {
   basePrice: number;
   customerPrice: number;
   pricingUnit?: BranchPricingMode;
+  isPercentOfService?: boolean;
   isCustom?: boolean;
   customAddonId?: string;
 }
@@ -112,6 +129,56 @@ interface ShopOption {
   holidays: BranchHoliday[];
   services: ShopServiceOption[];
   addons: ShopAddonOption[];
+}
+
+// Each service on a shop can bill in its own unit, so pricing mode/rates must be resolved per
+// selected service rather than once per shop. Custom services are always priced per-kg.
+function resolveShopService(
+  selectedShop: ShopOption | undefined,
+  service: ServiceSelectionState,
+): ShopServiceOption | undefined {
+  return service.customServiceId
+    ? selectedShop?.services.find((s) => s.customServiceId === service.customServiceId)
+    : selectedShop?.services.find((s) => s.type === service.bookingType && !s.isCustom);
+}
+
+function resolveShopPricingMode(
+  selectedShop: ShopOption | undefined,
+  service: ServiceSelectionState,
+): BranchPricingMode {
+  const shopService = resolveShopService(selectedShop, service);
+  return (
+    shopService?.pricingUnit ??
+    (service.customServiceId ? BranchPricingMode.PER_KG : BranchPricingMode.FLAT_BAG)
+  );
+}
+
+function AddonImage({ imageUrl }: { imageUrl?: string }) {
+  const src = resolveMediaUrl(imageUrl, process.env.NEXT_PUBLIC_API_URL);
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt=""
+        className="h-12 w-12 shrink-0 rounded-lg bg-slate-50 object-cover ring-1 ring-border/40"
+      />
+    );
+  }
+  return (
+    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-400 ring-1 ring-border/40">
+      <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6" aria-hidden>
+        <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.5" />
+        <circle cx="9" cy="9" r="1.75" fill="currentColor" />
+        <path
+          d="M3 16l5-5 4 4 3-3 6 6"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </div>
+  );
 }
 
 function BookingProgress({ current }: { current: BookingStep }) {
@@ -161,6 +228,28 @@ function BookingProgress({ current }: { current: BookingStep }) {
       </nav>
     </div>
   );
+}
+
+/** Non-empty garmentSelections payload for garment-priced booking types, else undefined. */
+function buildGarmentSelectionsForService(service: ServiceSelectionState): GarmentSelection[] | undefined {
+  if (!isGarmentPricedBookingType(service.bookingType)) return undefined;
+  const selections = Object.entries(service.garmentQuantities)
+    .map(([garmentId, qty]) => ({ garmentId, quantity: Number(qty) || 0 }))
+    .filter((sel) => sel.quantity > 0);
+  return selections.length > 0 ? selections : undefined;
+}
+
+function serviceSelectionToRequestBody(service: ServiceSelectionState) {
+  const garmentSelections = buildGarmentSelectionsForService(service);
+  return {
+    bookingType: service.bookingType,
+    ...(service.customServiceId ? { customServiceId: service.customServiceId } : {}),
+    ...(service.bagSizeId ? { bagSizeId: service.bagSizeId } : {}),
+    ...(Number(service.enteredWeightKg) ? { enteredWeightKg: Number(service.enteredWeightKg) } : {}),
+    ...(Number(service.enteredLoadCount) ? { enteredLoadCount: Number(service.enteredLoadCount) } : {}),
+    ...(Number(service.enteredPieceCount) ? { enteredPieceCount: Number(service.enteredPieceCount) } : {}),
+    ...(garmentSelections ? { garmentSelections } : {}),
+  };
 }
 
 function StepHeader({ title, description }: { title: string; description?: string }) {
@@ -369,6 +458,19 @@ function BagPreviewCard({
   );
 }
 
+/** Live "here's roughly what bag that fills" readout for the PER_KG/PER_LOAD weight steps —
+ * informational only, those modes bill by kg/load rather than by bag. */
+function BagFitHint({ weightKg, bagSizes }: { weightKg: number; bagSizes: BagSizeOption[] }) {
+  const bag = recommendBagForWeight(weightKg, bagSizes);
+  if (!bag) return null;
+  return (
+    <p className="mt-2 text-sm text-muted">
+      That&apos;s roughly a <span className="font-medium text-slate-900">{bag.label} bag</span> (up to{' '}
+      {bag.capacityKg} kg).
+    </p>
+  );
+}
+
 function getNextStepLabel(step: BookingStep): string {
   switch (step) {
     case 'address':
@@ -393,13 +495,13 @@ function getNextStepLabel(step: BookingStep): string {
 function canProceedStep(
   step: BookingStep,
   form: BookingFormState,
-  localQuote: QuoteBreakdown | null,
+  localQuote: MultiServiceQuoteBreakdown | null,
   addresses: AddressOption[],
   slots: PickupSlot[],
 ): boolean {
   switch (step) {
     case 'service':
-      return Boolean(form.bookingType);
+      return form.services.length > 0;
     case 'address':
       return Boolean(form.addressId) && addresses.length > 0;
     case 'shop':
@@ -412,7 +514,7 @@ function canProceedStep(
         )
       );
     case 'weight':
-      return Boolean(localQuote);
+      return Boolean(localQuote) && Boolean(localQuote?.meetsWeightMinimum);
     case 'addons':
       return Boolean(localQuote?.meetsMinimum);
     case 'review':
@@ -435,7 +537,7 @@ function WizardActions({
   step: BookingStep;
   loading: boolean;
   stepping: boolean;
-  activeQuote: QuoteBreakdown | null;
+  activeQuote: MultiServiceQuoteBreakdown | null;
   canProceed: boolean;
   onBack: () => void;
   onNext: () => void;
@@ -532,7 +634,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
   const [areaLabel, setAreaLabel] = useState('');
   const [dispatchNote, setDispatchNote] = useState('');
   const [availableServices, setAvailableServices] = useState<BookingType[]>([]);
-  const [quote, setQuote] = useState<QuoteBreakdown | null>(null);
+  const [quote, setQuote] = useState<MultiServiceQuoteBreakdown | null>(null);
   const [promoLoading, setPromoLoading] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -545,6 +647,21 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
   const [coverageAddressId, setCoverageAddressId] = useState('');
   const [reorderNotice, setReorderNotice] = useState('');
   const [addressesError, setAddressesError] = useState('');
+  // Collapsed by default; a category with an already-selected garment (e.g. a reorder/edit
+  // prefill) starts expanded so existing picks aren't hidden from view.
+  const [collapsedGarmentCategories, setCollapsedGarmentCategories] = useState<Set<string>>(
+    () =>
+      new Set(
+        getGarmentCategories().filter(
+          (category) =>
+            !GARMENT_CATALOG.some(
+              (g) =>
+                g.category === category &&
+                form.services.some((s) => (Number(s.garmentQuantities[g.id]) || 0) > 0),
+            ),
+        ),
+      ),
+  );
   const reorderAppliedRef = useRef(false);
   const pendingRebookBranchRef = useRef<string | null>(null);
   const selectedAddressIdRef = useRef(form.addressId);
@@ -614,8 +731,12 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
         const addressStillValid = addresses.some((a) => a._id === order.pickupAddressId);
         setForm((f) => ({
           ...f,
-          bookingType: order.bookingType,
-          bagSizeId: (order.bagSizeId as BagSizeId | undefined) ?? f.bagSizeId,
+          services: [
+            {
+              ...newServiceSelection(order.bookingType),
+              bagSizeId: (order.bagSizeId as BagSizeId | undefined) ?? '',
+            },
+          ],
           addonIds: order.addons?.map((a) => a.id) ?? [],
           addressId: addressStillValid && order.pickupAddressId ? order.pickupAddressId : f.addressId,
           branchId: order.branchId ?? '',
@@ -651,84 +772,102 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
   }, [shopOptions, shopsLoading]);
 
   const selectedShop = shopOptions.find((s) => s.branchId === form.branchId);
-  // Each service on a shop can bill in its own unit now, so this must be resolved per selected
-  // service (and re-derived whenever bookingType/customServiceId changes), not once per shop.
-  // Custom services are always priced per-kg (see partner-web services page).
-  const selectedShopService = form.customServiceId
-    ? selectedShop?.services.find((s) => s.customServiceId === form.customServiceId)
-    : selectedShop?.services.find((s) => s.type === form.bookingType && !s.isCustom);
-  const shopPricingMode =
-    selectedShopService?.pricingUnit ??
-    (form.customServiceId ? BranchPricingMode.PER_KG : BranchPricingMode.FLAT_BAG);
 
-  const localQuote = useMemo(() => {
-    if (!form.bookingType) return null;
-    const catalogService = config?.services.find((s) => s.type === form.bookingType);
-    const shopService = selectedShopService;
-    const service =
-      catalogService && shopService ? { ...catalogService, label: shopService.label } : catalogService;
+  // Shop-specific addon prices/units when a shop is chosen — falls back to the flat global
+  // catalog before a shop is picked, matching the `addons` render list below.
+  const addonOptions: BookingAddonOption[] | undefined = selectedShop
+    ? selectedShop.addons.map((a) => ({
+        id: a.slug,
+        label: a.label,
+        description: a.description ?? '',
+        price: a.customerPrice,
+        pricingUnit: a.pricingUnit ?? BranchPricingMode.FLAT_BAG,
+        isPercentOfService: a.isPercentOfService,
+      }))
+    : config?.addons;
 
-    const enteredWeightKg = Number(form.enteredWeightKg) || undefined;
-    const enteredLoadCount = Number(form.enteredLoadCount) || undefined;
-    const enteredPieceCount = Number(form.enteredPieceCount) || undefined;
+  /** Per-service local quote preview — one entry per selected service, in `form.services` order,
+   * `null` where that service's inputs aren't complete yet. Addons are NOT priced here (each
+   * service is quoted addon-free); they're priced once on the combined total via
+   * `combineServiceQuotes`, same as the server does. */
+  const serviceQuotes = useMemo(() => {
+    return form.services.map((service): QuoteBreakdown | null => {
+      const catalogService = config?.services.find((s) => s.type === service.bookingType);
+      const shopService = resolveShopService(selectedShop, service);
+      const svc =
+        catalogService && shopService ? { ...catalogService, label: shopService.label } : catalogService;
+      const pricingMode = resolveShopPricingMode(selectedShop, service);
 
-    if (shopPricingMode === BranchPricingMode.FLAT_BAG) {
-      if (!form.bagSizeId) return null;
-    } else if (shopPricingMode === BranchPricingMode.PER_KG) {
-      if (!enteredWeightKg) return null;
-    } else if (shopPricingMode === BranchPricingMode.PER_PIECE) {
-      if (!enteredPieceCount) return null;
-    } else if (!enteredWeightKg && !enteredLoadCount) {
-      return null;
-    }
+      const enteredWeightKg = Number(service.enteredWeightKg) || undefined;
+      const enteredLoadCount = Number(service.enteredLoadCount) || undefined;
+      const enteredPieceCount = Number(service.enteredPieceCount) || undefined;
+      const garmentPriced = isGarmentPricedBookingType(service.bookingType);
+      const garmentSelections: GarmentSelection[] = garmentPriced
+        ? Object.entries(service.garmentQuantities)
+            .map(([garmentId, qty]) => ({ garmentId, quantity: Number(qty) || 0 }))
+            .filter((sel) => sel.quantity > 0)
+        : [];
 
-    // Shop-specific addon prices/units when a shop is chosen — falls back to the flat global
-    // catalog before a shop is picked, matching the `addons` render list below.
-    const addonOptions = selectedShop
-      ? selectedShop.addons.map((a) => ({
-          id: a.slug,
-          label: a.label,
-          description: a.description ?? '',
-          price: a.customerPrice,
-          pricingUnit: a.pricingUnit ?? BranchPricingMode.FLAT_BAG,
-        }))
-      : config?.addons;
+      if (garmentPriced) {
+        if (garmentSelections.length === 0) return null;
+      } else if (pricingMode === BranchPricingMode.FLAT_BAG) {
+        if (!service.bagSizeId) return null;
+      } else if (pricingMode === BranchPricingMode.FIXED) {
+        // No customer input needed — the price is fixed regardless of quantity.
+      } else if (pricingMode === BranchPricingMode.PER_KG) {
+        if (!enteredWeightKg) return null;
+      } else if (
+        pricingMode === BranchPricingMode.PER_PIECE ||
+        pricingMode === BranchPricingMode.PER_PAIR ||
+        pricingMode === BranchPricingMode.PER_ITEM
+      ) {
+        if (!enteredPieceCount) return null;
+      } else if (!enteredWeightKg && !enteredLoadCount) {
+        return null;
+      }
 
-    try {
-      return calculateQuote(
-        {
-          bookingType: form.bookingType,
-          bagSizeId: form.bagSizeId || undefined,
-          addonIds: form.addonIds,
-          pricingMode: shopPricingMode,
-          rates: {
-            basePricePerKg: shopService?.basePricePerKg,
-            basePricePerLoad: shopService?.basePricePerLoad,
-            basePricePerPiece: shopService?.basePricePerPiece,
+      try {
+        return calculateQuote(
+          {
+            bookingType: service.bookingType,
+            bagSizeId: service.bagSizeId || undefined,
+            addonIds: [],
+            pricingMode,
+            rates: {
+              basePricePerKg: shopService?.basePricePerKg,
+              basePricePerLoad: shopService?.basePricePerLoad,
+              basePricePerPiece: shopService?.basePricePerPiece,
+              basePricePerPair: shopService?.basePricePerPair,
+              basePricePerItem: shopService?.basePricePerItem,
+              fixedPrice: shopService?.fixedPrice,
+            },
+            enteredWeightKg,
+            enteredLoadCount,
+            enteredPieceCount,
+            garmentSelections,
           },
-          enteredWeightKg,
-          enteredLoadCount,
-          enteredPieceCount,
-        },
-        service,
-        addonOptions,
+          svc,
+          addonOptions,
+        );
+      } catch {
+        return null;
+      }
+    });
+  }, [form.services, config, selectedShop, addonOptions]);
+
+  const localQuote = useMemo<MultiServiceQuoteBreakdown | null>(() => {
+    if (serviceQuotes.length === 0 || serviceQuotes.some((q) => q == null)) return null;
+    try {
+      return combineServiceQuotes(
+        serviceQuotes as QuoteBreakdown[],
+        addonOptions ?? [],
+        form.addonIds,
+        config?.deliveryFee ?? 0,
       );
     } catch {
       return null;
     }
-  }, [
-    form.bookingType,
-    form.customServiceId,
-    form.bagSizeId,
-    form.enteredWeightKg,
-    form.enteredLoadCount,
-    form.enteredPieceCount,
-    form.addonIds,
-    config,
-    selectedShop,
-    selectedShopService,
-    shopPricingMode,
-  ]);
+  }, [serviceQuotes, addonOptions, form.addonIds, selectedShop, config]);
 
   const loadAvailability = useCallback(
     async (addressId: string) => {
@@ -823,17 +962,12 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
   }, [form.addressId, hasRealPartnerCoverage, loadShops]);
 
   async function refreshServerQuote(couponCode = form.couponCode) {
-    if (!form.bookingType || !form.addressId || (!form.branchId && !form.autoDispatch)) return null;
-    const res = await api.post<QuoteBreakdown>(
+    if (form.services.length === 0 || !form.addressId || (!form.branchId && !form.autoDispatch)) return null;
+    const res = await api.post<MultiServiceQuoteBreakdown>(
       `/booking/quote?addressId=${encodeURIComponent(form.addressId)}`,
       {
-        bookingType: form.bookingType,
+        services: form.services.map(serviceSelectionToRequestBody),
         ...(form.branchId ? { branchId: form.branchId } : {}),
-        ...(form.customServiceId ? { customServiceId: form.customServiceId } : {}),
-        ...(form.bagSizeId ? { bagSizeId: form.bagSizeId } : {}),
-        ...(Number(form.enteredWeightKg) ? { enteredWeightKg: Number(form.enteredWeightKg) } : {}),
-        ...(Number(form.enteredLoadCount) ? { enteredLoadCount: Number(form.enteredLoadCount) } : {}),
-        ...(Number(form.enteredPieceCount) ? { enteredPieceCount: Number(form.enteredPieceCount) } : {}),
         addonIds: form.addonIds,
         ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}),
       },
@@ -876,7 +1010,9 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
       else if (step === 'schedule') setError('Select a pickup time');
       else if (step === 'weight') {
         setError(
-          `Minimum order is ${formatCurrency(BOOKING_MIN_ORDER_AMOUNT)}. Choose a bag size to continue.`,
+          form.services.some((s) => isGarmentPricedBookingType(s.bookingType))
+            ? 'Select at least one garment to continue.'
+            : `Minimum order is ${formatCurrency(BOOKING_MIN_ORDER_AMOUNT)}. Choose a bag size to continue.`,
         );
       }
       return;
@@ -926,13 +1062,8 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
     try {
       await refreshServerQuote(form.couponCode);
       const res = await api.post<{ _id: string; total: number }>('/booking/orders', {
-        bookingType: form.bookingType,
+        services: form.services.map(serviceSelectionToRequestBody),
         ...(form.branchId ? { branchId: form.branchId } : {}),
-        ...(form.customServiceId ? { customServiceId: form.customServiceId } : {}),
-        ...(form.bagSizeId ? { bagSizeId: form.bagSizeId } : {}),
-        ...(Number(form.enteredWeightKg) ? { enteredWeightKg: Number(form.enteredWeightKg) } : {}),
-        ...(Number(form.enteredLoadCount) ? { enteredLoadCount: Number(form.enteredLoadCount) } : {}),
-        ...(Number(form.enteredPieceCount) ? { enteredPieceCount: Number(form.enteredPieceCount) } : {}),
         addonIds: form.addonIds,
         pickupAddressId: form.addressId,
         scheduledPickupAt: form.scheduledPickupAt,
@@ -958,6 +1089,9 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
           pricePerKg: s.customerPricePerKg,
           basePricePerLoad: s.basePricePerLoad,
           basePricePerPiece: s.basePricePerPiece,
+          basePricePerPair: s.basePricePerPair,
+          basePricePerItem: s.basePricePerItem,
+          fixedPrice: s.fixedPrice,
           pricingUnit: s.pricingUnit ?? (s.isCustom ? BranchPricingMode.PER_KG : BranchPricingMode.FLAT_BAG),
           minWeightKg: catalogMatch?.minWeightKg ?? 5,
           isCustom: s.isCustom ?? false,
@@ -969,6 +1103,9 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
       ...s,
       basePricePerLoad: undefined,
       basePricePerPiece: undefined,
+      basePricePerPair: undefined,
+      basePricePerItem: undefined,
+      fixedPrice: undefined,
       pricingUnit: BranchPricingMode.FLAT_BAG,
       isCustom: false,
       customServiceId: undefined,
@@ -985,6 +1122,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
           description: a.description ?? catalogMatch?.description ?? '',
           price: a.customerPrice,
           pricingUnit: a.pricingUnit ?? BranchPricingMode.FLAT_BAG,
+          isPercentOfService: a.isPercentOfService,
           imageUrl: catalogMatch?.imageUrl,
           isCustom: a.isCustom ?? false,
         };
@@ -1118,6 +1256,15 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                     if (unit === BranchPricingMode.PER_PIECE && s.basePricePerPiece != null) {
                       return { amount: s.basePricePerPiece, suffix: ' / piece' };
                     }
+                    if (unit === BranchPricingMode.PER_PAIR && s.basePricePerPair != null) {
+                      return { amount: s.basePricePerPair, suffix: ' / pair' };
+                    }
+                    if (unit === BranchPricingMode.PER_ITEM && s.basePricePerItem != null) {
+                      return { amount: s.basePricePerItem, suffix: ' / item' };
+                    }
+                    if (unit === BranchPricingMode.FIXED && s.fixedPrice != null) {
+                      return { amount: s.fixedPrice, suffix: '' };
+                    }
                     if (unit === BranchPricingMode.FLAT_BAG && flatBagFrom != null) {
                       return { amount: flatBagFrom, suffix: '' };
                     }
@@ -1194,8 +1341,8 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
             title="Select service"
             description={
               selectedShop
-                ? `Prices below are what ${selectedShop.name} charges.`
-                : 'Choose the type of laundry service you need.'
+                ? `Select one or more services — prices below are what ${selectedShop.name} charges.`
+                : 'Select one or more laundry services you need.'
             }
           />
           <div className="list-stack">
@@ -1204,8 +1351,8 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                 availableServices.length === 0 || availableServices.includes(s.type);
               const disabled = Boolean(form.addressId && !areaOk);
               const selected = s.isCustom
-                ? form.customServiceId === s.customServiceId
-                : form.bookingType === s.type && !form.customServiceId;
+                ? form.services.some((sel) => sel.customServiceId === s.customServiceId)
+                : form.services.some((sel) => sel.bookingType === s.type && !sel.customServiceId);
               return (
                 <SelectableOption
                   key={s.customServiceId ?? s.type}
@@ -1214,8 +1361,13 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                   onClick={() =>
                     setForm((f) => ({
                       ...f,
-                      bookingType: s.type,
-                      customServiceId: s.customServiceId ?? '',
+                      services: selected
+                        ? f.services.filter((sel) =>
+                            s.isCustom
+                              ? sel.customServiceId !== s.customServiceId
+                              : !(sel.bookingType === s.type && !sel.customServiceId),
+                          )
+                        : [...f.services, newServiceSelection(s.type, s.customServiceId ?? '')],
                     }))
                   }
                 >
@@ -1229,9 +1381,15 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                       ? `${formatCurrency(s.basePricePerLoad)} / load`
                       : s.pricingUnit === BranchPricingMode.PER_PIECE && s.basePricePerPiece != null
                         ? `${formatCurrency(s.basePricePerPiece)} / piece`
-                        : s.pricingUnit === BranchPricingMode.FLAT_BAG
-                          ? 'Priced by bag size'
-                          : `${formatCurrency(s.pricePerKg)} / kg · min ${s.minWeightKg} kg`}
+                        : s.pricingUnit === BranchPricingMode.PER_PAIR && s.basePricePerPair != null
+                          ? `${formatCurrency(s.basePricePerPair)} / pair`
+                          : s.pricingUnit === BranchPricingMode.PER_ITEM && s.basePricePerItem != null
+                            ? `${formatCurrency(s.basePricePerItem)} / item`
+                            : s.pricingUnit === BranchPricingMode.FIXED && s.fixedPrice != null
+                              ? `${formatCurrency(s.fixedPrice)} fixed price`
+                              : s.pricingUnit === BranchPricingMode.FLAT_BAG
+                                ? 'Priced by bag size'
+                                : `${formatCurrency(s.pricePerKg)} / kg · min ${s.minWeightKg} kg`}
                   </p>
                   {disabled && (
                     <p className="mt-2 text-xs text-amber-700">Not available in your area</p>
@@ -1274,144 +1432,329 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
         </section>
       )}
 
-      {step === 'weight' && shopPricingMode === BranchPricingMode.FLAT_BAG && (
-        <section>
-          <StepHeader
-            title="Choose a bag size"
-            description="Same flat price everywhere — drag the slider to your estimated weight and we'll pick the bag that fits. We'll confirm actual weight at pickup."
-          />
-          <div className="grid gap-6 sm:grid-cols-[1.3fr_1fr]">
-            <div>
-              <BagWeightSlider
-                bagSizes={config?.bagSizes ?? []}
-                enteredWeightKg={form.enteredWeightKg}
-                onChange={(raw, bagId) =>
-                  setForm((f) => ({ ...f, enteredWeightKg: raw, bagSizeId: bagId ?? f.bagSizeId }))
-                }
-              />
-              <div className="list-stack mt-4">
-                {(config?.bagSizes ?? []).map((bag) => {
-                  const selected = form.bagSizeId === bag.id;
-                  return (
-                    <button
-                      key={bag.id}
-                      type="button"
-                      onClick={() => setForm((f) => ({ ...f, bagSizeId: bag.id }))}
-                      className={`panel w-full text-left transition-colors ${
-                        selected ? 'ring-2 ring-primary' : 'hover:bg-slate-50'
-                      }`}
-                      aria-pressed={selected}
-                    >
-                      <div className="flex items-center justify-between gap-4">
-                        <div>
-                          <p className="text-base font-semibold text-slate-900">
-                            {bag.label}
-                            {selected && form.enteredWeightKg && (
-                              <span className="badge-accent ml-2 text-xs">Recommended</span>
+      {step === 'weight' &&
+        form.services.map((service, idx) => {
+          const pricingMode = resolveShopPricingMode(selectedShop, service);
+          const garmentPriced = isGarmentPricedBookingType(service.bookingType);
+          const serviceQuote = serviceQuotes[idx] ?? null;
+          const serviceLabel =
+            services.find((s) =>
+              service.customServiceId
+                ? s.customServiceId === service.customServiceId
+                : s.type === service.bookingType && !s.isCustom,
+            )?.label ?? service.bookingType;
+          const updateService = (patch: Partial<ServiceSelectionState>) =>
+            setForm((f) => ({
+              ...f,
+              services: f.services.map((s, i) => (i === idx ? { ...s, ...patch } : s)),
+            }));
+
+          return (
+            <section key={service.customServiceId || `${service.bookingType}-${idx}`} className="mb-8">
+              {form.services.length > 1 && (
+                <h3 className="mb-3 text-base font-semibold text-slate-900">{serviceLabel}</h3>
+              )}
+
+              {garmentPriced && (
+                <>
+                  <StepHeader
+                    title="Select your garments"
+                    description="Pick each garment you're sending in and how many — priced per garment, no estimate needed."
+                  />
+                  {getGarmentCategories().map((category) => {
+                    const garmentsInCategory = GARMENT_CATALOG.filter((g) => g.category === category);
+                    const selectedCount = garmentsInCategory.reduce(
+                      (sum, g) => sum + (Number(service.garmentQuantities[g.id]) || 0),
+                      0,
+                    );
+                    const collapsed = collapsedGarmentCategories.has(category);
+                    return (
+                      <div key={category} className="panel mb-4">
+                        <button
+                          type="button"
+                          className="flex w-full items-center justify-between gap-4"
+                          aria-expanded={!collapsed}
+                          onClick={() =>
+                            setCollapsedGarmentCategories((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(category)) next.delete(category);
+                              else next.add(category);
+                              return next;
+                            })
+                          }
+                        >
+                          <span className="form-label mb-0 flex items-center gap-2">
+                            {category}
+                            {selectedCount > 0 && (
+                              <span className="badge-accent text-xs">{selectedCount} selected</span>
                             )}
-                          </p>
-                          <p className="mt-1 text-sm text-muted">
-                            Up to {bag.capacityKg} kg · {formatMachineLoadLabel(bag.capacityKg)}
-                          </p>
-                        </div>
-                        <p className="text-xl font-bold text-primary">{formatCurrency(bag.price)}</p>
+                          </span>
+                          <span
+                            className={`text-muted transition-transform ${collapsed ? '' : 'rotate-180'}`}
+                            aria-hidden
+                          >
+                            ▾
+                          </span>
+                        </button>
+                        {!collapsed && (
+                          <div className="mt-2 divide-y divide-slate-100">
+                            {garmentsInCategory.map((garment) => {
+                              const qty = Number(service.garmentQuantities[garment.id]) || 0;
+                              return (
+                                <div key={garment.id} className="flex items-center justify-between gap-4 py-2">
+                                  <div>
+                                    <p className="text-sm font-medium text-slate-900">{garment.label}</p>
+                                    <p className="text-xs text-muted">{formatCurrency(garment.price)} each</p>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      disabled={qty <= 0}
+                                      onClick={() =>
+                                        updateService({
+                                          garmentQuantities: {
+                                            ...service.garmentQuantities,
+                                            [garment.id]: String(Math.max(0, qty - 1)),
+                                          },
+                                        })
+                                      }
+                                    >
+                                      −
+                                    </Button>
+                                    <span className="w-6 text-center text-sm font-medium">{qty}</span>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() =>
+                                        updateService({
+                                          garmentQuantities: {
+                                            ...service.garmentQuantities,
+                                            [garment.id]: String(qty + 1),
+                                          },
+                                        })
+                                      }
+                                    >
+                                      +
+                                    </Button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
-                    </button>
+                    );
+                  })}
+                  {serviceQuote && (
+                    <p className="mt-2 text-sm font-medium text-primary">
+                      Subtotal: {formatCurrency(serviceQuote.serviceSubtotal)}
+                    </p>
+                  )}
+                </>
+              )}
+
+              {!garmentPriced && pricingMode === BranchPricingMode.FLAT_BAG && (
+                <>
+                  <StepHeader
+                    title="Choose a bag size"
+                    description="Same flat price everywhere — drag the slider to your estimated weight and we'll pick the bag that fits. We'll confirm actual weight at pickup."
+                  />
+                  <div className="grid gap-6 sm:grid-cols-[1.3fr_1fr]">
+                    <div>
+                      <BagWeightSlider
+                        bagSizes={config?.bagSizes ?? []}
+                        enteredWeightKg={service.enteredWeightKg}
+                        onChange={(raw, bagId) =>
+                          updateService({ enteredWeightKg: raw, bagSizeId: bagId ?? service.bagSizeId })
+                        }
+                      />
+                      <div className="list-stack mt-4">
+                        {(config?.bagSizes ?? []).map((bag) => {
+                          const selected = service.bagSizeId === bag.id;
+                          return (
+                            <button
+                              key={bag.id}
+                              type="button"
+                              onClick={() => updateService({ bagSizeId: bag.id })}
+                              className={`panel w-full text-left transition-colors ${
+                                selected ? 'ring-2 ring-primary' : 'hover:bg-slate-50'
+                              }`}
+                              aria-pressed={selected}
+                            >
+                              <div className="flex items-center justify-between gap-4">
+                                <div>
+                                  <p className="text-base font-semibold text-slate-900">
+                                    {bag.label}
+                                    {selected && service.enteredWeightKg && (
+                                      <span className="badge-accent ml-2 text-xs">Recommended</span>
+                                    )}
+                                  </p>
+                                  <p className="mt-1 text-sm text-muted">
+                                    Up to {bag.capacityKg} kg · {formatMachineLoadLabel(bag.capacityKg)}
+                                  </p>
+                                </div>
+                                <p className="text-xl font-bold text-primary">{formatCurrency(bag.price)}</p>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <BagPreviewCard bagSizes={config?.bagSizes ?? []} bagSizeId={service.bagSizeId} />
+                  </div>
+                </>
+              )}
+
+              {!garmentPriced && pricingMode === BranchPricingMode.PER_KG && (
+                <>
+                  <StepHeader
+                    title="Estimate your weight"
+                    description={`This shop charges per kilo, for loads up to ${BOOKING_PER_KG_MAX_KG} kg (minimum ${BOOKING_MIN_WEIGHT_KG} kg). Heavier loads are billed per machine load instead — ${BOOKING_MACHINE_LOAD_INFO}`}
+                  />
+                  <div className="panel">
+                    <label className="form-label" htmlFor={`entered-weight-${idx}`}>
+                      Estimated weight (kg)
+                    </label>
+                    <WeightSlider
+                      id={`entered-weight-${idx}`}
+                      value={service.enteredWeightKg}
+                      maxKg={BOOKING_PER_KG_MAX_KG}
+                      onChange={(raw) => updateService({ enteredWeightKg: raw })}
+                    />
+                    <BagFitHint weightKg={Number(service.enteredWeightKg) || 0} bagSizes={config?.bagSizes ?? []} />
+                    {service.enteredWeightKg && Number(service.enteredWeightKg) < BOOKING_MIN_WEIGHT_KG && (
+                      <p className="mt-2 text-sm text-red-600">Minimum booking weight is {BOOKING_MIN_WEIGHT_KG} kg.</p>
+                    )}
+                    {Number(service.enteredWeightKg) > BOOKING_PER_KG_MAX_KG && (
+                      <p className="mt-2 text-sm text-amber-600">
+                        Above {BOOKING_PER_KG_MAX_KG} kg counts as{' '}
+                        {formatMachineLoadLabel(Number(service.enteredWeightKg))} instead of per-kg pricing.
+                      </p>
+                    )}
+                    {serviceQuote && (
+                      <p className="mt-3 text-sm font-medium text-primary">
+                        Estimated: {formatCurrency(serviceQuote.serviceSubtotal)}
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {!garmentPriced && pricingMode === BranchPricingMode.PER_LOAD && (
+                <>
+                  <StepHeader
+                    title="Estimate your load count"
+                    description={`This shop charges per machine load — minimum 1 load, up to ${BOOKING_MACHINE_LOAD_MIN_KG} kg. Enter your estimated weight (or load count directly) — we'll confirm the actual load count and final price at pickup. ${BOOKING_MACHINE_LOAD_INFO}`}
+                  />
+                  <div className="panel">
+                    <label className="form-label" htmlFor={`entered-weight-load-${idx}`}>
+                      Estimated weight (kg)
+                    </label>
+                    <WeightSlider
+                      id={`entered-weight-load-${idx}`}
+                      value={service.enteredWeightKg}
+                      onChange={(v) =>
+                        updateService({
+                          enteredWeightKg: v,
+                          enteredLoadCount: v ? String(estimateMachineLoads(Number(v) || 0)) : '',
+                        })
+                      }
+                    />
+                    <p className="mt-2 text-sm text-muted">
+                      {service.enteredLoadCount
+                        ? `${service.enteredLoadCount} machine load${Number(service.enteredLoadCount) === 1 ? '' : 's'}`
+                        : 'kg'}
+                    </p>
+                    <BagFitHint weightKg={Number(service.enteredWeightKg) || 0} bagSizes={config?.bagSizes ?? []} />
+                    {service.enteredWeightKg && Number(service.enteredWeightKg) < BOOKING_MIN_WEIGHT_KG && (
+                      <p className="mt-2 text-sm text-red-600">Minimum booking weight is {BOOKING_MIN_WEIGHT_KG} kg.</p>
+                    )}
+                    {serviceQuote && (
+                      <p className="mt-3 text-sm font-medium text-primary">
+                        Estimated: {formatCurrency(serviceQuote.serviceSubtotal)}
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {!garmentPriced &&
+                (pricingMode === BranchPricingMode.PER_PIECE ||
+                  pricingMode === BranchPricingMode.PER_PAIR ||
+                  pricingMode === BranchPricingMode.PER_ITEM) &&
+                (() => {
+                  const unitNoun =
+                    pricingMode === BranchPricingMode.PER_PAIR
+                      ? 'pair'
+                      : pricingMode === BranchPricingMode.PER_ITEM
+                        ? 'item'
+                        : 'piece';
+                  const perUnitItems = addons.filter((a) => a.pricingUnit === pricingMode);
+                  return (
+                    <>
+                      <StepHeader
+                        title={`Estimate your ${unitNoun} count`}
+                        description={`This shop charges per ${unitNoun}. Enter an estimated ${unitNoun} count now — we'll confirm the actual count and final price at pickup.`}
+                      />
+                      <div className="panel">
+                        <label className="form-label" htmlFor={`entered-pieces-${idx}`}>
+                          Estimated {unitNoun}s
+                        </label>
+                        <input
+                          id={`entered-pieces-${idx}`}
+                          type="number"
+                          min={0}
+                          step="1"
+                          className="input-field w-40"
+                          value={service.enteredPieceCount}
+                          onChange={(e) => updateService({ enteredPieceCount: e.target.value })}
+                        />
+                        {serviceQuote && (
+                          <p className="mt-3 text-sm font-medium text-primary">
+                            Estimated: {formatCurrency(serviceQuote.serviceSubtotal)}
+                          </p>
+                        )}
+                      </div>
+                      {perUnitItems.length > 0 && (
+                        <div className="panel mt-4">
+                          <p className="form-label">Items priced per {unitNoun}</p>
+                          <div className="mt-2 divide-y divide-slate-100">
+                            {perUnitItems.map((item) => (
+                              <div key={item.id} className="flex items-center justify-between gap-4 py-2 text-sm">
+                                <span className="text-slate-700">{item.label}</span>
+                                <span className="font-medium text-slate-900">
+                                  {formatCurrency(item.price)} / {unitNoun}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
                   );
-                })}
-              </div>
-            </div>
-            <BagPreviewCard bagSizes={config?.bagSizes ?? []} bagSizeId={form.bagSizeId} />
-          </div>
-        </section>
-      )}
+                })()}
 
-      {step === 'weight' && shopPricingMode === BranchPricingMode.PER_KG && (
-        <section>
-          <StepHeader
-            title="Estimate your weight"
-            description="This shop charges per kilo. Enter an estimate now — we'll confirm the actual weight and final price at pickup."
-          />
-          <div className="panel">
-            <label className="form-label" htmlFor="entered-weight">
-              Estimated weight (kg)
-            </label>
-            <WeightSlider
-              id="entered-weight"
-              value={form.enteredWeightKg}
-              onChange={(raw) => setForm((f) => ({ ...f, enteredWeightKg: raw }))}
-            />
-            {localQuote && (
-              <p className="mt-3 text-sm font-medium text-primary">
-                Estimated: {formatCurrency(localQuote.serviceSubtotal)}
-              </p>
-            )}
-          </div>
-        </section>
-      )}
-
-      {step === 'weight' && shopPricingMode === BranchPricingMode.PER_LOAD && (
-        <section>
-          <StepHeader
-            title="Estimate your load count"
-            description={`This shop charges per machine load. Enter your estimated weight (or load count directly) — we'll confirm the actual load count and final price at pickup. ${BOOKING_MACHINE_LOAD_INFO}`}
-          />
-          <div className="panel">
-            <label className="form-label" htmlFor="entered-weight-load">
-              Estimated weight (kg)
-            </label>
-            <WeightSlider
-              id="entered-weight-load"
-              value={form.enteredWeightKg}
-              onChange={(v) =>
-                setForm((f) => ({
-                  ...f,
-                  enteredWeightKg: v,
-                  enteredLoadCount: v ? String(estimateMachineLoads(Number(v) || 0)) : '',
-                }))
-              }
-            />
-            <p className="mt-2 text-sm text-muted">
-              {form.enteredLoadCount
-                ? `${form.enteredLoadCount} machine load${Number(form.enteredLoadCount) === 1 ? '' : 's'}`
-                : 'kg'}
-            </p>
-            {localQuote && (
-              <p className="mt-3 text-sm font-medium text-primary">
-                Estimated: {formatCurrency(localQuote.serviceSubtotal)}
-              </p>
-            )}
-          </div>
-        </section>
-      )}
-
-      {step === 'weight' && shopPricingMode === BranchPricingMode.PER_PIECE && (
-        <section>
-          <StepHeader
-            title="Estimate your piece count"
-            description="This shop charges per piece. Enter an estimated piece count now — we'll confirm the actual count and final price at pickup."
-          />
-          <div className="panel">
-            <label className="form-label" htmlFor="entered-pieces">
-              Estimated pieces
-            </label>
-            <input
-              id="entered-pieces"
-              type="number"
-              min={0}
-              step="1"
-              className="input-field w-40"
-              value={form.enteredPieceCount}
-              onChange={(e) => setForm((f) => ({ ...f, enteredPieceCount: e.target.value }))}
-            />
-            {localQuote && (
-              <p className="mt-3 text-sm font-medium text-primary">
-                Estimated: {formatCurrency(localQuote.serviceSubtotal)}
-              </p>
-            )}
-          </div>
-        </section>
-      )}
+              {!garmentPriced && pricingMode === BranchPricingMode.FIXED && (
+                <>
+                  <StepHeader
+                    title="Fixed price service"
+                    description="This shop charges one flat price for this service, regardless of quantity."
+                  />
+                  {serviceQuote && (
+                    <div className="panel">
+                      <p className="text-sm font-medium text-primary">
+                        Price: {formatCurrency(serviceQuote.serviceSubtotal)}
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+            </section>
+          );
+        })}
 
       {step === 'addons' && (
         <section>
@@ -1438,7 +1781,11 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                       ? ' / load'
                       : a.pricingUnit === BranchPricingMode.PER_PIECE
                         ? ' / piece'
-                        : '';
+                        : a.pricingUnit === BranchPricingMode.PER_PAIR
+                          ? ' / pair'
+                          : a.pricingUnit === BranchPricingMode.PER_ITEM
+                            ? ' / item'
+                            : '';
                 return (
                   <SelectableOption
                     key={a.id}
@@ -1452,45 +1799,28 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                       }))
                     }
                   >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex justify-between gap-4">
-                        <span className="font-medium text-slate-900">
-                          {a.label}
-                          {a.isCustom && (
-                            <span className="badge-accent ml-2 text-xs">Shop special</span>
-                          )}
-                        </span>
-                        <span className="shrink-0 font-medium text-primary">
-                          +{formatCurrency(a.price)}
-                          {unitSuffix}
-                        </span>
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <AddonImage imageUrl={a.imageUrl} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex justify-between gap-4">
+                          <span className="font-medium text-slate-900">
+                            {a.label}
+                            {a.isCustom && (
+                              <span className="badge-accent ml-2 text-xs">Shop special</span>
+                            )}
+                          </span>
+                          <span className="shrink-0 font-medium text-primary">
+                            {a.isPercentOfService ? `+${a.price}%` : `+${formatCurrency(a.price)}${unitSuffix}`}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-sm text-muted">{a.description}</p>
                       </div>
-                      <p className="mt-1 text-sm text-muted">{a.description}</p>
                     </div>
                   </SelectableOption>
                 );
               })}
             </div>
           )}
-          {shopPricingMode !== BranchPricingMode.PER_PIECE &&
-            form.addonIds.some(
-              (id) => addons.find((a) => a.id === id)?.pricingUnit === BranchPricingMode.PER_PIECE,
-            ) && (
-              <div className="panel mt-3">
-                <label className="form-label" htmlFor="addon-piece-count">
-                  Piece count{' '}
-                  <span className="font-normal text-muted">(for the per-piece add-on above)</span>
-                </label>
-                <input
-                  id="addon-piece-count"
-                  type="number"
-                  min={0}
-                  className="input-field mt-1 w-32"
-                  value={form.enteredPieceCount}
-                  onChange={(e) => setForm((f) => ({ ...f, enteredPieceCount: e.target.value }))}
-                />
-              </div>
-            )}
         </section>
       )}
 
@@ -1523,7 +1853,10 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
           />
           <div className="panel">
             <dl className="space-y-3 text-sm">
-              <SummaryRow label="Service" value={activeQuote.serviceLabel} />
+              <SummaryRow
+                label={activeQuote.services.length > 1 ? 'Services' : 'Service'}
+                value={activeQuote.services.map((s) => s.serviceLabel).join(', ')}
+              />
               <SummaryRow
                 label="Shop"
                 value={form.autoDispatch ? "Lunara's pick (best available)" : selectedShop?.name ?? 'Selected shop'}
@@ -1533,22 +1866,48 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                 label="Pickup"
                 value={selectedSlot?.label ?? 'Selected slot'}
               />
-              <SummaryRow
-                label={
-                  activeQuote.pricingMode === BranchPricingMode.FLAT_BAG
-                    ? 'Bag size'
-                    : activeQuote.pricingMode === BranchPricingMode.PER_PIECE
-                      ? 'Estimated pieces'
-                      : 'Estimated weight'
-                }
-                value={
-                  activeQuote.pricingMode === BranchPricingMode.FLAT_BAG
-                    ? `${activeQuote.bagLabel} (up to ${activeQuote.weightKg} kg)`
-                    : activeQuote.pricingMode === BranchPricingMode.PER_PIECE
-                      ? `${activeQuote.pieceCount ?? form.enteredPieceCount} pieces`
-                      : `${activeQuote.weightKg} kg`
-                }
-              />
+              {activeQuote.services.map((serviceQuote, idx) =>
+                serviceQuote.garmentSelections?.length ? (
+                  <SummaryRow
+                    key={idx}
+                    label={activeQuote.services.length > 1 ? `${serviceQuote.serviceLabel} — garments` : 'Garments'}
+                    value={serviceQuote.garmentSelections
+                      .map((g) => `${GARMENT_CATALOG.find((c) => c.id === g.garmentId)?.label ?? g.garmentId} ×${g.quantity}`)
+                      .join(', ')}
+                  />
+                ) : (
+                  <SummaryRow
+                    key={idx}
+                    label={
+                      (activeQuote.services.length > 1 ? `${serviceQuote.serviceLabel} — ` : '') +
+                      (serviceQuote.pricingMode === BranchPricingMode.FLAT_BAG
+                        ? 'Bag size'
+                        : serviceQuote.pricingMode === BranchPricingMode.FIXED
+                          ? 'Pricing'
+                          : serviceQuote.pricingMode === BranchPricingMode.PER_PIECE
+                            ? 'Estimated pieces'
+                            : serviceQuote.pricingMode === BranchPricingMode.PER_PAIR
+                              ? 'Estimated pairs'
+                              : serviceQuote.pricingMode === BranchPricingMode.PER_ITEM
+                                ? 'Estimated items'
+                                : 'Estimated weight')
+                    }
+                    value={
+                      serviceQuote.pricingMode === BranchPricingMode.FLAT_BAG
+                        ? `${serviceQuote.bagLabel} (up to ${serviceQuote.weightKg} kg)`
+                        : serviceQuote.pricingMode === BranchPricingMode.FIXED
+                          ? 'Fixed price'
+                          : serviceQuote.pricingMode === BranchPricingMode.PER_PIECE
+                            ? `${serviceQuote.pieceCount ?? 0} pieces`
+                            : serviceQuote.pricingMode === BranchPricingMode.PER_PAIR
+                              ? `${serviceQuote.pieceCount ?? 0} pairs`
+                              : serviceQuote.pricingMode === BranchPricingMode.PER_ITEM
+                                ? `${serviceQuote.pieceCount ?? 0} items`
+                                : `${serviceQuote.weightKg} kg`
+                    }
+                  />
+                ),
+              )}
               {activeQuote.addons.length > 0 && (
                 <SummaryRow
                   label="Add-ons"

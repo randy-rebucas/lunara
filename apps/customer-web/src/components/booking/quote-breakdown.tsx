@@ -1,5 +1,26 @@
-import type { QuoteBreakdown } from '@lunara/utils';
+import type { MultiServiceQuoteBreakdown, QuoteBreakdown } from '@lunara/utils';
 import { BranchPricingMode, formatCurrency } from '@lunara/utils';
+
+function serviceLabelAndDetail(quote: QuoteBreakdown) {
+  const serviceLabel =
+    quote.pricingMode === BranchPricingMode.FLAT_BAG
+      ? `${quote.serviceLabel} — ${quote.bagLabel} bag`
+      : quote.serviceLabel;
+  const serviceDetail = quote.garmentSelections?.length
+    ? `${quote.garmentSelections.reduce((sum, g) => sum + g.quantity, 0)} garment${quote.garmentSelections.length === 1 && quote.garmentSelections[0].quantity === 1 ? '' : 's'}`
+    : quote.pricingMode === BranchPricingMode.FLAT_BAG
+      ? `Up to ${quote.weightKg} kg`
+      : quote.pricingMode === BranchPricingMode.FIXED
+        ? 'Fixed price'
+        : quote.pricingMode === BranchPricingMode.PER_PIECE
+          ? `${quote.pieceCount ?? 0} pieces (estimated)`
+          : quote.pricingMode === BranchPricingMode.PER_PAIR
+            ? `${quote.pieceCount ?? 0} pairs (estimated)`
+            : quote.pricingMode === BranchPricingMode.PER_ITEM
+              ? `${quote.pieceCount ?? 0} items (estimated)`
+              : `${quote.weightKg} kg (estimated)`;
+  return { serviceLabel, serviceDetail };
+}
 
 function BreakdownRow({
   label,
@@ -26,7 +47,7 @@ function BreakdownRow({
 }
 
 interface QuoteBreakdownPanelProps {
-  quote: QuoteBreakdown;
+  quote: MultiServiceQuoteBreakdown;
   showMinimumWarning?: boolean;
   totalLabel?: string;
 }
@@ -36,32 +57,33 @@ export function QuoteBreakdownPanel({
   showMinimumWarning = true,
   totalLabel = 'Estimated total',
 }: QuoteBreakdownPanelProps) {
-  const serviceLabel =
-    quote.pricingMode === BranchPricingMode.FLAT_BAG
-      ? `${quote.serviceLabel} — ${quote.bagLabel} bag`
-      : quote.serviceLabel;
-  const serviceDetail =
-    quote.pricingMode === BranchPricingMode.FLAT_BAG
-      ? `Up to ${quote.weightKg} kg`
-      : quote.pricingMode === BranchPricingMode.PER_PIECE
-        ? `${quote.pieceCount ?? 0} pieces (estimated)`
-        : `${quote.weightKg} kg (estimated)`;
   return (
     <dl className="space-y-2">
-      <BreakdownRow
-        label={serviceLabel}
-        detail={serviceDetail}
-        value={formatCurrency(quote.serviceSubtotal)}
-      />
+      {quote.services.map((serviceQuote, idx) => {
+        const { serviceLabel, serviceDetail } = serviceLabelAndDetail(serviceQuote);
+        return (
+          <BreakdownRow
+            key={idx}
+            label={serviceLabel}
+            detail={serviceDetail}
+            value={formatCurrency(serviceQuote.serviceSubtotal)}
+          />
+        );
+      })}
       {quote.addons.map((addon) => {
-        const detail =
-          addon.unit === BranchPricingMode.PER_KG
+        const detail = addon.percent
+          ? `+${addon.percent}%`
+          : addon.unit === BranchPricingMode.PER_KG
             ? `${addon.quantity ?? 0} kg`
             : addon.unit === BranchPricingMode.PER_LOAD
               ? `×${addon.quantity ?? 0} load${addon.quantity === 1 ? '' : 's'}`
               : addon.unit === BranchPricingMode.PER_PIECE
                 ? `×${addon.quantity ?? 0} piece${addon.quantity === 1 ? '' : 's'}`
-                : undefined;
+                : addon.unit === BranchPricingMode.PER_PAIR
+                  ? `×${addon.quantity ?? 0} pair${addon.quantity === 1 ? '' : 's'}`
+                  : addon.unit === BranchPricingMode.PER_ITEM
+                    ? `×${addon.quantity ?? 0} item${addon.quantity === 1 ? '' : 's'}`
+                    : undefined;
         return (
           <BreakdownRow
             key={addon.id}

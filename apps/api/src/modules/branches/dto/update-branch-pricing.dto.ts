@@ -23,6 +23,21 @@ export class BranchServicePriceDto {
   basePricePerPiece?: number;
 
   @IsOptional()
+  @IsNumber()
+  @Min(0)
+  basePricePerPair?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  basePricePerItem?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  fixedPrice?: number;
+
+  @IsOptional()
   @IsEnum(BranchPricingMode)
   pricingUnit?: BranchPricingMode;
 }

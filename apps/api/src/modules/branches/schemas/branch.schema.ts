@@ -130,6 +130,18 @@ class BranchServicePrice {
   @Prop({ min: 0 })
   basePricePerPiece?: number;
 
+  /** Shop's own price per pair, before Lunara's customer-facing markup. Used when pricingMode = PER_PAIR. */
+  @Prop({ min: 0 })
+  basePricePerPair?: number;
+
+  /** Shop's own price per item, before Lunara's customer-facing markup. Used when pricingMode = PER_ITEM. */
+  @Prop({ min: 0 })
+  basePricePerItem?: number;
+
+  /** Shop's own flat total, before Lunara's customer-facing markup. Used when pricingMode = FIXED. */
+  @Prop({ min: 0 })
+  fixedPrice?: number;
+
   /** How this specific service bills the customer. Falls back to the branch-level `pricingMode`
    * when unset, so branches configured before per-service units existed keep working unchanged. */
   @Prop({ enum: BranchPricingMode })
@@ -158,6 +170,18 @@ class BranchAddonPrice {
   /** Shop's own add-on price per piece, before markup. Used when pricingUnit = PER_PIECE. */
   @Prop({ min: 0 })
   basePricePerPiece?: number;
+
+  /** Shop's own add-on price per pair, before markup. Used when pricingUnit = PER_PAIR. */
+  @Prop({ min: 0 })
+  basePricePerPair?: number;
+
+  /** Shop's own add-on price per item, before markup. Used when pricingUnit = PER_ITEM. */
+  @Prop({ min: 0 })
+  basePricePerItem?: number;
+
+  /** Shop's own flat add-on total, before markup. Used when pricingUnit = FIXED. */
+  @Prop({ min: 0 })
+  fixedPrice?: number;
 
   /** How this add-on bills the customer — flat per order, or scaled by weight/load/piece count.
    * Falls back to FLAT_BAG (today's behavior) when unset. */

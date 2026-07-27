@@ -51,6 +51,9 @@ interface OrderDetail {
   branchId?: string;
   bagSizeId?: string;
   addons?: { id: string }[];
+  /** Garment-priced orders only (see GARMENT_PRICED_BOOKING_TYPES) — must be forwarded when
+   * setting up a recurring pickup for one of these, or the subscription quote is rejected. */
+  garmentSelections?: { garmentId: string; quantity: number }[];
   createdAt?: string;
   pickup?: {
     receiptCode?: string;
@@ -269,9 +272,14 @@ export default function OrderTrackPage() {
       const nextRunAt = new Date(order.scheduledPickupAt);
       nextRunAt.setDate(nextRunAt.getDate() + subscribeFrequencyDays);
       await api.post('/subscriptions', {
-        bookingType: order.bookingType,
+        services: [
+          {
+            bookingType: order.bookingType,
+            ...(order.bagSizeId ? { bagSizeId: order.bagSizeId } : {}),
+            ...(order.garmentSelections?.length ? { garmentSelections: order.garmentSelections } : {}),
+          },
+        ],
         ...(order.branchId ? { branchId: order.branchId } : {}),
-        ...(order.bagSizeId ? { bagSizeId: order.bagSizeId } : {}),
         addonIds: order.addons?.map((a) => a.id) ?? [],
         pickupAddressId: order.pickupAddressId,
         scheduledPickupAt: nextRunAt.toISOString(),

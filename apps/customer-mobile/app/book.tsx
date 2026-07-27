@@ -16,7 +16,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BookingType, PaymentMethod } from '@lunara/types';
 import {
   BOOKING_MACHINE_LOAD_INFO,
+  BOOKING_MACHINE_LOAD_MIN_KG,
   BOOKING_MIN_ORDER_AMOUNT,
+  BOOKING_MIN_WEIGHT_KG,
+  BOOKING_PER_KG_MAX_KG,
   BranchPricingMode,
   estimateMachineLoads,
   EXPRESS_RETURN_ADDON_ID,
@@ -26,11 +29,16 @@ import {
   formatAddressTypeLabel,
   isExpressReturnAllowed,
   getTodayScheduleSummary,
+  getGarmentCategories,
+  GARMENT_CATALOG,
+  isGarmentPricedBookingType,
+  recommendBagForWeight,
   type BagSizeId,
   type BagSizeOption,
   type BookingAddonOption,
   type BranchHoliday,
   type CashTiming,
+  type GarmentSelection,
   type LaundryServiceOption,
   isPickupSlotBookable,
   type PickupSlot,
@@ -105,6 +113,9 @@ interface ShopServiceOption {
   basePricePerKg: number;
   basePricePerLoad?: number;
   basePricePerPiece?: number;
+  basePricePerPair?: number;
+  basePricePerItem?: number;
+  fixedPrice?: number;
   pricingUnit?: BranchPricingMode;
   customerPricePerKg: number;
   isCustom?: boolean;
@@ -118,6 +129,7 @@ interface ShopAddonOption {
   basePrice: number;
   customerPrice: number;
   pricingUnit?: BranchPricingMode;
+  isPercentOfService?: boolean;
   isCustom?: boolean;
   customAddonId?: string;
 }
@@ -169,6 +181,15 @@ const ADDON_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   express_delivery: 'flash-outline',
 };
 const ADDON_ICON_FALLBACK: keyof typeof Ionicons.glyphMap = 'pricetag-outline';
+
+/** Non-empty garmentSelections payload for garment-priced booking types, else undefined. */
+function buildGarmentSelectionsPayload(form: BookingFormState): GarmentSelection[] | undefined {
+  if (!form.bookingType || !isGarmentPricedBookingType(form.bookingType)) return undefined;
+  const selections = Object.entries(form.garmentQuantities)
+    .map(([garmentId, qty]) => ({ garmentId, quantity: Number(qty) || 0 }))
+    .filter((sel) => sel.quantity > 0);
+  return selections.length > 0 ? selections : undefined;
+}
 
 export default function BookScreen() {
   const insets = useSafeAreaInsets();
@@ -326,6 +347,9 @@ export default function BookScreen() {
           pricePerKg: s.customerPricePerKg,
           basePricePerLoad: s.basePricePerLoad,
           basePricePerPiece: s.basePricePerPiece,
+          basePricePerPair: s.basePricePerPair,
+          basePricePerItem: s.basePricePerItem,
+          fixedPrice: s.fixedPrice,
           pricingUnit: s.pricingUnit ?? (s.isCustom ? BranchPricingMode.PER_KG : BranchPricingMode.FLAT_BAG),
           minWeightKg: catalogMatch?.minWeightKg ?? 5,
           isCustom: s.isCustom ?? false,
@@ -337,6 +361,9 @@ export default function BookScreen() {
       ...s,
       basePricePerLoad: undefined,
       basePricePerPiece: undefined,
+      basePricePerPair: undefined,
+      basePricePerItem: undefined,
+      fixedPrice: undefined,
       pricingUnit: BranchPricingMode.FLAT_BAG,
       isCustom: false,
       customServiceId: undefined,
@@ -353,6 +380,7 @@ export default function BookScreen() {
           description: a.description ?? catalogMatch?.description ?? '',
           price: a.customerPrice,
           pricingUnit: a.pricingUnit ?? BranchPricingMode.FLAT_BAG,
+          isPercentOfService: a.isPercentOfService,
           imageUrl: catalogMatch?.imageUrl,
           isCustom: a.isCustom ?? false,
         };
@@ -385,12 +413,26 @@ export default function BookScreen() {
     const enteredWeightKg = Number(form.enteredWeightKg) || undefined;
     const enteredLoadCount = Number(form.enteredLoadCount) || undefined;
     const enteredPieceCount = Number(form.enteredPieceCount) || undefined;
+    const garmentPriced = isGarmentPricedBookingType(form.bookingType);
+    const garmentSelections: GarmentSelection[] = garmentPriced
+      ? Object.entries(form.garmentQuantities)
+          .map(([garmentId, qty]) => ({ garmentId, quantity: Number(qty) || 0 }))
+          .filter((sel) => sel.quantity > 0)
+      : [];
 
-    if (shopPricingMode === BranchPricingMode.FLAT_BAG) {
+    if (garmentPriced) {
+      if (garmentSelections.length === 0) return null;
+    } else if (shopPricingMode === BranchPricingMode.FLAT_BAG) {
       if (!form.bagSizeId) return null;
+    } else if (shopPricingMode === BranchPricingMode.FIXED) {
+      // No customer input needed — the price is fixed regardless of quantity.
     } else if (shopPricingMode === BranchPricingMode.PER_KG) {
       if (!enteredWeightKg) return null;
-    } else if (shopPricingMode === BranchPricingMode.PER_PIECE) {
+    } else if (
+      shopPricingMode === BranchPricingMode.PER_PIECE ||
+      shopPricingMode === BranchPricingMode.PER_PAIR ||
+      shopPricingMode === BranchPricingMode.PER_ITEM
+    ) {
       if (!enteredPieceCount) return null;
     } else if (!enteredWeightKg && !enteredLoadCount) {
       return null;
@@ -405,6 +447,7 @@ export default function BookScreen() {
           description: a.description ?? '',
           price: a.customerPrice,
           pricingUnit: a.pricingUnit ?? BranchPricingMode.FLAT_BAG,
+          isPercentOfService: a.isPercentOfService,
         }))
       : config?.addons;
 
@@ -419,10 +462,14 @@ export default function BookScreen() {
             basePricePerKg: shopService?.basePricePerKg,
             basePricePerLoad: shopService?.basePricePerLoad,
             basePricePerPiece: shopService?.basePricePerPiece,
+            basePricePerPair: shopService?.basePricePerPair,
+            basePricePerItem: shopService?.basePricePerItem,
+            fixedPrice: shopService?.fixedPrice,
           },
           enteredWeightKg,
           enteredLoadCount,
           enteredPieceCount,
+          garmentSelections,
         },
         service,
         addonOptions,
@@ -437,6 +484,7 @@ export default function BookScreen() {
     form.enteredWeightKg,
     form.enteredLoadCount,
     form.enteredPieceCount,
+    form.garmentQuantities,
     form.addonIds,
     config?.services,
     config?.addons,
@@ -543,13 +591,18 @@ export default function BookScreen() {
       {
         method: 'POST',
         body: JSON.stringify({
-          bookingType: form.bookingType,
+          services: [
+            {
+              bookingType: form.bookingType,
+              ...(form.customServiceId ? { customServiceId: form.customServiceId } : {}),
+              ...(form.bagSizeId ? { bagSizeId: form.bagSizeId } : {}),
+              ...(Number(form.enteredWeightKg) ? { enteredWeightKg: Number(form.enteredWeightKg) } : {}),
+              ...(Number(form.enteredLoadCount) ? { enteredLoadCount: Number(form.enteredLoadCount) } : {}),
+              ...(Number(form.enteredPieceCount) ? { enteredPieceCount: Number(form.enteredPieceCount) } : {}),
+              ...(buildGarmentSelectionsPayload(form) ? { garmentSelections: buildGarmentSelectionsPayload(form) } : {}),
+            },
+          ],
           ...(form.branchId ? { branchId: form.branchId } : {}),
-          ...(form.customServiceId ? { customServiceId: form.customServiceId } : {}),
-          ...(form.bagSizeId ? { bagSizeId: form.bagSizeId } : {}),
-          ...(Number(form.enteredWeightKg) ? { enteredWeightKg: Number(form.enteredWeightKg) } : {}),
-          ...(Number(form.enteredLoadCount) ? { enteredLoadCount: Number(form.enteredLoadCount) } : {}),
-          ...(Number(form.enteredPieceCount) ? { enteredPieceCount: Number(form.enteredPieceCount) } : {}),
           addonIds: form.addonIds,
           ...(form.scheduledPickupAt ? { scheduledPickupAt: form.scheduledPickupAt } : {}),
           ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}),
@@ -619,12 +672,34 @@ export default function BookScreen() {
       return;
     }
     if (step === 'weight') {
-      if (shopPricingMode === BranchPricingMode.FLAT_BAG && !form.bagSizeId) {
+      const garmentPriced = Boolean(form.bookingType && isGarmentPricedBookingType(form.bookingType));
+      if (garmentPriced) {
+        const hasSelection = Object.values(form.garmentQuantities).some((q) => Number(q) > 0);
+        if (!hasSelection) {
+          setError('Select at least one garment');
+          return;
+        }
+      } else if (shopPricingMode === BranchPricingMode.FLAT_BAG && !form.bagSizeId) {
         setError('Choose a bag size');
         return;
       }
-      if (shopPricingMode === BranchPricingMode.PER_KG && !Number(form.enteredWeightKg)) {
+      if (!garmentPriced && shopPricingMode === BranchPricingMode.PER_KG && !Number(form.enteredWeightKg)) {
         setError('Enter the estimated weight');
+        return;
+      }
+      if (
+        (shopPricingMode === BranchPricingMode.PER_KG || shopPricingMode === BranchPricingMode.PER_LOAD) &&
+        Number(form.enteredWeightKg) &&
+        Number(form.enteredWeightKg) < BOOKING_MIN_WEIGHT_KG
+      ) {
+        setError(`Minimum booking weight is ${BOOKING_MIN_WEIGHT_KG} kg`);
+        return;
+      }
+      if (
+        shopPricingMode === BranchPricingMode.PER_KG &&
+        Number(form.enteredWeightKg) > BOOKING_PER_KG_MAX_KG
+      ) {
+        setError(`Per-kg pricing only covers up to ${BOOKING_PER_KG_MAX_KG} kg`);
         return;
       }
       if (
@@ -635,8 +710,14 @@ export default function BookScreen() {
         setError('Enter the estimated weight or load count');
         return;
       }
-      if (shopPricingMode === BranchPricingMode.PER_PIECE && !Number(form.enteredPieceCount)) {
-        setError('Enter the piece count');
+      if (
+        !garmentPriced &&
+        (shopPricingMode === BranchPricingMode.PER_PIECE ||
+          shopPricingMode === BranchPricingMode.PER_PAIR ||
+          shopPricingMode === BranchPricingMode.PER_ITEM) &&
+        !Number(form.enteredPieceCount)
+      ) {
+        setError('Enter the count');
         return;
       }
     }
@@ -696,13 +777,18 @@ export default function BookScreen() {
       const order = await apiFetch<{ _id: string; total: number }>('/booking/orders', {
         method: 'POST',
         body: JSON.stringify({
-          bookingType: form.bookingType,
+          services: [
+            {
+              bookingType: form.bookingType,
+              ...(form.customServiceId ? { customServiceId: form.customServiceId } : {}),
+              ...(form.bagSizeId ? { bagSizeId: form.bagSizeId } : {}),
+              ...(Number(form.enteredWeightKg) ? { enteredWeightKg: Number(form.enteredWeightKg) } : {}),
+              ...(Number(form.enteredLoadCount) ? { enteredLoadCount: Number(form.enteredLoadCount) } : {}),
+              ...(Number(form.enteredPieceCount) ? { enteredPieceCount: Number(form.enteredPieceCount) } : {}),
+              ...(buildGarmentSelectionsPayload(form) ? { garmentSelections: buildGarmentSelectionsPayload(form) } : {}),
+            },
+          ],
           ...(form.branchId ? { branchId: form.branchId } : {}),
-          ...(form.customServiceId ? { customServiceId: form.customServiceId } : {}),
-          ...(form.bagSizeId ? { bagSizeId: form.bagSizeId } : {}),
-          ...(Number(form.enteredWeightKg) ? { enteredWeightKg: Number(form.enteredWeightKg) } : {}),
-          ...(Number(form.enteredLoadCount) ? { enteredLoadCount: Number(form.enteredLoadCount) } : {}),
-          ...(Number(form.enteredPieceCount) ? { enteredPieceCount: Number(form.enteredPieceCount) } : {}),
           addonIds: form.addonIds,
           pickupAddressId: form.addressId,
           scheduledPickupAt: form.scheduledPickupAt,
@@ -935,6 +1021,15 @@ export default function BookScreen() {
                       if (unit === BranchPricingMode.PER_PIECE && s.basePricePerPiece != null) {
                         return { amount: s.basePricePerPiece, suffix: ' / piece' };
                       }
+                      if (unit === BranchPricingMode.PER_PAIR && s.basePricePerPair != null) {
+                        return { amount: s.basePricePerPair, suffix: ' / pair' };
+                      }
+                      if (unit === BranchPricingMode.PER_ITEM && s.basePricePerItem != null) {
+                        return { amount: s.basePricePerItem, suffix: ' / item' };
+                      }
+                      if (unit === BranchPricingMode.FIXED && s.fixedPrice != null) {
+                        return { amount: s.fixedPrice, suffix: '' };
+                      }
                       if (unit === BranchPricingMode.FLAT_BAG && flatBagFrom != null) {
                         return { amount: flatBagFrom, suffix: '' };
                       }
@@ -1084,9 +1179,15 @@ export default function BookScreen() {
                         ? `${formatCurrency(s.basePricePerLoad)} / load`
                         : s.pricingUnit === BranchPricingMode.PER_PIECE && s.basePricePerPiece != null
                           ? `${formatCurrency(s.basePricePerPiece)} / piece`
-                          : s.pricingUnit === BranchPricingMode.FLAT_BAG
-                            ? 'Priced by bag size'
-                            : `${formatCurrency(s.pricePerKg)} / kg · min ${s.minWeightKg} kg`}
+                          : s.pricingUnit === BranchPricingMode.PER_PAIR && s.basePricePerPair != null
+                            ? `${formatCurrency(s.basePricePerPair)} / pair`
+                            : s.pricingUnit === BranchPricingMode.PER_ITEM && s.basePricePerItem != null
+                              ? `${formatCurrency(s.basePricePerItem)} / item`
+                              : s.pricingUnit === BranchPricingMode.FIXED && s.fixedPrice != null
+                                ? `${formatCurrency(s.fixedPrice)} fixed price`
+                                : s.pricingUnit === BranchPricingMode.FLAT_BAG
+                                  ? 'Priced by bag size'
+                                  : `${formatCurrency(s.pricePerKg)} / kg · min ${s.minWeightKg} kg`}
                     </Text>
                   </Pressable>
                 );
@@ -1131,7 +1232,74 @@ export default function BookScreen() {
             </View>
           )}
 
-          {step === 'weight' && shopPricingMode === BranchPricingMode.FLAT_BAG && (
+          {step === 'weight' && form.bookingType && isGarmentPricedBookingType(form.bookingType) && (
+            <View>
+              <StepHeading step="weight" title="Select your garments" />
+              <Text style={styles.sub}>
+                Pick each garment you&apos;re sending in and how many — priced per garment, no estimate needed.
+              </Text>
+              {getGarmentCategories().map((category) => (
+                <View key={category} style={styles.garmentCategoryCard}>
+                  <Text style={styles.optionTitle}>{category}</Text>
+                  {GARMENT_CATALOG.filter((g) => g.category === category).map((garment, i) => {
+                    const qty = Number(form.garmentQuantities[garment.id]) || 0;
+                    return (
+                      <View
+                        key={garment.id}
+                        style={[styles.garmentRow, i === 0 && styles.garmentRowFirst]}
+                      >
+                        <View>
+                          <Text style={styles.optionSub}>{garment.label}</Text>
+                          <Text style={styles.optionSub}>{formatCurrency(garment.price)} each</Text>
+                        </View>
+                        <View style={styles.garmentQtyRow}>
+                          <Pressable
+                            style={styles.garmentQtyBtn}
+                            disabled={qty <= 0}
+                            onPress={() =>
+                              setForm((f) => ({
+                                ...f,
+                                garmentQuantities: {
+                                  ...f.garmentQuantities,
+                                  [garment.id]: String(Math.max(0, qty - 1)),
+                                },
+                              }))
+                            }
+                          >
+                            <Ionicons name="remove" size={16} color={colors.foreground} />
+                          </Pressable>
+                          <Text style={styles.garmentQtyValue}>{qty}</Text>
+                          <Pressable
+                            style={styles.garmentQtyBtn}
+                            onPress={() =>
+                              setForm((f) => ({
+                                ...f,
+                                garmentQuantities: {
+                                  ...f.garmentQuantities,
+                                  [garment.id]: String(qty + 1),
+                                },
+                              }))
+                            }
+                          >
+                            <Ionicons name="add" size={16} color={colors.foreground} />
+                          </Pressable>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              ))}
+              {localQuote ? (
+                <Text style={styles.optionPrice}>
+                  Subtotal: {formatCurrency(localQuote.serviceSubtotal)}
+                </Text>
+              ) : null}
+            </View>
+          )}
+
+          {step === 'weight' &&
+            !(form.bookingType && isGarmentPricedBookingType(form.bookingType)) &&
+            shopPricingMode === BranchPricingMode.FLAT_BAG && (
             <View>
               <StepHeading step="weight" title="Choose a bag size" />
               <Text style={styles.sub}>
@@ -1168,22 +1336,41 @@ export default function BookScreen() {
             </View>
           )}
 
-          {step === 'weight' && shopPricingMode === BranchPricingMode.PER_KG && (
+          {step === 'weight' &&
+            !(form.bookingType && isGarmentPricedBookingType(form.bookingType)) &&
+            shopPricingMode === BranchPricingMode.PER_KG && (
             <View>
               <StepHeading step="weight" title="Estimate your weight" />
               <Text style={styles.sub}>
-                This shop charges per kilo. Enter an estimate now — we&apos;ll confirm the actual
-                weight and final price at pickup. Min order{' '}
-                {formatCurrency(config?.minOrderAmount ?? BOOKING_MIN_ORDER_AMOUNT)}.
+                This shop charges per kilo, for loads up to {BOOKING_PER_KG_MAX_KG} kg (minimum{' '}
+                {BOOKING_MIN_WEIGHT_KG} kg). Heavier loads are billed per machine load instead —{' '}
+                {BOOKING_MACHINE_LOAD_INFO}
               </Text>
               <TextInput
                 style={styles.weightInput}
                 keyboardType="decimal-pad"
-                placeholder="e.g. 6"
+                placeholder="e.g. 4"
                 value={form.enteredWeightKg}
                 onChangeText={(v) => setForm((f) => ({ ...f, enteredWeightKg: v }))}
               />
               <Text style={styles.optionSub}>kg</Text>
+              {(() => {
+                const bag = recommendBagForWeight(Number(form.enteredWeightKg) || 0, config?.bagSizes ?? []);
+                return bag ? (
+                  <Text style={styles.optionSub}>
+                    That's roughly a {bag.label} bag (up to {bag.capacityKg} kg).
+                  </Text>
+                ) : null;
+              })()}
+              {Number(form.enteredWeightKg) > 0 && Number(form.enteredWeightKg) < BOOKING_MIN_WEIGHT_KG ? (
+                <Text style={styles.error}>Minimum booking weight is {BOOKING_MIN_WEIGHT_KG} kg.</Text>
+              ) : null}
+              {Number(form.enteredWeightKg) > BOOKING_PER_KG_MAX_KG ? (
+                <Text style={styles.error}>
+                  Above {BOOKING_PER_KG_MAX_KG} kg counts as{' '}
+                  {formatMachineLoadLabel(Number(form.enteredWeightKg))} instead of per-kg pricing.
+                </Text>
+              ) : null}
               {localQuote ? (
                 <Text style={styles.optionPrice}>
                   Estimated: {formatCurrency(localQuote.serviceSubtotal)}
@@ -1192,14 +1379,15 @@ export default function BookScreen() {
             </View>
           )}
 
-          {step === 'weight' && shopPricingMode === BranchPricingMode.PER_LOAD && (
+          {step === 'weight' &&
+            !(form.bookingType && isGarmentPricedBookingType(form.bookingType)) &&
+            shopPricingMode === BranchPricingMode.PER_LOAD && (
             <View>
               <StepHeading step="weight" title="Estimate your load count" />
               <Text style={styles.sub}>
-                This shop charges per machine load. Enter your estimated weight (or load count
-                directly) — we&apos;ll confirm the actual load count and final price at pickup.{' '}
-                {BOOKING_MACHINE_LOAD_INFO} Min order{' '}
-                {formatCurrency(config?.minOrderAmount ?? BOOKING_MIN_ORDER_AMOUNT)}.
+                This shop charges per machine load — minimum 1 load, up to {BOOKING_MACHINE_LOAD_MIN_KG}{' '}
+                kg. Enter your estimated weight (or load count directly) — we&apos;ll confirm the actual
+                load count and final price at pickup. {BOOKING_MACHINE_LOAD_INFO}
               </Text>
               <TextInput
                 style={styles.weightInput}
@@ -1219,6 +1407,17 @@ export default function BookScreen() {
                   ? `${form.enteredLoadCount} machine load${Number(form.enteredLoadCount) === 1 ? '' : 's'}`
                   : 'kg'}
               </Text>
+              {(() => {
+                const bag = recommendBagForWeight(Number(form.enteredWeightKg) || 0, config?.bagSizes ?? []);
+                return bag ? (
+                  <Text style={styles.optionSub}>
+                    That's roughly a {bag.label} bag (up to {bag.capacityKg} kg).
+                  </Text>
+                ) : null;
+              })()}
+              {Number(form.enteredWeightKg) > 0 && Number(form.enteredWeightKg) < BOOKING_MIN_WEIGHT_KG ? (
+                <Text style={styles.error}>Minimum booking weight is {BOOKING_MIN_WEIGHT_KG} kg.</Text>
+              ) : null}
               {localQuote ? (
                 <Text style={styles.optionPrice}>
                   Estimated: {formatCurrency(localQuote.serviceSubtotal)}
@@ -1227,26 +1426,67 @@ export default function BookScreen() {
             </View>
           )}
 
-          {step === 'weight' && shopPricingMode === BranchPricingMode.PER_PIECE && (
+          {step === 'weight' &&
+            !(form.bookingType && isGarmentPricedBookingType(form.bookingType)) &&
+            (shopPricingMode === BranchPricingMode.PER_PIECE ||
+              shopPricingMode === BranchPricingMode.PER_PAIR ||
+              shopPricingMode === BranchPricingMode.PER_ITEM) &&
+            (() => {
+              const unitNoun =
+                shopPricingMode === BranchPricingMode.PER_PAIR
+                  ? 'pair'
+                  : shopPricingMode === BranchPricingMode.PER_ITEM
+                    ? 'item'
+                    : 'piece';
+              const perUnitItems = addons.filter((a) => a.pricingUnit === shopPricingMode);
+              return (
+                <View>
+                  <StepHeading step="weight" title={`Estimate your ${unitNoun} count`} />
+                  <Text style={styles.sub}>
+                    This shop charges per {unitNoun}. Enter an estimated {unitNoun} count now — we&apos;ll
+                    confirm the actual count and final price at pickup. Min order{' '}
+                    {formatCurrency(config?.minOrderAmount ?? BOOKING_MIN_ORDER_AMOUNT)}.
+                  </Text>
+                  <TextInput
+                    style={styles.weightInput}
+                    keyboardType="number-pad"
+                    placeholder="e.g. 4"
+                    value={form.enteredPieceCount}
+                    onChangeText={(v) => setForm((f) => ({ ...f, enteredPieceCount: v }))}
+                  />
+                  <Text style={styles.optionSub}>{unitNoun}s</Text>
+                  {localQuote ? (
+                    <Text style={styles.optionPrice}>
+                      Estimated: {formatCurrency(localQuote.serviceSubtotal)}
+                    </Text>
+                  ) : null}
+                  {perUnitItems.length > 0 ? (
+                    <View style={{ marginTop: spacing.md }}>
+                      <Text style={styles.optionTitle}>Items priced per {unitNoun}</Text>
+                      {perUnitItems.map((item) => (
+                        <View key={item.id} style={styles.addonRow}>
+                          <Text style={styles.optionSub}>{item.label}</Text>
+                          <Text style={styles.optionSub}>
+                            {formatCurrency(item.price)} / {unitNoun}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })()}
+
+          {step === 'weight' &&
+            !(form.bookingType && isGarmentPricedBookingType(form.bookingType)) &&
+            shopPricingMode === BranchPricingMode.FIXED && (
             <View>
-              <StepHeading step="weight" title="Estimate your piece count" />
+              <StepHeading step="weight" title="Fixed price service" />
               <Text style={styles.sub}>
-                This shop charges per piece. Enter an estimated piece count now — we&apos;ll
-                confirm the actual count and final price at pickup. Min order{' '}
-                {formatCurrency(config?.minOrderAmount ?? BOOKING_MIN_ORDER_AMOUNT)}.
+                This shop charges one flat price for this service, regardless of quantity.
               </Text>
-              <TextInput
-                style={styles.weightInput}
-                keyboardType="number-pad"
-                placeholder="e.g. 4"
-                value={form.enteredPieceCount}
-                onChangeText={(v) => setForm((f) => ({ ...f, enteredPieceCount: v }))}
-              />
-              <Text style={styles.optionSub}>pieces</Text>
               {localQuote ? (
-                <Text style={styles.optionPrice}>
-                  Estimated: {formatCurrency(localQuote.serviceSubtotal)}
-                </Text>
+                <Text style={styles.optionPrice}>Price: {formatCurrency(localQuote.serviceSubtotal)}</Text>
               ) : null}
             </View>
           )}
@@ -1268,7 +1508,11 @@ export default function BookScreen() {
                         ? ' / load'
                         : a.pricingUnit === BranchPricingMode.PER_PIECE
                           ? ' / piece'
-                          : '';
+                          : a.pricingUnit === BranchPricingMode.PER_PAIR
+                            ? ' / pair'
+                            : a.pricingUnit === BranchPricingMode.PER_ITEM
+                              ? ' / item'
+                              : '';
                   return (
                     <Pressable
                       key={a.id}
@@ -1303,8 +1547,7 @@ export default function BookScreen() {
                             <Text style={styles.optionTitle}>{a.label}</Text>
                             <View style={styles.addonRight}>
                               <Text style={styles.addonPrice}>
-                                +{formatCurrency(a.price)}
-                                {unitSuffix}
+                                {a.isPercentOfService ? `+${a.price}%` : `+${formatCurrency(a.price)}${unitSuffix}`}
                               </Text>
                               {selected ? (
                                 <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
@@ -1324,9 +1567,16 @@ export default function BookScreen() {
                 })
               )}
               {shopPricingMode !== BranchPricingMode.PER_PIECE &&
-              form.addonIds.some(
-                (id) => addons.find((a) => a.id === id)?.pricingUnit === BranchPricingMode.PER_PIECE,
-              ) ? (
+              shopPricingMode !== BranchPricingMode.PER_PAIR &&
+              shopPricingMode !== BranchPricingMode.PER_ITEM &&
+              form.addonIds.some((id) => {
+                const unit = addons.find((a) => a.id === id)?.pricingUnit;
+                return (
+                  unit === BranchPricingMode.PER_PIECE ||
+                  unit === BranchPricingMode.PER_PAIR ||
+                  unit === BranchPricingMode.PER_ITEM
+                );
+              }) ? (
                 <View style={{ marginTop: 12 }}>
                   <Text style={styles.optionSub}>Piece count (for the per-piece add-on above)</Text>
                   <TextInput
@@ -1394,14 +1644,19 @@ export default function BookScreen() {
                   <Text>{formatCurrency(activeQuote.serviceSubtotal)}</Text>
                 </View>
                 {activeQuote.addons.map((a) => {
-                  const detail =
-                    a.unit === BranchPricingMode.PER_KG
+                  const detail = a.percent
+                    ? `${a.label} (+${a.percent}%)`
+                    : a.unit === BranchPricingMode.PER_KG
                       ? `${a.label} (${a.quantity ?? 0} kg)`
                       : a.unit === BranchPricingMode.PER_LOAD
                         ? `${a.label} (×${a.quantity ?? 0} load${a.quantity === 1 ? '' : 's'})`
                         : a.unit === BranchPricingMode.PER_PIECE
                           ? `${a.label} (×${a.quantity ?? 0} piece${a.quantity === 1 ? '' : 's'})`
-                          : a.label;
+                          : a.unit === BranchPricingMode.PER_PAIR
+                            ? `${a.label} (×${a.quantity ?? 0} pair${a.quantity === 1 ? '' : 's'})`
+                            : a.unit === BranchPricingMode.PER_ITEM
+                              ? `${a.label} (×${a.quantity ?? 0} item${a.quantity === 1 ? '' : 's'})`
+                              : a.label;
                   return (
                     <View key={a.id} style={styles.estimateRow}>
                       <Text style={styles.estimateLabelMuted}>{detail}</Text>
@@ -1448,17 +1703,35 @@ export default function BookScreen() {
                 </Text>
                 <Text style={styles.summaryLine}>
                   <Text style={styles.summaryMuted}>
-                    {activeQuote.pricingMode === BranchPricingMode.FLAT_BAG
-                      ? 'Bag size: '
-                      : activeQuote.pricingMode === BranchPricingMode.PER_PIECE
-                        ? 'Estimated pieces: '
-                        : 'Estimated weight: '}
+                    {activeQuote.garmentSelections?.length
+                      ? 'Garments: '
+                      : activeQuote.pricingMode === BranchPricingMode.FLAT_BAG
+                        ? 'Bag size: '
+                        : activeQuote.pricingMode === BranchPricingMode.FIXED
+                          ? 'Pricing: '
+                          : activeQuote.pricingMode === BranchPricingMode.PER_PIECE
+                            ? 'Estimated pieces: '
+                            : activeQuote.pricingMode === BranchPricingMode.PER_PAIR
+                              ? 'Estimated pairs: '
+                              : activeQuote.pricingMode === BranchPricingMode.PER_ITEM
+                                ? 'Estimated items: '
+                                : 'Estimated weight: '}
                   </Text>
-                  {activeQuote.pricingMode === BranchPricingMode.FLAT_BAG
-                    ? `${activeQuote.bagLabel} (up to ${activeQuote.weightKg} kg)`
-                    : activeQuote.pricingMode === BranchPricingMode.PER_PIECE
-                      ? `${activeQuote.pieceCount ?? form.enteredPieceCount} pieces`
-                      : `${activeQuote.weightKg} kg`}
+                  {activeQuote.garmentSelections?.length
+                    ? activeQuote.garmentSelections
+                        .map((g) => `${GARMENT_CATALOG.find((c) => c.id === g.garmentId)?.label ?? g.garmentId} ×${g.quantity}`)
+                        .join(', ')
+                    : activeQuote.pricingMode === BranchPricingMode.FLAT_BAG
+                      ? `${activeQuote.bagLabel} (up to ${activeQuote.weightKg} kg)`
+                      : activeQuote.pricingMode === BranchPricingMode.FIXED
+                        ? 'Fixed price'
+                        : activeQuote.pricingMode === BranchPricingMode.PER_PIECE
+                          ? `${activeQuote.pieceCount ?? form.enteredPieceCount} pieces`
+                          : activeQuote.pricingMode === BranchPricingMode.PER_PAIR
+                            ? `${activeQuote.pieceCount ?? form.enteredPieceCount} pairs`
+                            : activeQuote.pricingMode === BranchPricingMode.PER_ITEM
+                              ? `${activeQuote.pieceCount ?? form.enteredPieceCount} items`
+                              : `${activeQuote.weightKg} kg`}
                 </Text>
                 <Text style={styles.summaryLine}>
                   <Text style={styles.summaryMuted}>Pickup: </Text>
@@ -1736,4 +2009,32 @@ const styles = StyleSheet.create({
   primaryBtn: { flex: 2 },
   btnDisabled: { opacity: 0.6 },
   linkPressed: { opacity: 0.7 },
+  garmentCategoryCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  garmentRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  garmentRowFirst: { borderTopWidth: 0 },
+  garmentQtyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  garmentQtyBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  garmentQtyValue: { minWidth: 24, textAlign: 'center', fontWeight: '600', fontSize: 15 },
 });

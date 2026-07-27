@@ -24,14 +24,16 @@ export class SubscriptionsService {
     // subscription can never be saved with a branch/address/addon combo that wouldn't book.
     await this.bookingService.prepareOrderPayload(userId, dto);
 
+    // Subscriptions re-book a single recurring service — the primary (first) selected service.
+    const primary = dto.services[0];
     const subscription = await this.subscriptionModel.create({
       userId: new Types.ObjectId(userId),
-      bookingType: dto.bookingType,
+      bookingType: primary.bookingType,
       branchId: dto.branchId,
-      bagSizeId: dto.bagSizeId,
-      enteredWeightKg: dto.enteredWeightKg,
-      enteredLoadCount: dto.enteredLoadCount,
-      enteredPieceCount: dto.enteredPieceCount,
+      bagSizeId: primary.bagSizeId,
+      enteredWeightKg: primary.enteredWeightKg,
+      enteredLoadCount: primary.enteredLoadCount,
+      enteredPieceCount: primary.enteredPieceCount,
       addonIds: dto.addonIds ?? [],
       couponCode: dto.couponCode,
       pickupAddressId: dto.pickupAddressId,

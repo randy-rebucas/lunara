@@ -95,6 +95,8 @@ export class CatalogService {
 
       description: doc.description,
 
+      category: doc.category,
+
       pricePerKg: doc.pricePerKg,
 
       minWeightKg: doc.minWeightKg,
@@ -115,7 +117,11 @@ export class CatalogService {
 
       description: doc.description,
 
+      category: doc.category,
+
       price: doc.price,
+
+      isPercentOfService: doc.isPercentOfService,
 
       imageUrl: doc.imageUrl,
 
@@ -136,6 +142,8 @@ export class CatalogService {
       label: doc.label,
 
       description: doc.description,
+
+      category: doc.category,
 
       pricePerKg: doc.pricePerKg,
 
@@ -166,6 +174,8 @@ export class CatalogService {
       label: doc.label,
 
       description: doc.description,
+
+      category: doc.category,
 
       price: doc.price,
 
@@ -247,6 +257,8 @@ export class CatalogService {
 
       description: string;
 
+      category: LaundryServiceDocument['category'];
+
       pricePerKg: number;
 
       minWeightKg: number;
@@ -266,6 +278,8 @@ export class CatalogService {
     if (dto.label) service.label = dto.label.trim();
 
     if (dto.description != null) service.description = dto.description.trim();
+
+    if (dto.category != null) service.category = dto.category;
 
     if (dto.pricePerKg != null) service.pricePerKg = dto.pricePerKg;
 
@@ -325,6 +339,8 @@ export class CatalogService {
 
       description: string;
 
+      category: LaundryAddonDocument['category'];
+
       price: number;
 
       imageUrl: string;
@@ -344,6 +360,8 @@ export class CatalogService {
     if (dto.label) addon.label = dto.label.trim();
 
     if (dto.description != null) addon.description = dto.description.trim();
+
+    if (dto.category != null) addon.category = dto.category;
 
     if (dto.price != null) addon.price = dto.price;
 

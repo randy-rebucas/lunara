@@ -12,10 +12,24 @@ interface LaundryAddonRow {
   slug: string;
   label: string;
   description: string;
+  category?: string;
   price: number;
   imageUrl?: string;
   isActive: boolean;
   sortOrder: number;
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  treatment: 'Treatment',
+  protection: 'Protection',
+  finishing: 'Finishing',
+  speed: 'Speed',
+  repair: 'Repair',
+};
+
+function categoryLabel(category?: string) {
+  if (!category) return 'Uncategorized';
+  return CATEGORY_LABELS[category] ?? category;
 }
 
 type AddonState = 'nominal' | 'attention';
@@ -42,6 +56,24 @@ function deriveAddonState(items: LaundryAddonRow[]): AddonState {
 
 function resolveAddonImage(url?: string) {
   return resolveMediaUrl(url, process.env.NEXT_PUBLIC_API_URL);
+}
+
+function PlaceholderIcon({ className }: { className?: string }) {
+  return (
+    <div className={`flex items-center justify-center bg-slate-100 text-slate-400 ${className ?? ''}`}>
+      <svg viewBox="0 0 24 24" fill="none" className="h-1/2 w-1/2" aria-hidden>
+        <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.5" />
+        <circle cx="9" cy="9" r="1.75" fill="currentColor" />
+        <path
+          d="M3 16l5-5 4 4 3-3 6 6"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </div>
+  );
 }
 
 // ── Stat tiles ─────────────────────────────────────────────────────────────
@@ -88,12 +120,14 @@ function StatTile({
 
 export function AddonsBoard() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [limit, setLimit] = useState(50);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [editing, setEditing] = useState<LaundryAddonRow | null>(null);
   const [label, setLabel] = useState('');
   const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('');
   const [price, setPrice] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [sortOrder, setSortOrder] = useState('');
@@ -114,17 +148,26 @@ export function AddonsBoard() {
   const activeCount = addons.filter((a) => a.isActive).length;
   const inactiveCount = addons.length - activeCount;
 
+  const categories = useMemo(
+    () => Array.from(new Set(addons.map((a) => a.category ?? 'uncategorized'))).sort(),
+    [addons],
+  );
+
   const filteredAddons = useMemo(() => {
     let list = addons;
     if (statusFilter === 'active') list = list.filter((a) => a.isActive);
     if (statusFilter === 'inactive') list = list.filter((a) => !a.isActive);
+    if (categoryFilter !== 'all') {
+      list = list.filter((a) => (a.category ?? 'uncategorized') === categoryFilter);
+    }
     const searched = filterBySearch(list, search, [
       (a) => a.slug,
       (a) => a.label,
       (a) => a.description,
+      (a) => categoryLabel(a.category),
     ]);
     return searched.slice(0, limit);
-  }, [addons, statusFilter, search, limit]);
+  }, [addons, statusFilter, categoryFilter, search, limit]);
 
   const addonState = deriveAddonState(addons);
   const copy = addonCopy[addonState];
@@ -141,6 +184,7 @@ export function AddonsBoard() {
     setEditing(addon);
     setLabel(addon.label);
     setDescription(addon.description);
+    setCategory(addon.category ?? '');
     setPrice(String(addon.price));
     setImageUrl(addon.imageUrl ?? '');
     setSortOrder(String(addon.sortOrder));
@@ -176,6 +220,7 @@ export function AddonsBoard() {
         body: JSON.stringify({
           label: label.trim(),
           description: description.trim(),
+          category: category || undefined,
           price: Number(price),
           imageUrl: imageUrl.trim(),
           sortOrder: Number(sortOrder),
@@ -299,6 +344,25 @@ export function AddonsBoard() {
             />
           </div>
 
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="text-xs font-medium text-muted" htmlFor="addon-category-filter">
+              Category
+            </label>
+            <select
+              id="addon-category-filter"
+              className="input-field w-auto"
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+            >
+              <option value="all">All categories</option>
+              {categories.map((c) => (
+                <option key={c} value={c}>
+                  {categoryLabel(c === 'uncategorized' ? undefined : c)}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <ListControls
             search={search}
             onSearchChange={setSearch}
@@ -333,6 +397,7 @@ export function AddonsBoard() {
                       <th scope="col">Image</th>
                       <th scope="col">Slug</th>
                       <th scope="col">Label</th>
+                      <th scope="col">Category</th>
                       <th scope="col">Price</th>
                       <th scope="col">Order</th>
                       <th scope="col">Status</th>
@@ -354,7 +419,7 @@ export function AddonsBoard() {
                                 className="h-12 w-12 rounded-lg bg-slate-50 object-cover ring-1 ring-border/40"
                               />
                             ) : (
-                              <span className="text-xs text-muted">—</span>
+                              <PlaceholderIcon className="h-12 w-12 rounded-lg ring-1 ring-border/40" />
                             )}
                           </td>
                           <td className="text-code text-xs text-muted">{a.slug}</td>
@@ -363,6 +428,9 @@ export function AddonsBoard() {
                             <p className="truncate text-xs text-muted" title={a.description}>
                               {a.description}
                             </p>
+                          </td>
+                          <td>
+                            <span className="badge-neutral text-xs">{categoryLabel(a.category)}</span>
                           </td>
                           <td className="tabular-nums">{formatPeso(a.price)}</td>
                           <td className="tabular-nums text-muted">{a.sortOrder}</td>
@@ -429,9 +497,7 @@ export function AddonsBoard() {
                         className="h-16 w-16 bg-slate-50 object-cover"
                       />
                     ) : (
-                      <div className="flex h-16 w-16 items-center justify-center bg-slate-100 text-xs text-muted">
-                        No image
-                      </div>
+                      <PlaceholderIcon className="h-16 w-16" />
                     )}
                     <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity hover:opacity-100">
                       <span className="text-xs font-medium text-white">
@@ -476,6 +542,24 @@ export function AddonsBoard() {
                       onChange={(e) => setLabel(e.target.value)}
                       required
                     />
+                  </div>
+                  <div>
+                    <label htmlFor="addon-category" className="form-label">
+                      Category
+                    </label>
+                    <select
+                      id="addon-category"
+                      className="input-field"
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value)}
+                    >
+                      <option value="">Uncategorized</option>
+                      {Object.entries(CATEGORY_LABELS).map(([value, categoryName]) => (
+                        <option key={value} value={value}>
+                          {categoryName}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label htmlFor="addon-price" className="form-label">

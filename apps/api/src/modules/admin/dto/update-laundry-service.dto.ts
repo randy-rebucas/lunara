@@ -1,4 +1,5 @@
-import { IsBoolean, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { ServiceCategory } from '@lunara/types';
+import { IsBoolean, IsEnum, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 
 export class UpdateLaundryServiceDto {
   @IsOptional()
@@ -8,6 +9,10 @@ export class UpdateLaundryServiceDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @IsOptional()
+  @IsEnum(ServiceCategory)
+  category?: ServiceCategory;
 
   @IsOptional()
   @IsNumber()

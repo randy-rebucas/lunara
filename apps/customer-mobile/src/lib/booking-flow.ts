@@ -16,7 +16,7 @@ export const BOOKING_STEPS: { id: BookingStep; label: string }[] = [
   { id: 'shop', label: 'Shop' },
   { id: 'service', label: 'Service' },
   { id: 'schedule', label: 'Schedule' },
-  { id: 'weight', label: 'Bag size' },
+  { id: 'weight', label: 'Details' },
   { id: 'addons', label: 'Add-ons' },
   { id: 'review', label: 'Estimate' },
   { id: 'confirm', label: 'Confirm' },
@@ -37,6 +37,9 @@ export interface BookingFormState {
   enteredLoadCount: string;
   /** Customer-entered piece count — used for shops in PER_PIECE pricing mode. */
   enteredPieceCount: string;
+  /** Selected garments + quantity — used for garment-priced booking types (see
+   * GARMENT_PRICED_BOOKING_TYPES, currently just Dry Cleaning). Keyed by garment id. */
+  garmentQuantities: Record<string, string>;
   addonIds: string[];
   couponCode: string;
 }
@@ -52,6 +55,7 @@ export const initialBookingForm: BookingFormState = {
   enteredWeightKg: '',
   enteredLoadCount: '',
   enteredPieceCount: '',
+  garmentQuantities: {},
   addonIds: [],
   couponCode: '',
 };

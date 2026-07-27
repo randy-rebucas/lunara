@@ -51,6 +51,7 @@ export interface BookingOrderPayload {
   estimatedWeightKg: number;
   estimatedLoadCount?: number;
   estimatedPieceCount?: number;
+  garmentSelections?: { garmentId: string; quantity: number }[];
   bagSizeId?: string;
   bagSizeLabel?: string;
   addons: { id: string; label: string; price: number }[];
@@ -199,6 +200,7 @@ export class OrdersService {
       estimatedWeightKg: payload.estimatedWeightKg,
       estimatedLoadCount: payload.estimatedLoadCount,
       estimatedPieceCount: payload.estimatedPieceCount,
+      garmentSelections: payload.garmentSelections,
       bagSizeId: payload.bagSizeId,
       bagSizeLabel: payload.bagSizeLabel,
       addons: payload.addons,

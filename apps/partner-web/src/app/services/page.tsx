@@ -18,14 +18,18 @@ interface BranchOption {
   city: string;
 }
 
-type PricingMode = 'flat_bag' | 'per_kg' | 'per_load' | 'per_piece';
+type PricingMode = 'flat_bag' | 'per_kg' | 'per_load' | 'per_piece' | 'per_pair' | 'per_item' | 'fixed';
 
 interface ShopServicePrice {
   type: string;
   label: string;
+  category?: string;
   basePricePerKg: number;
   basePricePerLoad?: number;
   basePricePerPiece?: number;
+  basePricePerPair?: number;
+  basePricePerItem?: number;
+  fixedPrice?: number;
   pricingUnit?: PricingMode;
   customerPricePerKg: number;
   isCustom?: boolean;
@@ -35,11 +39,17 @@ interface ShopServicePrice {
 interface ShopAddonPrice {
   slug: string;
   label: string;
+  category?: string;
   basePrice: number;
   basePricePerKg?: number;
   basePricePerLoad?: number;
   basePricePerPiece?: number;
+  basePricePerPair?: number;
+  basePricePerItem?: number;
+  fixedPrice?: number;
   pricingUnit?: PricingMode;
+  /** Global-catalog-only — not partner-configurable, unlike pricingUnit. */
+  isPercentOfService?: boolean;
   customerPrice: number;
   isCustom?: boolean;
   customAddonId?: string;
@@ -76,7 +86,43 @@ const PRICING_MODE_OPTIONS: { value: PricingMode; label: string; description: st
     label: 'Per piece',
     description: 'You set a price per item/piece. Customers get an estimate; final price is confirmed once you count the pieces.',
   },
+  {
+    value: 'per_pair',
+    label: 'Per pair',
+    description: 'You set a price per pair (e.g. shoes). Customers get an estimate; final price is confirmed once you count the pairs.',
+  },
+  {
+    value: 'per_item',
+    label: 'Per item',
+    description: 'You set a price per item. Customers get an estimate; final price is confirmed once you count the items.',
+  },
+  {
+    value: 'fixed',
+    label: 'Fixed price',
+    description: 'One flat price regardless of quantity — the customer sees this exact price, no estimate.',
+  },
 ];
+
+/** Maps a pricing unit to the ShopServicePrice/ShopAddonPrice field it bills from. */
+const RATE_FIELD_BY_MODE = {
+  per_kg: 'basePricePerKg',
+  per_load: 'basePricePerLoad',
+  per_piece: 'basePricePerPiece',
+  per_pair: 'basePricePerPair',
+  per_item: 'basePricePerItem',
+  fixed: 'fixedPrice',
+} as const satisfies Partial<Record<PricingMode, keyof ShopServicePrice & keyof ShopAddonPrice>>;
+
+/** Custom services aren't flat-bag priced (see resolveCustomServicePricing on the API side, which
+ * defaults an unset unit to per-kilo) — exclude that option from the "add custom service" form. */
+const NEW_SERVICE_UNIT_OPTIONS = PRICING_MODE_OPTIONS.filter((opt) => opt.value !== 'flat_bag');
+
+/** Custom services use the legacy `pricePerKg` field name for their per-kg rate (see
+ * create-branch-custom-service.dto.ts), unlike branch service/addon pricing's `basePricePerKg`. */
+const CUSTOM_SERVICE_RATE_FIELD_BY_MODE = {
+  ...RATE_FIELD_BY_MODE,
+  per_kg: 'pricePerKg',
+} as const;
 
 const BOOKING_TYPE_LABELS: Record<string, string> = {
   [BookingType.WASH_FOLD]: 'Wash & Fold',
@@ -88,10 +134,52 @@ const BOOKING_TYPE_LABELS: Record<string, string> = {
   [BookingType.CURTAINS]: 'Curtains',
   [BookingType.SHOES]: 'Shoes',
   [BookingType.UNIFORMS]: 'Uniforms',
+  [BookingType.IRONING]: 'Ironing / Press Only',
+  [BookingType.RUGS]: 'Rugs & Carpets',
+  [BookingType.UPHOLSTERY]: 'Upholstery',
+  [BookingType.BAGS]: 'Bags',
+  [BookingType.LEATHER]: 'Leather Care',
+  [BookingType.ALTERATION]: 'Alteration & Repair',
+  [BookingType.PREMIUM_WASH_FOLD]: 'Premium Wash & Fold',
+  [BookingType.BABY_CLOTHES_WASH]: 'Baby Clothes Wash',
+  [BookingType.DELICATES_WASH]: 'Delicates Wash',
+  [BookingType.COLOR_SEPARATION_WASH]: 'Color Separation',
+  [BookingType.WHITE_GARMENTS_WASH]: 'White Garments Only',
+  [BookingType.HAND_WASH]: 'Hand Wash',
+  [BookingType.MACHINE_WASH]: 'Machine Wash',
+  [BookingType.ECO_FRIENDLY_WASH]: 'Eco-Friendly Wash',
+  [BookingType.HYPOALLERGENIC_WASH]: 'Hypoallergenic Wash',
 };
 
 function formatPeso(n: number) {
   return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
+}
+
+const SERVICE_CATEGORY_LABELS: Record<string, string> = {
+  core_laundry: 'Core Laundry',
+  garment_care: 'Garment Care',
+  home_textiles: 'Home Textiles',
+  footwear_leather: 'Footwear & Leather',
+  wellness_sanitation: 'Wellness & Sanitation',
+  specialty: 'Specialty',
+};
+
+const ADDON_CATEGORY_LABELS: Record<string, string> = {
+  treatment: 'Treatment',
+  protection: 'Protection',
+  finishing: 'Finishing',
+  speed: 'Speed',
+  repair: 'Repair',
+};
+
+function serviceCategoryLabel(category?: string) {
+  if (!category) return 'Custom';
+  return SERVICE_CATEGORY_LABELS[category] ?? category;
+}
+
+function addonCategoryLabel(category?: string) {
+  if (!category) return 'Custom';
+  return ADDON_CATEGORY_LABELS[category] ?? category;
 }
 
 export default function ServicesPage() {
@@ -123,14 +211,12 @@ export default function ServicesPage() {
     reload: reloadPricing,
   } = usePartnerQuery(loadPricing, [selectedBranchId]);
 
-  const [servicePrices, setServicePrices] = useState<Record<string, string>>({});
-  const [serviceLoadPrices, setServiceLoadPrices] = useState<Record<string, string>>({});
-  const [servicePiecePrices, setServicePiecePrices] = useState<Record<string, string>>({});
+  // Keyed by rate field name (basePricePerKg, basePricePerLoad, basePricePerPiece, basePricePerPair,
+  // basePricePerItem, fixedPrice) -> serviceType -> string value. flat_bag has no editable rate.
+  const [serviceRates, setServiceRates] = useState<Record<string, Record<string, string>>>({});
   const [serviceUnits, setServiceUnits] = useState<Record<string, PricingMode>>({});
   const [addonPrices, setAddonPrices] = useState<Record<string, string>>({});
-  const [addonKgPrices, setAddonKgPrices] = useState<Record<string, string>>({});
-  const [addonLoadPrices, setAddonLoadPrices] = useState<Record<string, string>>({});
-  const [addonPiecePrices, setAddonPiecePrices] = useState<Record<string, string>>({});
+  const [addonRates, setAddonRates] = useState<Record<string, Record<string, string>>>({});
   const [addonUnits, setAddonUnits] = useState<Record<string, PricingMode>>({});
   const [hiddenServiceTypes, setHiddenServiceTypes] = useState<string[]>([]);
   const [hiddenAddonSlugs, setHiddenAddonSlugs] = useState<string[]>([]);
@@ -142,7 +228,8 @@ export default function ServicesPage() {
     baseBookingType: BookingType.WASH_FOLD as string,
     label: '',
     description: '',
-    pricePerKg: '',
+    pricingUnit: 'per_kg' as PricingMode,
+    rate: '',
   });
   const [addingService, setAddingService] = useState(false);
   const [showServiceForm, setShowServiceForm] = useState(false);
@@ -155,35 +242,28 @@ export default function ServicesPage() {
 
   useEffect(() => {
     if (!pricing) return;
-    setServicePrices(
-      Object.fromEntries(pricing.services.map((s) => [s.type, String(s.basePricePerKg ?? '')])),
-    );
-    setServiceLoadPrices(
+    const rateFields = Object.values(RATE_FIELD_BY_MODE);
+    setServiceRates(
       Object.fromEntries(
-        pricing.services.map((s) => [s.type, s.basePricePerLoad != null ? String(s.basePricePerLoad) : '']),
-      ),
-    );
-    setServicePiecePrices(
-      Object.fromEntries(
-        pricing.services.map((s) => [s.type, s.basePricePerPiece != null ? String(s.basePricePerPiece) : '']),
+        rateFields.map((field) => [
+          field,
+          Object.fromEntries(
+            pricing.services.map((s) => [s.type, s[field] != null ? String(s[field]) : '']),
+          ),
+        ]),
       ),
     );
     setAddonPrices(
       Object.fromEntries(pricing.addons.map((a) => [a.slug, String(a.basePrice)])),
     );
-    setAddonKgPrices(
+    setAddonRates(
       Object.fromEntries(
-        pricing.addons.map((a) => [a.slug, a.basePricePerKg != null ? String(a.basePricePerKg) : '']),
-      ),
-    );
-    setAddonLoadPrices(
-      Object.fromEntries(
-        pricing.addons.map((a) => [a.slug, a.basePricePerLoad != null ? String(a.basePricePerLoad) : '']),
-      ),
-    );
-    setAddonPiecePrices(
-      Object.fromEntries(
-        pricing.addons.map((a) => [a.slug, a.basePricePerPiece != null ? String(a.basePricePerPiece) : '']),
+        rateFields.map((field) => [
+          field,
+          Object.fromEntries(
+            pricing.addons.map((a) => [a.slug, a[field] != null ? String(a[field]) : '']),
+          ),
+        ]),
       ),
     );
     setAddonUnits(
@@ -208,14 +288,15 @@ export default function ServicesPage() {
             servicePricing: pricing.services
               .filter((s) => !s.isCustom)
               .map((s) => {
-                const perKg = servicePrices[s.type];
-                const perLoad = serviceLoadPrices[s.type];
-                const perPiece = servicePiecePrices[s.type];
+                const rates = Object.fromEntries(
+                  Object.entries(RATE_FIELD_BY_MODE).map(([, field]) => {
+                    const raw = serviceRates[field]?.[s.type];
+                    return [field, raw !== '' && raw != null ? Number(raw) : undefined];
+                  }),
+                );
                 return {
                   serviceType: s.type,
-                  basePricePerKg: perKg !== '' && perKg != null ? Number(perKg) : undefined,
-                  basePricePerLoad: perLoad !== '' && perLoad != null ? Number(perLoad) : undefined,
-                  basePricePerPiece: perPiece !== '' && perPiece != null ? Number(perPiece) : undefined,
+                  ...rates,
                   pricingUnit: serviceUnits[s.type] ?? 'flat_bag',
                 };
               }),
@@ -225,17 +306,18 @@ export default function ServicesPage() {
           method: 'PATCH',
           body: JSON.stringify({
             addonPricing: pricing.addons
-              .filter((a) => !a.isCustom)
+              .filter((a) => !a.isCustom && !a.isPercentOfService)
               .map((a) => {
-                const perKg = addonKgPrices[a.slug];
-                const perLoad = addonLoadPrices[a.slug];
-                const perPiece = addonPiecePrices[a.slug];
+                const rates = Object.fromEntries(
+                  Object.entries(RATE_FIELD_BY_MODE).map(([, field]) => {
+                    const raw = addonRates[field]?.[a.slug];
+                    return [field, raw !== '' && raw != null ? Number(raw) : undefined];
+                  }),
+                );
                 return {
                   addonSlug: a.slug,
                   basePrice: Number(addonPrices[a.slug] ?? a.basePrice),
-                  basePricePerKg: perKg !== '' && perKg != null ? Number(perKg) : undefined,
-                  basePricePerLoad: perLoad !== '' && perLoad != null ? Number(perLoad) : undefined,
-                  basePricePerPiece: perPiece !== '' && perPiece != null ? Number(perPiece) : undefined,
+                  ...rates,
                   pricingUnit: addonUnits[a.slug] ?? 'flat_bag',
                 };
               }),
@@ -272,16 +354,27 @@ export default function ServicesPage() {
     setRowError('');
     setAddingService(true);
     try {
+      const rateField =
+        CUSTOM_SERVICE_RATE_FIELD_BY_MODE[
+          newService.pricingUnit as keyof typeof CUSTOM_SERVICE_RATE_FIELD_BY_MODE
+        ] ?? 'pricePerKg';
       await partnerFetch(`/partner/branches/${selectedBranchId}/custom-services`, {
         method: 'POST',
         body: JSON.stringify({
           baseBookingType: newService.baseBookingType,
           label: newService.label.trim(),
           description: newService.description.trim(),
-          pricePerKg: Number(newService.pricePerKg),
+          pricingUnit: newService.pricingUnit,
+          [rateField]: Number(newService.rate),
         }),
       });
-      setNewService({ baseBookingType: BookingType.WASH_FOLD, label: '', description: '', pricePerKg: '' });
+      setNewService({
+        baseBookingType: BookingType.WASH_FOLD,
+        label: '',
+        description: '',
+        pricingUnit: 'per_kg',
+        rate: '',
+      });
       setShowServiceForm(false);
       await reloadPricing();
     } catch (e) {
@@ -439,16 +532,30 @@ export default function ServicesPage() {
                     />
                   </div>
                   <div>
-                    <label className="form-label">Your price / kg</label>
+                    <label className="form-label">Billing unit</label>
+                    <select
+                      className="input-field"
+                      value={newService.pricingUnit}
+                      onChange={(e) =>
+                        setNewService((s) => ({ ...s, pricingUnit: e.target.value as PricingMode }))
+                      }
+                    >
+                      {NEW_SERVICE_UNIT_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label">Your price</label>
                     <input
                       type="number"
                       min={0}
                       step="0.5"
                       className="input-field"
-                      value={newService.pricePerKg}
-                      onChange={(e) =>
-                        setNewService((s) => ({ ...s, pricePerKg: e.target.value }))
-                      }
+                      value={newService.rate}
+                      onChange={(e) => setNewService((s) => ({ ...s, rate: e.target.value }))}
                     />
                   </div>
                 </div>
@@ -456,7 +563,7 @@ export default function ServicesPage() {
                   <button
                     type="button"
                     className="btn-primary btn-sm"
-                    disabled={addingService || !newService.label || !newService.pricePerKg}
+                    disabled={addingService || !newService.label || !newService.rate}
                     onClick={() => void createService()}
                   >
                     {addingService ? 'Adding…' : 'Add service'}
@@ -470,6 +577,7 @@ export default function ServicesPage() {
                 <thead>
                   <tr>
                     <th>Service</th>
+                    <th>Category</th>
                     <th>Unit</th>
                     <th>Your price</th>
                     <th>Customer pays</th>
@@ -480,13 +588,21 @@ export default function ServicesPage() {
                   {pricing.services.map((s) => {
                     const key = s.customServiceId ?? s.type;
                     if (s.isCustom) {
+                      const customUnit = s.pricingUnit ?? 'per_kg';
+                      const customRateField = RATE_FIELD_BY_MODE[customUnit as keyof typeof RATE_FIELD_BY_MODE];
+                      const customRate = customRateField ? (s[customRateField] ?? 0) : s.basePricePerKg;
                       return (
                         <tr key={key}>
                           <td className="font-medium text-slate-900">
                             {s.label} <span className="badge-accent ml-1 text-xs">Custom</span>
                           </td>
-                          <td className="text-muted">Per kilo</td>
-                          <td className="text-muted">{formatPeso(s.basePricePerKg)}</td>
+                          <td className="text-muted">
+                            <span className="badge-neutral text-xs">{serviceCategoryLabel(s.category)}</span>
+                          </td>
+                          <td className="text-muted">
+                            {PRICING_MODE_OPTIONS.find((opt) => opt.value === customUnit)?.label ?? customUnit}
+                          </td>
+                          <td className="text-muted">{formatPeso(customRate)}</td>
                           <td className="text-muted">{formatPeso(s.customerPricePerKg)}</td>
                           <td>
                             <button
@@ -501,16 +617,15 @@ export default function ServicesPage() {
                       );
                     }
                     const unit = serviceUnits[s.type] ?? 'flat_bag';
-                    const base =
-                      unit === 'per_load'
-                        ? Number(serviceLoadPrices[s.type] ?? 0)
-                        : unit === 'per_piece'
-                          ? Number(servicePiecePrices[s.type] ?? 0)
-                          : Number(servicePrices[s.type] ?? 0);
+                    const rateField = unit === 'flat_bag' ? undefined : RATE_FIELD_BY_MODE[unit];
+                    const base = rateField ? Number(serviceRates[rateField]?.[s.type] ?? 0) : 0;
                     const isHiddenLocal = hiddenServiceTypes.includes(s.type);
                     return (
                       <tr key={key}>
                         <td className="font-medium text-slate-900">{s.label}</td>
+                        <td className="text-muted">
+                          <span className="badge-neutral text-xs">{serviceCategoryLabel(s.category)}</span>
+                        </td>
                         <td>
                           <select
                             className="input-field w-32"
@@ -527,38 +642,10 @@ export default function ServicesPage() {
                           </select>
                         </td>
                         <td>
-                          {unit === 'flat_bag' ? (
+                          {!rateField ? (
                             <span className="text-xs text-muted">
                               Platform-wide flat pricing — not partner-configurable
                             </span>
-                          ) : unit === 'per_load' ? (
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-muted">₱</span>
-                              <input
-                                type="number"
-                                min={0}
-                                step="0.5"
-                                className="input-field w-28"
-                                value={serviceLoadPrices[s.type] ?? ''}
-                                onChange={(e) =>
-                                  setServiceLoadPrices((p) => ({ ...p, [s.type]: e.target.value }))
-                                }
-                              />
-                            </div>
-                          ) : unit === 'per_piece' ? (
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-muted">₱</span>
-                              <input
-                                type="number"
-                                min={0}
-                                step="0.5"
-                                className="input-field w-28"
-                                value={servicePiecePrices[s.type] ?? ''}
-                                onChange={(e) =>
-                                  setServicePiecePrices((p) => ({ ...p, [s.type]: e.target.value }))
-                                }
-                              />
-                            </div>
                           ) : (
                             <div className="flex items-center gap-2">
                               <span className="text-sm text-muted">₱</span>
@@ -567,16 +654,20 @@ export default function ServicesPage() {
                                 min={0}
                                 step="0.5"
                                 className="input-field w-28"
-                                value={servicePrices[s.type] ?? ''}
-                                onChange={(e) =>
-                                  setServicePrices((p) => ({ ...p, [s.type]: e.target.value }))
-                                }
+                                value={serviceRates[rateField]?.[s.type] ?? ''}
+                                onChange={(e) => {
+                                  const value = e.target.value;
+                                  setServiceRates((p) => ({
+                                    ...p,
+                                    [rateField]: { ...p[rateField], [s.type]: value },
+                                  }));
+                                }}
                               />
                             </div>
                           )}
                         </td>
                         <td className="text-muted">
-                          {unit === 'flat_bag' ? '—' : formatPeso(base * MARKUP_MULTIPLIER)}
+                          {!rateField ? '—' : formatPeso(base * MARKUP_MULTIPLIER)}
                         </td>
                         <td>
                           <label className="flex items-center gap-2 text-xs text-muted">
@@ -667,6 +758,7 @@ export default function ServicesPage() {
                 <thead>
                   <tr>
                     <th>Add-on</th>
+                    <th>Category</th>
                     <th>Unit</th>
                     <th>Your price</th>
                     <th>Customer pays</th>
@@ -681,6 +773,9 @@ export default function ServicesPage() {
                         <tr key={key}>
                           <td className="font-medium text-slate-900">
                             {a.label} <span className="badge-accent ml-1 text-xs">Custom</span>
+                          </td>
+                          <td className="text-muted">
+                            <span className="badge-neutral text-xs">{addonCategoryLabel(a.category)}</span>
                           </td>
                           <td className="text-muted">Flat</td>
                           <td className="text-muted">{formatPeso(a.basePrice)}</td>
@@ -697,19 +792,43 @@ export default function ServicesPage() {
                         </tr>
                       );
                     }
+                    if (a.isPercentOfService) {
+                      return (
+                        <tr key={key}>
+                          <td className="font-medium text-slate-900">{a.label}</td>
+                          <td className="text-muted">
+                            <span className="badge-neutral text-xs">{addonCategoryLabel(a.category)}</span>
+                          </td>
+                          <td className="text-muted">% of service</td>
+                          <td className="text-muted">
+                            +{a.basePrice}% <span className="text-xs">(not partner-configurable)</span>
+                          </td>
+                          <td className="text-muted">+{a.customerPrice}%</td>
+                          <td>
+                            <label className="flex items-center gap-2 text-xs text-muted">
+                              <input
+                                type="checkbox"
+                                checked={!hiddenAddonSlugs.includes(a.slug)}
+                                onChange={(e) => toggleHiddenAddon(a.slug, !e.target.checked)}
+                              />
+                              {hiddenAddonSlugs.includes(a.slug) ? 'Hidden' : 'Offered'}
+                            </label>
+                          </td>
+                        </tr>
+                      );
+                    }
                     const unit = addonUnits[a.slug] ?? 'flat_bag';
-                    const base =
-                      unit === 'per_kg'
-                        ? Number(addonKgPrices[a.slug] ?? 0)
-                        : unit === 'per_load'
-                          ? Number(addonLoadPrices[a.slug] ?? 0)
-                          : unit === 'per_piece'
-                            ? Number(addonPiecePrices[a.slug] ?? 0)
-                            : Number(addonPrices[a.slug] ?? 0);
+                    const rateField = unit === 'flat_bag' ? undefined : RATE_FIELD_BY_MODE[unit];
+                    const base = rateField
+                      ? Number(addonRates[rateField]?.[a.slug] ?? 0)
+                      : Number(addonPrices[a.slug] ?? 0);
                     const isHiddenLocal = hiddenAddonSlugs.includes(a.slug);
                     return (
                       <tr key={key}>
                         <td className="font-medium text-slate-900">{a.label}</td>
+                        <td className="text-muted">
+                          <span className="badge-neutral text-xs">{addonCategoryLabel(a.category)}</span>
+                        </td>
                         <td>
                           <select
                             className="input-field w-32"
@@ -733,23 +852,17 @@ export default function ServicesPage() {
                               min={0}
                               step="0.5"
                               className="input-field w-28"
-                              value={
-                                unit === 'per_kg'
-                                  ? (addonKgPrices[a.slug] ?? '')
-                                  : unit === 'per_load'
-                                    ? (addonLoadPrices[a.slug] ?? '')
-                                    : unit === 'per_piece'
-                                      ? (addonPiecePrices[a.slug] ?? '')
-                                      : (addonPrices[a.slug] ?? '')
-                              }
+                              value={rateField ? (addonRates[rateField]?.[a.slug] ?? '') : (addonPrices[a.slug] ?? '')}
                               onChange={(e) => {
                                 const value = e.target.value;
-                                if (unit === 'per_kg') setAddonKgPrices((p) => ({ ...p, [a.slug]: value }));
-                                else if (unit === 'per_load')
-                                  setAddonLoadPrices((p) => ({ ...p, [a.slug]: value }));
-                                else if (unit === 'per_piece')
-                                  setAddonPiecePrices((p) => ({ ...p, [a.slug]: value }));
-                                else setAddonPrices((p) => ({ ...p, [a.slug]: value }));
+                                if (rateField) {
+                                  setAddonRates((p) => ({
+                                    ...p,
+                                    [rateField]: { ...p[rateField], [a.slug]: value },
+                                  }));
+                                } else {
+                                  setAddonPrices((p) => ({ ...p, [a.slug]: value }));
+                                }
                               }}
                             />
                           </div>

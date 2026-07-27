@@ -5,17 +5,24 @@ import {
   applyShopMarkup,
   BAG_SIZES,
   BOOKING_MIN_ORDER_AMOUNT,
+  BOOKING_MIN_WEIGHT_KG,
+  BOOKING_PER_KG_MAX_KG,
   BranchPricingMode,
   calculateQuote,
+  combineServiceQuotes,
   type BagSizeId,
+  type GarmentSelection,
+  GARMENT_CATALOG,
   distanceKm,
   EXPRESS_RETURN_ADDON_ID,
   getBagSize,
   generatePickupSlots,
   isExpressReturnAllowed,
+  isGarmentPricedBookingType,
   isPickupSlotBookable,
   PICKUP_SCHEDULE_DAY_COUNT,
   isServiceAvailableInArea,
+  type QuoteBreakdown,
   resolveCoordinates,
   SHOP_PRICE_MARKUP_MULTIPLIER,
   validateAddressFields,
@@ -26,7 +33,7 @@ import { CatalogService } from '../catalog/catalog.service';
 import { PromotionsService } from '../promotions/promotions.service';
 import { SettingsService } from '../settings/settings.service';
 import { ServiceAreasService } from '../service-areas/service-areas.service';
-import { BookingQuoteDto, CreateBookingOrderDto } from './dto/booking.dto';
+import { BookingQuoteDto, CreateBookingOrderDto, ServiceSelectionDto } from './dto/booking.dto';
 
 @Injectable()
 export class BookingService {
@@ -59,6 +66,7 @@ export class BookingService {
         minOrderAmount: BOOKING_MIN_ORDER_AMOUNT,
         bagSizes: BAG_SIZES,
         deliveryFee: deliveryFees.data.deliveryFee,
+        garmentCatalog: GARMENT_CATALOG,
       },
     };
   }
@@ -153,10 +161,164 @@ export class BookingService {
     };
   }
 
+  /** Prices one service line (today's per-service pricing-mode resolution + calculateQuote call)
+   * against an already-resolved branch. Shared by buildQuote's per-service loop. */
+  private async priceOneService(
+    service: ServiceSelectionDto,
+    branch: Awaited<ReturnType<BranchesService['getActivePartnerShop']>>,
+  ): Promise<QuoteBreakdown> {
+    const catalogService = await this.catalogService.findActiveByType(service.bookingType);
+    if (!catalogService) throw new BadRequestException('Invalid or inactive service type');
+
+    const garmentPriced = isGarmentPricedBookingType(service.bookingType);
+    if (garmentPriced) {
+      if (!service.garmentSelections?.length) {
+        throw new BadRequestException('Select at least one garment for this service');
+      }
+      const invalidGarment = service.garmentSelections.find(
+        (g) => !GARMENT_CATALOG.some((c) => c.id === g.garmentId),
+      );
+      if (invalidGarment) {
+        throw new BadRequestException('Invalid garment selected');
+      }
+    }
+
+    let pricingMode: BranchPricingMode = BranchPricingMode.FLAT_BAG;
+    let pricingRates:
+      | {
+          basePricePerKg?: number;
+          basePricePerLoad?: number;
+          basePricePerPiece?: number;
+          basePricePerPair?: number;
+          basePricePerItem?: number;
+          fixedPrice?: number;
+          minWeightKg?: number;
+        }
+      | undefined;
+
+    // Custom services carry their own pricingUnit/rates independent of the branch's base
+    // BookingType pricing — don't fall back to resolveServicePricingUnit/branch.servicePricing
+    // for them, or a per-item custom service would incorrectly price as whatever the branch's
+    // base service happens to use.
+    if (service.customServiceId) {
+      const customPricing = await this.branchesService.resolveCustomServicePricing(
+        branch,
+        service.customServiceId,
+      );
+      pricingMode = customPricing.pricingMode;
+      pricingRates = customPricing.rates;
+    } else {
+      pricingMode = this.branchesService.resolveServicePricingUnit(branch, service.bookingType);
+      if (pricingMode !== BranchPricingMode.FLAT_BAG) {
+        const servicePrice = branch.servicePricing?.find((p) => p.serviceType === service.bookingType);
+        pricingRates = {
+          basePricePerKg: servicePrice?.basePricePerKg,
+          basePricePerLoad: servicePrice?.basePricePerLoad,
+          basePricePerPiece: servicePrice?.basePricePerPiece,
+          basePricePerPair: servicePrice?.basePricePerPair,
+          basePricePerItem: servicePrice?.basePricePerItem,
+          fixedPrice: servicePrice?.fixedPrice,
+        };
+      }
+    }
+    if (!garmentPriced) {
+      if (pricingMode !== BranchPricingMode.FLAT_BAG) {
+        const rates = pricingRates ?? {};
+        if (pricingMode === BranchPricingMode.PER_KG && rates.basePricePerKg == null) {
+          throw new BadRequestException('This shop has not configured per-kg pricing for this service');
+        }
+        if (pricingMode === BranchPricingMode.PER_LOAD && rates.basePricePerLoad == null) {
+          throw new BadRequestException('This shop has not configured per-load pricing for this service');
+        }
+        if (pricingMode === BranchPricingMode.PER_PIECE && rates.basePricePerPiece == null) {
+          throw new BadRequestException('This shop has not configured per-piece pricing for this service');
+        }
+        if (pricingMode === BranchPricingMode.PER_PAIR && rates.basePricePerPair == null) {
+          throw new BadRequestException('This shop has not configured per-pair pricing for this service');
+        }
+        if (pricingMode === BranchPricingMode.PER_ITEM && rates.basePricePerItem == null) {
+          throw new BadRequestException('This shop has not configured per-item pricing for this service');
+        }
+        if (pricingMode === BranchPricingMode.FIXED && rates.fixedPrice == null) {
+          throw new BadRequestException('This shop has not configured a fixed price for this service');
+        }
+        if (pricingMode === BranchPricingMode.PER_KG && !service.enteredWeightKg) {
+          throw new BadRequestException('Enter the estimated weight for this shop\'s per-kg pricing');
+        }
+        if (pricingMode === BranchPricingMode.PER_KG && service.enteredWeightKg != null) {
+          if (service.enteredWeightKg < BOOKING_MIN_WEIGHT_KG) {
+            throw new BadRequestException(`Minimum booking weight is ${BOOKING_MIN_WEIGHT_KG} kg`);
+          }
+          if (service.enteredWeightKg > BOOKING_PER_KG_MAX_KG) {
+            throw new BadRequestException(
+              `Per-kg pricing only covers up to ${BOOKING_PER_KG_MAX_KG} kg — heavier loads are billed per machine load`,
+            );
+          }
+        }
+        if (pricingMode === BranchPricingMode.PER_LOAD && !service.enteredWeightKg && !service.enteredLoadCount) {
+          throw new BadRequestException('Enter the estimated weight or load count for this shop\'s per-load pricing');
+        }
+        if (
+          pricingMode === BranchPricingMode.PER_LOAD &&
+          service.enteredWeightKg != null &&
+          service.enteredWeightKg < BOOKING_MIN_WEIGHT_KG
+        ) {
+          throw new BadRequestException(`Minimum booking weight is ${BOOKING_MIN_WEIGHT_KG} kg`);
+        }
+        if (pricingMode === BranchPricingMode.PER_PIECE && !service.enteredPieceCount) {
+          throw new BadRequestException('Enter the piece count for this shop\'s per-piece pricing');
+        }
+        if (pricingMode === BranchPricingMode.PER_PAIR && !service.enteredPieceCount) {
+          throw new BadRequestException('Enter the pair count for this shop\'s per-pair pricing');
+        }
+        if (pricingMode === BranchPricingMode.PER_ITEM && !service.enteredPieceCount) {
+          throw new BadRequestException('Enter the item count for this shop\'s per-item pricing');
+        }
+      } else if (!service.bagSizeId) {
+        throw new BadRequestException('Choose a bag size for this shop');
+      }
+    }
+    const offered = await this.branchesService.isServiceTypeOfferedByBranch(branch, service.bookingType);
+    if (!offered) {
+      throw new BadRequestException('This shop does not offer this service');
+    }
+    // Only label/description come from the shop's own catalog now — base price is flat bag
+    // pricing (BAG_SIZES), same regardless of booking type or which shop is assigned.
+    const resolved = await this.branchesService.resolvePriceableService(
+      branch,
+      service.bookingType,
+      service.customServiceId,
+    );
+    const priceableService = {
+      ...catalogService,
+      label: resolved.label ?? catalogService.label,
+      description: resolved.description ?? catalogService.description,
+    };
+
+    return calculateQuote(
+      {
+        bookingType: service.bookingType,
+        bagSizeId: service.bagSizeId as BagSizeId,
+        addonIds: [],
+        pricingMode,
+        rates: pricingRates,
+        enteredWeightKg: service.enteredWeightKg,
+        enteredLoadCount: service.enteredLoadCount,
+        enteredPieceCount: service.enteredPieceCount,
+        garmentSelections: service.garmentSelections as GarmentSelection[] | undefined,
+      },
+      priceableService,
+      [],
+      0,
+    );
+  }
+
   /**
    * White-labeled partner bookings (partnerContextId set) are scoped to that partner's own
    * branch pool instead of a customer-chosen branchId, but otherwise resolve a branch and price
    * against it exactly like the general customer flow — including that branch's pricing mode.
+   * Every selected service is priced independently (each keeping its own pricing mode/inputs)
+   * against the one resolved branch, then combined into a single order-level breakdown.
    */
   async buildQuote(
     dto: BookingQuoteDto,
@@ -165,108 +327,67 @@ export class BookingService {
     address: { city: string; province: string; latitude?: number; longitude?: number },
     partnerContextId?: string,
   ) {
-    const service = await this.catalogService.findActiveByType(dto.bookingType);
-    if (!service) throw new BadRequestException('Invalid or inactive service type');
-    if (!isServiceAvailableInArea(dto.bookingType, areaServices)) {
-      throw new BadRequestException('This service is not available in your area');
+    if (!dto.services?.length) {
+      throw new BadRequestException('Select at least one service');
+    }
+    for (const service of dto.services) {
+      if (!isServiceAvailableInArea(service.bookingType, areaServices)) {
+        throw new BadRequestException('This service is not available in your area');
+      }
     }
 
-    let priceableService = service;
-    let priceableAddons = await this.catalogService.listActiveAddons();
-    let resolvedBranchId: string | undefined;
-    let pricingMode: BranchPricingMode = BranchPricingMode.FLAT_BAG;
-    let pricingRates:
-      | { basePricePerKg?: number; basePricePerLoad?: number; basePricePerPiece?: number; minWeightKg?: number }
-      | undefined;
-    {
-      const bag = dto.bagSizeId ? getBagSize(dto.bagSizeId) : undefined;
-      const estimatedWeight = bag?.capacityKg ?? dto.enteredWeightKg ?? 5;
+    const bookingTypes = dto.services.map((s) => s.bookingType);
+    const primary = dto.services[0];
+    const bag = primary.bagSizeId ? getBagSize(primary.bagSizeId) : undefined;
+    const estimatedWeight = bag?.capacityKg ?? primary.enteredWeightKg ?? 5;
 
-      let branchId: string;
-      if (partnerContextId) {
-        // White-labeled bookings stay within that partner's own branch pool — no customer choice.
-        const partnerBranch = await this.resolvePartnerBranch(
-          partnerContextId,
-          address,
-          dto.bookingType,
-          estimatedWeight,
-          dto,
-        );
-        branchId = partnerBranch.branchId;
-      } else {
-        branchId = dto.branchId ?? '';
-        if (!branchId) {
-          // "Let Lunara dispatch" — customer didn't pick a shop, so pick the top-ranked
-          // available branch network-wide instead of blocking checkout.
-          branchId = await this.resolveNetworkBranch(address, dto.bookingType, estimatedWeight, dto);
-        }
-      }
-
-      const branch = await this.branchesService.getActivePartnerShop(branchId);
-      resolvedBranchId = branch._id.toString();
-      pricingMode = this.branchesService.resolveServicePricingUnit(branch, dto.bookingType);
-      if (pricingMode !== BranchPricingMode.FLAT_BAG) {
-        const servicePrice = branch.servicePricing?.find((p) => p.serviceType === dto.bookingType);
-        pricingRates = {
-          basePricePerKg: servicePrice?.basePricePerKg,
-          basePricePerLoad: servicePrice?.basePricePerLoad,
-          basePricePerPiece: servicePrice?.basePricePerPiece,
-        };
-        if (pricingMode === BranchPricingMode.PER_KG && pricingRates.basePricePerKg == null) {
-          throw new BadRequestException('This shop has not configured per-kg pricing for this service');
-        }
-        if (pricingMode === BranchPricingMode.PER_LOAD && pricingRates.basePricePerLoad == null) {
-          throw new BadRequestException('This shop has not configured per-load pricing for this service');
-        }
-        if (pricingMode === BranchPricingMode.PER_PIECE && pricingRates.basePricePerPiece == null) {
-          throw new BadRequestException('This shop has not configured per-piece pricing for this service');
-        }
-        if (pricingMode === BranchPricingMode.PER_KG && !dto.enteredWeightKg) {
-          throw new BadRequestException('Enter the estimated weight for this shop\'s per-kg pricing');
-        }
-        if (pricingMode === BranchPricingMode.PER_LOAD && !dto.enteredWeightKg && !dto.enteredLoadCount) {
-          throw new BadRequestException('Enter the estimated weight or load count for this shop\'s per-load pricing');
-        }
-        if (pricingMode === BranchPricingMode.PER_PIECE && !dto.enteredPieceCount) {
-          throw new BadRequestException('Enter the piece count for this shop\'s per-piece pricing');
-        }
-      } else if (!dto.bagSizeId) {
-        throw new BadRequestException('Choose a bag size for this shop');
-      }
-      const [branchLng, branchLat] = branch.location.coordinates;
-      const customerCoords = resolveCoordinates(address.city, address.latitude, address.longitude);
-      const dist = distanceKm(customerCoords, [branchLng, branchLat]);
-      if (dist > branch.serviceRadiusKm) {
-        throw new BadRequestException('Selected shop does not deliver to this address');
-      }
-      const offered = await this.branchesService.isServiceTypeOfferedByBranch(
-        branch,
-        dto.bookingType,
+    let branchId: string;
+    if (partnerContextId) {
+      // White-labeled bookings stay within that partner's own branch pool — no customer choice.
+      const partnerBranch = await this.resolvePartnerBranch(
+        partnerContextId,
+        address,
+        bookingTypes,
+        estimatedWeight,
+        dto,
       );
-      if (!offered) {
-        throw new BadRequestException('This shop does not offer this service');
+      branchId = partnerBranch.branchId;
+    } else {
+      branchId = dto.branchId ?? '';
+      if (!branchId) {
+        // "Let Lunara dispatch" — customer didn't pick a shop, so pick the top-ranked
+        // available branch network-wide instead of blocking checkout.
+        branchId = await this.resolveNetworkBranch(address, bookingTypes, estimatedWeight, dto);
       }
-      // Only label/description come from the shop's own catalog now — base price is flat bag
-      // pricing (BAG_SIZES), same regardless of booking type or which shop is assigned.
-      const resolved = await this.branchesService.resolvePriceableService(
-        branch,
-        dto.bookingType,
-        dto.customServiceId,
-      );
-      priceableService = {
-        ...service,
-        label: resolved.label ?? service.label,
-        description: resolved.description ?? service.description,
-      };
-      priceableAddons = await this.branchesService.listPriceableAddonOptions(branch);
-      priceableAddons = await Promise.all(
-        priceableAddons.map(async (addon) => {
-          const unit = this.branchesService.resolveAddonPricingUnit(branch, addon.id);
-          const rate = await this.branchesService.resolveAddonRateForUnit(branch, addon.id, unit);
-          return { ...addon, price: applyShopMarkup(rate), pricingUnit: unit };
-        }),
-      );
     }
+
+    const branch = await this.branchesService.getActivePartnerShop(branchId);
+    const resolvedBranchId = branch._id.toString();
+
+    const [branchLng, branchLat] = branch.location.coordinates;
+    const customerCoords = resolveCoordinates(address.city, address.latitude, address.longitude);
+    const dist = distanceKm(customerCoords, [branchLng, branchLat]);
+    if (dist > branch.serviceRadiusKm) {
+      throw new BadRequestException('Selected shop does not deliver to this address');
+    }
+
+    const serviceQuotes: QuoteBreakdown[] = [];
+    for (const service of dto.services) {
+      serviceQuotes.push(await this.priceOneService(service, branch));
+    }
+
+    let priceableAddons: Awaited<ReturnType<CatalogService['listActiveAddons']>> =
+      await this.branchesService.listPriceableAddonOptions(branch);
+    priceableAddons = await Promise.all(
+      priceableAddons.map(async (addon) => {
+        // Percent-of-service add-ons bill off the order's own combined service subtotal,
+        // computed later in combineServiceQuotes — no shop rate to resolve or markup here.
+        if (addon.isPercentOfService) return addon;
+        const unit = this.branchesService.resolveAddonPricingUnit(branch, addon.id);
+        const rate = await this.branchesService.resolveAddonRateForUnit(branch, addon.id, unit);
+        return { ...addon, price: applyShopMarkup(rate), pricingUnit: unit };
+      }),
+    );
 
     const addonIds = dto.addonIds ?? [];
     const invalidAddon = addonIds.find((id) => !priceableAddons.some((a) => a.id === id));
@@ -283,22 +404,7 @@ export class BookingService {
     }
 
     const deliveryFee = await this.settingsService.getDeliveryFeeForAddress(address);
-
-    const quote = calculateQuote(
-      {
-        bookingType: dto.bookingType,
-        bagSizeId: dto.bagSizeId as BagSizeId,
-        addonIds,
-        pricingMode,
-        rates: pricingRates,
-        enteredWeightKg: dto.enteredWeightKg,
-        enteredLoadCount: dto.enteredLoadCount,
-        enteredPieceCount: dto.enteredPieceCount,
-      },
-      priceableService,
-      priceableAddons,
-      deliveryFee,
-    );
+    const quote = combineServiceQuotes(serviceQuotes, priceableAddons, addonIds, deliveryFee);
 
     if (!quote.meetsMinimum) {
       throw new BadRequestException(
@@ -307,7 +413,11 @@ export class BookingService {
     }
 
     const finalQuote = await this.promotionsService.applyCouponToQuote(quote, dto.couponCode, userId);
-    return { ...finalQuote, resolvedBranchId };
+    // Back-compat: mirror the primary (first) service's single-service fields at the top level
+    // (bookingType, serviceLabel, bagLabel, ...) alongside the new `services[]`/combined totals,
+    // so existing single-service UI keeps working unchanged while multi-service UI can read `services`.
+    const primaryServiceQuote = serviceQuotes[0];
+    return { ...primaryServiceQuote, ...finalQuote, resolvedBranchId };
   }
 
   async quote(userId: string, addressId: string, dto: BookingQuoteDto, partnerContextId?: string) {
@@ -334,26 +444,50 @@ export class BookingService {
       throw new BadRequestException('Selected pickup slot is no longer available');
     }
 
-    const serviceNote =
-      quote.pricingMode === BranchPricingMode.FLAT_BAG
-        ? `${quote.bagLabel} bag (up to ${quote.weightKg} kg)`
-        : quote.pricingMode === BranchPricingMode.PER_PIECE
-          ? `${quote.pieceCount ?? dto.enteredPieceCount ?? 0} pieces (estimated)`
-          : `${quote.weightKg} kg (estimated)`;
+    const serviceNoteFor = (serviceQuote: (typeof quote.services)[number]) =>
+      serviceQuote.garmentSelections?.length
+        ? serviceQuote.garmentSelections
+            .map((g) => `${GARMENT_CATALOG.find((c) => c.id === g.garmentId)?.label ?? g.garmentId} ×${g.quantity}`)
+            .join(', ')
+        : serviceQuote.pricingMode === BranchPricingMode.FLAT_BAG
+          ? `${serviceQuote.bagLabel} bag (up to ${serviceQuote.weightKg} kg)`
+          : serviceQuote.pricingMode === BranchPricingMode.FIXED
+            ? 'Fixed price'
+            : serviceQuote.pricingMode === BranchPricingMode.PER_PIECE
+              ? `${serviceQuote.pieceCount ?? 0} pieces (estimated)`
+              : serviceQuote.pricingMode === BranchPricingMode.PER_PAIR
+                ? `${serviceQuote.pieceCount ?? 0} pairs (estimated)`
+                : serviceQuote.pricingMode === BranchPricingMode.PER_ITEM
+                  ? `${serviceQuote.pieceCount ?? 0} items (estimated)`
+                  : `${serviceQuote.weightKg} kg (estimated)`;
+
     const items = [
-      {
-        serviceType: dto.bookingType,
+      ...quote.services.map((serviceQuote) => ({
+        serviceType: serviceQuote.bookingType,
         quantity: 1,
-        unitPrice: quote.serviceSubtotal,
-        notes: serviceNote,
-      },
+        unitPrice: serviceQuote.serviceSubtotal,
+        notes: serviceNoteFor(serviceQuote),
+      })),
       ...quote.addons.map((a) => ({
-        serviceType: dto.bookingType,
+        // Add-ons are priced once at the order level (not per service) — tag them against the
+        // primary (first) service type since OrderItem has no order-level "addon" slot of its own.
+        serviceType: quote.services[0].bookingType,
         quantity: 1,
         unitPrice: a.price,
-        notes:
-          a.unit && a.unit !== BranchPricingMode.FLAT_BAG
-            ? `Add-on: ${a.label} (×${a.quantity ?? 0} ${a.unit === BranchPricingMode.PER_KG ? 'kg' : a.unit === BranchPricingMode.PER_LOAD ? 'loads' : 'pieces'})`
+        notes: a.percent
+          ? `Add-on: ${a.label} (+${a.percent}%)`
+          : a.unit && a.unit !== BranchPricingMode.FLAT_BAG && a.unit !== BranchPricingMode.FIXED
+            ? `Add-on: ${a.label} (×${a.quantity ?? 0} ${
+                a.unit === BranchPricingMode.PER_KG
+                  ? 'kg'
+                  : a.unit === BranchPricingMode.PER_LOAD
+                    ? 'loads'
+                    : a.unit === BranchPricingMode.PER_PAIR
+                      ? 'pairs'
+                      : a.unit === BranchPricingMode.PER_ITEM
+                        ? 'items'
+                        : 'pieces'
+              })`
             : `Add-on: ${a.label}`,
       })),
     ];
@@ -374,37 +508,55 @@ export class BookingService {
     const resolvedPartnerId = branch.partnerUserId.toString();
     const baseSubtotal = Math.round(serviceBaseSubtotal + baseAddonsSum);
     const pricingModel = 'commission' as const;
+
+    // Order-level bookingType/pricingMode/estimate fields still describe a single service for
+    // anything downstream that hasn't been migrated to itemized services — the primary (first)
+    // selected service. The itemized `items[]` above is the source of truth for what was booked.
+    const primaryDto = dto.services[0];
+    const primaryQuote = quote.services[0];
     let pricingSnapshot:
-      | { basePricePerKg?: number; basePricePerLoad?: number; basePricePerPiece?: number; minWeightKg?: number }
+      | {
+          basePricePerKg?: number;
+          basePricePerLoad?: number;
+          basePricePerPiece?: number;
+          basePricePerPair?: number;
+          basePricePerItem?: number;
+          fixedPrice?: number;
+          minWeightKg?: number;
+        }
       | undefined;
-    if (quote.pricingMode !== BranchPricingMode.FLAT_BAG) {
-      const servicePrice = branch.servicePricing?.find((p) => p.serviceType === dto.bookingType);
+    if (primaryQuote.pricingMode !== BranchPricingMode.FLAT_BAG) {
+      const servicePrice = branch.servicePricing?.find((p) => p.serviceType === primaryDto.bookingType);
       pricingSnapshot = {
         basePricePerKg: servicePrice?.basePricePerKg,
         basePricePerLoad: servicePrice?.basePricePerLoad,
         basePricePerPiece: servicePrice?.basePricePerPiece,
+        basePricePerPair: servicePrice?.basePricePerPair,
+        basePricePerItem: servicePrice?.basePricePerItem,
+        fixedPrice: servicePrice?.fixedPrice,
       };
     }
 
     return {
-        bookingType: dto.bookingType,
+        bookingType: primaryDto.bookingType,
         items,
         pickupAddressId: dto.pickupAddressId,
         deliveryAddressId: dto.deliveryAddressId ?? dto.pickupAddressId,
         scheduledPickupAt: dto.scheduledPickupAt,
         scheduledDeliveryAt: undefined,
         couponCode: quote.couponCode,
-        estimatedWeightKg: quote.weightKg,
-        estimatedLoadCount: dto.enteredLoadCount,
-        estimatedPieceCount: dto.enteredPieceCount,
-        bagSizeId: quote.bagSizeId,
-        bagSizeLabel: quote.bagLabel,
+        estimatedWeightKg: primaryQuote.weightKg,
+        estimatedLoadCount: primaryDto.enteredLoadCount,
+        estimatedPieceCount: primaryDto.enteredPieceCount,
+        garmentSelections: primaryQuote.garmentSelections,
+        bagSizeId: primaryQuote.bagSizeId,
+        bagSizeLabel: primaryQuote.bagLabel,
         addons: quote.addons,
         subtotal: quote.subtotal,
         deliveryFee: quote.deliveryFee,
         discount: quote.discount,
         total: quote.total,
-        pricingMode: quote.pricingMode,
+        pricingMode: primaryQuote.pricingMode,
         pricingSnapshot,
         isEstimate: quote.isEstimate,
         branchId,
@@ -425,16 +577,24 @@ export class BookingService {
   private async firstDispatchableBranch(
     branchEvaluations: { branchId: string; code: string; name: string; availability: { acceptingOrders: boolean }; qualified: boolean }[],
     dto: BookingQuoteDto,
-    bookingType: BookingType,
+    bookingTypes: BookingType[],
   ) {
-    const canPriceNonFlat = Boolean(dto.enteredWeightKg || dto.enteredLoadCount || dto.enteredPieceCount);
     for (const candidate of branchEvaluations) {
       if (!candidate.availability.acceptingOrders || !candidate.qualified) continue;
-      if (canPriceNonFlat) return candidate;
       const branch = await this.branchesService.getActivePartnerShop(candidate.branchId);
-      if (this.branchesService.resolveServicePricingUnit(branch, bookingType) === BranchPricingMode.FLAT_BAG) {
-        return candidate;
-      }
+
+      const offersAll = await Promise.all(
+        bookingTypes.map((type) => this.branchesService.isServiceTypeOfferedByBranch(branch, type)),
+      );
+      if (offersAll.some((offered) => !offered)) continue;
+
+      const canPriceEveryService = dto.services.every((service) => {
+        if (this.branchesService.resolveServicePricingUnit(branch, service.bookingType) === BranchPricingMode.FLAT_BAG) {
+          return true;
+        }
+        return Boolean(service.enteredWeightKg || service.enteredLoadCount || service.enteredPieceCount);
+      });
+      if (canPriceEveryService) return candidate;
     }
     return undefined;
   }
@@ -447,20 +607,20 @@ export class BookingService {
   private async resolvePartnerBranch(
     partnerContextId: string,
     address: { line1?: string; city: string; province: string; latitude?: number; longitude?: number },
-    bookingType: BookingType,
+    bookingTypes: BookingType[],
     estimatedWeightKg: number,
     dto: BookingQuoteDto,
   ) {
     const evaluation = await this.branchesService.buildDispatchEvaluationsForPartner(
       { ...address, line1: address.line1 ?? '' },
-      bookingType,
+      bookingTypes[0],
       estimatedWeightKg,
       new Types.ObjectId(partnerContextId),
     );
 
     // Lunara is choosing on the customer's behalf here, so only algorithmically-qualified
     // branches are eligible — capacity alone isn't enough (see isQualityQualified).
-    const eligible = await this.firstDispatchableBranch(evaluation.branchEvaluations, dto, bookingType);
+    const eligible = await this.firstDispatchableBranch(evaluation.branchEvaluations, dto, bookingTypes);
     if (!eligible) {
       throw new BadRequestException(
         'This laundry partner is fully booked right now. Please try again later.',
@@ -477,18 +637,18 @@ export class BookingService {
    */
   private async resolveNetworkBranch(
     address: { line1?: string; city: string; province: string; latitude?: number; longitude?: number },
-    bookingType: BookingType,
+    bookingTypes: BookingType[],
     estimatedWeightKg: number,
     dto: BookingQuoteDto,
   ) {
     const evaluation = await this.branchesService.buildDispatchEvaluations(
       { ...address, line1: address.line1 ?? '' },
-      bookingType,
+      bookingTypes[0],
       estimatedWeightKg,
     );
 
     // Lunara is choosing the shop here, not the customer, so it must meet the quality bar too.
-    const eligible = await this.firstDispatchableBranch(evaluation.branchEvaluations, dto, bookingType);
+    const eligible = await this.firstDispatchableBranch(evaluation.branchEvaluations, dto, bookingTypes);
     if (!eligible) {
       throw new BadRequestException(
         'All nearby laundry shops are fully booked right now. Please try again later.',

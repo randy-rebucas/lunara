@@ -1,19 +1,35 @@
 import { BookingType } from '@lunara/types';
 import { BAG_SIZES } from '@lunara/utils';
-import { IsArray, IsDateString, IsEnum, IsIn, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  ArrayMinSize,
+  IsArray,
+  IsDateString,
+  IsEnum,
+  IsIn,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 
 const BAG_SIZE_IDS = BAG_SIZES.map((b) => b.id);
 
-export class BookingQuoteDto {
+export class GarmentSelectionDto {
+  @IsString()
+  garmentId!: string;
+
+  @IsNumber()
+  @Min(1)
+  quantity!: number;
+}
+
+/** One selected laundry service within a (potentially multi-service) booking — everything needed
+ * to price that one service line via calculateQuote. */
+export class ServiceSelectionDto {
   @IsEnum(BookingType)
   bookingType!: BookingType;
-
-  /** General customer flow: the shop the customer picked. Omit to let Lunara auto-dispatch to the
-   * top-ranked available shop network-wide ("Let Lunara pick a shop for you"). Always omitted for
-   * white-labeled partner bookings, which resolve within that partner's own branch pool instead. */
-  @IsOptional()
-  @IsString()
-  branchId?: string;
 
   /** When set, prices/labels this line item from the shop's own custom service instead of the global catalog. */
   @IsOptional()
@@ -43,6 +59,31 @@ export class BookingQuoteDto {
   @IsNumber()
   @Min(1)
   enteredPieceCount?: number;
+
+  /** Required (non-empty) when bookingType is garment-priced (see GARMENT_PRICED_BOOKING_TYPES,
+   * currently just DRY_CLEANING) — selected garments + quantity to price the order from. */
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => GarmentSelectionDto)
+  garmentSelections?: GarmentSelectionDto[];
+}
+
+export class BookingQuoteDto {
+  /** Every service being booked together (e.g. Wash & Fold + Dry Cleaning + Shoes) — priced and
+   * itemized as separate lines, all against one resolved shop/pickup slot. */
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => ServiceSelectionDto)
+  services!: ServiceSelectionDto[];
+
+  /** General customer flow: the shop the customer picked. Omit to let Lunara auto-dispatch to the
+   * top-ranked available shop network-wide ("Let Lunara pick a shop for you"). Always omitted for
+   * white-labeled partner bookings, which resolve within that partner's own branch pool instead. */
+  @IsOptional()
+  @IsString()
+  branchId?: string;
 
   @IsOptional()
   @IsArray()

@@ -1,5 +1,4 @@
 import type { PromotionAudience } from '@lunara/types';
-import type { QuoteBreakdown } from './booking.js';
 
 export interface PromotionDiscountInput {
   code: string;
@@ -149,10 +148,9 @@ export function computePromotionDiscountAmount(
   return Math.min(promo.discountValue, subtotal + deliveryFee);
 }
 
-export function applyPromotionToQuote(
-  quote: QuoteBreakdown,
-  promo: PromotionDiscountInput,
-): QuoteBreakdown {
+export function applyPromotionToQuote<
+  T extends { subtotal: number; deliveryFee: number; discount: number; total: number; couponCode?: string; promotionTitle?: string },
+>(quote: T, promo: PromotionDiscountInput): T {
   const discount = computePromotionDiscountAmount(quote.subtotal, quote.deliveryFee, promo);
   return {
     ...quote,

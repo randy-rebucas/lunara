@@ -1,6 +1,9 @@
 import { join } from 'path';
 
-export const UPLOAD_ROOT = process.env.UPLOAD_ROOT ?? join(process.cwd(), 'uploads');
+/** `||` (not `??`) deliberately — an empty-string UPLOAD_ROOT (e.g. an unset .env placeholder)
+ * must fall back to the default too, otherwise ServeStaticModule gets a relative rootPath and
+ * throws instead of 404ing on any file outside whatever the process's cwd happens to resolve to. */
+export const UPLOAD_ROOT = process.env.UPLOAD_ROOT || join(process.cwd(), 'uploads');
 
 /** Local dir still used by writeCatalogAddonImages() to generate default SVG placeholder icons. */
 export const CATALOG_ADDON_UPLOAD_DIR = join(UPLOAD_ROOT, 'public', 'catalog-addons');

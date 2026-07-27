@@ -1,4 +1,4 @@
-import { BookingType, type DayOperatingHours, type OperatingHours } from '@lunara/types';
+import { AddonCategory, BookingType, ServiceCategory, type DayOperatingHours, type OperatingHours } from '@lunara/types';
 
 export const BOOKING_MIN_ORDER_AMOUNT = 150;
 /** @deprecated use BOOKING_FLAT_DELIVERY_FEE */
@@ -14,6 +14,15 @@ export const BOOKING_MACHINE_LOAD_MIN_KG = 8;
 
 export const BOOKING_MACHINE_LOAD_INFO =
   'Each machine holds up to 8 kg per load — every additional 8 kg (or part of it) counts as another load.';
+
+/** Overall minimum weight for a weight-based booking (FLAT_BAG/PER_KG/PER_LOAD) — does not apply to PER_PIECE. */
+export const BOOKING_MIN_WEIGHT_KG = 5;
+
+/** Per-kg pricing only applies up to this weight — heavier loads are billed per machine load instead. */
+export const BOOKING_PER_KG_MAX_KG = 5;
+
+/** Load-count cap referenced by the per-kg → per-load guidance (2 loads = up to 16 kg). */
+export const BOOKING_PER_KG_MAX_LOAD_COUNT = 2;
 
 /** Number of 8kg machine loads needed for a given weight, rounded up (min 1). Used both for
  * dispatch/display capacity estimates and — for PER_LOAD pricing — as the billed load count when
@@ -33,6 +42,8 @@ export interface LaundryServiceOption {
   type: BookingType;
   label: string;
   description: string;
+  /** Grouping for catalog display (e.g. "Core Laundry", "Specialty") — not billing-relevant. */
+  category?: ServiceCategory;
   /** @deprecated Base pricing is flat by bag size (see BAG_SIZES), not per kg. Kept for legacy/display reference only. */
   pricePerKg: number;
   /** @deprecated Base pricing is flat by bag size (see BAG_SIZES), not per kg. Kept for legacy/display reference only. */
@@ -62,13 +73,30 @@ export function getBagSize(id: string): BagSizeOption | undefined {
   return BAG_SIZES.find((b) => b.id === id);
 }
 
+/** The smallest bag whose capacity fits a given weight — used to show a live "appropriate bag"
+ * preview on the PER_KG/PER_LOAD weight steps (informational only; those modes don't bill by bag). */
+export function recommendBagForWeight(
+  weightKg: number,
+  bagSizes: BagSizeOption[] = BAG_SIZES,
+): BagSizeOption | undefined {
+  if (weightKg <= 0 || bagSizes.length === 0) return undefined;
+  return bagSizes.find((bag) => weightKg <= bag.capacityKg) ?? bagSizes[bagSizes.length - 1];
+}
+
 export interface BookingAddonOption {
   id: string;
   label: string;
   description: string;
-  /** Flat total when pricingUnit is FLAT_BAG (or unset); otherwise the per-kg/load/piece rate. */
+  /** Grouping for catalog display (e.g. "Treatment", "Protection") — not billing-relevant. */
+  category?: AddonCategory;
+  /** Flat total when pricingUnit is FLAT_BAG (or unset); the per-kg/load/piece rate for other
+   * pricingUnit values; or the percentage (e.g. 50 for 50%) when isPercentOfService is true —
+   * pricingUnit is ignored in that case. */
   price: number;
   pricingUnit?: BranchPricingMode;
+  /** Global-catalog-only pricing kind (see catalog.seed.ts) — not partner-configurable, unlike
+   * pricingUnit. When true, this add-on's total is serviceSubtotal × price/100, not a flat/unit rate. */
+  isPercentOfService?: boolean;
   imageUrl?: string;
 }
 
@@ -102,6 +130,9 @@ export enum BranchPricingMode {
   PER_KG = 'per_kg',
   PER_LOAD = 'per_load',
   PER_PIECE = 'per_piece',
+  PER_PAIR = 'per_pair',
+  PER_ITEM = 'per_item',
+  FIXED = 'fixed',
 }
 
 /** Partner's own rates for the active pricing mode; branch-level, resolved server-side. */
@@ -109,24 +140,72 @@ export interface PricingModeRates {
   basePricePerKg?: number;
   basePricePerLoad?: number;
   basePricePerPiece?: number;
+  basePricePerPair?: number;
+  basePricePerItem?: number;
+  /** Flat total for FIXED pricing mode, regardless of quantity. */
+  fixedPrice?: number;
   minWeightKg?: number;
+}
+
+export interface GarmentItem {
+  id: string;
+  category: string;
+  label: string;
+  /** Reference price only — the app doesn't yet support per-branch overrides for garment pricing. */
+  price: number;
+}
+
+export interface GarmentSelection {
+  garmentId: string;
+  quantity: number;
+}
+
+/** Booking types billed by summing selected garments × quantity instead of any BranchPricingMode —
+ * see GARMENT_CATALOG. Dry cleaning is priced per garment type, not by weight/piece/kg. */
+export const GARMENT_PRICED_BOOKING_TYPES: BookingType[] = [BookingType.DRY_CLEANING];
+
+export function isGarmentPricedBookingType(bookingType: BookingType): boolean {
+  return GARMENT_PRICED_BOOKING_TYPES.includes(bookingType);
+}
+
+export function getGarment(id: string, catalog: GarmentItem[] = GARMENT_CATALOG): GarmentItem | undefined {
+  return catalog.find((g) => g.id === id);
+}
+
+export function getGarmentCategories(catalog: GarmentItem[] = GARMENT_CATALOG): string[] {
+  return [...new Set(catalog.map((g) => g.category))];
+}
+
+/** Sums selected garments × quantity — the whole basis for GARMENT_PRICED_BOOKING_TYPES billing. */
+export function computeGarmentSubtotal(
+  selections: GarmentSelection[],
+  catalog: GarmentItem[] = GARMENT_CATALOG,
+): number {
+  return selections.reduce((sum, sel) => {
+    if (sel.quantity <= 0) return sum;
+    const garment = getGarment(sel.garmentId, catalog);
+    return garment ? sum + garment.price * sel.quantity : sum;
+  }, 0);
 }
 
 export interface QuoteInput {
   bookingType: BookingType;
-  /** Required when pricingMode is FLAT_BAG (or omitted). */
+  /** Required when pricingMode is FLAT_BAG (or omitted), unless bookingType is garment-priced. */
   bagSizeId?: BagSizeId;
   addonIds: string[];
-  /** Defaults to FLAT_BAG (today's behavior) when omitted. */
+  /** Defaults to FLAT_BAG (today's behavior) when omitted. Ignored for garment-priced booking types. */
   pricingMode?: BranchPricingMode;
-  /** Partner's per-kg/per-load/per-piece rates — required when pricingMode is PER_KG, PER_LOAD, or PER_PIECE. */
+  /** Partner's rates for the active mode — required when pricingMode is PER_KG, PER_LOAD, PER_PIECE, PER_PAIR, PER_ITEM, or FIXED. */
   rates?: PricingModeRates;
   /** Customer-entered weight — required for PER_KG, and used to derive load count for PER_LOAD if enteredLoadCount is omitted. */
   enteredWeightKg?: number;
   /** Customer-entered load count — required for PER_LOAD unless enteredWeightKg is provided instead. */
   enteredLoadCount?: number;
-  /** Customer-entered piece count — required for PER_PIECE. */
+  /** Customer-entered piece/pair/item count — required for PER_PIECE, PER_PAIR, and PER_ITEM. */
   enteredPieceCount?: number;
+  /** Required (non-empty) when bookingType is garment-priced (see GARMENT_PRICED_BOOKING_TYPES) — the
+   * service subtotal is computed as sum(garment price × quantity) instead of any BranchPricingMode. */
+  garmentSelections?: GarmentSelection[];
 }
 
 /** Computes the base laundry service subtotal for a given pricing mode. Shared between booking-time
@@ -156,6 +235,23 @@ export function computeServiceSubtotal(
       const pieceCount = qty.pieceCount ?? 0;
       return Math.round(pieceCount * perPiece * 100) / 100;
     }
+    case BranchPricingMode.PER_PAIR: {
+      const perPair = rates?.basePricePerPair;
+      if (perPair == null) throw new Error('Missing basePricePerPair for PER_PAIR pricing mode');
+      const pairCount = qty.pieceCount ?? 0;
+      return Math.round(pairCount * perPair * 100) / 100;
+    }
+    case BranchPricingMode.PER_ITEM: {
+      const perItem = rates?.basePricePerItem;
+      if (perItem == null) throw new Error('Missing basePricePerItem for PER_ITEM pricing mode');
+      const itemCount = qty.pieceCount ?? 0;
+      return Math.round(itemCount * perItem * 100) / 100;
+    }
+    case BranchPricingMode.FIXED: {
+      const fixedPrice = rates?.fixedPrice;
+      if (fixedPrice == null) throw new Error('Missing fixedPrice for FIXED pricing mode');
+      return fixedPrice;
+    }
     case BranchPricingMode.FLAT_BAG:
     default: {
       if (!qty.bag) throw new Error('Missing bag size for FLAT_BAG pricing mode');
@@ -172,9 +268,17 @@ export interface QuoteBreakdown {
   /** Nominal weight from the bag's capacity — for machine-load estimates and display, not billing. */
   weightKg: number;
   serviceSubtotal: number;
-  /** `price` is the computed line total (already rate × quantity for non-flat units). `unit`/
-   * `quantity` describe what that total was computed from, for display. */
-  addons: { id: string; label: string; price: number; unit?: BranchPricingMode; quantity?: number }[];
+  /** `price` is the computed line total (already rate × quantity for non-flat units, or
+   * serviceSubtotal × percent/100 for percent-of-service add-ons). `unit`/`quantity` describe
+   * what that total was computed from, for display; `percent` is set instead for percent add-ons. */
+  addons: {
+    id: string;
+    label: string;
+    price: number;
+    unit?: BranchPricingMode;
+    quantity?: number;
+    percent?: number;
+  }[];
   addonsSubtotal: number;
   subtotal: number;
   deliveryFee: number;
@@ -182,13 +286,100 @@ export interface QuoteBreakdown {
   total: number;
   meetsMinimum: boolean;
   minimumOrderAmount: number;
+  /** False only when this is a weight-based mode (not PER_PIECE) and enteredWeightKg is below BOOKING_MIN_WEIGHT_KG. */
+  meetsWeightMinimum: boolean;
+  minimumWeightKg: number;
   couponCode?: string;
   promotionTitle?: string;
   pricingMode: BranchPricingMode;
+  /** Set only for garment-priced booking types (see GARMENT_PRICED_BOOKING_TYPES) — the garment
+   * selections serviceSubtotal was computed from. */
+  garmentSelections?: GarmentSelection[];
   /** PER_PIECE orders only — piece count the subtotal was computed from. */
   pieceCount?: number;
   /** True when the base service price is provisional (PER_KG/PER_LOAD/PER_PIECE) and will be confirmed at pickup. */
   isEstimate: boolean;
+}
+
+export interface MultiServiceQuoteBreakdown {
+  services: QuoteBreakdown[];
+  addons: QuoteBreakdown['addons'];
+  addonsSubtotal: number;
+  serviceSubtotal: number;
+  subtotal: number;
+  deliveryFee: number;
+  discount: number;
+  total: number;
+  meetsMinimum: boolean;
+  minimumOrderAmount: number;
+  meetsWeightMinimum: boolean;
+  minimumWeightKg: number;
+  couponCode?: string;
+  promotionTitle?: string;
+  isEstimate: boolean;
+}
+
+/** Combines per-service QuoteBreakdowns (each priced independently via calculateQuote) into one
+ * order-level breakdown. Add-ons are priced once here against the combined service subtotal
+ * (rather than per-service) so a percent-of-service add-on bills off the whole order, not just
+ * whichever service happened to compute it. */
+export function combineServiceQuotes(
+  serviceQuotes: QuoteBreakdown[],
+  addonOptions: BookingAddonOption[],
+  addonIds: string[],
+  deliveryFee: number,
+): MultiServiceQuoteBreakdown {
+  if (!serviceQuotes.length) throw new Error('At least one service is required');
+
+  const serviceSubtotal = serviceQuotes.reduce((sum, s) => sum + s.serviceSubtotal, 0);
+  const combinedWeightKg = serviceQuotes.reduce((sum, s) => sum + s.weightKg, 0);
+  const combinedPieceCount = serviceQuotes.reduce((sum, s) => sum + (s.pieceCount ?? 0), 0);
+
+  const addons = addonIds
+    .map((id) => addonOptions.find((a) => a.id === id))
+    .filter((a): a is BookingAddonOption => !!a)
+    .map((a) => {
+      if (a.isPercentOfService) {
+        const price = Math.round(serviceSubtotal * (a.price / 100) * 100) / 100;
+        return { id: a.id, label: a.label, price, percent: a.price };
+      }
+      const unit = a.pricingUnit ?? BranchPricingMode.FLAT_BAG;
+      const quantity =
+        unit === BranchPricingMode.PER_KG
+          ? combinedWeightKg
+          : unit === BranchPricingMode.PER_LOAD
+            ? estimateMachineLoads(combinedWeightKg)
+            : unit === BranchPricingMode.PER_PIECE ||
+                unit === BranchPricingMode.PER_PAIR ||
+                unit === BranchPricingMode.PER_ITEM
+              ? combinedPieceCount
+              : undefined;
+      const price =
+        unit === BranchPricingMode.FLAT_BAG || unit === BranchPricingMode.FIXED
+          ? a.price
+          : Math.round(a.price * (quantity ?? 0) * 100) / 100;
+      return { id: a.id, label: a.label, price, unit, quantity };
+    });
+  const addonsSubtotal = addons.reduce((sum, a) => sum + a.price, 0);
+  const subtotal = serviceSubtotal + addonsSubtotal;
+  const discount = 0;
+  const total = subtotal + deliveryFee - discount;
+
+  return {
+    services: serviceQuotes,
+    addons,
+    addonsSubtotal,
+    serviceSubtotal,
+    subtotal,
+    deliveryFee,
+    discount,
+    total,
+    meetsMinimum: subtotal >= BOOKING_MIN_ORDER_AMOUNT,
+    minimumOrderAmount: BOOKING_MIN_ORDER_AMOUNT,
+    meetsWeightMinimum: serviceQuotes.every((s) => s.meetsWeightMinimum),
+    minimumWeightKg: BOOKING_MIN_WEIGHT_KG,
+    isEstimate: serviceQuotes.some((s) => s.isEstimate),
+  };
 }
 
 export const LAUNDRY_SERVICES: LaundryServiceOption[] = [
@@ -240,6 +431,183 @@ export const BOOKING_ADDONS: BookingAddonOption[] = [
     description: 'Delivery within 24h after cleaning',
     price: 80,
   },
+  {
+    id: 'express_service_24h',
+    label: 'Express Service (24 Hours)',
+    description: 'Rushed turnaround — ready within 24 hours',
+    price: 50,
+    isPercentOfService: true,
+  },
+  {
+    id: 'same_day_service',
+    label: 'Same-Day Service',
+    description: 'Ready the same day it\'s dropped off',
+    price: 100,
+    isPercentOfService: true,
+  },
+  {
+    id: 'premium_stain_removal',
+    label: 'Premium Stain Removal',
+    description: 'Advanced treatment for tough or set-in stains',
+    price: 100,
+  },
+  {
+    id: 'heavy_stain_treatment',
+    label: 'Heavy Stain Treatment',
+    description: 'Deep treatment for heavily soiled garments',
+    price: 150,
+  },
+  {
+    id: 'odor_removal',
+    label: 'Odor Removal',
+    description: 'Deodorizing treatment for smoke, mildew, or other odors',
+    price: 80,
+  },
+  {
+    id: 'steam_pressing',
+    label: 'Steam Pressing',
+    description: 'Finishing steam press for a crisp, wrinkle-free look',
+    price: 50,
+  },
+  {
+    id: 'waterproofing',
+    label: 'Waterproofing',
+    description: 'Water-repellent treatment for jackets and outerwear',
+    price: 200,
+  },
+  {
+    id: 'fabric_protection',
+    label: 'Fabric Protection',
+    description: 'Protective coating against future stains',
+    price: 150,
+  },
+  {
+    id: 'minor_repair_button',
+    label: 'Minor Repair (Button)',
+    description: 'Button reattachment or replacement',
+    price: 50,
+  },
+  {
+    id: 'minor_stitching',
+    label: 'Minor Stitching',
+    description: 'Small seam or hem stitching',
+    price: 80,
+  },
+  {
+    id: 'garment_bag_packaging',
+    label: 'Garment Bag Packaging',
+    description: 'Protective garment bag for delivery',
+    price: 30,
+  },
+  {
+    id: 'premium_hanger',
+    label: 'Premium Hanger',
+    description: 'Upgraded hanger for delivered garments',
+    price: 20,
+  },
+];
+
+/** Reference dry-cleaning garment price list — platform-wide for now (no per-branch override yet).
+ * Wedding Gown's real-world range (₱2,500–₱8,000) is collapsed to its low end as a starting price. */
+export const GARMENT_CATALOG: GarmentItem[] = [
+  { id: 'suit_jacket', category: 'Suits & Formal Wear', label: 'Suit Jacket', price: 250 },
+  { id: 'suit_pants', category: 'Suits & Formal Wear', label: 'Suit Pants', price: 180 },
+  { id: 'complete_suit_2pc', category: 'Suits & Formal Wear', label: 'Complete Suit (2-piece)', price: 400 },
+  { id: 'three_piece_suit', category: 'Suits & Formal Wear', label: 'Three-piece Suit', price: 550 },
+  { id: 'blazer', category: 'Suits & Formal Wear', label: 'Blazer', price: 250 },
+  { id: 'sports_coat', category: 'Suits & Formal Wear', label: 'Sports Coat', price: 250 },
+  { id: 'vest_waistcoat', category: 'Suits & Formal Wear', label: 'Vest / Waistcoat', price: 120 },
+  { id: 'tuxedo_jacket', category: 'Suits & Formal Wear', label: 'Tuxedo Jacket', price: 350 },
+  { id: 'tuxedo_pants', category: 'Suits & Formal Wear', label: 'Tuxedo Pants', price: 220 },
+  { id: 'complete_tuxedo', category: 'Suits & Formal Wear', label: 'Complete Tuxedo', price: 550 },
+
+  { id: 'dress_shirt', category: 'Shirts & Tops', label: 'Dress Shirt', price: 120 },
+  { id: 'silk_shirt', category: 'Shirts & Tops', label: 'Silk Shirt', price: 180 },
+  { id: 'polo_shirt', category: 'Shirts & Tops', label: 'Polo Shirt', price: 100 },
+  { id: 'long_sleeve_shirt', category: 'Shirts & Tops', label: 'Long Sleeve Shirt', price: 120 },
+  { id: 'blouse', category: 'Shirts & Tops', label: 'Blouse', price: 120 },
+  { id: 'silk_blouse', category: 'Shirts & Tops', label: 'Silk Blouse', price: 180 },
+  { id: 'sweater', category: 'Shirts & Tops', label: 'Sweater', price: 180 },
+  { id: 'cardigan', category: 'Shirts & Tops', label: 'Cardigan', price: 180 },
+  { id: 'hoodie', category: 'Shirts & Tops', label: 'Hoodie', price: 180 },
+  { id: 'knitwear', category: 'Shirts & Tops', label: 'Knitwear', price: 200 },
+
+  { id: 'casual_dress', category: 'Dresses', label: 'Casual Dress', price: 220 },
+  { id: 'cocktail_dress', category: 'Dresses', label: 'Cocktail Dress', price: 350 },
+  { id: 'evening_gown', category: 'Dresses', label: 'Evening Gown', price: 650 },
+  { id: 'formal_gown', category: 'Dresses', label: 'Formal Gown', price: 750 },
+  { id: 'wedding_gown', category: 'Dresses', label: 'Wedding Gown', price: 2500 },
+  { id: 'bridesmaid_dress', category: 'Dresses', label: 'Bridesmaid Dress', price: 400 },
+  { id: 'prom_dress', category: 'Dresses', label: 'Prom Dress', price: 450 },
+
+  { id: 'dress_pants', category: 'Bottoms', label: 'Dress Pants', price: 180 },
+  { id: 'slacks', category: 'Bottoms', label: 'Slacks', price: 180 },
+  { id: 'pencil_skirt', category: 'Bottoms', label: 'Pencil Skirt', price: 150 },
+  { id: 'long_skirt', category: 'Bottoms', label: 'Long Skirt', price: 180 },
+
+  { id: 'barong_tagalog', category: 'Traditional Wear', label: 'Barong Tagalog', price: 180 },
+  { id: 'filipiniana_dress', category: 'Traditional Wear', label: 'Filipiniana Dress', price: 400 },
+  { id: 'kimono', category: 'Traditional Wear', label: 'Kimono', price: 350 },
+  { id: 'hanbok', category: 'Traditional Wear', label: 'Hanbok', price: 500 },
+  { id: 'saree', category: 'Traditional Wear', label: 'Saree', price: 450 },
+  { id: 'abaya', category: 'Traditional Wear', label: 'Abaya', price: 350 },
+
+  { id: 'denim_jacket', category: 'Outerwear', label: 'Denim Jacket', price: 220 },
+  { id: 'bomber_jacket', category: 'Outerwear', label: 'Bomber Jacket', price: 250 },
+  { id: 'leather_jacket', category: 'Outerwear', label: 'Leather Jacket', price: 700 },
+  { id: 'suede_jacket', category: 'Outerwear', label: 'Suede Jacket', price: 800 },
+  { id: 'wool_coat', category: 'Outerwear', label: 'Wool Coat', price: 500 },
+  { id: 'trench_coat', category: 'Outerwear', label: 'Trench Coat', price: 550 },
+  { id: 'winter_coat', category: 'Outerwear', label: 'Winter Coat', price: 600 },
+  { id: 'down_jacket', category: 'Outerwear', label: 'Down Jacket', price: 650 },
+  { id: 'raincoat', category: 'Outerwear', label: 'Raincoat', price: 250 },
+
+  { id: 'leather_pants', category: 'Leather Items', label: 'Leather Pants', price: 700 },
+  { id: 'leather_skirt', category: 'Leather Items', label: 'Leather Skirt', price: 500 },
+  { id: 'leather_vest', category: 'Leather Items', label: 'Leather Vest', price: 400 },
+  { id: 'leather_gloves', category: 'Leather Items', label: 'Leather Gloves', price: 250 },
+
+  { id: 'silk_dress', category: 'Delicate Fabrics', label: 'Silk Dress', price: 350 },
+  { id: 'velvet_dress', category: 'Delicate Fabrics', label: 'Velvet Dress', price: 400 },
+  { id: 'satin_dress', category: 'Delicate Fabrics', label: 'Satin Dress', price: 350 },
+  { id: 'lace_dress', category: 'Delicate Fabrics', label: 'Lace Dress', price: 350 },
+  { id: 'chiffon_dress', category: 'Delicate Fabrics', label: 'Chiffon Dress', price: 350 },
+  { id: 'cashmere_sweater', category: 'Delicate Fabrics', label: 'Cashmere Sweater', price: 350 },
+
+  { id: 'school_blazer', category: 'Uniforms', label: 'School Blazer', price: 200 },
+  { id: 'hotel_uniform', category: 'Uniforms', label: 'Hotel Uniform', price: 180 },
+  { id: 'airline_uniform', category: 'Uniforms', label: 'Airline Uniform', price: 220 },
+  { id: 'security_uniform', category: 'Uniforms', label: 'Security Uniform', price: 180 },
+  { id: 'military_uniform', category: 'Uniforms', label: 'Military Uniform', price: 250 },
+  { id: 'graduation_gown', category: 'Uniforms', label: 'Graduation Gown', price: 250 },
+  { id: 'choir_robe', category: 'Uniforms', label: 'Choir Robe', price: 300 },
+
+  { id: 'christening_gown', category: "Children's Wear", label: 'Christening Gown', price: 350 },
+  { id: 'flower_girl_dress', category: "Children's Wear", label: 'Flower Girl Dress', price: 300 },
+  { id: 'ring_bearer_suit', category: "Children's Wear", label: 'Ring Bearer Suit', price: 300 },
+
+  { id: 'curtains_per_panel', category: 'Home Textiles', label: 'Curtains (per panel)', price: 250 },
+  { id: 'sheer_curtain', category: 'Home Textiles', label: 'Sheer Curtain', price: 180 },
+  { id: 'tablecloth', category: 'Home Textiles', label: 'Tablecloth', price: 250 },
+  { id: 'chair_cover', category: 'Home Textiles', label: 'Chair Cover', price: 80 },
+  { id: 'cushion_cover', category: 'Home Textiles', label: 'Cushion Cover', price: 60 },
+  { id: 'decorative_pillow_cover', category: 'Home Textiles', label: 'Decorative Pillow Cover', price: 60 },
+  { id: 'blanket', category: 'Home Textiles', label: 'Blanket', price: 350 },
+  { id: 'comforter_single', category: 'Home Textiles', label: 'Comforter (Single)', price: 450 },
+  { id: 'comforter_double', category: 'Home Textiles', label: 'Comforter (Double)', price: 600 },
+  { id: 'comforter_queen', category: 'Home Textiles', label: 'Comforter (Queen)', price: 700 },
+  { id: 'comforter_king', category: 'Home Textiles', label: 'Comforter (King)', price: 850 },
+  { id: 'duvet', category: 'Home Textiles', label: 'Duvet', price: 700 },
+  { id: 'quilt', category: 'Home Textiles', label: 'Quilt', price: 500 },
+  { id: 'bedspread', category: 'Home Textiles', label: 'Bedspread', price: 450 },
+
+  { id: 'necktie', category: 'Accessories', label: 'Necktie', price: 80 },
+  { id: 'bow_tie', category: 'Accessories', label: 'Bow Tie', price: 60 },
+  { id: 'scarf', category: 'Accessories', label: 'Scarf', price: 100 },
+  { id: 'shawl', category: 'Accessories', label: 'Shawl', price: 150 },
+  { id: 'pashmina', category: 'Accessories', label: 'Pashmina', price: 180 },
+  { id: 'fabric_hat', category: 'Accessories', label: 'Fabric Hat', price: 150 },
+  { id: 'pocket_square', category: 'Accessories', label: 'Pocket Square', price: 50 },
 ];
 
 export const EXPRESS_RETURN_ADDON_ID = 'express_delivery';
@@ -341,12 +709,17 @@ export function calculateQuote(
   const service = serviceOverride ?? getService(input.bookingType);
   if (!service) throw new Error('Unknown service type');
 
-  const pricingMode = input.pricingMode ?? BranchPricingMode.FLAT_BAG;
-  const bag = input.bagSizeId ? getBagSize(input.bagSizeId) : undefined;
-  if (pricingMode === BranchPricingMode.FLAT_BAG && !bag) throw new Error('Unknown bag size');
+  const garmentPriced = isGarmentPricedBookingType(input.bookingType) && !!input.garmentSelections?.length;
 
-  const weightKg =
-    pricingMode === BranchPricingMode.FLAT_BAG
+  const pricingMode = input.pricingMode ?? BranchPricingMode.FLAT_BAG;
+  const bag = !garmentPriced && input.bagSizeId ? getBagSize(input.bagSizeId) : undefined;
+  if (!garmentPriced && pricingMode === BranchPricingMode.FLAT_BAG && !bag) {
+    throw new Error('Unknown bag size');
+  }
+
+  const weightKg = garmentPriced
+    ? 0
+    : pricingMode === BranchPricingMode.FLAT_BAG
       ? (bag?.capacityKg ?? 0)
       : (input.enteredWeightKg ?? 0);
   // Always resolved regardless of the service's own mode — an add-on can bill per-load or
@@ -354,28 +727,36 @@ export function calculateQuote(
   const loadCount = input.enteredLoadCount ?? estimateMachineLoads(weightKg);
   const pieceCount = input.enteredPieceCount;
 
-  const serviceSubtotal = computeServiceSubtotal(pricingMode, input.rates, {
-    bag,
-    weightKg,
-    loadCount: pricingMode === BranchPricingMode.PER_LOAD ? loadCount : undefined,
-    pieceCount: pricingMode === BranchPricingMode.PER_PIECE ? pieceCount : undefined,
-  });
+  const serviceSubtotal = garmentPriced
+    ? computeGarmentSubtotal(input.garmentSelections ?? [])
+    : computeServiceSubtotal(pricingMode, input.rates, {
+        bag,
+        weightKg,
+        loadCount: pricingMode === BranchPricingMode.PER_LOAD ? loadCount : undefined,
+        pieceCount: pricingMode === BranchPricingMode.PER_PIECE ? pieceCount : undefined,
+      });
   const catalog = addonOptions ?? BOOKING_ADDONS;
   const addons = input.addonIds
     .map((id) => catalog.find((a) => a.id === id))
     .filter((a): a is BookingAddonOption => !!a)
     .map((a) => {
+      if (a.isPercentOfService) {
+        const price = Math.round(serviceSubtotal * (a.price / 100) * 100) / 100;
+        return { id: a.id, label: a.label, price, percent: a.price };
+      }
       const unit = a.pricingUnit ?? BranchPricingMode.FLAT_BAG;
       const quantity =
         unit === BranchPricingMode.PER_KG
           ? weightKg
           : unit === BranchPricingMode.PER_LOAD
             ? loadCount
-            : unit === BranchPricingMode.PER_PIECE
+            : unit === BranchPricingMode.PER_PIECE ||
+                unit === BranchPricingMode.PER_PAIR ||
+                unit === BranchPricingMode.PER_ITEM
               ? (pieceCount ?? 0)
               : undefined;
       const price =
-        unit === BranchPricingMode.FLAT_BAG
+        unit === BranchPricingMode.FLAT_BAG || unit === BranchPricingMode.FIXED
           ? a.price
           : Math.round(a.price * (quantity ?? 0) * 100) / 100;
       return { id: a.id, label: a.label, price, unit, quantity };
@@ -401,9 +782,21 @@ export function calculateQuote(
     total,
     meetsMinimum: subtotal >= BOOKING_MIN_ORDER_AMOUNT,
     minimumOrderAmount: BOOKING_MIN_ORDER_AMOUNT,
+    meetsWeightMinimum:
+      garmentPriced ||
+      pricingMode === BranchPricingMode.PER_PIECE ||
+      pricingMode === BranchPricingMode.PER_PAIR ||
+      pricingMode === BranchPricingMode.PER_ITEM ||
+      pricingMode === BranchPricingMode.FIXED ||
+      weightKg >= BOOKING_MIN_WEIGHT_KG,
+    minimumWeightKg: BOOKING_MIN_WEIGHT_KG,
     pricingMode,
+    garmentSelections: garmentPriced ? input.garmentSelections : undefined,
     pieceCount,
-    isEstimate: pricingMode !== BranchPricingMode.FLAT_BAG,
+    isEstimate:
+      !garmentPriced &&
+      pricingMode !== BranchPricingMode.FLAT_BAG &&
+      pricingMode !== BranchPricingMode.FIXED,
   };
 }
 

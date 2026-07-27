@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { BookingType } from '@lunara/types';
+import { BranchPricingMode } from '@lunara/utils';
 import { HydratedDocument, Types } from 'mongoose';
 
 export type BranchCustomServiceDocument = HydratedDocument<BranchCustomService>;
@@ -22,8 +23,29 @@ export class BranchCustomService {
   @Prop({ required: true })
   description!: string;
 
-  @Prop({ required: true, min: 0 })
-  pricePerKg!: number;
+  /** Legacy default rate — required historically, now just the PER_KG rate when pricingUnit is
+   * PER_KG (or unset, for services created before per-service pricing units existed). */
+  @Prop({ min: 0 })
+  pricePerKg?: number;
+
+  @Prop({ min: 0 })
+  basePricePerLoad?: number;
+
+  @Prop({ min: 0 })
+  basePricePerPiece?: number;
+
+  @Prop({ min: 0 })
+  basePricePerPair?: number;
+
+  @Prop({ min: 0 })
+  basePricePerItem?: number;
+
+  @Prop({ min: 0 })
+  fixedPrice?: number;
+
+  /** Falls back to PER_KG (today's behavior) when unset. */
+  @Prop({ enum: BranchPricingMode })
+  pricingUnit?: BranchPricingMode;
 
   @Prop({ default: 3 })
   minWeightKg!: number;

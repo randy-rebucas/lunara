@@ -8,7 +8,6 @@ import {
   isNewCustomer,
   isPromotionActive,
   normalizePromotionCode,
-  type QuoteBreakdown,
   validateCustomerPromoForQuote,
   validatePromotionForCustomer,
 } from '@lunara/utils';
@@ -169,11 +168,9 @@ export class PromotionsService implements OnModuleInit {
     return { type: 'shared', promotion };
   }
 
-  async applyCouponToQuote(
-    quote: QuoteBreakdown,
-    couponCode: string | undefined,
-    userId: string,
-  ): Promise<QuoteBreakdown> {
+  async applyCouponToQuote<
+    T extends { subtotal: number; deliveryFee: number; discount: number; total: number; couponCode?: string; promotionTitle?: string },
+  >(quote: T, couponCode: string | undefined, userId: string): Promise<T> {
     if (!couponCode?.trim()) return quote;
 
     const resolved = await this.resolveCode(couponCode, userId);
@@ -198,7 +195,7 @@ export class PromotionsService implements OnModuleInit {
       if (!eligibility.valid) {
         throw new BadRequestException(eligibility.message);
       }
-      return applyPromotionToQuote(quote, {
+      return applyPromotionToQuote<T>(quote, {
         code: promo.code,
         title: promo.title,
         discountType: promo.discountType,

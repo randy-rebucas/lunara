@@ -6,6 +6,15 @@ import { BranchPricingMode } from '@lunara/utils';
 export type OrderDocument = HydratedDocument<Order>;
 
 @Schema({ _id: false })
+class OrderGarmentSelection {
+  @Prop({ required: true })
+  garmentId!: string;
+
+  @Prop({ required: true })
+  quantity!: number;
+}
+
+@Schema({ _id: false })
 class OrderAddon {
   @Prop({ required: true })
   id!: string;
@@ -365,6 +374,11 @@ export class Order {
   /** PER_PIECE orders only — customer-entered estimated piece count. */
   @Prop()
   estimatedPieceCount?: number;
+
+  /** Garment-priced orders only (see GARMENT_PRICED_BOOKING_TYPES) — the garments + quantity
+   * the service subtotal was computed from. */
+  @Prop({ type: [OrderGarmentSelection], default: undefined })
+  garmentSelections?: OrderGarmentSelection[];
 
   /** Flat bag size the customer selected and paid for (see @lunara/utils BAG_SIZES). Unset for PER_KG/PER_LOAD/PER_PIECE orders. */
   @Prop()

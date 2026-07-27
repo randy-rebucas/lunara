@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { BookingType } from '@lunara/types';
+import { BookingType, ServiceCategory } from '@lunara/types';
 import { HydratedDocument } from 'mongoose';
 
 export type LaundryServiceDocument = HydratedDocument<LaundryService>;
@@ -14,6 +14,9 @@ export class LaundryService {
 
   @Prop({ required: true })
   description!: string;
+
+  @Prop({ enum: ServiceCategory })
+  category?: ServiceCategory;
 
   @Prop({ required: true })
   pricePerKg!: number;

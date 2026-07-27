@@ -1,4 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { AddonCategory } from '@lunara/types';
 import { HydratedDocument } from 'mongoose';
 
 export type LaundryAddonDocument = HydratedDocument<LaundryAddon>;
@@ -14,8 +15,17 @@ export class LaundryAddon {
   @Prop({ required: true })
   description!: string;
 
+  @Prop({ enum: AddonCategory })
+  category?: AddonCategory;
+
+  /** Flat peso total, or the percentage (e.g. 50 for 50%) when isPercentOfService is true. */
   @Prop({ required: true })
   price!: number;
+
+  /** True for add-ons billed as a % of the order's service subtotal (e.g. Express/Same-Day
+   * service) instead of a flat peso amount — not partner-configurable, unlike branch pricingUnit. */
+  @Prop({ default: false })
+  isPercentOfService!: boolean;
 
   @Prop()
   imageUrl?: string;

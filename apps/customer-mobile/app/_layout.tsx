@@ -410,6 +410,29 @@ export default function RootLayout() {
 
         <Stack.Screen
 
+          name="subscriptions/index"
+
+          options={{
+
+            ...stackHeaderOptions,
+
+            headerShown: true,
+
+            title: 'Recurring pickups',
+
+            presentation: 'card',
+            headerLeft: () => (
+              <Pressable onPress={handleHeaderBack} hitSlop={10}>
+                <Ionicons name="chevron-back" size={26} color={colors.primary} />
+              </Pressable>
+            ),
+
+          }}
+
+        />
+
+        <Stack.Screen
+
           name="support/index"
 
           options={{

@@ -11,10 +11,25 @@ interface LaundryServiceRow {
   type: string;
   label: string;
   description: string;
+  category?: string;
   pricePerKg: number;
   minWeightKg: number;
   isActive: boolean;
   sortOrder: number;
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  core_laundry: 'Core Laundry',
+  garment_care: 'Garment Care',
+  home_textiles: 'Home Textiles',
+  footwear_leather: 'Footwear & Leather',
+  wellness_sanitation: 'Wellness & Sanitation',
+  specialty: 'Specialty',
+};
+
+function categoryLabel(category?: string) {
+  if (!category) return 'Uncategorized';
+  return CATEGORY_LABELS[category] ?? category;
 }
 
 type ServiceState = 'nominal' | 'attention';
@@ -83,12 +98,14 @@ function StatTile({
 
 export function ServicesBoard() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [limit, setLimit] = useState(50);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [editing, setEditing] = useState<LaundryServiceRow | null>(null);
   const [label, setLabel] = useState('');
   const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('');
   const [pricePerKg, setPricePerKg] = useState('');
   const [minWeightKg, setMinWeightKg] = useState('');
   const [sortOrder, setSortOrder] = useState('');
@@ -107,17 +124,26 @@ export function ServicesBoard() {
   const activeCount = services.filter((s) => s.isActive).length;
   const inactiveCount = services.length - activeCount;
 
+  const categories = useMemo(
+    () => Array.from(new Set(services.map((s) => s.category ?? 'uncategorized'))).sort(),
+    [services],
+  );
+
   const filteredServices = useMemo(() => {
     let list = services;
     if (statusFilter === 'active') list = list.filter((s) => s.isActive);
     if (statusFilter === 'inactive') list = list.filter((s) => !s.isActive);
+    if (categoryFilter !== 'all') {
+      list = list.filter((s) => (s.category ?? 'uncategorized') === categoryFilter);
+    }
     const searched = filterBySearch(list, search, [
       (s) => s.type,
       (s) => s.label,
       (s) => s.description,
+      (s) => categoryLabel(s.category),
     ]);
     return searched.slice(0, limit);
-  }, [services, statusFilter, search, limit]);
+  }, [services, statusFilter, categoryFilter, search, limit]);
 
   const serviceState = deriveServiceState(services);
   const copy = serviceCopy[serviceState];
@@ -134,6 +160,7 @@ export function ServicesBoard() {
     setEditing(service);
     setLabel(service.label);
     setDescription(service.description);
+    setCategory(service.category ?? '');
     setPricePerKg(String(service.pricePerKg));
     setMinWeightKg(String(service.minWeightKg));
     setSortOrder(String(service.sortOrder));
@@ -152,6 +179,7 @@ export function ServicesBoard() {
         body: JSON.stringify({
           label: label.trim(),
           description: description.trim(),
+          category: category || undefined,
           pricePerKg: Number(pricePerKg),
           minWeightKg: Number(minWeightKg),
           sortOrder: Number(sortOrder),
@@ -275,6 +303,25 @@ export function ServicesBoard() {
             />
           </div>
 
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="text-xs font-medium text-muted" htmlFor="svc-category-filter">
+              Category
+            </label>
+            <select
+              id="svc-category-filter"
+              className="input-field w-auto"
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+            >
+              <option value="all">All categories</option>
+              {categories.map((c) => (
+                <option key={c} value={c}>
+                  {categoryLabel(c === 'uncategorized' ? undefined : c)}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <ListControls
             search={search}
             onSearchChange={setSearch}
@@ -312,6 +359,7 @@ export function ServicesBoard() {
                     <tr>
                       <th scope="col">Type</th>
                       <th scope="col">Label</th>
+                      <th scope="col">Category</th>
                       <th scope="col">Price / kg</th>
                       <th scope="col">Min kg</th>
                       <th scope="col">Order</th>
@@ -330,6 +378,9 @@ export function ServicesBoard() {
                           <p className="truncate text-xs text-muted" title={s.description}>
                             {s.description}
                           </p>
+                        </td>
+                        <td>
+                          <span className="badge-neutral text-xs">{categoryLabel(s.category)}</span>
                         </td>
                         <td className="tabular-nums">{formatPeso(s.pricePerKg)}</td>
                         <td className="tabular-nums text-muted">{s.minWeightKg} kg</td>
@@ -393,6 +444,24 @@ export function ServicesBoard() {
                       onChange={(e) => setLabel(e.target.value)}
                       required
                     />
+                  </div>
+                  <div>
+                    <label htmlFor="svc-category" className="form-label">
+                      Category
+                    </label>
+                    <select
+                      id="svc-category"
+                      className="input-field"
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value)}
+                    >
+                      <option value="">Uncategorized</option>
+                      {Object.entries(CATEGORY_LABELS).map(([value, categoryName]) => (
+                        <option key={value} value={value}>
+                          {categoryName}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label htmlFor="svc-price" className="form-label">

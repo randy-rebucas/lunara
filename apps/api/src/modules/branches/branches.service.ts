@@ -44,6 +44,23 @@ import { UpdateBranchHiddenCatalogDto } from './dto/update-branch-hidden-catalog
 
 export const CUSTOM_ADDON_ID_PREFIX = 'custom:';
 
+type RateKey =
+  | 'basePricePerKg'
+  | 'basePricePerLoad'
+  | 'basePricePerPiece'
+  | 'basePricePerPair'
+  | 'basePricePerItem'
+  | 'fixedPrice';
+
+const RATE_KEY_LABEL: Record<RateKey, string> = {
+  basePricePerKg: 'per-kg',
+  basePricePerLoad: 'per-load',
+  basePricePerPiece: 'per-piece',
+  basePricePerPair: 'per-pair',
+  basePricePerItem: 'per-item',
+  fixedPrice: 'fixed',
+};
+
 const CAPACITY_STATUSES = [
   OrderStatus.PENDING,
   OrderStatus.PENDING_DISPATCH,
@@ -193,6 +210,12 @@ export class BranchesService {
         return override?.basePricePerLoad ?? 0;
       case BranchPricingMode.PER_PIECE:
         return override?.basePricePerPiece ?? 0;
+      case BranchPricingMode.PER_PAIR:
+        return override?.basePricePerPair ?? 0;
+      case BranchPricingMode.PER_ITEM:
+        return override?.basePricePerItem ?? 0;
+      case BranchPricingMode.FIXED:
+        return override?.fixedPrice ?? 0;
       case BranchPricingMode.FLAT_BAG:
       default:
         return this.resolveBranchAddonPrice(branch, addonSlug);
@@ -226,9 +249,13 @@ export class BranchesService {
           return {
             type: service.type,
             label: service.label,
+            category: service.category,
             basePricePerKg,
             basePricePerLoad: override?.basePricePerLoad,
             basePricePerPiece: override?.basePricePerPiece,
+            basePricePerPair: override?.basePricePerPair,
+            basePricePerItem: override?.basePricePerItem,
+            fixedPrice: override?.fixedPrice,
             pricingUnit: override?.pricingUnit ?? branch.pricingMode ?? BranchPricingMode.FLAT_BAG,
             customerPricePerKg: applyShopMarkup(basePricePerKg),
             isCustom: false,
@@ -240,17 +267,46 @@ export class BranchesService {
       branchId: branch._id,
       isActive: true,
     });
-    const customItems = customServices.map((custom) => ({
-      type: custom.baseBookingType,
-      label: custom.label,
-      description: custom.description,
-      basePricePerKg: custom.pricePerKg,
-      customerPricePerKg: applyShopMarkup(custom.pricePerKg),
-      isCustom: true,
-      customServiceId: custom._id.toString(),
-    }));
+    const customItems = customServices.map((custom) => {
+      const unit = custom.pricingUnit ?? BranchPricingMode.PER_KG;
+      return {
+        type: custom.baseBookingType,
+        label: custom.label,
+        description: custom.description,
+        basePricePerKg: custom.pricePerKg,
+        basePricePerLoad: custom.basePricePerLoad,
+        basePricePerPiece: custom.basePricePerPiece,
+        basePricePerPair: custom.basePricePerPair,
+        basePricePerItem: custom.basePricePerItem,
+        fixedPrice: custom.fixedPrice,
+        pricingUnit: unit,
+        customerPricePerKg: applyShopMarkup(this.resolveCustomServiceRate(custom, unit)),
+        isCustom: true,
+        customServiceId: custom._id.toString(),
+      };
+    });
 
     return [...globalItems, ...customItems];
+  }
+
+  /** The active rate for a custom service's own pricing unit — mirrors resolveAddonRateForUnit
+   * for branch-owned custom services (which have no global-catalog fallback). */
+  private resolveCustomServiceRate(custom: BranchCustomServiceDocument, unit: BranchPricingMode): number {
+    switch (unit) {
+      case BranchPricingMode.PER_LOAD:
+        return custom.basePricePerLoad ?? 0;
+      case BranchPricingMode.PER_PIECE:
+        return custom.basePricePerPiece ?? 0;
+      case BranchPricingMode.PER_PAIR:
+        return custom.basePricePerPair ?? 0;
+      case BranchPricingMode.PER_ITEM:
+        return custom.basePricePerItem ?? 0;
+      case BranchPricingMode.FIXED:
+        return custom.fixedPrice ?? 0;
+      case BranchPricingMode.PER_KG:
+      default:
+        return custom.pricePerKg ?? 0;
+    }
   }
 
   private async serializeShopAddonPricing(branch: BranchDocument, includeHidden = false) {
@@ -260,6 +316,19 @@ export class BranchesService {
       addons
         .filter((addon) => includeHidden || !hidden.has(addon.id))
         .map(async (addon) => {
+          // Percent-of-service add-ons (Express/Same-Day) bill off the order's service subtotal,
+          // not a shop-set rate — global-catalog-only, not partner-configurable, and never marked up.
+          if (addon.isPercentOfService) {
+            return {
+              slug: addon.id,
+              label: addon.label,
+              category: addon.category,
+              basePrice: addon.price,
+              customerPrice: addon.price,
+              isPercentOfService: true,
+              isCustom: false,
+            };
+          }
           const basePrice = await this.resolveBranchAddonPrice(branch, addon.id);
           const override = branch.addonPricing?.find((p) => p.addonSlug === addon.id);
           const pricingUnit = override?.pricingUnit ?? BranchPricingMode.FLAT_BAG;
@@ -267,10 +336,14 @@ export class BranchesService {
           return {
             slug: addon.id,
             label: addon.label,
+            category: addon.category,
             basePrice,
             basePricePerKg: override?.basePricePerKg,
             basePricePerLoad: override?.basePricePerLoad,
             basePricePerPiece: override?.basePricePerPiece,
+            basePricePerPair: override?.basePricePerPair,
+            basePricePerItem: override?.basePricePerItem,
+            fixedPrice: override?.fixedPrice,
             pricingUnit,
             customerPrice: applyShopMarkup(activeRate),
             isCustom: false,
@@ -329,6 +402,30 @@ export class BranchesService {
     return { bookingType, pricePerKg: basePricePerKg };
   }
 
+  /** Custom services carry their own pricingUnit/rates independent of the branch's base
+   * BookingType pricing — used by booking.service.ts's quote path instead of
+   * resolveServicePricingUnit/branch.servicePricing whenever a customServiceId is selected. */
+  async resolveCustomServicePricing(branch: BranchDocument, customServiceId: string) {
+    const custom = await this.customServiceModel.findOne({
+      _id: customServiceId,
+      branchId: branch._id,
+      isActive: true,
+    });
+    if (!custom) throw new NotFoundException('Custom service not found');
+    const pricingMode = custom.pricingUnit ?? BranchPricingMode.PER_KG;
+    return {
+      pricingMode,
+      rates: {
+        basePricePerKg: custom.pricePerKg,
+        basePricePerLoad: custom.basePricePerLoad,
+        basePricePerPiece: custom.basePricePerPiece,
+        basePricePerPair: custom.basePricePerPair,
+        basePricePerItem: custom.basePricePerItem,
+        fixedPrice: custom.fixedPrice,
+      },
+    };
+  }
+
   /** Whether the branch offers this BookingType — false if hidden, unless a custom service overrides it. */
   async isServiceTypeOfferedByBranch(branch: BranchDocument, bookingType: BookingType) {
     if (!branch.hiddenServiceTypes?.includes(bookingType)) return true;
@@ -347,6 +444,7 @@ export class BranchesService {
   ) {
     const branch = await this.branchModel.findById(branchId);
     if (!branch) throw new NotFoundException('Branch not found');
+    this.assertCustomServiceRateConfigured(dto);
     const created = await this.customServiceModel.create({
       branchId: branch._id,
       partnerUserId: new Types.ObjectId(partnerUserId),
@@ -354,6 +452,12 @@ export class BranchesService {
       label: dto.label,
       description: dto.description,
       pricePerKg: dto.pricePerKg,
+      basePricePerLoad: dto.basePricePerLoad,
+      basePricePerPiece: dto.basePricePerPiece,
+      basePricePerPair: dto.basePricePerPair,
+      basePricePerItem: dto.basePricePerItem,
+      fixedPrice: dto.fixedPrice,
+      pricingUnit: dto.pricingUnit,
       minWeightKg: dto.minWeightKg ?? 5,
       sortOrder: dto.sortOrder ?? 0,
     });
@@ -370,9 +474,43 @@ export class BranchesService {
       branchId: new Types.ObjectId(branchId),
     });
     if (!custom) throw new NotFoundException('Custom service not found');
+    this.assertCustomServiceRateConfigured({ ...custom.toObject(), ...dto });
     Object.assign(custom, dto);
     await custom.save();
     return { success: true, data: { _id: custom._id.toString() } };
+  }
+
+  /** Mirrors updateServicePricing's guard — the rate for a custom service's chosen pricingUnit
+   * must be set before it can bill in that unit. */
+  private assertCustomServiceRateConfigured(
+    service: Partial<
+      Pick<
+        BranchCustomService,
+        | 'pricingUnit'
+        | 'pricePerKg'
+        | 'basePricePerLoad'
+        | 'basePricePerPiece'
+        | 'basePricePerPair'
+        | 'basePricePerItem'
+        | 'fixedPrice'
+      >
+    >,
+  ) {
+    const rateKeyByUnit: Partial<Record<BranchPricingMode, RateKey>> = {
+      [BranchPricingMode.PER_KG]: 'basePricePerKg',
+      [BranchPricingMode.PER_LOAD]: 'basePricePerLoad',
+      [BranchPricingMode.PER_PIECE]: 'basePricePerPiece',
+      [BranchPricingMode.PER_PAIR]: 'basePricePerPair',
+      [BranchPricingMode.PER_ITEM]: 'basePricePerItem',
+      [BranchPricingMode.FIXED]: 'fixedPrice',
+    };
+    const unit = service.pricingUnit ?? BranchPricingMode.PER_KG;
+    const rateKey = rateKeyByUnit[unit];
+    if (!rateKey) return;
+    const value = rateKey === 'basePricePerKg' ? service.pricePerKg : service[rateKey];
+    if (value == null) {
+      throw new BadRequestException(`Set a ${RATE_KEY_LABEL[rateKey]} rate for this custom service`);
+    }
   }
 
   async deleteCustomService(branchId: string, serviceId: string) {
@@ -719,21 +857,26 @@ export class BranchesService {
       basePricePerKg?: number;
       basePricePerLoad?: number;
       basePricePerPiece?: number;
+      basePricePerPair?: number;
+      basePricePerItem?: number;
+      fixedPrice?: number;
       pricingUnit?: BranchPricingMode;
     }[],
   ) {
-    const rateKeyByUnit: Partial<Record<BranchPricingMode, 'basePricePerKg' | 'basePricePerLoad' | 'basePricePerPiece'>> = {
+    const rateKeyByUnit: Partial<Record<BranchPricingMode, RateKey>> = {
       [BranchPricingMode.PER_KG]: 'basePricePerKg',
       [BranchPricingMode.PER_LOAD]: 'basePricePerLoad',
       [BranchPricingMode.PER_PIECE]: 'basePricePerPiece',
+      [BranchPricingMode.PER_PAIR]: 'basePricePerPair',
+      [BranchPricingMode.PER_ITEM]: 'basePricePerItem',
+      [BranchPricingMode.FIXED]: 'fixedPrice',
     };
     for (const row of pricing) {
       const rateKey = row.pricingUnit ? rateKeyByUnit[row.pricingUnit] : undefined;
       if (rateKey && row[rateKey] == null) {
-        const modeLabel = { basePricePerKg: 'per-kg', basePricePerLoad: 'per-load', basePricePerPiece: 'per-piece' }[
-          rateKey
-        ];
-        throw new BadRequestException(`Set a ${modeLabel} rate before switching this service to that unit`);
+        throw new BadRequestException(
+          `Set a ${RATE_KEY_LABEL[rateKey]} rate before switching this service to that unit`,
+        );
       }
     }
     // Atomic $set instead of load-then-save: this endpoint is fired alongside addon-pricing and
@@ -751,10 +894,13 @@ export class BranchesService {
   async updatePricingMode(branchId: string, pricingMode: BranchPricingMode) {
     const branch = await this.branchModel.findById(branchId);
     if (!branch) throw new NotFoundException('Branch not found');
-    const rateKeyByMode: Partial<Record<BranchPricingMode, 'basePricePerKg' | 'basePricePerLoad' | 'basePricePerPiece'>> = {
+    const rateKeyByMode: Partial<Record<BranchPricingMode, RateKey>> = {
       [BranchPricingMode.PER_KG]: 'basePricePerKg',
       [BranchPricingMode.PER_LOAD]: 'basePricePerLoad',
       [BranchPricingMode.PER_PIECE]: 'basePricePerPiece',
+      [BranchPricingMode.PER_PAIR]: 'basePricePerPair',
+      [BranchPricingMode.PER_ITEM]: 'basePricePerItem',
+      [BranchPricingMode.FIXED]: 'fixedPrice',
     };
     const rateKey = rateKeyByMode[pricingMode];
     if (rateKey) {
@@ -766,11 +912,8 @@ export class BranchesService {
         return rate == null;
       });
       if (missing) {
-        const modeLabel = { basePricePerKg: 'per-kg', basePricePerLoad: 'per-load', basePricePerPiece: 'per-piece' }[
-          rateKey
-        ];
         throw new BadRequestException(
-          `Set a ${modeLabel} rate for every offered service before switching to this pricing mode`,
+          `Set a ${RATE_KEY_LABEL[rateKey]} rate for every offered service before switching to this pricing mode`,
         );
       }
     }
@@ -787,21 +930,26 @@ export class BranchesService {
       basePricePerKg?: number;
       basePricePerLoad?: number;
       basePricePerPiece?: number;
+      basePricePerPair?: number;
+      basePricePerItem?: number;
+      fixedPrice?: number;
       pricingUnit?: BranchPricingMode;
     }[],
   ) {
-    const rateKeyByUnit: Partial<Record<BranchPricingMode, 'basePricePerKg' | 'basePricePerLoad' | 'basePricePerPiece'>> = {
+    const rateKeyByUnit: Partial<Record<BranchPricingMode, RateKey>> = {
       [BranchPricingMode.PER_KG]: 'basePricePerKg',
       [BranchPricingMode.PER_LOAD]: 'basePricePerLoad',
       [BranchPricingMode.PER_PIECE]: 'basePricePerPiece',
+      [BranchPricingMode.PER_PAIR]: 'basePricePerPair',
+      [BranchPricingMode.PER_ITEM]: 'basePricePerItem',
+      [BranchPricingMode.FIXED]: 'fixedPrice',
     };
     for (const row of pricing) {
       const rateKey = row.pricingUnit ? rateKeyByUnit[row.pricingUnit] : undefined;
       if (rateKey && row[rateKey] == null) {
-        const modeLabel = { basePricePerKg: 'per-kg', basePricePerLoad: 'per-load', basePricePerPiece: 'per-piece' }[
-          rateKey
-        ];
-        throw new BadRequestException(`Set a ${modeLabel} rate before switching this add-on to that unit`);
+        throw new BadRequestException(
+          `Set a ${RATE_KEY_LABEL[rateKey]} rate before switching this add-on to that unit`,
+        );
       }
     }
     const branch = await this.branchModel.findByIdAndUpdate(

@@ -34,12 +34,16 @@ export class SubscriptionsSchedulerService {
 
     for (const subscription of due) {
       const dto: CreateBookingOrderDto = {
-        bookingType: subscription.bookingType,
+        services: [
+          {
+            bookingType: subscription.bookingType,
+            bagSizeId: subscription.bagSizeId,
+            enteredWeightKg: subscription.enteredWeightKg,
+            enteredLoadCount: subscription.enteredLoadCount,
+            enteredPieceCount: subscription.enteredPieceCount,
+          },
+        ],
         branchId: subscription.branchId,
-        bagSizeId: subscription.bagSizeId,
-        enteredWeightKg: subscription.enteredWeightKg,
-        enteredLoadCount: subscription.enteredLoadCount,
-        enteredPieceCount: subscription.enteredPieceCount,
         addonIds: subscription.addonIds,
         couponCode: subscription.couponCode,
         pickupAddressId: subscription.pickupAddressId,
