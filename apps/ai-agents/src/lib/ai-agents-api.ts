@@ -1,6 +1,7 @@
 import { assertApiUrlConfigured, resolveApiV1BaseUrl } from '@lunara/utils';
 import type {
   AiAgentPersona,
+  AiAgentsStats,
   AiChatMessage,
   AiConversationSummary,
   AiPromptLibraryGroup,
@@ -317,6 +318,11 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function listAgents() {
   return apiFetch<AiAgentPersona[]>('/ai-agents');
+}
+
+/** Staff/admin only — server returns 403 for other roles. */
+export function getStats() {
+  return apiFetch<AiAgentsStats>('/ai-agents/stats');
 }
 
 export function getPromptLibrary(agentId: string) {

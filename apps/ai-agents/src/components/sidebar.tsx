@@ -2,10 +2,10 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowLeft, LogOut, MessageSquarePlus, Settings, User, X } from 'lucide-react';
+import { ArrowLeft, BarChart3, LogOut, MessageSquarePlus, Settings, User, X } from 'lucide-react';
 import brandIcon from '@lunara/brand/icon';
 import type { AiConversationSummary } from '@lunara/types';
-import { logout } from '../lib/ai-agents-api';
+import { getCurrentUser, logout } from '../lib/ai-agents-api';
 import { relativeTime } from '../lib/relative-time';
 
 export function Sidebar({
@@ -23,6 +23,9 @@ export function Sidebar({
   open: boolean;
   onClose: () => void;
 }) {
+  const role = getCurrentUser()?.role;
+  const canSeeStats = role === 'staff' || role === 'admin';
+
   return (
     <>
       {open ? (
@@ -89,6 +92,12 @@ export function Sidebar({
         </div>
 
         <div className="space-y-0.5 border-t border-border px-3 py-3">
+          {canSeeStats ? (
+            <Link href="/stats" className="btn-ghost w-full justify-start gap-2">
+              <BarChart3 className="h-4 w-4" aria-hidden />
+              Usage stats
+            </Link>
+          ) : null}
           <Link href="/profile" className="btn-ghost w-full justify-start gap-2">
             <User className="h-4 w-4" aria-hidden />
             Profile

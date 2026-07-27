@@ -38,6 +38,13 @@ export class AiAgentsController {
     return this.aiAgentsService.sendGuestMessage(agentId, dto);
   }
 
+  @Get('stats')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.STAFF, UserRole.ADMIN)
+  getStats() {
+    return this.aiAgentsService.getStats();
+  }
+
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.STAFF, UserRole.ADMIN, UserRole.CUSTOMER)

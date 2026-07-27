@@ -73,8 +73,9 @@ Set in **Settings → Environment Variables** and apply to **Production** (and P
 | Variable | Required | Example |
 |----------|----------|---------|
 | `NEXT_PUBLIC_API_URL` | Yes | `https://api.lunara.example.com` |
+| `NEXT_PUBLIC_GA_MEASUREMENT_ID` | No | `G-XXXXXXXXXX` — enables Google Analytics 4 (page views, visits, visitor location/geo). Omit to skip GA entirely; the app works fine without it. |
 
-**Important:** Next.js bakes public env vars into the client bundle at **build time**. After changing `NEXT_PUBLIC_API_URL`, redeploy.
+**Important:** Next.js bakes public env vars into the client bundle at **build time**. After changing `NEXT_PUBLIC_API_URL` or `NEXT_PUBLIC_GA_MEASUREMENT_ID`, redeploy.
 
 ### Required API-side variable (Render)
 
@@ -134,7 +135,16 @@ Configure in **Settings → Environment Variables** with environment set to **Pr
 
 ---
 
-## 8. Post-Deploy
+## 8. Usage stats
+
+Two separate layers cover "statistics" for this app:
+
+- **In-app conversation/message counts** — `/stats` page (staff/admin only, linked from the sidebar). Backed by `GET /ai-agents/stats`, which aggregates real conversation/message documents per persona plus a lightweight daily guest-message counter (`ai_guest_usage` collection — counts only, no content or identity is stored for guest chats).
+- **Page views, total visits, and visitor location** — Google Analytics 4, once `NEXT_PUBLIC_GA_MEASUREMENT_ID` is set. This is standard GA traffic data, viewed in the GA dashboard, not in the app itself.
+
+---
+
+## 9. Post-Deploy
 
 ### Verify the app
 
@@ -142,6 +152,7 @@ Configure in **Settings → Environment Variables** with environment set to **Pr
 2. Click it → `/guest/emma` loads, shows the Lunara logo + Emma's avatar, and answers a general question (e.g. "What areas do you serve?") without any login
 3. Sign in with a staff/admin/customer account → confirm the full AI team roster loads and a persona responds
 4. Verify API calls succeed in browser **Network** tab (`/api/v1/ai-agents/...`)
+5. As a staff/admin user, open **Usage stats** from the sidebar → confirm `/stats` loads conversation/message/guest counts
 
 ### Monitor usage
 
@@ -151,7 +162,7 @@ Configure in **Settings → Environment Variables** with environment set to **Pr
 
 ---
 
-## 9. Security Considerations
+## 10. Security Considerations
 
 - **Guest surface is deliberately narrow:** only Emma, only general prompts, zero tools beyond the public branch/service-area list (`list_service_areas`, `get_branch_detail`) — no account, order, payment, or ticket data is reachable pre-login. If you add tools, only mark them `guestSafe: true` in `apps/api/src/modules/ai-agents/tools/*.ts` when the underlying data is genuinely public.
 - **No conversation persistence for guests:** guest chats are stateless (nothing written to MongoDB), so there's no guest data to retain or purge.
@@ -160,7 +171,7 @@ Configure in **Settings → Environment Variables** with environment set to **Pr
 
 ---
 
-## 10. Operations
+## 11. Operations
 
 ### Redeploy
 
@@ -176,7 +187,7 @@ Vercel → **Deployments** → select a previous deployment → **Promote to Pro
 
 ---
 
-## 11. Troubleshooting
+## 12. Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|

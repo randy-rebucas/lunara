@@ -10,10 +10,12 @@ import {
   getSystemPrompt,
   isAudienceAllowed,
   listPersonaSummaries,
+  PERSONAS,
   PersonaAudience,
 } from './personas';
 import { AiConversation, AiConversationDocument } from './schemas/ai-conversation.schema';
 import { AiMessage, AiMessageDocument } from './schemas/ai-message.schema';
+import { AiGuestUsage, AiGuestUsageDocument } from './schemas/ai-guest-usage.schema';
 import { SendMessageDto } from './dto/send-message.dto';
 import { sanitizeMessage } from './sanitize-message';
 import { AiToolRegistry } from './tools/registry';
@@ -42,6 +44,7 @@ export class AiAgentsService {
   constructor(
     @InjectModel(AiConversation.name) private conversationModel: Model<AiConversationDocument>,
     @InjectModel(AiMessage.name) private messageModel: Model<AiMessageDocument>,
+    @InjectModel(AiGuestUsage.name) private guestUsageModel: Model<AiGuestUsageDocument>,
     private toolRegistry: AiToolRegistry,
   ) {}
 
@@ -276,6 +279,11 @@ export class AiAgentsService {
       );
     }
 
+    const today = new Date().toISOString().slice(0, 10);
+    await this.guestUsageModel
+      .updateOne({ agentId, date: today }, { $inc: { count: 1 } }, { upsert: true })
+      .catch(() => undefined);
+
     return {
       success: true,
       data: {
@@ -285,6 +293,58 @@ export class AiAgentsService {
           content: replyText,
           createdAt: new Date().toISOString(),
         },
+      },
+    };
+  }
+
+  /** Staff-facing usage stats: conversations/messages per persona, plus guest chat volume. */
+  async getStats() {
+    const [conversationCounts, messageCounts, guestUsage, totalConversations, totalMessages] =
+      await Promise.all([
+        this.conversationModel.aggregate([{ $group: { _id: '$agentId', count: { $sum: 1 } } }]),
+        this.messageModel.aggregate([
+          { $match: { role: 'user' } },
+          {
+            $lookup: {
+              from: 'ai_conversations',
+              localField: 'conversationId',
+              foreignField: '_id',
+              as: 'conversation',
+            },
+          },
+          { $unwind: '$conversation' },
+          { $group: { _id: '$conversation.agentId', count: { $sum: 1 } } },
+        ]),
+        this.guestUsageModel
+          .find()
+          .sort({ date: -1 })
+          .limit(56) // ~4 weeks × up to 2 guest-enabled agents
+          .lean(),
+        this.conversationModel.countDocuments(),
+        this.messageModel.countDocuments({ role: 'user' }),
+      ]);
+
+    const guestTotalByAgent = new Map<string, number>();
+    for (const row of guestUsage) {
+      guestTotalByAgent.set(row.agentId, (guestTotalByAgent.get(row.agentId) ?? 0) + row.count);
+    }
+
+    return {
+      success: true,
+      data: {
+        totalConversations,
+        totalMessages,
+        totalGuestMessages: guestUsage.reduce((sum, r) => sum + r.count, 0),
+        perPersona: PERSONAS.map((p) => ({
+          agentId: p.id,
+          name: p.name,
+          conversations: conversationCounts.find((c) => c._id === p.id)?.count ?? 0,
+          messages: messageCounts.find((c) => c._id === p.id)?.count ?? 0,
+          guestMessages: guestTotalByAgent.get(p.id) ?? 0,
+        })),
+        guestUsageByDay: guestUsage
+          .map((r) => ({ date: r.date, agentId: r.agentId, count: r.count }))
+          .sort((a, b) => a.date.localeCompare(b.date)),
       },
     };
   }

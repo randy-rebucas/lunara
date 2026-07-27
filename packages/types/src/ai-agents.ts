@@ -24,3 +24,25 @@ export interface AiChatMessage {
   content: string;
   createdAt: string;
 }
+
+export interface AiPersonaStats {
+  agentId: string;
+  name: string;
+  conversations: number;
+  messages: number;
+  guestMessages: number;
+}
+
+export interface AiGuestUsageDay {
+  date: string;
+  agentId: string;
+  count: number;
+}
+
+export interface AiAgentsStats {
+  totalConversations: number;
+  totalMessages: number;
+  totalGuestMessages: number;
+  perPersona: AiPersonaStats[];
+  guestUsageByDay: AiGuestUsageDay[];
+}
