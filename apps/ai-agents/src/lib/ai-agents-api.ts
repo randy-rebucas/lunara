@@ -337,3 +337,31 @@ export function sendMessage(agentId: string, message: string, conversationId?: s
     body: JSON.stringify({ message, conversationId }),
   });
 }
+
+// Logged-out access — no auth token attached, no conversation history. Only Emma responds here,
+// and only with the general "how it works" prompt set (enforced server-side).
+async function guestApiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+  });
+  let body: { success?: boolean; data?: T; error?: { message?: string } };
+  try {
+    body = await res.json();
+  } catch {
+    throw new Error(res.ok ? 'Invalid response from API' : `API error (${res.status}).`);
+  }
+  if (!body.success) throw new Error(body.error?.message ?? 'Request failed');
+  return body.data as T;
+}
+
+export function getGuestPromptLibrary(agentId: string) {
+  return guestApiFetch<AiPromptLibraryGroup[]>(`/ai-agents/guest/${agentId}/prompt-library`);
+}
+
+export function sendGuestMessage(agentId: string, message: string) {
+  return guestApiFetch<{ message: AiChatMessage }>(`/ai-agents/guest/${agentId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ message }),
+  });
+}

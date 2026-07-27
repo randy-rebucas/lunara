@@ -203,6 +203,92 @@ export class AiAgentsService {
     };
   }
 
+  /**
+   * Logged-out chat: no persistence, no tools (nothing to scope them to), single Claude turn.
+   * Only reachable for personas with 'guest' in their audience — enforced by isAudienceAllowed.
+   */
+  async sendGuestMessage(agentId: string, dto: SendMessageDto) {
+    const persona = getPersona(agentId);
+    if (!persona || !isAudienceAllowed(persona, 'guest')) {
+      throw new NotFoundException('Unknown agent');
+    }
+
+    const message = sanitizeMessage(dto.message);
+    if (!message) throw new BadRequestException('Message cannot be empty');
+
+    const model = getAnthropicModel();
+    let replyText: string;
+    try {
+      const client = getAnthropicClient();
+      const tools = this.toolRegistry.getGuestToolsForPersona(persona.id);
+      const ctx = { userId: '', audience: 'guest' as const, personaId: persona.id };
+
+      let turns: Anthropic.MessageParam[] = [{ role: 'user', content: message }];
+      replyText = '';
+      for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
+        const response = await client.messages.create({
+          model,
+          max_tokens: MAX_TOKENS,
+          system: getSystemPrompt(persona, 'guest'),
+          tools: tools.length ? tools : undefined,
+          messages: turns,
+        });
+
+        if (response.stop_reason !== 'tool_use' || round === MAX_TOOL_ROUNDS) {
+          const textBlock = response.content.find((b) => b.type === 'text');
+          replyText = textBlock && textBlock.type === 'text' ? textBlock.text : '';
+          break;
+        }
+
+        turns = [...turns, { role: 'assistant', content: response.content }];
+
+        const toolUseBlocks = response.content.filter(
+          (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use',
+        );
+        const toolResults = await Promise.all(
+          toolUseBlocks.map(async (block) => {
+            try {
+              const result = await this.toolRegistry.execute(block.name, block.input, ctx);
+              return {
+                type: 'tool_result' as const,
+                tool_use_id: block.id,
+                content: JSON.stringify(result ?? null),
+              };
+            } catch (err) {
+              return {
+                type: 'tool_result' as const,
+                tool_use_id: block.id,
+                content: JSON.stringify({
+                  error: err instanceof Error ? err.message : 'Tool execution failed',
+                }),
+                is_error: true,
+              };
+            }
+          }),
+        );
+        turns = [...turns, { role: 'user', content: toolResults }];
+      }
+
+      if (!replyText) replyText = NO_ANSWER_FALLBACK;
+    } catch (err) {
+      throw new BadRequestException(
+        err instanceof Error ? `AI request failed: ${err.message}` : 'AI request failed',
+      );
+    }
+
+    return {
+      success: true,
+      data: {
+        message: {
+          id: new Types.ObjectId().toString(),
+          role: 'assistant',
+          content: replyText,
+          createdAt: new Date().toISOString(),
+        },
+      },
+    };
+  }
+
   private async findOwnedConversation(userId: string, conversationId: string, agentId?: string) {
     const conversation = await this.conversationModel.findById(conversationId);
     if (!conversation) throw new NotFoundException('Conversation not found');

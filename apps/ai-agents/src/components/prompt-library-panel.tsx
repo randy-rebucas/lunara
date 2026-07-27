@@ -3,16 +3,19 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import type { AiPromptLibraryGroup } from '@lunara/types';
-import { getPromptLibrary } from '../lib/ai-agents-api';
+import { getGuestPromptLibrary, getPromptLibrary } from '../lib/ai-agents-api';
 
 export function PromptLibraryPanel({
   agentId,
   agentName,
+  guest = false,
   onClose,
   onPick,
 }: {
   agentId: string;
   agentName: string;
+  /** Fetch the logged-out prompt set (no auth token attached) instead of the authenticated one. */
+  guest?: boolean;
   onClose: () => void;
   onPick: (prompt: string) => void;
 }) {
@@ -21,7 +24,7 @@ export function PromptLibraryPanel({
 
   useEffect(() => {
     let cancelled = false;
-    getPromptLibrary(agentId)
+    (guest ? getGuestPromptLibrary(agentId) : getPromptLibrary(agentId))
       .then((data) => {
         if (!cancelled) setGroups(data);
       })
@@ -31,7 +34,7 @@ export function PromptLibraryPanel({
     return () => {
       cancelled = true;
     };
-  }, [agentId]);
+  }, [agentId, guest]);
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-black/50" onClick={onClose}>

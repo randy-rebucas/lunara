@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
-import { Eye, EyeOff, Lock, Mail, ShieldCheck } from 'lucide-react';
+import { Eye, EyeOff, Lock, Mail, MessageCircleQuestion, ShieldCheck } from 'lucide-react';
 import brandIcon from '@lunara/brand/icon';
 import { getAuthToken, login, requestPasswordReset } from '../../lib/ai-agents-api';
 import { AuroraOrb } from '../../components/aurora-orb';
@@ -207,7 +207,19 @@ function LoginForm() {
             Sign up
           </a>
         </p>
+
       </form>
+
+      <div className="mt-5 border-t border-white/10 pt-5">
+        <p className="mb-2.5 text-center text-xs text-slate-500">Just have a quick question?</p>
+        <a
+          href="/guest/emma"
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-white/5 py-3 text-sm font-semibold text-white ring-1 ring-white/10 transition-colors hover:bg-white/10 hover:ring-indigo-400/40"
+        >
+          <MessageCircleQuestion className="h-4.5 w-4.5 text-indigo-300" aria-hidden />
+          Ask Emma without signing in
+        </a>
+      </div>
 
       <div className="mt-6 rounded-lg bg-white/5 px-4 py-3 ring-1 ring-white/10">
         <div className="flex items-center gap-2 text-xs font-medium text-slate-300">

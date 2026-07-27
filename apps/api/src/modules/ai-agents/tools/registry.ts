@@ -56,6 +56,7 @@ import { buildNotificationTools } from './notifications.tools';
 import { buildSupportTools } from './support.tools';
 import { buildBookingTools } from './booking.tools';
 import { buildApiSurfaceTools } from './api-surface.tools';
+import { buildGuestTools } from './guest.tools';
 import { ToolCtx, ToolSpec } from './types';
 
 @Injectable()
@@ -122,6 +123,7 @@ export class AiToolRegistry {
       ...buildSupportTools(support),
       ...buildBookingTools(booking),
       ...buildApiSurfaceTools(apiSurface),
+      ...buildGuestTools(branches),
     ];
   }
 
@@ -131,10 +133,20 @@ export class AiToolRegistry {
       .map(({ name, description, input_schema }) => ({ name, description, input_schema }));
   }
 
+  /** Only tools explicitly marked `guestSafe` — the sole tools an unauthenticated caller can reach. */
+  getGuestToolsForPersona(personaId: string) {
+    return this.specs
+      .filter((s) => s.guestSafe && s.personas.includes(personaId))
+      .map(({ name, description, input_schema }) => ({ name, description, input_schema }));
+  }
+
   async execute(name: string, input: unknown, ctx: ToolCtx): Promise<unknown> {
     const spec = this.specs.find((s) => s.name === name);
     if (!spec || !spec.personas.includes(ctx.personaId)) {
       throw new Error(`Tool "${name}" is not available to this agent`);
+    }
+    if (ctx.audience === 'guest' && !spec.guestSafe) {
+      throw new Error(`Tool "${name}" is not available to guests`);
     }
     return spec.handler(input, ctx);
   }

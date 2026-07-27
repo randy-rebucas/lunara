@@ -11,7 +11,8 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { isReady } = useAiAgentsAuth();
 
-  const isPublicRoute = pathname === '/login' || pathname === '/register';
+  const isPublicRoute =
+    pathname === '/login' || pathname === '/register' || pathname.startsWith('/guest/');
 
   useEffect(() => {
     if (!isReady) return;

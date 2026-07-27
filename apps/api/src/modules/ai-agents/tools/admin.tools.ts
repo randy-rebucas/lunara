@@ -26,7 +26,7 @@ export function buildAdminTools(admin: AdminService): ToolSpec[] {
           days: { type: 'number', description: 'How many trailing days to report on (default 7).' },
         },
       },
-      personas: ['olivia'],
+      personas: ['olivia', 'sophia'],
       handler: async (input: { days?: number }) => admin.getReports(input?.days),
     },
     {

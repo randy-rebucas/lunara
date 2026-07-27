@@ -33,7 +33,7 @@ export function buildOrderTools(orders: OrdersService): ToolSpec[] {
       },
       personas: ['olivia', 'daniel', 'emma'],
       handler: async (input: { orderId: string }, ctx) =>
-        orders.findOne(input.orderId, { sub: ctx.userId, role: ctx.role }),
+        orders.findOne(input.orderId, { sub: ctx.userId, role: ctx.role as UserRole }),
     },
     {
       name: 'get_my_recent_orders',
