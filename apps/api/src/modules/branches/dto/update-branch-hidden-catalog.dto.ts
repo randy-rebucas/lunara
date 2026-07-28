@@ -11,4 +11,9 @@ export class UpdateBranchHiddenCatalogDto {
   @IsArray()
   @IsString({ each: true })
   hiddenAddonSlugs?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  hiddenGarmentItemIds?: string[];
 }

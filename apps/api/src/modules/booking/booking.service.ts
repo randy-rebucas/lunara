@@ -175,8 +175,9 @@ export class BookingService {
       if (!service.garmentSelections?.length) {
         throw new BadRequestException('Select at least one garment for this service');
       }
+      const hiddenGarmentIds = new Set(branch.hiddenGarmentItemIds ?? []);
       const invalidGarment = service.garmentSelections.find(
-        (g) => !GARMENT_CATALOG.some((c) => c.id === g.garmentId),
+        (g) => !GARMENT_CATALOG.some((c) => c.id === g.garmentId) || hiddenGarmentIds.has(g.garmentId),
       );
       if (invalidGarment) {
         throw new BadRequestException('Invalid garment selected');

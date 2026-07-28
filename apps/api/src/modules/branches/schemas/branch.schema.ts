@@ -277,6 +277,11 @@ export class Branch {
   @Prop({ type: [String], default: [] })
   hiddenAddonSlugs!: string[];
 
+  /** GARMENT_CATALOG item ids (from @lunara/utils) this shop does not do dry cleaning for.
+   * Empty = offers every garment. Only meaningful when DRY_CLEANING isn't itself hidden. */
+  @Prop({ type: [String], default: [] })
+  hiddenGarmentItemIds!: string[];
+
   @Prop({ type: PartnerPortalSettings, default: () => ({ ...DEFAULT_PARTNER_PORTAL_SETTINGS }) })
   portalSettings!: PartnerPortalSettings;
 

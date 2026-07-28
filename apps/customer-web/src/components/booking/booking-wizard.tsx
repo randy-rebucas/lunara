@@ -28,6 +28,7 @@ import {
   type BagSizeOption,
   type BookingAddonOption,
   type BranchHoliday,
+  type GarmentItem,
   type GarmentSelection,
   type LaundryServiceOption,
   type MultiServiceQuoteBreakdown,
@@ -129,6 +130,8 @@ interface ShopOption {
   holidays: BranchHoliday[];
   services: ShopServiceOption[];
   addons: ShopAddonOption[];
+  /** GARMENT_CATALOG filtered to what this shop offers — falls back to the full catalog if absent. */
+  garmentCatalog?: GarmentItem[];
 }
 
 // Each service on a shop can bill in its own unit, so pricing mode/rates must be resolved per
@@ -1461,8 +1464,10 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                     title="Select your garments"
                     description="Pick each garment you're sending in and how many — priced per garment, no estimate needed."
                   />
-                  {getGarmentCategories().map((category) => {
-                    const garmentsInCategory = GARMENT_CATALOG.filter((g) => g.category === category);
+                  {getGarmentCategories(selectedShop?.garmentCatalog ?? GARMENT_CATALOG).map((category) => {
+                    const garmentsInCategory = (selectedShop?.garmentCatalog ?? GARMENT_CATALOG).filter(
+                      (g) => g.category === category,
+                    );
                     const selectedCount = garmentsInCategory.reduce(
                       (sum, g) => sum + (Number(service.garmentQuantities[g.id]) || 0),
                       0,

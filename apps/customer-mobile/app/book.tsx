@@ -38,6 +38,7 @@ import {
   type BookingAddonOption,
   type BranchHoliday,
   type CashTiming,
+  type GarmentItem,
   type GarmentSelection,
   type LaundryServiceOption,
   isPickupSlotBookable,
@@ -161,6 +162,8 @@ interface ShopOption {
   services: ShopServiceOption[];
   addons: ShopAddonOption[];
   branches: ShopBranchVariant[];
+  /** GARMENT_CATALOG filtered to what this shop offers — falls back to the full catalog if absent. */
+  garmentCatalog?: GarmentItem[];
 }
 
 const STEP_ICON: Record<BookingStep, keyof typeof Ionicons.glyphMap> = {
@@ -1238,10 +1241,12 @@ export default function BookScreen() {
               <Text style={styles.sub}>
                 Pick each garment you&apos;re sending in and how many — priced per garment, no estimate needed.
               </Text>
-              {getGarmentCategories().map((category) => (
+              {getGarmentCategories(selectedShop?.garmentCatalog ?? GARMENT_CATALOG).map((category) => (
                 <View key={category} style={styles.garmentCategoryCard}>
                   <Text style={styles.optionTitle}>{category}</Text>
-                  {GARMENT_CATALOG.filter((g) => g.category === category).map((garment, i) => {
+                  {(selectedShop?.garmentCatalog ?? GARMENT_CATALOG)
+                    .filter((g) => g.category === category)
+                    .map((garment, i) => {
                     const qty = Number(form.garmentQuantities[garment.id]) || 0;
                     return (
                       <View

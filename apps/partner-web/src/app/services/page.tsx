@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { BookingType } from '@lunara/types';
-import { SHOP_PRICE_MARKUP_MULTIPLIER } from '@lunara/utils';
+import { GARMENT_CATALOG, getGarmentCategories, SHOP_PRICE_MARKUP_MULTIPLIER } from '@lunara/utils';
 import { AuthLoading } from '../../components/auth-loading';
 import { DataPageStatus } from '../../components/data-page-status';
 import { PageHeader } from '../../components/ui/page-header';
@@ -55,12 +55,21 @@ interface ShopAddonPrice {
   customAddonId?: string;
 }
 
+interface ShopGarmentItem {
+  id: string;
+  category: string;
+  label: string;
+  price: number;
+}
+
 interface ShopPricing {
   pricingMode: PricingMode;
   services: ShopServicePrice[];
   addons: ShopAddonPrice[];
+  garmentCatalog: ShopGarmentItem[];
   hiddenServiceTypes: string[];
   hiddenAddonSlugs: string[];
+  hiddenGarmentItemIds: string[];
 }
 
 const MARKUP_MULTIPLIER = SHOP_PRICE_MARKUP_MULTIPLIER;
@@ -220,6 +229,8 @@ export default function ServicesPage() {
   const [addonUnits, setAddonUnits] = useState<Record<string, PricingMode>>({});
   const [hiddenServiceTypes, setHiddenServiceTypes] = useState<string[]>([]);
   const [hiddenAddonSlugs, setHiddenAddonSlugs] = useState<string[]>([]);
+  const [hiddenGarmentItemIds, setHiddenGarmentItemIds] = useState<string[]>([]);
+  const [collapsedGarmentCategories, setCollapsedGarmentCategories] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState('');
@@ -271,6 +282,7 @@ export default function ServicesPage() {
     );
     setHiddenServiceTypes(pricing.hiddenServiceTypes);
     setHiddenAddonSlugs(pricing.hiddenAddonSlugs);
+    setHiddenGarmentItemIds(pricing.hiddenGarmentItemIds);
     setServiceUnits(
       Object.fromEntries(pricing.services.map((s) => [s.type, s.pricingUnit ?? 'flat_bag'])),
     );
@@ -325,7 +337,7 @@ export default function ServicesPage() {
         }),
         partnerFetch(`/partner/branches/${selectedBranchId}/hidden-catalog`, {
           method: 'PATCH',
-          body: JSON.stringify({ hiddenServiceTypes, hiddenAddonSlugs }),
+          body: JSON.stringify({ hiddenServiceTypes, hiddenAddonSlugs, hiddenGarmentItemIds }),
         }),
       ]);
       setSaved(true);
@@ -348,6 +360,29 @@ export default function ServicesPage() {
     setHiddenAddonSlugs((prev) =>
       hide ? [...prev, slug] : prev.filter((s) => s !== slug),
     );
+  }
+
+  function toggleHiddenGarment(garmentId: string, hide: boolean) {
+    setHiddenGarmentItemIds((prev) =>
+      hide ? [...prev, garmentId] : prev.filter((id) => id !== garmentId),
+    );
+  }
+
+  function toggleGarmentCategory(garmentIds: string[], offerAll: boolean) {
+    setHiddenGarmentItemIds((prev) =>
+      offerAll
+        ? prev.filter((id) => !garmentIds.includes(id))
+        : [...new Set([...prev, ...garmentIds])],
+    );
+  }
+
+  function toggleCollapsedGarmentCategory(category: string) {
+    setCollapsedGarmentCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
   }
 
   async function createService() {
@@ -885,6 +920,82 @@ export default function ServicesPage() {
               </table>
             </div>
           </div>
+
+          {!hiddenServiceTypes.includes(BookingType.DRY_CLEANING) && (
+            <div className="section-panel mt-6 overflow-hidden">
+              <div className="border-b border-border px-4 py-3">
+                <h2 className="text-sm font-semibold text-slate-900">Dry cleaning garments</h2>
+                <p className="mt-1 text-xs text-muted">
+                  Choose which garment types you actually dry clean. Customers booking Dry Cleaning at
+                  your shop will only be able to select garments you offer here.
+                </p>
+              </div>
+
+              <div className="divide-y divide-border">
+                {getGarmentCategories(pricing.garmentCatalog ?? GARMENT_CATALOG).map((category) => {
+                  const garments = (pricing.garmentCatalog ?? GARMENT_CATALOG).filter(
+                    (g) => g.category === category,
+                  );
+                  const garmentIds = garments.map((g) => g.id);
+                  const offeredCount = garmentIds.filter((id) => !hiddenGarmentItemIds.includes(id)).length;
+                  const collapsed = collapsedGarmentCategories.has(category);
+                  return (
+                    <div key={category} className="p-4">
+                      <div className="flex items-center justify-between">
+                        <button
+                          type="button"
+                          className="text-sm font-medium text-slate-900"
+                          onClick={() => toggleCollapsedGarmentCategory(category)}
+                        >
+                          {collapsed ? '▸' : '▾'} {category}{' '}
+                          <span className="text-xs font-normal text-muted">
+                            ({offeredCount}/{garmentIds.length} offered)
+                          </span>
+                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            className="btn-outline btn-sm"
+                            onClick={() => toggleGarmentCategory(garmentIds, true)}
+                          >
+                            Offer all
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-outline btn-sm"
+                            onClick={() => toggleGarmentCategory(garmentIds, false)}
+                          >
+                            Hide all
+                          </button>
+                        </div>
+                      </div>
+                      {!collapsed && (
+                        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                          {garments.map((g) => {
+                            const isHiddenLocal = hiddenGarmentItemIds.includes(g.id);
+                            return (
+                              <label
+                                key={g.id}
+                                className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs text-muted"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={!isHiddenLocal}
+                                  onChange={(e) => toggleHiddenGarment(g.id, !e.target.checked)}
+                                />
+                                <span className="flex-1 text-slate-900">{g.label}</span>
+                                <span>{formatPeso(g.price)}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {saveError && <p className="mt-3 text-sm text-destructive">{saveError}</p>}
           <div className="mt-4 flex items-center gap-3">

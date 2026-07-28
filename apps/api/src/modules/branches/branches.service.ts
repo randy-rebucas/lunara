@@ -9,6 +9,7 @@ import {
   distanceKm,
   estimateTurnaroundHours,
   formatDistanceKm,
+  GARMENT_CATALOG,
   getTodayScheduleSummary,
   buildPartnerCoverageNotice,
   rankBranchesForDispatch,
@@ -235,6 +236,14 @@ export class BranchesService {
       description: custom.description,
       price: custom.price,
     }));
+  }
+
+  /** GARMENT_CATALOG filtered to what this shop actually does dry cleaning for — mirrors how
+   * serializeShopPricing/serializeShopAddonPricing filter by hiddenServiceTypes/hiddenAddonSlugs. */
+  private serializeShopGarmentCatalog(branch: BranchDocument, includeHidden = false) {
+    if (includeHidden) return GARMENT_CATALOG;
+    const hidden = new Set(branch.hiddenGarmentItemIds ?? []);
+    return GARMENT_CATALOG.filter((garment) => !hidden.has(garment.id));
   }
 
   private async serializeShopPricing(branch: BranchDocument, includeHidden = false) {
@@ -579,6 +588,7 @@ export class BranchesService {
     const update: Record<string, unknown> = {};
     if (dto.hiddenServiceTypes !== undefined) update.hiddenServiceTypes = dto.hiddenServiceTypes;
     if (dto.hiddenAddonSlugs !== undefined) update.hiddenAddonSlugs = dto.hiddenAddonSlugs;
+    if (dto.hiddenGarmentItemIds !== undefined) update.hiddenGarmentItemIds = dto.hiddenGarmentItemIds;
     const branch = await this.branchModel.findByIdAndUpdate(branchId, { $set: update }, { new: true });
     if (!branch) throw new NotFoundException('Branch not found');
     return {
@@ -586,6 +596,7 @@ export class BranchesService {
       data: {
         hiddenServiceTypes: branch.hiddenServiceTypes,
         hiddenAddonSlugs: branch.hiddenAddonSlugs,
+        hiddenGarmentItemIds: branch.hiddenGarmentItemIds,
       },
     };
   }
@@ -749,6 +760,7 @@ export class BranchesService {
         const todaysOrders = await this.countTodaysOrders(branch._id);
         const services = await this.serializeShopPricing(branch);
         const addons = await this.serializeShopAddonPricing(branch);
+        const garmentCatalog = this.serializeShopGarmentCatalog(branch);
         const holidays = await this.resolveBranchHolidays(branch);
         const operatingHours =
           branch.operatingHours?.length === 7 ? branch.operatingHours : DEFAULT_OPERATING_HOURS;
@@ -771,6 +783,7 @@ export class BranchesService {
           todaySchedule: getTodayScheduleSummary(operatingHours, holidays),
           services,
           addons,
+          garmentCatalog,
         };
       }),
     );
@@ -844,8 +857,10 @@ export class BranchesService {
         pricingMode: branch.pricingMode,
         services: await this.serializeShopPricing(branch, includeHidden),
         addons: await this.serializeShopAddonPricing(branch, includeHidden),
+        garmentCatalog: this.serializeShopGarmentCatalog(branch, includeHidden),
         hiddenServiceTypes: branch.hiddenServiceTypes ?? [],
         hiddenAddonSlugs: branch.hiddenAddonSlugs ?? [],
+        hiddenGarmentItemIds: branch.hiddenGarmentItemIds ?? [],
       },
     };
   }
