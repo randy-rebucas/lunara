@@ -52,6 +52,7 @@ function CreateSettlementModal({
   const [step, setStep] = useState<'select' | 'confirm'>('select');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [adminNote, setAdminNote] = useState('');
+  const [recoverClawback, setRecoverClawback] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,6 +61,13 @@ function CreateSettlementModal({
     [partnerId],
   );
   const { data: orders, error: loadError } = useAdminQuery(loadOrders, [partnerId]);
+
+  const loadClawback = useCallback(
+    () => adminFetch<{ outstanding: number }>(`/admin/partners/${partnerId}/clawback-balance`),
+    [partnerId],
+  );
+  const { data: clawback } = useAdminQuery(loadClawback, [partnerId]);
+  const outstandingClawback = clawback?.outstanding ?? 0;
 
   useEffect(() => {
     if (orders) setSelected(new Set(orders.map((o) => o.orderId)));
@@ -90,7 +98,11 @@ function CreateSettlementModal({
       await adminFetch(`/admin/partners/${partnerId}/settlements`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderIds: [...selected], adminNote: adminNote.trim() || undefined }),
+        body: JSON.stringify({
+          orderIds: [...selected],
+          adminNote: adminNote.trim() || undefined,
+          recoverClawback: recoverClawback || undefined,
+        }),
       });
       onCreated();
       onClose();
@@ -203,7 +215,32 @@ function CreateSettlementModal({
                 <span className="font-semibold text-slate-900">Partner payout</span>
                 <span className="font-bold text-slate-900">{formatPeso(totalPayout)}</span>
               </div>
+              <p className="pt-1 text-xs text-muted">
+                Final payout will be further reduced by the actual rider pickup/delivery cost for
+                these orders (looked up at settlement time) — shown on the settlement once created.
+              </p>
             </div>
+
+            {outstandingClawback > 0 && (
+              <label className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={recoverClawback}
+                  onChange={(e) => setRecoverClawback(e.target.checked)}
+                />
+                <span>
+                  <span className="font-medium text-slate-900">
+                    Recover outstanding clawback — {formatPeso(outstandingClawback)}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-muted">
+                    This partner has {formatPeso(outstandingClawback)} owed back from refunds on
+                    orders in earlier settlements. Check this to deduct it from this payout instead
+                    of leaving it outstanding.
+                  </span>
+                </span>
+              </label>
+            )}
 
             <div>
               <label className="form-label">Admin note <span className="font-normal text-muted">(optional)</span></label>
@@ -349,6 +386,7 @@ export default function PartnerSettlementsPage() {
                           <th>Paid on</th>
                           <th className="text-right">Gross</th>
                           <th className="text-right">Lunara fee</th>
+                          <th className="text-right">Rider cost</th>
                           <th className="text-right">Partner payout</th>
                         </tr>
                       </thead>
@@ -379,8 +417,21 @@ export default function PartnerSettlementsPage() {
                                 <span className="ml-1 text-xs text-muted">({Math.round(s.commissionRate * 100)}%)</span>
                               )}
                             </td>
+                            <td className="text-right text-sm text-rose-600">
+                              {s.riderCostRecovered ? `+${formatPeso(s.riderCostRecovered)}` : '—'}
+                            </td>
                             <td className="text-right font-semibold text-slate-900">
                               {formatPeso(s.partnerPayout ?? s.totalAmount)}
+                              {s.clawbackRecoveryApplied ? (
+                                <span className="mt-0.5 block text-xs font-normal text-amber-600">
+                                  net of {formatPeso(s.clawbackRecoveryApplied)} clawback recovered
+                                </span>
+                              ) : null}
+                              {s.clawbackTotal ? (
+                                <span className="mt-0.5 block text-xs font-normal text-muted">
+                                  {formatPeso(s.clawbackTotal - (s.clawbackRecovered ?? 0))} outstanding from {s.clawbackOrderCount} refund{s.clawbackOrderCount !== 1 ? 's' : ''}
+                                </span>
+                              ) : null}
                             </td>
                           </tr>
                         ))}
@@ -392,6 +443,7 @@ export default function PartnerSettlementsPage() {
                           <td /><td />
                           <td className="text-right text-muted">{formatPeso(settlements.reduce((s, r) => s + r.totalAmount, 0))}</td>
                           <td className="text-right text-rose-600">+{formatPeso(settlements.reduce((s, r) => s + (r.lunaraFee ?? 0), 0))}</td>
+                          <td className="text-right text-rose-600">+{formatPeso(settlements.reduce((s, r) => s + (r.riderCostRecovered ?? 0), 0))}</td>
                           <td className="text-right text-slate-900">{formatPeso(settlements.reduce((s, r) => s + (r.partnerPayout ?? r.totalAmount), 0))}</td>
                         </tr>
                       </tfoot>

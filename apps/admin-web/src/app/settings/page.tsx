@@ -18,6 +18,9 @@ const API_URL = resolveApiV1BaseUrl(process.env.NEXT_PUBLIC_API_URL);
 // ── Server-side settings shapes ────────────────────────────────────────────
 interface DeliveryFeeSettings {
   deliveryFee: number;
+  deliveryBaseDistanceKm: number;
+  deliveryPerKmRate: number;
+  maxDeliveryRadiusKm: number;
 }
 
 interface AutomationSettings {
@@ -233,6 +236,39 @@ function PesoField({
           value={value}
           onChange={(e) => onChange(Number(e.target.value))}
         />
+      </div>
+      {hint ? <span className="mt-1 block text-xs text-muted">{hint}</span> : null}
+    </label>
+  );
+}
+
+function UnitField({
+  label,
+  hint,
+  unit,
+  value,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  unit: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="text-sm font-medium text-slate-900">{label}</span>
+      <div className="relative mt-1.5">
+        <input
+          type="number"
+          min={0}
+          className="input-field pr-12"
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value))}
+        />
+        <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted">
+          {unit}
+        </span>
       </div>
       {hint ? <span className="mt-1 block text-xs text-muted">{hint}</span> : null}
     </label>
@@ -566,14 +602,35 @@ export default function AdminSettingsPage() {
               <div className="space-y-5">
                 <SettingsCard
                   title="Order pricing"
-                  description="Flat pickup + delivery fee charged on every order, regardless of address."
+                  description="Pickup + delivery fee = base fee + (distance beyond the base allowance x per-km rate)."
                 >
-                  <div className="grid gap-4 px-5 py-4 sm:grid-cols-2">
+                  <div className="grid gap-4 px-5 py-4 sm:grid-cols-2 lg:grid-cols-4">
                     <PesoField
-                      label="Delivery fee"
-                      hint="Charged to the customer on top of the service subtotal."
+                      label="Base delivery fee"
+                      hint="Covers the base distance allowance below."
                       value={deliveryFee.deliveryFee}
-                      onChange={(v) => setDeliveryFee({ deliveryFee: v })}
+                      onChange={(v) => setDeliveryFee({ ...deliveryFee, deliveryFee: v })}
+                    />
+                    <UnitField
+                      label="Base distance"
+                      unit="km"
+                      hint="Distance covered by the base fee before per-km charges apply."
+                      value={deliveryFee.deliveryBaseDistanceKm}
+                      onChange={(v) => setDeliveryFee({ ...deliveryFee, deliveryBaseDistanceKm: v })}
+                    />
+                    <UnitField
+                      label="Per-km rate"
+                      unit="₱/km"
+                      hint="Charged per whole km beyond the base distance."
+                      value={deliveryFee.deliveryPerKmRate}
+                      onChange={(v) => setDeliveryFee({ ...deliveryFee, deliveryPerKmRate: v })}
+                    />
+                    <UnitField
+                      label="Max delivery radius"
+                      unit="km"
+                      hint="Beyond a shop's own radius but within this, orders need admin approval before dispatch. Beyond this, checkout is blocked."
+                      value={deliveryFee.maxDeliveryRadiusKm}
+                      onChange={(v) => setDeliveryFee({ ...deliveryFee, maxDeliveryRadiusKm: v })}
                     />
                   </div>
                 </SettingsCard>

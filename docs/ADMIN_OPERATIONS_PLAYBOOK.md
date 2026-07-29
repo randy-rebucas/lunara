@@ -111,7 +111,8 @@ This can also run automatically if **auto-generate settlements** is enabled in A
 
 ## 11. System settings — `/settings` and `/automation-settings`
 
-- **`/settings`** (Operations tab): flat **delivery fee** (platform-wide, not per-shop), **rider fees** (pickup/delivery leg amounts), a quick inline **auto-dispatch** toggle, app version info, and a branches summary. Only changed sections are saved when you hit save.
+- **`/settings`** (Operations tab): distance-tiered **delivery fee** (base fee, base distance, per-km rate, and max delivery radius — platform-wide, not per-shop; see [`delivery-pricing-and-approval.md`](./delivery-pricing-and-approval.md)), **rider fees** (pickup/delivery leg amounts), a quick inline **auto-dispatch** toggle, app version info, and a branches summary. Only changed sections are saved when you hit save.
+- Orders whose delivery distance exceeds the assigned shop's own service radius (but stay within the platform max) show a **"Needs approval"** badge on the Orders board and are held from dispatch until approved there — see [`delivery-pricing-and-approval.md`](./delivery-pricing-and-approval.md).
 - **`/automation-settings`**: the full set of auto-* policy toggles — auto-dispatch orders, auto-assign pickup/delivery riders, auto-generate settlements, auto-approve refunds (with a ₱ threshold), auto-approve withdrawals (with a ₱ threshold). Treat this page as "how much do we trust the algorithm to act without a human clicking confirm" — start conservative, loosen over time as you build confidence.
 
 ---

@@ -58,6 +58,8 @@ import {
   ReceiveLaundryDto,
   VerifyShopWeightDto,
 } from './dto/shop-receiving.dto';
+import { CreatePartnerPromotionDto } from './dto/create-partner-promotion.dto';
+import { SetPromotionActiveDto } from './dto/set-promotion-active.dto';
 
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/jpg']);
 
@@ -101,6 +103,31 @@ export class PartnerController {
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
   getActivePromotions() {
     return this.promotionsService.listActivePromotionsForPartner();
+  }
+
+  @Get('promotions/mine')
+  @Roles(UserRole.PARTNER)
+  listOwnPromotions(@Req() req: { user: { sub: string } }) {
+    return this.promotionsService.listPromotionsForPartnerOwner(req.user.sub);
+  }
+
+  @Post('promotions')
+  @Roles(UserRole.PARTNER)
+  createOwnPromotion(
+    @Req() req: { user: { sub: string } },
+    @Body() dto: CreatePartnerPromotionDto,
+  ) {
+    return this.promotionsService.createPartnerPromotion(req.user.sub, dto);
+  }
+
+  @Patch('promotions/:id/active')
+  @Roles(UserRole.PARTNER)
+  setOwnPromotionActive(
+    @Req() req: { user: { sub: string } },
+    @Param('id') id: string,
+    @Body() dto: SetPromotionActiveDto,
+  ) {
+    return this.promotionsService.setPartnerPromotionActive(req.user.sub, id, dto.isActive);
   }
 
   @Get('branches')

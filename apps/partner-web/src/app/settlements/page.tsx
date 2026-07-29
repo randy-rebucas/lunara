@@ -281,6 +281,26 @@ export default function SettlementsPage() {
                           <tr>
                             <td colSpan={6} className="bg-slate-50/70 p-0">
                               <div className="border-t border-border/60 px-3 py-4 sm:px-5">
+                                <div className="mb-4 grid max-w-sm grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                                  <span className="text-muted">Gross revenue</span>
+                                  <span className="text-right text-slate-900">{formatPeso(s.totalAmount)}</span>
+                                  <span className="text-muted">Lunara commission</span>
+                                  <span className="text-right text-rose-600">−{formatPeso(s.lunaraFee ?? 0)}</span>
+                                  {s.riderCostRecovered ? (
+                                    <>
+                                      <span className="text-muted">Rider delivery cost</span>
+                                      <span className="text-right text-rose-600">−{formatPeso(s.riderCostRecovered)}</span>
+                                    </>
+                                  ) : null}
+                                  {s.clawbackRecoveryApplied ? (
+                                    <>
+                                      <span className="text-muted">Prior refund recovered</span>
+                                      <span className="text-right text-rose-600">−{formatPeso(s.clawbackRecoveryApplied)}</span>
+                                    </>
+                                  ) : null}
+                                  <span className="border-t border-border/60 pt-1 font-semibold text-slate-900">You received</span>
+                                  <span className="border-t border-border/60 pt-1 text-right font-semibold text-slate-900">{formatPeso(s.partnerPayout ?? s.totalAmount)}</span>
+                                </div>
                                 {isLoadingThis && <p className="text-sm text-muted">Loading orders…</p>}
                                 {!isLoadingThis && ordersError && <p className="text-sm text-destructive">{ordersError}</p>}
                                 {!isLoadingThis && orders?.length === 0 && (

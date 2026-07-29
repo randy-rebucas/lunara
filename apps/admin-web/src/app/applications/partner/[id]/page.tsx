@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useState } from 'react';
 import { AuthenticatedImage } from '../../../../components/authenticated-image';
@@ -40,6 +41,8 @@ interface PartnerApplicationDetail {
   message?: string;
   status: string;
   rejectionReason?: string;
+  onboardedPartnerId?: string;
+  onboardedAt?: string;
   createdAt?: string;
 }
 
@@ -218,6 +221,26 @@ export default function PartnerApplicationReviewPage() {
                       </button>
                     </div>
                   </div>
+                )}
+              </OpsPanel>
+            ) : null}
+
+            {data.status === 'approved' ? (
+              <OpsPanel title="Onboarding">
+                {data.onboardedPartnerId ? (
+                  <p className="text-sm text-slate-700">
+                    Onboarded{data.onboardedAt ? ` on ${new Date(data.onboardedAt).toLocaleDateString()}` : ''} —
+                    account and shop already created for this application.
+                  </p>
+                ) : (
+                  <>
+                    <p className="mb-3 text-sm text-muted">
+                      Approved but not yet onboarded — no account or shop exists for this business yet.
+                    </p>
+                    <Link href={`/partners/new?fromApplicationId=${data._id}`} className="btn-primary btn-sm">
+                      Onboard this partner →
+                    </Link>
+                  </>
                 )}
               </OpsPanel>
             ) : null}

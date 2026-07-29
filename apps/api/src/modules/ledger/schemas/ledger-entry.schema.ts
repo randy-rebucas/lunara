@@ -15,6 +15,7 @@ export const LEDGER_ACCOUNT_TYPES = [
   'rider_wage_expense',
   'customer_wallet_liability',
   'refund_expense',
+  'payment_processing_expense',
 ] as const;
 export type LedgerAccountType = (typeof LEDGER_ACCOUNT_TYPES)[number];
 
@@ -57,6 +58,7 @@ export class LedgerEntry {
       'payment',
       'refund',
       'wallet_topup',
+      'chargeback',
     ],
   })
   sourceType!:
@@ -67,7 +69,8 @@ export class LedgerEntry {
     | 'rider_earning'
     | 'payment'
     | 'refund'
-    | 'wallet_topup';
+    | 'wallet_topup'
+    | 'chargeback';
 
   @Prop({ required: true })
   sourceId!: string;

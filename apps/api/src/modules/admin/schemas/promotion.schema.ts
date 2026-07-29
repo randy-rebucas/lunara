@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { PromotionAudience, PromotionKind } from '@lunara/types';
-import { HydratedDocument } from 'mongoose';
+import { HydratedDocument, Types } from 'mongoose';
 
 export type PromotionDocument = HydratedDocument<Promotion>;
 
@@ -44,6 +44,31 @@ export class Promotion {
 
   @Prop()
   endsAt?: Date;
+
+  /** Set only for partner-created promotions — restricts eligibility to orders assigned to one of
+   * this partner's branches. Absent for platform (admin-created) promotions, which apply everywhere. */
+  @Prop({ type: Types.ObjectId, index: true })
+  partnerUserId?: Types.ObjectId;
+
+  /** Who absorbs the discount amount. Platform promotions always absorb it as a Lunara cost;
+   * partner promotions deduct it from the partner's own payout at settlement. */
+  @Prop({ enum: ['platform', 'partner'], default: 'platform' })
+  fundedBy!: 'platform' | 'partner';
+
+  /** Partner-created promotions start 'pending' and aren't usable at checkout until an admin
+   * approves them (see PromotionsService.applyCouponToQuote). Platform promotions skip review
+   * entirely — 'approved' from creation. */
+  @Prop({ enum: ['approved', 'pending', 'rejected'], default: 'approved' })
+  approvalStatus!: 'approved' | 'pending' | 'rejected';
+
+  @Prop()
+  adminNote?: string;
+
+  @Prop()
+  reviewedAt?: Date;
+
+  @Prop({ type: Types.ObjectId })
+  reviewedBy?: Types.ObjectId;
 
   createdAt!: Date;
   updatedAt!: Date;

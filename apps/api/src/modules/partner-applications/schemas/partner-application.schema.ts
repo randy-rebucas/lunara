@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument } from 'mongoose';
+import { HydratedDocument, Types } from 'mongoose';
 import type { PartnerApplicationDocumentType } from '../partner-application-documents';
 
 export type PartnerApplicationDocument = HydratedDocument<PartnerApplication>;
@@ -122,6 +122,16 @@ export class PartnerApplication {
 
   @Prop({ trim: true, maxlength: 1000 })
   rejectionReason?: string;
+
+  /** Set once an admin actually onboards this applicant (creates their User + Branch) via
+   * /admin/partners/onboard with sourceApplicationId — distinct from `status: 'approved'`, which
+   * only records the review decision. An application can sit approved for a while before anyone
+   * completes onboarding, or in principle be onboarded manually without ever passing through here. */
+  @Prop({ type: Types.ObjectId })
+  onboardedPartnerId?: Types.ObjectId;
+
+  @Prop()
+  onboardedAt?: Date;
 
   createdAt!: Date;
   updatedAt!: Date;

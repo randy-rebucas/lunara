@@ -25,6 +25,10 @@ interface Promotion {
   redemptions: number;
   discountGiven: number;
   revenueImpact: number;
+  partnerUserId?: string;
+  fundedBy?: 'platform' | 'partner';
+  approvalStatus?: 'approved' | 'pending' | 'rejected';
+  adminNote?: string;
 }
 
 type PromoState = 'nominal' | 'attention';
@@ -269,6 +273,20 @@ export function PromotionsBoard() {
     }
   }
 
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
+  async function reviewPartnerPromo(p: Promotion, action: 'approve' | 'reject') {
+    setActionError('');
+    setReviewingId(p._id);
+    try {
+      await adminFetch(`/admin/promotions/${p._id}/review`, { method: 'POST', body: JSON.stringify({ action }) });
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to review promotion');
+    } finally {
+      setReviewingId(null);
+    }
+  }
+
   return (
     <div>
       <header className="mb-5">
@@ -508,6 +526,7 @@ export function PromotionsBoard() {
                     <thead>
                       <tr>
                         <th scope="col">Code</th>
+                        <th scope="col">Source</th>
                         <th scope="col">Discount</th>
                         <th scope="col">Redemptions</th>
                         <th scope="col" className="text-right">Discount given</th>
@@ -528,6 +547,18 @@ export function PromotionsBoard() {
                             <td>
                               <span className="text-code font-bold text-primary">{p.code}</span>
                               <p className="max-w-[12rem] truncate text-xs text-muted" title={p.title}>{p.title}</p>
+                            </td>
+                            <td>
+                              {p.partnerUserId ? (
+                                <span className="badge-secondary">Partner</span>
+                              ) : (
+                                <span className="badge-neutral">Platform</span>
+                              )}
+                              {p.approvalStatus === 'pending' ? (
+                                <span className="badge-warning ml-1">Pending review</span>
+                              ) : p.approvalStatus === 'rejected' ? (
+                                <span className="badge-danger ml-1">Rejected</span>
+                              ) : null}
                             </td>
                             <td className="whitespace-nowrap tabular-nums text-sm">{formatDiscount(p)}</td>
                             <td>
@@ -580,6 +611,16 @@ export function PromotionsBoard() {
                           </span>
                         )}
                         <span className="badge-secondary capitalize">{selected.discountType}</span>
+                        {selected.partnerUserId ? (
+                          <span className="badge-secondary">Partner-created</span>
+                        ) : (
+                          <span className="badge-neutral">Platform</span>
+                        )}
+                        {selected.approvalStatus === 'pending' ? (
+                          <span className="badge-warning">Pending review</span>
+                        ) : selected.approvalStatus === 'rejected' ? (
+                          <span className="badge-danger">Rejected</span>
+                        ) : null}
                       </div>
                     </div>
                     <button
@@ -604,7 +645,40 @@ export function PromotionsBoard() {
                     <RailRow label="Audience" value={formatAudience(selected)} />
                     <RailRow label="Uses / customer" value={formatUsesPerCustomer(selected)} />
                     <RailRow label="Validity" value={formatValidity(selected)} />
+                    <RailRow
+                      label="Funded by"
+                      value={selected.fundedBy === 'partner' ? "Partner's own payout" : 'Lunara (platform)'}
+                    />
+                    {selected.partnerUserId ? (
+                      <RailRow label="Scope" value="This partner's branches only" />
+                    ) : null}
                   </RailSection>
+
+                  {selected.partnerUserId && selected.approvalStatus === 'pending' ? (
+                    <RailSection title="Review">
+                      <p className="mb-2 text-xs text-muted">
+                        Partner-created promo, awaiting approval before it&apos;s usable at checkout.
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          className="btn-primary btn-sm flex-1"
+                          disabled={reviewingId === selected._id}
+                          onClick={() => void reviewPartnerPromo(selected, 'approve')}
+                        >
+                          {reviewingId === selected._id ? 'Saving…' : 'Approve'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-outline btn-sm flex-1"
+                          disabled={reviewingId === selected._id}
+                          onClick={() => void reviewPartnerPromo(selected, 'reject')}
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </RailSection>
+                  ) : null}
 
                   <RailSection title="Performance">
                     <RailRow label="Redemptions" value={selected.redemptions.toLocaleString()} />

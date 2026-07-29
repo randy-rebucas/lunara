@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { calculateDeliveryFee } from '@lunara/utils';
 import { PlatformSettings, PlatformSettingsDocument } from './schemas/platform-settings.schema';
 import { UpdateDeliveryFeeDto } from './dto/update-delivery-fee.dto';
 import { UpdateAutomationSettingsDto } from './dto/update-automation-settings.dto';
@@ -26,6 +27,9 @@ export class SettingsService {
       success: true,
       data: {
         deliveryFee: settings.deliveryFee,
+        deliveryBaseDistanceKm: settings.deliveryBaseDistanceKm,
+        deliveryPerKmRate: settings.deliveryPerKmRate,
+        maxDeliveryRadiusKm: settings.maxDeliveryRadiusKm,
       },
     };
   }
@@ -33,19 +37,45 @@ export class SettingsService {
   async updateDeliveryFeeSettings(dto: UpdateDeliveryFeeDto) {
     const settings = await this.getOrCreateSettings();
     if (dto.deliveryFee !== undefined) settings.deliveryFee = dto.deliveryFee;
+    if (dto.deliveryBaseDistanceKm !== undefined)
+      settings.deliveryBaseDistanceKm = dto.deliveryBaseDistanceKm;
+    if (dto.deliveryPerKmRate !== undefined) settings.deliveryPerKmRate = dto.deliveryPerKmRate;
+    if (dto.maxDeliveryRadiusKm !== undefined) settings.maxDeliveryRadiusKm = dto.maxDeliveryRadiusKm;
     await settings.save();
     return {
       success: true,
       data: {
         deliveryFee: settings.deliveryFee,
+        deliveryBaseDistanceKm: settings.deliveryBaseDistanceKm,
+        deliveryPerKmRate: settings.deliveryPerKmRate,
+        maxDeliveryRadiusKm: settings.maxDeliveryRadiusKm,
       },
     };
   }
 
-  /** Flat delivery fee — same for every address. */
-  async getDeliveryFeeForAddress(_address: { city: string; province: string }) {
+  /** Platform-wide delivery distance ceiling — beyond this, checkout is blocked outright regardless
+   * of branch. Used alongside a branch's own serviceRadiusKm to decide when an order needs manual
+   * admin approval instead of being auto-dispatched. */
+  async getMaxDeliveryRadiusKm(): Promise<number> {
     const settings = await this.getOrCreateSettings();
-    return settings.deliveryFee;
+    return settings.maxDeliveryRadiusKm;
+  }
+
+  /** Delivery Fee = base fare + (chargeable distance beyond the base allowance x per-km rate).
+   * Pass the pickup-to-shop distance in km; omit it (e.g. for pre-shop-selection previews) to get
+   * the flat base fare only. */
+  async getDeliveryFeeForAddress(
+    _address: { city: string; province: string },
+    distanceKm?: number,
+  ) {
+    const settings = await this.getOrCreateSettings();
+    if (distanceKm === undefined) return settings.deliveryFee;
+    return calculateDeliveryFee(
+      distanceKm,
+      settings.deliveryFee,
+      settings.deliveryBaseDistanceKm,
+      settings.deliveryPerKmRate,
+    );
   }
 
   async getRiderFeeSettings() {

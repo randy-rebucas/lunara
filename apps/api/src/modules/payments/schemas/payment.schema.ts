@@ -51,6 +51,14 @@ export class Payment {
   @Prop()
   paidAt?: Date;
 
+  /** Set when the card network/PayMongo pulls this payment back after the fact. Distinct from a
+   * customer-initiated or admin-approved refund — no wallet credit is issued for a chargeback. */
+  @Prop()
+  chargedBackAt?: Date;
+
+  @Prop()
+  chargebackAmount?: number;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

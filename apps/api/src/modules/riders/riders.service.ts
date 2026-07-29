@@ -268,14 +268,14 @@ export class RidersService {
           accountType: 'rider_payout_expense',
           direction: 'debit',
           amount,
-          description: `${RIDER_EARNING_TYPE_LABELS[type]} fee earned by rider ${userId} (order ${orderId.slice(-6)})`,
+          description: `${RIDER_EARNING_TYPE_LABELS[type]} fee earned by rider ${userId} (order ${orderId.slice(-6)}) — rate ₱${amount} at time of task, live-configurable and may differ from the current PlatformSettings value`,
         },
         {
           accountType: 'rider_payable',
           accountSubject: userId,
           direction: 'credit',
           amount,
-          description: `Payable to rider ${userId} for ${RIDER_EARNING_TYPE_LABELS[type]}`,
+          description: `Payable to rider ${userId} for ${RIDER_EARNING_TYPE_LABELS[type]} — rate ₱${amount}`,
         },
       ],
     );

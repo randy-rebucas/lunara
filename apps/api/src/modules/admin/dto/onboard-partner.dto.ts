@@ -68,4 +68,9 @@ export class OnboardPartnerDto {
   @IsNumber()
   @Min(1)
   maxWeightCapacityKg?: number;
+
+  /** Links the created User + Branch back to the PartnerApplication they were onboarded from. */
+  @IsOptional()
+  @IsMongoId()
+  sourceApplicationId?: string;
 }

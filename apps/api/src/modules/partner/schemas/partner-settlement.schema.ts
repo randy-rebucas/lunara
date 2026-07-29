@@ -62,6 +62,23 @@ export class PartnerSettlement {
   @Prop({ default: 0 })
   clawbackOrderCount!: number;
 
+  /** How much of this settlement's own clawbackTotal has since been recovered — deducted from a
+   * later settlement's payout for the same partner. clawbackTotal − clawbackRecovered is what's
+   * still outstanding. See PartnerOperationsService.getOutstandingClawbackBalance(). */
+  @Prop({ default: 0 })
+  clawbackRecovered!: number;
+
+  /** Amount deducted from THIS settlement's own payout to recover outstanding clawback balance
+   * from the partner's earlier settlements (opt-in, via CreateSettlementDto.recoverClawback). */
+  @Prop({ default: 0 })
+  clawbackRecoveryApplied!: number;
+
+  /** Actual rider pickup+delivery task cost for the orders in this settlement (looked up from the
+   * ledger, not estimated) — deducted from partnerPayout so the partner, who already received the
+   * full customer-paid deliveryFee inside totalAmount, funds the delivery instead of Lunara. */
+  @Prop({ default: 0 })
+  riderCostRecovered!: number;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

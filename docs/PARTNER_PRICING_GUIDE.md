@@ -18,7 +18,7 @@ Every shop picks one **pricing mode** for its base wash/dry/fold service — set
 ```
 What the customer pays = Base service (see table above)
                         + Add-ons (your price × 1.30 markup)
-                        + ₱70 delivery fee (flat, platform-wide)
+                        + Delivery fee (distance-tiered, platform-wide — see below)
                         − Promo discount (if any)
 
 What you get paid       = Customer payment − Lunara's commission
@@ -86,7 +86,7 @@ Example: if you set fabric softener at ₱30, the customer is charged ₱39 for 
 
 ### Delivery fee
 
-A flat ₱70 pickup + delivery fee is added to every order, network-wide. This isn't shop-specific and isn't part of your payout calculation — it funds rider pickup/delivery, not your shop's cut.
+A pickup + delivery fee is added to every order, network-wide — ₱70 for the first 3 km between the customer and the assigned shop, +₱8/km beyond that. This isn't shop-specific and isn't part of your payout calculation — it funds rider pickup/delivery, not your shop's cut. Full formula and admin-tunable values: [`delivery-pricing-and-approval.md`](./delivery-pricing-and-approval.md).
 
 ### Minimum order
 
@@ -150,7 +150,7 @@ Settlements are batched and paid out periodically (e.g. monthly), with a full it
 | How do I switch pricing modes? | Partner dashboard → Services → Pricing mode. Switching to per-kilo/per-load requires a rate set for every service you offer. |
 | When is the per-kilo/per-load price final? | It's an estimate at booking time; it's finalized once your shop weighs the laundry and enters the actual weight/load count during receiving. |
 | Can I set my own add-on prices? | Yes — customers are charged your price + 30% markup, in every pricing mode. |
-| Do I control the delivery fee? | No — it's a flat ₱70 platform-wide fee. |
+| Do I control the delivery fee? | No — it's a platform-wide fee, ₱70 base + ₱8/km beyond 3 km. |
 | Do promo codes cost me money? | No — Lunara absorbs promo discounts. |
 | What's my commission rate? | 20% by default; check your dashboard for your exact rate, since it can be set per branch. |
 | Where do I see my actual payouts? | Partner dashboard → Revenue (per-order) and Settlements (batched, paid). |

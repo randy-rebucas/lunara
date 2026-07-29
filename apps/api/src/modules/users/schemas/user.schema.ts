@@ -79,6 +79,12 @@ export class User {
   @Prop()
   deliveryRadiusKm?: number;
 
+  /** Partner-only: the PartnerApplication this account was onboarded from, if any — lets admin
+   * trace a live partner back to the application that led to it. Unset for partners onboarded
+   * without going through the public application flow (e.g. direct admin-created accounts). */
+  @Prop({ type: Types.ObjectId })
+  sourceApplicationId?: Types.ObjectId;
+
   /** Staff-only: when true, this staff account can edit shop settings (hours, machines,
    * pricing, etc.) in addition to normal order-processing actions. Ignored for PARTNER/ADMIN,
    * who always have full access. Defaults to view-only. */

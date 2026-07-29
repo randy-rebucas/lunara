@@ -58,6 +58,7 @@ export interface BookingOrderPayload {
   subtotal: number;
   deliveryFee: number;
   discount: number;
+  discountFundedBy?: 'platform' | 'partner';
   total: number;
   branchId?: string;
   branchCode?: string;
@@ -68,6 +69,8 @@ export interface BookingOrderPayload {
   pricingMode?: BranchPricingMode;
   pricingSnapshot?: PricingModeRates;
   subscriptionId?: string;
+  deliveryDistanceKm?: number;
+  requiresDeliveryApproval?: boolean;
 }
 
 @Injectable()
@@ -208,12 +211,15 @@ export class OrdersService {
       subtotal: payload.subtotal,
       deliveryFee: payload.deliveryFee,
       discount: payload.discount,
+      discountFundedBy: payload.discountFundedBy,
       couponCode: payload.couponCode,
       total: payload.total,
       baseSubtotal: payload.baseSubtotal,
       pricingModel: payload.pricingModel,
       pricingMode: payload.pricingMode ?? BranchPricingMode.FLAT_BAG,
       pricingSnapshot: payload.pricingSnapshot,
+      deliveryDistanceKm: payload.deliveryDistanceKm,
+      requiresDeliveryApproval: payload.requiresDeliveryApproval ?? false,
       statusHistory: [{ status: OrderStatus.PENDING, timestamp: new Date() }],
     });
 

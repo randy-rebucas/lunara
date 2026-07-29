@@ -1,4 +1,4 @@
-import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsMongoId, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class CreatePartnerDto {
   @IsEmail()
@@ -12,4 +12,9 @@ export class CreatePartnerDto {
   @IsString()
   @MinLength(8)
   password!: string;
+
+  /** Links the created User back to the PartnerApplication it was onboarded from. */
+  @IsOptional()
+  @IsMongoId()
+  sourceApplicationId?: string;
 }

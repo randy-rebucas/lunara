@@ -215,6 +215,11 @@ export class Branch {
   @Prop({ type: Types.ObjectId, required: true, index: true })
   partnerUserId!: Types.ObjectId;
 
+  /** The PartnerApplication this branch was onboarded from, if any — same traceability as
+   * User.sourceApplicationId, set together when onboarding is initiated from an application. */
+  @Prop({ type: Types.ObjectId })
+  sourceApplicationId?: Types.ObjectId;
+
   /** The partner's single flagship shop — branches (variants) roll up to it in shop counts and
    * customer-facing listings. Exactly one active branch per partnerUserId may have this set;
    * enforced by the partial unique index below. Server-derived only — see BranchManagementService. */

@@ -32,6 +32,10 @@ import {
   loadLatestOrderPaymentsByOrderId,
 } from '../payments/payment-summary';
 import { EmailService } from '../../common/email/email.service';
+import {
+  PartnerApplication,
+  PartnerApplicationDocument,
+} from '../partner-applications/schemas/partner-application.schema';
 
 const COMPLETED = [OrderStatus.DELIVERED, OrderStatus.COMPLETED];
 const CANCELLED = [OrderStatus.CANCELLED, OrderStatus.REFUNDED];
@@ -129,6 +133,7 @@ export class AdminService {
     @InjectModel(Promotion.name) private promotionModel: Model<PromotionDocument>,
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
     @InjectModel(Branch.name) private branchModel: Model<BranchDocument>,
+    @InjectModel(PartnerApplication.name) private partnerApplicationModel: Model<PartnerApplicationDocument>,
     @InjectModel(Review.name) private reviewModel: Model<ReviewDocument>,
     private supportService: SupportService,
     private branchesService: BranchesService,
@@ -140,6 +145,41 @@ export class AdminService {
   async ensureSeeded() {
     await this.supportService.ensureSeeded();
     await this.promotionsService.ensureSeeded();
+  }
+
+  /** Orders held at checkout because delivery distance exceeded the assigned branch's own
+   * serviceRadiusKm (but stayed within the platform-wide max) — awaiting admin sign-off before dispatch. */
+  async listOrdersAwaitingDeliveryApproval() {
+    const orders = await this.orderModel
+      .find({ requiresDeliveryApproval: true })
+      .sort({ createdAt: -1 })
+      .limit(100);
+    return { success: true, data: orders };
+  }
+
+  async approveDeliveryDistance(orderId: string, adminUserId: string) {
+    const order = await this.orderModel.findById(orderId);
+    if (!order) throw new NotFoundException('Order not found');
+    if (!order.requiresDeliveryApproval) {
+      throw new BadRequestException('Order does not require delivery approval');
+    }
+
+    order.requiresDeliveryApproval = false;
+    order.deliveryApprovedAt = new Date();
+    order.deliveryApprovedBy = new Types.ObjectId(adminUserId);
+    order.statusHistory.push({
+      status: order.status,
+      timestamp: new Date(),
+      note: `Long-distance delivery approved by admin (${order.deliveryDistanceKm?.toFixed(1)}km)`,
+      updatedBy: adminUserId,
+    });
+    await order.save();
+
+    if (order.status === OrderStatus.PENDING) {
+      await this.branchesService.finalizePreResolvedShopAssignment(order);
+    }
+
+    return { success: true, data: order };
   }
 
   async getDashboard() {
@@ -758,7 +798,12 @@ export class AdminService {
       passwordHash,
       role: UserRole.PARTNER,
       isActive: true,
+      sourceApplicationId: dto.sourceApplicationId ? new Types.ObjectId(dto.sourceApplicationId) : undefined,
     });
+
+    if (dto.sourceApplicationId) {
+      await this.markApplicationOnboarded(dto.sourceApplicationId, user._id);
+    }
 
     await this.emailService.sendPartnerInvite(email, dto.password);
 
@@ -776,6 +821,21 @@ export class AdminService {
     };
   }
 
+  /** Marks a PartnerApplication as onboarded once its account/branch actually exist — distinct
+   * from `status: 'approved'`, which only records the review decision (see the field's own doc
+   * comment on the schema). Best-effort: an invalid/missing id shouldn't fail onboarding itself. */
+  private async markApplicationOnboarded(applicationId: string, partnerUserId: Types.ObjectId) {
+    try {
+      await this.partnerApplicationModel.updateOne(
+        { _id: applicationId },
+        { $set: { onboardedPartnerId: partnerUserId, onboardedAt: new Date() } },
+      );
+    } catch {
+      // Invalid id or already-deleted application — onboarding the partner itself already
+      // succeeded by the time this runs, so this is traceability best-effort, not a hard dependency.
+    }
+  }
+
   async onboardPartner(dto: OnboardPartnerDto) {
     const email = dto.email.trim().toLowerCase();
     const phone = dto.phone?.trim();
@@ -789,12 +849,16 @@ export class AdminService {
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
+    const sourceApplicationId = dto.sourceApplicationId
+      ? new Types.ObjectId(dto.sourceApplicationId)
+      : undefined;
     const user = await this.userModel.create({
       email,
       phone,
       passwordHash,
       role: UserRole.PARTNER,
       isActive: true,
+      sourceApplicationId,
     });
 
     let branch;
@@ -813,9 +877,19 @@ export class AdminService {
         maxActiveOrders: dto.maxActiveOrders,
         maxWeightCapacityKg: dto.maxWeightCapacityKg,
       });
+      if (sourceApplicationId) {
+        await this.branchModel.updateOne(
+          { _id: branch.data.branchId },
+          { $set: { sourceApplicationId } },
+        );
+      }
     } catch (err) {
       await this.userModel.deleteOne({ _id: user._id });
       throw err;
+    }
+
+    if (dto.sourceApplicationId) {
+      await this.markApplicationOnboarded(dto.sourceApplicationId, user._id);
     }
 
     await this.emailService.sendPartnerInvite(email, dto.password);
@@ -1459,6 +1533,29 @@ export class AdminService {
     return { success: true, data: this.serializePromotion(promo) };
   }
 
+  /** Approves or rejects a partner-created promotion. Only 'approved' partner promotions become
+   * usable at checkout (see PromotionsService.applyCouponToQuote). */
+  async reviewPartnerPromotion(
+    id: string,
+    adminUserId: string,
+    action: 'approve' | 'reject',
+    adminNote?: string,
+  ) {
+    const promo = await this.promotionModel.findById(id);
+    if (!promo) throw new NotFoundException('Promotion not found');
+    if (!promo.partnerUserId) {
+      throw new BadRequestException('Only partner-created promotions require approval');
+    }
+
+    promo.approvalStatus = action === 'approve' ? 'approved' : 'rejected';
+    promo.reviewedAt = new Date();
+    promo.reviewedBy = new Types.ObjectId(adminUserId);
+    if (adminNote !== undefined) promo.adminNote = adminNote;
+    await promo.save();
+
+    return { success: true, data: this.serializePromotion(promo) };
+  }
+
   private async orderStatusCounts() {
     const grouped = await this.orderModel.aggregate([
       { $group: { _id: '$status', count: { $sum: 1 } } },
@@ -1482,6 +1579,11 @@ export class AdminService {
       newCustomerWithinDays: p.newCustomerWithinDays,
       startsAt: p.startsAt,
       endsAt: p.endsAt,
+      partnerUserId: p.partnerUserId?.toString(),
+      fundedBy: p.fundedBy,
+      approvalStatus: p.approvalStatus,
+      adminNote: p.adminNote,
+      reviewedAt: p.reviewedAt,
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
     };

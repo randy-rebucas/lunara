@@ -1,4 +1,12 @@
-import { BadRequestException, Injectable, OnModuleInit, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  OnModuleInit,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { OrderStatus, PromotionAudience, PromotionKind } from '@lunara/types';
@@ -24,8 +32,14 @@ import {
   PromotionUsageCounterDocument,
 } from './schemas/promotion-usage-counter.schema';
 import { DEFAULT_PROMOTIONS } from './promotions.seed';
+import { CreatePartnerPromotionDto } from '../partner/dto/create-partner-promotion.dto';
 
 const COMPLETED_ORDER_STATUSES = [OrderStatus.DELIVERED, OrderStatus.COMPLETED];
+
+/** Ceilings on partner-created promotions — partners fund these themselves, but an unbounded
+ * discount is still a support/abuse risk worth capping platform-side regardless of who pays. */
+const MAX_PARTNER_PERCENT_DISCOUNT = 50;
+const MAX_PARTNER_FIXED_DISCOUNT = 300;
 
 type ResolvedPromo =
   | {
@@ -168,9 +182,17 @@ export class PromotionsService implements OnModuleInit {
     return { type: 'shared', promotion };
   }
 
+  /** `partnerId` is the resolved order's shop's owning partner (branch.partnerUserId) — required to
+   * validate a partner-scoped promotion code, since those only apply to orders at that partner's
+   * own branches. Platform (admin-created) promotions ignore it entirely. */
   async applyCouponToQuote<
     T extends { subtotal: number; deliveryFee: number; discount: number; total: number; couponCode?: string; promotionTitle?: string },
-  >(quote: T, couponCode: string | undefined, userId: string): Promise<T> {
+  >(
+    quote: T,
+    couponCode: string | undefined,
+    userId: string,
+    partnerId?: string,
+  ): Promise<T & { fundedBy?: 'platform' | 'partner' }> {
     if (!couponCode?.trim()) return quote;
 
     const resolved = await this.resolveCode(couponCode, userId);
@@ -195,15 +217,28 @@ export class PromotionsService implements OnModuleInit {
       if (!eligibility.valid) {
         throw new BadRequestException(eligibility.message);
       }
-      return applyPromotionToQuote<T>(quote, {
+      const applied = applyPromotionToQuote<T>(quote, {
         code: promo.code,
         title: promo.title,
         discountType: promo.discountType,
         discountValue: promo.discountValue,
       });
+      return { ...applied, fundedBy: 'platform' };
     }
 
     const promo = resolved.promotion;
+
+    // Partner-scoped promotions only apply at their own shops, and only once admin-approved —
+    // treat both failures as "invalid code" rather than leaking why, same as any other ineligible code.
+    if (promo.partnerUserId) {
+      if (promo.approvalStatus !== 'approved') {
+        throw new BadRequestException('Invalid or expired promo code');
+      }
+      if (!partnerId || promo.partnerUserId.toString() !== partnerId) {
+        throw new BadRequestException('This promo code is not valid for the selected shop');
+      }
+    }
+
     const context = await this.buildCustomerContext(userId, quote.subtotal);
     const redemptionCount = await this.countRedemptions(userId, promo._id);
     const eligibility = validatePromotionForCustomer(
@@ -226,12 +261,13 @@ export class PromotionsService implements OnModuleInit {
       throw new BadRequestException(eligibility.message);
     }
 
-    return applyPromotionToQuote(quote, {
+    const applied = applyPromotionToQuote(quote, {
       code: promo.code,
       title: promo.title,
       discountType: promo.discountType,
       discountValue: promo.discountValue,
     });
+    return { ...applied, fundedBy: promo.fundedBy };
   }
 
   async recordRedemption(userId: string, code: string, orderId: string) {
@@ -403,5 +439,90 @@ export class PromotionsService implements OnModuleInit {
       .map((p) => this.serializeDealFromPromotion(p));
 
     return { success: true, data: deals };
+  }
+
+  private serializePartnerPromotion(p: PromotionDocument) {
+    return {
+      _id: p._id.toString(),
+      code: p.code,
+      title: p.title,
+      description: p.description,
+      discountType: p.discountType,
+      discountValue: p.discountValue,
+      minOrderAmount: p.minOrderAmount,
+      isActive: p.isActive,
+      maxUsesPerCustomer: p.maxUsesPerCustomer,
+      startsAt: p.startsAt,
+      endsAt: p.endsAt,
+      fundedBy: p.fundedBy,
+      approvalStatus: p.approvalStatus,
+      adminNote: p.adminNote,
+      createdAt: p.createdAt,
+    };
+  }
+
+  /** Promotions this partner created themselves — any approval status, so they can see what's
+   * pending/rejected as well as what's live. */
+  async listPromotionsForPartnerOwner(partnerUserId: string) {
+    const items = await this.promotionModel
+      .find({ partnerUserId: new Types.ObjectId(partnerUserId) })
+      .sort({ createdAt: -1 });
+    return { success: true, data: items.map((p) => this.serializePartnerPromotion(p)) };
+  }
+
+  /** Partner self-service promo creation — always partner-funded (deducted from their own payout at
+   * settlement, never Lunara's cost) and scoped to their own branches only. Starts 'pending' and
+   * isn't usable at checkout until an admin approves it (see applyCouponToQuote above). */
+  async createPartnerPromotion(partnerUserId: string, dto: CreatePartnerPromotionDto) {
+    if (dto.discountType === 'percent' && dto.discountValue > MAX_PARTNER_PERCENT_DISCOUNT) {
+      throw new BadRequestException(
+        `Partner promotions can discount at most ${MAX_PARTNER_PERCENT_DISCOUNT}% off`,
+      );
+    }
+    if (dto.discountType === 'fixed' && dto.discountValue > MAX_PARTNER_FIXED_DISCOUNT) {
+      throw new BadRequestException(
+        `Partner promotions can discount at most ₱${MAX_PARTNER_FIXED_DISCOUNT}`,
+      );
+    }
+
+    let promo: PromotionDocument;
+    try {
+      promo = await this.promotionModel.create({
+        code: dto.code.toUpperCase(),
+        title: dto.title,
+        description: dto.description,
+        discountType: dto.discountType,
+        discountValue: dto.discountValue,
+        minOrderAmount: dto.minOrderAmount ?? 0,
+        isActive: true,
+        audience: PromotionAudience.ALL,
+        kind: PromotionKind.STANDARD,
+        maxUsesPerCustomer: dto.maxUsesPerCustomer,
+        startsAt: dto.startsAt ? new Date(dto.startsAt) : undefined,
+        endsAt: dto.endsAt ? new Date(dto.endsAt) : undefined,
+        partnerUserId: new Types.ObjectId(partnerUserId),
+        fundedBy: 'partner',
+        approvalStatus: 'pending',
+      });
+    } catch (e) {
+      if ((e as { code?: number })?.code === 11000) {
+        throw new ConflictException(`A promotion with code "${dto.code.toUpperCase()}" already exists`);
+      }
+      throw e;
+    }
+    return { success: true, data: this.serializePartnerPromotion(promo) };
+  }
+
+  /** Lets a partner turn their own promotion on/off without re-triggering admin review — toggling
+   * off is always safe, and toggling a previously-approved one back on doesn't need re-approval. */
+  async setPartnerPromotionActive(partnerUserId: string, promotionId: string, isActive: boolean) {
+    const promo = await this.promotionModel.findById(promotionId);
+    if (!promo) throw new NotFoundException('Promotion not found');
+    if (!promo.partnerUserId || promo.partnerUserId.toString() !== partnerUserId) {
+      throw new ForbiddenException("You don't have access to this promotion");
+    }
+    promo.isActive = isActive;
+    await promo.save();
+    return { success: true, data: this.serializePartnerPromotion(promo) };
   }
 }

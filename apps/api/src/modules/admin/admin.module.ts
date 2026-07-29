@@ -24,6 +24,10 @@ import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
 import { Review, ReviewSchema } from '../reviews/schemas/review.schema';
 import { PartnerModule } from '../partner/partner.module';
 import { ServiceAreasModule } from '../service-areas/service-areas.module';
+import {
+  PartnerApplication,
+  PartnerApplicationSchema,
+} from '../partner-applications/schemas/partner-application.schema';
 
 @Module({
   imports: [
@@ -36,6 +40,7 @@ import { ServiceAreasModule } from '../service-areas/service-areas.module';
       { name: Payment.name, schema: PaymentSchema },
       { name: Branch.name, schema: BranchSchema },
       { name: Review.name, schema: ReviewSchema },
+      { name: PartnerApplication.name, schema: PartnerApplicationSchema },
     ]),
     SupportModule,
     RefundsModule,

@@ -38,6 +38,8 @@ interface OrderRow {
   paymentReceiptCode?: string;
   paymentPaidAt?: string;
   cashTiming?: string;
+  requiresDeliveryApproval?: boolean;
+  deliveryDistanceKm?: number;
 }
 
 type PipelineState = 'nominal' | 'attention' | 'critical';
@@ -255,6 +257,20 @@ export function OrdersBoard() {
   }, [tab, limit]);
 
   const { data, loading, error, reload } = useAdminQuery(load, [tab, limit]);
+
+  const [approvingDelivery, setApprovingDelivery] = useState(false);
+  const approveDelivery = useCallback(
+    async (orderId: string) => {
+      setApprovingDelivery(true);
+      try {
+        await adminFetch(`/admin/dispatch/orders/${orderId}/approve-delivery`, { method: 'POST' });
+        await reload();
+      } finally {
+        setApprovingDelivery(false);
+      }
+    },
+    [reload],
+  );
 
   useAdminOperationsSocket({
     onDispatchQueueUpdated: () => {
@@ -575,6 +591,14 @@ export function OrdersBoard() {
                                 {o.operationsConflict ? (
                                   <span className="badge-danger">Conflict</span>
                                 ) : null}
+                                {o.requiresDeliveryApproval ? (
+                                  <span
+                                    className="badge-warning"
+                                    title={`Delivery distance (${o.deliveryDistanceKm?.toFixed(1) ?? '?'}km) exceeds the shop's service radius — needs admin approval`}
+                                  >
+                                    Needs approval
+                                  </span>
+                                ) : null}
                                 {isAwaitingPartnerAccept(o) ? (
                                   <span
                                     className="badge-neutral"
@@ -627,6 +651,9 @@ export function OrdersBoard() {
                         <span className="badge-neutral" title="Partner must accept the order in the partner portal before a rider can be assigned">
                           Awaiting partner
                         </span>
+                      ) : null}
+                      {selected.requiresDeliveryApproval ? (
+                        <span className="badge-warning">Needs approval</span>
                       ) : null}
                     </div>
                     <button
@@ -682,7 +709,27 @@ export function OrdersBoard() {
                     {selected.operationsConflict ? (
                       <RailRow label="Flags" value={<span className="badge-danger">Conflict</span>} />
                     ) : null}
+                    {selected.deliveryDistanceKm != null ? (
+                      <RailRow label="Delivery distance" value={`${selected.deliveryDistanceKm.toFixed(1)} km`} />
+                    ) : null}
                   </RailSection>
+
+                  {selected.requiresDeliveryApproval ? (
+                    <RailSection title="Delivery approval">
+                      <p className="px-0 pb-2 text-xs text-muted">
+                        This address is beyond the assigned shop&apos;s normal service radius. Dispatch
+                        is on hold until an admin approves the delivery distance.
+                      </p>
+                      <button
+                        type="button"
+                        className="btn-primary btn-sm"
+                        disabled={approvingDelivery}
+                        onClick={() => void approveDelivery(selected._id)}
+                      >
+                        {approvingDelivery ? 'Approving…' : 'Approve delivery & dispatch'}
+                      </button>
+                    </RailSection>
+                  ) : null}
 
                   <RailSection title="Summary">
                     {selected.subtotal != null ? (

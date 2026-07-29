@@ -104,6 +104,36 @@ export class LedgerService {
     );
   }
 
+  /**
+   * Actual rider pickup+delivery task cost per order, read from posted rider_earning entries
+   * (not estimated from live settings) — correctly returns ₱0 for orders a salaried employee
+   * rider handled (creditEarning() posts nothing for them) and reflects whatever rate was
+   * actually in effect when each leg completed, even if PlatformSettings has changed since.
+   */
+  async getRiderCostByOrderId(orderIds: string[]): Promise<Map<string, number>> {
+    const map = new Map<string, number>();
+    if (orderIds.length === 0) return map;
+
+    const sourceIds = orderIds.flatMap((id) => [`${id}:pickup`, `${id}:delivery`]);
+    const rows = await this.entryModel.aggregate<{ _id: string; total: number }>([
+      {
+        $match: {
+          sourceType: 'rider_earning',
+          accountType: { $in: ['rider_payout_expense', 'rider_wage_expense'] },
+          direction: 'debit',
+          sourceId: { $in: sourceIds },
+        },
+      },
+      { $group: { _id: '$sourceId', total: { $sum: '$amount' } } },
+    ]);
+
+    for (const row of rows) {
+      const orderId = row._id.split(':')[0];
+      map.set(orderId, (map.get(orderId) ?? 0) + row.total);
+    }
+    return map;
+  }
+
   private isDuplicateKeyError(err: unknown): boolean {
     return typeof err === 'object' && err !== null && (err as { code?: number }).code === 11000;
   }
@@ -198,7 +228,8 @@ export class LedgerService {
     const riderCost      = -get('rider_payout_expense');  // expense account: debits increase it
     const riderWageCost  = -get('rider_wage_expense');    // expense account: debits increase it
     const refundCost     = -get('refund_expense');         // expense account: debits increase it
-    const netMargin = platformRevenue - riderCost - riderWageCost - refundCost;
+    const processingCost = -get('payment_processing_expense'); // expense account: debits increase it
+    const netMargin = platformRevenue - riderCost - riderWageCost - refundCost - processingCost;
 
     // ── Cash flow ──
     const cashIn  = -get('platform_cash');  // asset account: debits = cash received → negate
@@ -219,6 +250,7 @@ export class LedgerService {
         riderCost,
         riderWageCost,
         refundCost,
+        processingCost,
         netMargin,
       },
       cashFlow: {
@@ -330,7 +362,12 @@ export class LedgerService {
       });
     }
 
-    const expenseAccounts = new Set(['rider_payout_expense', 'rider_wage_expense', 'refund_expense']);
+    const expenseAccounts = new Set([
+      'rider_payout_expense',
+      'rider_wage_expense',
+      'refund_expense',
+      'payment_processing_expense',
+    ]);
     for (const row of monthlyAgg) {
       const key = monthKey(row._id.year, row._id.month);
       const bucket = buckets.get(key);

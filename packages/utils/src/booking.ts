@@ -5,6 +5,22 @@ export const BOOKING_MIN_ORDER_AMOUNT = 150;
 export const BOOKING_DELIVERY_FEE = 50;
 /** Flat pickup + delivery fee charged on every booking. */
 export const BOOKING_FLAT_DELIVERY_FEE = 70;
+/** Distance (km) covered by the base delivery fee before per-km charges kick in. */
+export const BOOKING_DELIVERY_BASE_DISTANCE_KM = 3;
+/** Charge per whole km beyond BOOKING_DELIVERY_BASE_DISTANCE_KM. */
+export const BOOKING_DELIVERY_PER_KM_RATE = 8;
+
+/** Delivery Fee = Base Fare + (chargeable distance x per-km rate), where chargeable distance is
+ * whatever's beyond the base allowance, rounded up to the next whole km. */
+export function calculateDeliveryFee(
+  distanceKm: number,
+  baseFee: number = BOOKING_FLAT_DELIVERY_FEE,
+  baseDistanceKm: number = BOOKING_DELIVERY_BASE_DISTANCE_KM,
+  perKmRate: number = BOOKING_DELIVERY_PER_KM_RATE,
+): number {
+  const chargeableKm = Math.max(0, Math.ceil(distanceKm - baseDistanceKm));
+  return baseFee + chargeableKm * perKmRate;
+}
 /** Lunara's markup on a partner shop's own add-on prices. Base service pricing is flat bag pricing
  * (see BAG_SIZES) and no longer uses this — add-ons still do. Single source of truth — never hardcode 1.30 elsewhere. */
 export const SHOP_PRICE_MARKUP_MULTIPLIER = 1.3;

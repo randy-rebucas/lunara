@@ -261,6 +261,11 @@ export interface PartnerSettlement {
   paidAt?: string;
   paidBy?: string;
   adminNote?: string;
+  clawbackTotal?: number;
+  clawbackOrderCount?: number;
+  clawbackRecovered?: number;
+  clawbackRecoveryApplied?: number;
+  riderCostRecovered?: number;
   createdAt: string;
 }
 

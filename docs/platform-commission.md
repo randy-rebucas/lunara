@@ -2,15 +2,18 @@
 
 ## Overview
 
-Lunara's sole revenue mechanism is commission on the laundry subtotal of every completed order — delivery fees pass straight through to fund rider payouts and are never part of Lunara's cut. Two pricing models exist side by side; which one an order uses determines *how* the cut is computed, but the settlement math (`totalAmount − lunaraFee = partnerPayout`) is the same either way.
+Lunara's revenue is commission on the laundry subtotal of every completed order, plus (since 2026-07-29) the actual rider delivery cost recovered from the partner's payout — the delivery fee the customer pays now genuinely funds the rider who ran that delivery, rather than passing through to the partner with Lunara footing the rider bill separately. Two pricing models exist side by side; which one an order uses determines *how* the commission is computed, but the settlement math is the same either way.
 
 ```
 Gross revenue (order totals for period)
-− Lunara fee  (computed per order — see "Two pricing models" below)
+− Lunara fee            (commission — see "Two pricing models" below)
+− Rider cost recovered  (actual pickup+delivery cost for the period's orders, from the ledger)
 = Partner payout
 ```
 
-There is no subscription, ads, or other monetization — commission is it.
+`lunaraFee + riderCostRecovered` is what's credited to `platform_revenue`. See [`financial-transactions-audit.md`](./financial-transactions-audit.md) §3 for the full formula including discount handling and clawback recovery.
+
+There is no subscription, ads, or other monetization — commission (plus recovered delivery cost) is it.
 
 ---
 
@@ -35,6 +38,26 @@ lunaraFee = order.subtotal − order.baseSubtotal
 ```
 
 Because a partner can own several branches with different commission rates, `computeOrderFee()` always looks up the rate per-order (via a `branchId → commissionRate` map) rather than assuming one flat rate for the whole settlement — this matters for the legacy model; the shop-markup model doesn't need a rate lookup at all since the cut is already embedded in the price.
+
+---
+
+## Who pays for a discount
+
+`order.total` already has `discount` subtracted, and settlement computes `partnerPayout = totalAmount − lunaraFee`. That means **a discount always drains the partner's payout first**, unless `lunaraFee` is adjusted to compensate — it's the discount, not the fee, that's baked into `total`.
+
+`computeOrderFee()` corrects for this using `order.discountFundedBy` (set at booking time from the applied promotion — see [`delivery-pricing-and-approval.md`](./delivery-pricing-and-approval.md)'s sibling doc on promotions, or `apps/api/src/modules/promotions/promotions.service.ts`):
+
+```
+platformFundedDiscount = discountFundedBy === 'partner' ? 0 : discount
+lunaraFee               = max(0, normalFee − platformFundedDiscount)
+```
+
+| `discountFundedBy` | Effect |
+|---|---|
+| `'platform'` (admin promos, signup codes, or unset) | `lunaraFee` is reduced by the discount — Lunara absorbs it, partner payout is unaffected. |
+| `'partner'` (a partner's own promo) | `lunaraFee` is untouched — the discount comes entirely out of the partner's payout via the already-discounted `total`. |
+
+Without this adjustment, *every* discount — including admin-run platform promotions — would silently come out of the partner's pocket, since `total` (which payout is based on) already reflects it and nothing else compensates. This is corrected at settlement time (`computeOrderFee`), not by touching `baseSubtotal` at booking time — `baseSubtotal` reflects the service price split only, and doesn't know about the discount.
 
 ---
 

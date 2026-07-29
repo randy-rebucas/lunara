@@ -7,7 +7,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { OrderStatus, PaymentMethod, PaymentStatus } from '@lunara/types';
-import { REFUND_FLOW, isRefundablePaymentMethod } from '@lunara/utils';
+import { REFUND_FLOW, isRefundablePaymentMethod, isPaymongoMethod } from '@lunara/utils';
 import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
@@ -463,6 +463,104 @@ export class RefundsService {
       refundId: refund._id.toString(),
       amount,
     });
+  }
+
+  /**
+   * Admin-recorded chargeback — there's no PayMongo webhook wired up for these yet, so an admin
+   * enters it after seeing it in the PayMongo dashboard. Unlike a refund, no customer wallet
+   * credit is issued (the customer didn't request anything back — the card network pulled the
+   * money) and the reversal hits platform_cash directly instead of refund_expense, since real
+   * cash actually left Lunara's account. Mirrors the refund flow otherwise: an already-settled
+   * order goes through the same clawback tracking used for refunds (see PartnerOperationsService.
+   * recordSettlementClawback and getOutstandingClawbackBalance).
+   */
+  async recordChargeback(paymentId: string, adminUserId: string, amount?: number, note?: string) {
+    const payment = await this.paymentModel.findById(paymentId);
+    if (!payment) throw new NotFoundException('Payment not found');
+    if (payment.status !== PaymentStatus.PAID) {
+      throw new BadRequestException('Only a paid payment can be charged back');
+    }
+    if (payment.chargedBackAt) {
+      throw new BadRequestException('This payment has already been charged back');
+    }
+    if (!isPaymongoMethod(payment.method)) {
+      throw new BadRequestException('Only PayMongo-processed payments can be charged back');
+    }
+
+    const chargebackAmount = Math.min(amount ?? payment.amount, payment.amount);
+    payment.chargedBackAt = new Date();
+    payment.chargebackAmount = chargebackAmount;
+    await payment.save();
+
+    if (payment.purpose === 'wallet_topup') {
+      // Reverses the wallet credit granted at top-up time. Throws if the customer has since spent
+      // it below the chargeback amount — a real edge case an admin needs to handle manually
+      // (there's no way to claw back money that's already left the wallet).
+      await this.walletsService.debit(
+        payment.userId.toString(),
+        chargebackAmount,
+        `chargeback-${payment._id}`,
+        'Wallet top-up reversed by chargeback',
+      );
+      await this.ledgerService.post(
+        `chargeback:${payment._id.toString()}`,
+        'chargeback',
+        payment._id.toString(),
+        [
+          {
+            accountType: 'customer_wallet_liability',
+            accountSubject: payment.userId.toString(),
+            direction: 'debit',
+            amount: chargebackAmount,
+            description: `Wallet top-up reversed by chargeback (payment ${payment._id.toString().slice(-6)})${note ? `: ${note}` : ''}`,
+          },
+          {
+            accountType: 'platform_cash',
+            direction: 'credit',
+            amount: chargebackAmount,
+            description: `Cash pulled back by chargeback on wallet top-up ${payment._id.toString().slice(-6)}`,
+          },
+        ],
+      );
+      return { success: true, data: { chargebackAmount, purpose: 'wallet_topup' as const } };
+    }
+
+    const order = payment.orderId ? await this.orderModel.findById(payment.orderId) : null;
+    if (!order) throw new NotFoundException('Order not found for this payment');
+
+    if (order.settlementId) {
+      await this.partnerOperationsService.recordSettlementClawback(order, chargebackAmount, 'chargeback');
+    } else {
+      await this.ledgerService.post(
+        `chargeback:${payment._id.toString()}`,
+        'chargeback',
+        payment._id.toString(),
+        [
+          {
+            accountType: 'order_revenue_clearing',
+            direction: 'debit',
+            amount: chargebackAmount,
+            description: `Chargeback reverses recognized revenue for order ${order._id.toString().slice(-6)}${note ? `: ${note}` : ''}`,
+          },
+          {
+            accountType: 'platform_cash',
+            direction: 'credit',
+            amount: chargebackAmount,
+            description: `Cash pulled back by chargeback for order ${order._id.toString().slice(-6)}`,
+          },
+        ],
+      );
+    }
+
+    order.statusHistory.push({
+      status: order.status,
+      timestamp: new Date(),
+      note: `Chargeback recorded — ₱${chargebackAmount}${note ? `: ${note}` : ''}`,
+      updatedBy: adminUserId,
+    });
+    await order.save();
+
+    return { success: true, data: { chargebackAmount, purpose: 'order' as const, orderId: order._id.toString() } };
   }
 
   private async notifyCustomer(refund: RefundRequestDocument) {

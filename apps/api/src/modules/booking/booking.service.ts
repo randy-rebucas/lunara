@@ -368,9 +368,15 @@ export class BookingService {
     const [branchLng, branchLat] = branch.location.coordinates;
     const customerCoords = resolveCoordinates(address.city, address.latitude, address.longitude);
     const dist = distanceKm(customerCoords, [branchLng, branchLat]);
-    if (dist > branch.serviceRadiusKm) {
-      throw new BadRequestException('Selected shop does not deliver to this address');
+    const maxDeliveryRadiusKm = await this.settingsService.getMaxDeliveryRadiusKm();
+    if (dist > maxDeliveryRadiusKm) {
+      throw new BadRequestException(
+        `Selected shop does not deliver to this address (${dist.toFixed(1)}km exceeds the ${maxDeliveryRadiusKm}km delivery limit)`,
+      );
     }
+    // Beyond the shop's own service radius but still within the platform-wide ceiling — let the
+    // order through but hold it for manual admin approval instead of auto-dispatching it.
+    const requiresDeliveryApproval = dist > branch.serviceRadiusKm;
 
     const serviceQuotes: QuoteBreakdown[] = [];
     for (const service of dto.services) {
@@ -404,7 +410,7 @@ export class BookingService {
       );
     }
 
-    const deliveryFee = await this.settingsService.getDeliveryFeeForAddress(address);
+    const deliveryFee = await this.settingsService.getDeliveryFeeForAddress(address, dist);
     const quote = combineServiceQuotes(serviceQuotes, priceableAddons, addonIds, deliveryFee);
 
     if (!quote.meetsMinimum) {
@@ -413,12 +419,23 @@ export class BookingService {
       );
     }
 
-    const finalQuote = await this.promotionsService.applyCouponToQuote(quote, dto.couponCode, userId);
+    const finalQuote = await this.promotionsService.applyCouponToQuote(
+      quote,
+      dto.couponCode,
+      userId,
+      branch.partnerUserId.toString(),
+    );
     // Back-compat: mirror the primary (first) service's single-service fields at the top level
     // (bookingType, serviceLabel, bagLabel, ...) alongside the new `services[]`/combined totals,
     // so existing single-service UI keeps working unchanged while multi-service UI can read `services`.
     const primaryServiceQuote = serviceQuotes[0];
-    return { ...primaryServiceQuote, ...finalQuote, resolvedBranchId };
+    return {
+      ...primaryServiceQuote,
+      ...finalQuote,
+      resolvedBranchId,
+      deliveryDistanceKm: dist,
+      requiresDeliveryApproval,
+    };
   }
 
   async quote(userId: string, addressId: string, dto: BookingQuoteDto, partnerContextId?: string) {
@@ -556,6 +573,7 @@ export class BookingService {
         subtotal: quote.subtotal,
         deliveryFee: quote.deliveryFee,
         discount: quote.discount,
+        discountFundedBy: quote.discount > 0 ? quote.fundedBy : undefined,
         total: quote.total,
         pricingMode: primaryQuote.pricingMode,
         pricingSnapshot,
@@ -566,6 +584,8 @@ export class BookingService {
         partnerId: resolvedPartnerId,
         baseSubtotal,
         pricingModel,
+        deliveryDistanceKm: quote.deliveryDistanceKm,
+        requiresDeliveryApproval: quote.requiresDeliveryApproval,
     };
   }
 

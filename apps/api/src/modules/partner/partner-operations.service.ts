@@ -114,6 +114,13 @@ export class PartnerOperationsService {
    * (everything created before this flow shipped) fall back to that order's own branch's
    * commissionRate-of-subtotal formula - a partner can own several branches with different
    * rates, so the rate must be looked up per order rather than assumed to be one flat number.
+   *
+   * `total` already has `discount` subtracted (see booking.ts combineServiceQuotes), and
+   * `partnerPayout = total - lunaraFee` downstream — so a discount always drains the partner's
+   * payout unless this fee is adjusted to compensate. Platform-funded discounts (admin promos,
+   * signup codes) get subtracted back out of the fee here so Lunara — not the partner — eats the
+   * cost; partner-funded discounts (the partner's own coupon) are left alone, since the partner
+   * funding their own promo out of their own payout is exactly the intended effect.
    */
   private computeOrderFee(
     order: {
@@ -122,28 +129,46 @@ export class PartnerOperationsService {
       baseSubtotal?: number;
       pricingModel?: string;
       branchId?: Types.ObjectId;
+      discount?: number;
+      discountFundedBy?: string;
     },
     commissionRateByBranchId: Map<string, number>,
     fallbackRate = 0.20,
   ): number {
+    const platformFundedDiscount =
+      order.discountFundedBy === 'partner' ? 0 : Math.max(0, order.discount ?? 0);
+
     if (
       (order.pricingModel === 'shop_markup' || order.pricingModel === 'commission') &&
       order.baseSubtotal != null
     ) {
-      return (order.subtotal ?? order.total) - order.baseSubtotal;
+      const fee = (order.subtotal ?? order.total) - order.baseSubtotal;
+      return Math.max(0, fee - platformFundedDiscount);
     }
     const rate = commissionRateByBranchId.get(order.branchId?.toString() ?? '') ?? fallbackRate;
-    return Math.round((order.subtotal ?? order.total) * rate);
+    const fee = Math.round((order.subtotal ?? order.total) * rate);
+    return Math.max(0, fee - platformFundedDiscount);
   }
 
   /**
    * Called by refunds.service.ts when a refunded order was already paid out in a
-   * PartnerSettlement. The partner was already paid their share and the platform already
-   * recognized its commission on this order — refunding the customer doesn't undo either of
-   * those on its own, so this reverses both and records the clawback on the settlement for
-   * admins to net against the partner's next payout (see LEDGER.md "No settlement reversal").
+   * PartnerSettlement, and by PaymentsService.recordChargeback() when a chargeback lands on an
+   * already-settled order. Either way the partner was already paid their share and the platform
+   * already recognized its commission on this order — the reversal doesn't undo those on its own,
+   * so this books it and records the clawback on the settlement for admins to net against the
+   * partner's next payout (see createSettlement's recoverClawback option, and LEDGER.md).
+   *
+   * A refund and a chargeback differ in where the reversed cash actually lands: a refund credits
+   * the customer's Lunara wallet (no cash leaves — `refund_expense` is the right P&L hit); a
+   * chargeback means the card network already pulled real cash out of Lunara's account, so the
+   * reversal credits `platform_cash` instead — that's genuinely lower cash on hand, not just a
+   * liability swap.
    */
-  async recordSettlementClawback(order: OrderDocument, refundAmount: number) {
+  async recordSettlementClawback(
+    order: OrderDocument,
+    refundAmount: number,
+    kind: 'refund' | 'chargeback' = 'refund',
+  ) {
     if (!order.settlementId || refundAmount <= 0) return;
 
     const settlement = await this.settlementModel.findById(order.settlementId);
@@ -164,13 +189,15 @@ export class PartnerOperationsService {
       { $inc: { clawbackTotal: refundAmount, clawbackOrderCount: 1 } },
     );
 
+    const label = kind === 'chargeback' ? 'chargeback' : 'refund';
+    const creditAccount = kind === 'chargeback' ? ('platform_cash' as const) : ('refund_expense' as const);
     const entries = [] as Parameters<LedgerService['post']>[3];
     if (feeShare > 0) {
       entries.push({
         accountType: 'platform_revenue' as const,
         direction: 'debit' as const,
         amount: feeShare,
-        description: `Commission reversed — order ${order._id.toString().slice(-6)} refunded after settlement ${settlement._id.toString().slice(-6)}`,
+        description: `Commission reversed — order ${order._id.toString().slice(-6)} ${label} after settlement ${settlement._id.toString().slice(-6)}`,
       });
     }
     if (payoutShare > 0) {
@@ -178,19 +205,22 @@ export class PartnerOperationsService {
         accountType: 'cash_out' as const,
         direction: 'debit' as const,
         amount: payoutShare,
-        description: `Partner payout owed back — order ${order._id.toString().slice(-6)} refunded after settlement ${settlement._id.toString().slice(-6)}`,
+        description: `Partner payout owed back — order ${order._id.toString().slice(-6)} ${label} after settlement ${settlement._id.toString().slice(-6)}`,
       });
     }
     if (entries.length > 0) {
       entries.push({
-        accountType: 'refund_expense' as const,
+        accountType: creditAccount,
         direction: 'credit' as const,
         amount: feeShare + payoutShare,
-        description: `Post-settlement refund clawback for order ${order._id.toString().slice(-6)}`,
+        description:
+          kind === 'chargeback'
+            ? `Cash pulled back by chargeback on order ${order._id.toString().slice(-6)} (already settled)`
+            : `Post-settlement refund clawback for order ${order._id.toString().slice(-6)}`,
       });
       await this.ledgerService.post(
-        `settlement-clawback:${order._id.toString()}`,
-        'settlement_clawback',
+        `${kind === 'chargeback' ? 'chargeback-clawback' : 'settlement-clawback'}:${order._id.toString()}`,
+        kind === 'chargeback' ? 'chargeback' : 'settlement_clawback',
         order._id.toString(),
         entries,
       );
@@ -1288,10 +1318,26 @@ export class PartnerOperationsService {
     return { success: true, data };
   }
 
+  /** Sum of clawbackTotal − clawbackRecovered across every settlement for this partner — how much
+   * is still outstanding from post-settlement refunds that were never actually recovered from a
+   * later payout. Surfaced to admin before creating a new settlement so they can choose to net it. */
+  async getOutstandingClawbackBalance(partnerId: string) {
+    const [result] = await this.settlementModel.aggregate<{ outstanding: number }>([
+      { $match: { partnerId: new Types.ObjectId(partnerId) } },
+      {
+        $group: {
+          _id: null,
+          outstanding: { $sum: { $subtract: ['$clawbackTotal', '$clawbackRecovered'] } },
+        },
+      },
+    ]);
+    return { success: true, data: { outstanding: Math.max(0, result?.outstanding ?? 0) } };
+  }
+
   async createSettlement(
     adminUserId: string,
     partnerId: string,
-    dto: { orderIds: string[]; adminNote?: string },
+    dto: { orderIds: string[]; adminNote?: string; recoverClawback?: boolean },
   ) {
     if (!dto.orderIds || dto.orderIds.length === 0) {
       throw new BadRequestException('At least one order must be selected');
@@ -1357,7 +1403,48 @@ export class PartnerOperationsService {
     const lunaraFee = Math.round(
       completedOrders.reduce((s, o) => s + this.computeOrderFee(o, commissionRateByBranchId), 0),
     );
-    const partnerPayout = totalAmount - lunaraFee;
+
+    // totalAmount includes the full customer-paid deliveryFee, which — with lunaraFee computed
+    // on subtotal only — would otherwise flow entirely into partnerPayout, while Lunara pays
+    // riders separately out of platform_cash with nothing connecting the two. The partner already
+    // received the delivery fee revenue inside totalAmount, so their payout funds the delivery:
+    // actual rider cost for these orders (read from the ledger, not estimated — correctly ₱0 for
+    // orders an employee rider handled) is deducted here and credited to platform_revenue instead.
+    const riderCostByOrderId = await this.ledgerService.getRiderCostByOrderId(
+      completedOrders.map((o) => o._id.toString()),
+    );
+    const riderCostForPeriod = completedOrders.reduce(
+      (s, o) => s + (riderCostByOrderId.get(o._id.toString()) ?? 0),
+      0,
+    );
+    const riderCostRecovered = Math.max(0, Math.min(riderCostForPeriod, totalAmount - lunaraFee));
+
+    // Opt-in: net this partner's outstanding balance from earlier post-settlement clawbacks
+    // (refunds on orders already paid out) against this new payout, and mark it recovered on
+    // the settlements it came from so it isn't counted as outstanding twice.
+    let clawbackRecoveryApplied = 0;
+    const clawbackSourceSettlements: { id: Types.ObjectId; apply: number }[] = [];
+    if (dto.recoverClawback) {
+      const outstandingSettlements = await this.settlementModel
+        .find({
+          partnerId: new Types.ObjectId(partnerId),
+          $expr: { $gt: ['$clawbackTotal', '$clawbackRecovered'] },
+        })
+        .sort({ createdAt: 1 });
+      let remainingCapacity = totalAmount - lunaraFee - riderCostRecovered;
+      for (const s of outstandingSettlements) {
+        if (remainingCapacity <= 0) break;
+        const outstanding = s.clawbackTotal - s.clawbackRecovered;
+        const apply = Math.min(outstanding, remainingCapacity);
+        if (apply <= 0) continue;
+        clawbackSourceSettlements.push({ id: s._id, apply });
+        clawbackRecoveryApplied += apply;
+        remainingCapacity -= apply;
+      }
+    }
+
+    const partnerPayout =
+      totalAmount - lunaraFee - riderCostRecovered - clawbackRecoveryApplied;
 
     // Stored commissionRate becomes a display-only weighted average across the legacy-priced
     // orders in this settlement (shop_markup/commission orders don't have a "rate" at all, their
@@ -1389,6 +1476,8 @@ export class PartnerOperationsService {
         totalAmount,
         lunaraFee,
         partnerPayout,
+        riderCostRecovered,
+        clawbackRecoveryApplied,
         commissionRate: weightedCommissionRate,
         status: 'paid',
         paidAt: new Date(),
@@ -1405,6 +1494,22 @@ export class PartnerOperationsService {
       throw err;
     }
 
+    // Mark the recovered clawback as no longer outstanding on the settlements it came from —
+    // after createSettlement's own document write succeeds, so a failure above never marks a
+    // clawback recovered without an actual settlement to show for it.
+    for (const src of clawbackSourceSettlements) {
+      await this.settlementModel.updateOne(
+        { _id: src.id },
+        { $inc: { clawbackRecovered: src.apply } },
+      );
+    }
+
+    // platform_revenue is credited lunaraFee + riderCostRecovered, not lunaraFee alone — the
+    // recovered rider cost is real margin Lunara keeps instead of funding out of platform_cash
+    // with nothing to show for it (see comment above). clawbackRecoveryApplied needs no separate
+    // credit: it was already expensed via refund_expense at clawback time (recordSettlementClawback),
+    // so simply crediting a smaller cash_out here is what actually recovers it — the debit posted
+    // there and the smaller credit posted here net to zero on the cash_out account over time.
     await this.ledgerService.post(
       `settlement:${settlement._id.toString()}`,
       'settlement',
@@ -1420,13 +1525,13 @@ export class PartnerOperationsService {
           accountType: 'cash_out',
           direction: 'credit',
           amount: partnerPayout,
-          description: `Cash paid out to partner ${partnerId}`,
+          description: `Cash paid out to partner ${partnerId}${clawbackRecoveryApplied > 0 ? ` (net of ₱${clawbackRecoveryApplied} recovered clawback)` : ''}`,
         },
         {
           accountType: 'platform_revenue',
           direction: 'credit',
-          amount: lunaraFee,
-          description: `Commission earned on partner ${partnerId} settlement`,
+          amount: lunaraFee + riderCostRecovered,
+          description: `Commission earned on partner ${partnerId} settlement (rate ${(weightedCommissionRate * 100).toFixed(1)}%)${riderCostRecovered > 0 ? ` + ₱${riderCostRecovered} rider delivery cost recovered from partner payout` : ''}`,
         },
       ],
     );
@@ -1451,6 +1556,11 @@ export class PartnerOperationsService {
       paidAt: s.paidAt?.toISOString(),
       paidBy: s.paidBy?.toString(),
       adminNote: s.adminNote,
+      clawbackTotal: s.clawbackTotal ?? 0,
+      clawbackOrderCount: s.clawbackOrderCount ?? 0,
+      clawbackRecovered: s.clawbackRecovered ?? 0,
+      clawbackRecoveryApplied: s.clawbackRecoveryApplied ?? 0,
+      riderCostRecovered: s.riderCostRecovered ?? 0,
       createdAt: s.createdAt.toISOString(),
     };
   }

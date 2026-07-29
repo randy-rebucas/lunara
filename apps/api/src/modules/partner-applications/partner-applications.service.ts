@@ -119,6 +119,8 @@ export class PartnerApplicationsService {
       message: application.message,
       status: application.status,
       rejectionReason: application.rejectionReason,
+      onboardedPartnerId: application.onboardedPartnerId?.toString(),
+      onboardedAt: application.onboardedAt,
       createdAt: application.createdAt,
       updatedAt: application.updatedAt,
     };

@@ -5,6 +5,7 @@ import { OrderStatus, PaymentMethod, PaymentStatus } from '@lunara/types';
 import {
   generatePaymentReceiptCode,
   isPaymongoMethod,
+  calculatePaymongoFee,
   buildRiderCashPaymentInfo,
   type CashTiming,
   type RiderCashPaymentInfo,
@@ -516,6 +517,12 @@ export class PaymentsService {
       'Wallet top-up via PayMongo',
     );
 
+    // PayMongo nets its processing fee out before depositing — platform_cash reflects what
+    // Lunara actually receives, not the full topup amount, with the difference booked as a
+    // real expense rather than silently making platform_cash overstate cash on hand.
+    const processingFee = isPaymongoMethod(payment.method) ? calculatePaymongoFee(payment.amount) : 0;
+    const netCash = payment.amount - processingFee;
+
     await this.ledgerService.post(
       `payment:${payment._id.toString()}`,
       'wallet_topup',
@@ -524,9 +531,19 @@ export class PaymentsService {
         {
           accountType: 'platform_cash',
           direction: 'debit',
-          amount: payment.amount,
-          description: `PayMongo wallet top-up received from user ${payment.userId.toString()}`,
+          amount: netCash,
+          description: `PayMongo wallet top-up received from user ${payment.userId.toString()}${processingFee > 0 ? ` (net of ₱${processingFee} processing fee)` : ''}`,
         },
+        ...(processingFee > 0
+          ? [
+              {
+                accountType: 'payment_processing_expense' as const,
+                direction: 'debit' as const,
+                amount: processingFee,
+                description: `PayMongo processing fee on wallet top-up ${payment._id.toString().slice(-6)} (3.5% + ₱15)`,
+              },
+            ]
+          : []),
         {
           accountType: 'customer_wallet_liability',
           accountSubject: payment.userId.toString(),
@@ -549,6 +566,7 @@ export class PaymentsService {
 
     // Wallet-funded orders draw down an already-recognized liability, not new cash —
     // crediting platform_cash again here would double-count money already posted at top-up.
+    // No PayMongo fee either: the fee was already charged once, at wallet top-up time.
     const sourceAccount =
       payment.method === PaymentMethod.WALLET
         ? ({
@@ -556,6 +574,8 @@ export class PaymentsService {
             accountSubject: payment.userId.toString(),
           })
         : ({ accountType: 'platform_cash' as const });
+    const processingFee = isPaymongoMethod(payment.method) ? calculatePaymongoFee(payment.amount) : 0;
+    const netCash = payment.amount - processingFee;
 
     await this.ledgerService.post(
       `payment:${payment._id.toString()}`,
@@ -565,12 +585,22 @@ export class PaymentsService {
         {
           ...sourceAccount,
           direction: 'debit',
-          amount: payment.amount,
+          amount: netCash,
           description:
             payment.method === PaymentMethod.WALLET
               ? `Wallet debited for order ${order._id.toString().slice(-6)}`
-              : `PayMongo payment received for order ${order._id.toString().slice(-6)}`,
+              : `PayMongo payment received for order ${order._id.toString().slice(-6)}${processingFee > 0 ? ` (net of ₱${processingFee} processing fee)` : ''}`,
         },
+        ...(processingFee > 0
+          ? [
+              {
+                accountType: 'payment_processing_expense' as const,
+                direction: 'debit' as const,
+                amount: processingFee,
+                description: `PayMongo processing fee on order ${order._id.toString().slice(-6)} (3.5% + ₱15)`,
+              },
+            ]
+          : []),
         {
           accountType: 'order_revenue_clearing',
           direction: 'credit',
@@ -585,6 +615,24 @@ export class PaymentsService {
 
   private async confirmOrder(order: OrderDocument) {
     if (order.status !== OrderStatus.PENDING) return;
+
+    // Delivery distance exceeded the assigned branch's service radius at checkout — hold dispatch
+    // until an admin reviews and approves it (see admin.service.ts approveDeliveryDistance).
+    if (order.requiresDeliveryApproval) {
+      order.statusHistory.push({
+        status: order.status,
+        timestamp: new Date(),
+        note: `Payment confirmed — awaiting admin approval (delivery distance ${order.deliveryDistanceKm?.toFixed(1)}km exceeds shop's service radius)`,
+      });
+      await order.save();
+      this.trackingGateway.emitAdminDispatcherAlert({
+        type: 'awaiting_shop',
+        orderId: order._id.toString(),
+        status: order.status,
+        message: 'Long-distance delivery — needs admin approval before dispatch',
+      });
+      return;
+    }
 
     // Partner white-labeled bookings already have their branch pre-resolved at checkout
     // (booking.service.ts) — those go straight to their own shop and skip the shared

@@ -446,6 +446,12 @@ export class Order {
   @Prop({ uppercase: true })
   couponCode?: string;
 
+  /** Who absorbs `discount` — 'partner' means it comes out of the assigned branch's own payout at
+   * settlement (see PartnerOperationsService.computeOrderFee); 'platform' (or unset, e.g. orders
+   * with no coupon) means Lunara's commission absorbs it and the partner's payout is unaffected. */
+  @Prop({ enum: ['platform', 'partner'] })
+  discountFundedBy?: 'platform' | 'partner';
+
   @Prop({ required: true })
   deliveryFee!: number;
 
@@ -474,6 +480,21 @@ export class Order {
 
   @Prop({ type: Types.ObjectId, ref: 'PartnerSettlement' })
   settlementId?: Types.ObjectId;
+
+  /** Pickup-to-shop distance computed at checkout. */
+  @Prop()
+  deliveryDistanceKm?: number;
+
+  /** True when deliveryDistanceKm exceeded the assigned branch's own serviceRadiusKm (but was still
+   * within the platform-wide maxDeliveryRadiusKm) — dispatch is held until an admin approves it. */
+  @Prop({ default: false })
+  requiresDeliveryApproval!: boolean;
+
+  @Prop()
+  deliveryApprovedAt?: Date;
+
+  @Prop({ type: Types.ObjectId })
+  deliveryApprovedBy?: Types.ObjectId;
 
   createdAt!: Date;
   updatedAt!: Date;

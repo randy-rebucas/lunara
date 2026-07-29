@@ -98,6 +98,16 @@ export function isPaymongoMethod(method: PaymentMethod) {
   return PAYMONGO_METHODS.includes(method);
 }
 
+/** PayMongo's published PH processing rate: 3.5% + ₱15 per transaction. Not modelled anywhere
+ * before — Lunara's platform_cash previously showed the full payment amount as received, when
+ * PayMongo actually nets its fee out before depositing. */
+export const PAYMONGO_FEE_RATE = 0.035;
+export const PAYMONGO_FEE_FLAT = 15;
+
+export function calculatePaymongoFee(amount: number): number {
+  return Math.round(amount * PAYMONGO_FEE_RATE + PAYMONGO_FEE_FLAT);
+}
+
 /** Wallet and online (PayMongo) payments can be refunded to the Lunara wallet — not cash. */
 export function isRefundablePaymentMethod(method: PaymentMethod) {
   return method === PaymentMethod.WALLET || isPaymongoMethod(method);

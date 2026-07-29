@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { adminFetch } from '../../../lib/admin-api';
 import { BranchAddressEditor, type BranchAddressValue } from '../../../components/datacenter/branch-address-editor';
 
@@ -12,6 +12,14 @@ interface Branch {
   name: string;
   branchType: string;
   city: string;
+}
+
+interface PartnerApplicationForPrefill {
+  _id: string;
+  businessName: string;
+  email: string;
+  phone: string;
+  address: { street: string; barangay: string; cityMunicipality: string; province: string; postalCode: string };
 }
 
 const INITIAL_FORM = {
@@ -37,11 +45,14 @@ const INITIAL_ADDRESS: BranchAddressValue = {
 
 export default function CreatePartnerPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromApplicationId = searchParams.get('fromApplicationId');
   const [form, setForm] = useState(INITIAL_FORM);
   const [address, setAddress] = useState<BranchAddressValue>(INITIAL_ADDRESS);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [prefillSource, setPrefillSource] = useState<PartnerApplicationForPrefill | null>(null);
 
   const loadBranches = useCallback(async () => {
     try {
@@ -55,6 +66,29 @@ export default function CreatePartnerPage() {
   useEffect(() => {
     void loadBranches();
   }, [loadBranches]);
+
+  useEffect(() => {
+    if (!fromApplicationId) return;
+    adminFetch<PartnerApplicationForPrefill>(`/partner-applications/${fromApplicationId}`)
+      .then((app) => {
+        setPrefillSource(app);
+        setForm((f) => ({
+          ...f,
+          email: app.email ?? f.email,
+          phone: app.phone ?? f.phone,
+          branchName: app.businessName ?? f.branchName,
+        }));
+        setAddress((a) => ({
+          ...a,
+          line1: [app.address?.street, app.address?.barangay].filter(Boolean).join(', ') || a.line1,
+          city: app.address?.cityMunicipality || a.city,
+          province: app.address?.province || a.province,
+        }));
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? `Failed to load application: ${err.message}` : 'Failed to load application');
+      });
+  }, [fromApplicationId]);
 
   function set(key: keyof typeof INITIAL_FORM) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -87,6 +121,7 @@ export default function CreatePartnerPage() {
           commissionRate: Number(form.commissionRate) / 100,
           maxActiveOrders: Number(form.maxActiveOrders),
           maxWeightCapacityKg: Number(form.maxWeightCapacityKg),
+          sourceApplicationId: fromApplicationId || undefined,
         }),
       });
       router.push('/partners');
@@ -106,6 +141,12 @@ export default function CreatePartnerPage() {
           <p className="mt-1 text-sm text-muted">Creates a portal login account and branch in one step.</p>
         </div>
       </div>
+
+      {prefillSource && (
+        <div className="alert-info mb-6" role="status">
+          Prefilled from <strong>{prefillSource.businessName}</strong>&apos;s partner application. Review before submitting — the pin location below defaults to Manila and needs to be set manually.
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-8">
         {/* Account */}

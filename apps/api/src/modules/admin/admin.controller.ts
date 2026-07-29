@@ -56,6 +56,8 @@ import { CreateRiderDto } from './dto/create-rider.dto';
 import { RiderAnnouncementDto } from './dto/rider-announcement.dto';
 import { BroadcastDto } from './dto/broadcast.dto';
 import { UpdatePromotionDto } from './dto/update-promotion.dto';
+import { ReviewPromotionDto } from './dto/review-promotion.dto';
+import { RecordChargebackDto } from './dto/record-chargeback.dto';
 import { UpdateLaundryAddonDto } from './dto/update-laundry-addon.dto';
 import { UpdateLaundryServiceDto } from './dto/update-laundry-service.dto';
 import { CatalogService } from '../catalog/catalog.service';
@@ -355,6 +357,11 @@ export class AdminController {
     return this.partnerOperationsService.getPartnerSettlementsForAdmin(partnerId);
   }
 
+  @Get('partners/:partnerId/clawback-balance')
+  getPartnerClawbackBalance(@Param('partnerId') partnerId: string) {
+    return this.partnerOperationsService.getOutstandingClawbackBalance(partnerId);
+  }
+
   @Get('partners/:partnerId/unsettled-orders')
   getUnsettledOrders(@Param('partnerId') partnerId: string) {
     return this.partnerOperationsService.getUnsettledOrders(partnerId);
@@ -491,6 +498,19 @@ export class AdminController {
     return this.branchesService.updateCustomAddon(id, addonId, dto);
   }
 
+  @Get('dispatch/delivery-approvals')
+  listOrdersAwaitingDeliveryApproval() {
+    return this.adminService.listOrdersAwaitingDeliveryApproval();
+  }
+
+  @Post('dispatch/orders/:orderId/approve-delivery')
+  approveDeliveryDistance(
+    @Param('orderId') orderId: string,
+    @Req() req: { user: { sub: string } },
+  ) {
+    return this.adminService.approveDeliveryDistance(orderId, req.user.sub);
+  }
+
   @Get('dispatch/dashboard')
   getDispatchDashboard() {
     return this.adminDispatchService.getDispatchDashboard();
@@ -564,6 +584,15 @@ export class AdminController {
     return this.refundsService.reviewRefund(id, req.user.sub, dto);
   }
 
+  @Post('payments/:paymentId/chargeback')
+  recordChargeback(
+    @Param('paymentId') paymentId: string,
+    @Req() req: { user: { sub: string } },
+    @Body() dto: RecordChargebackDto,
+  ) {
+    return this.refundsService.recordChargeback(paymentId, req.user.sub, dto.amount, dto.note);
+  }
+
   @Get('reports')
   getReports(@Query('days') days = '7') {
     return this.adminService.getReports(Number(days) || 7);
@@ -582,6 +611,15 @@ export class AdminController {
   @Patch('promotions/:id')
   updatePromotion(@Param('id') id: string, @Body() dto: UpdatePromotionDto) {
     return this.adminService.updatePromotion(id, dto);
+  }
+
+  @Post('promotions/:id/review')
+  reviewPartnerPromotion(
+    @Param('id') id: string,
+    @Req() req: { user: { sub: string } },
+    @Body() dto: ReviewPromotionDto,
+  ) {
+    return this.adminService.reviewPartnerPromotion(id, req.user.sub, dto.action, dto.adminNote);
   }
 
   @Get('services')
