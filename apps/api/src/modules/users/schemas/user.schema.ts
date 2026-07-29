@@ -15,7 +15,7 @@ export class User {
   @Prop()
   passwordHash?: string;
 
-  @Prop({ required: true, enum: UserRole, default: UserRole.CUSTOMER })
+  @Prop({ required: true, enum: UserRole, default: UserRole.CUSTOMER, index: true })
   role!: UserRole;
 
   @Prop({ type: Types.ObjectId, index: true })
@@ -96,3 +96,5 @@ export class User {
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
+// Backs date-range queries used by admin reports (e.g. new customers/riders joined in a period).
+UserSchema.index({ createdAt: -1 });

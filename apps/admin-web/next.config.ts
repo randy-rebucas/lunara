@@ -10,6 +10,14 @@ loadEnvConfig(path.join(__dirname, '../..'), process.env.NODE_ENV !== 'productio
 
 const nextConfig: NextConfig = {
   transpilePackages: ['@lunara/brand', '@lunara/ui', '@lunara/config', '@lunara/utils', '@lunara/hooks'],
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'res.cloudinary.com',
+      },
+    ],
+  },
 };
 
 export default nextConfig;

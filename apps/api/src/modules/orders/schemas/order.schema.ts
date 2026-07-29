@@ -513,3 +513,5 @@ OrderSchema.index(
   { 'laundryProcessing.tagId': 1 },
   { partialFilterExpression: { 'laundryProcessing.tagId': { $exists: true } } },
 );
+// Backs date-range queries and sorting used by admin reports/dashboards (e.g. AdminService.getReports).
+OrderSchema.index({ createdAt: -1 });

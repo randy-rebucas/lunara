@@ -7,6 +7,10 @@ import * as bcrypt from 'bcrypt';
 import { reseedLaundryAddons, reseedLaundryServices } from '../modules/catalog/catalog.seed';
 import { reseedPromotions } from '../modules/promotions/promotions.seed';
 
+if (process.env.NODE_ENV === 'production') {
+  throw new Error('Refusing to run seed script with NODE_ENV=production — this would overwrite live data.');
+}
+
 const MONGODB_URI = process.env.MONGODB_URI ?? 'mongodb://localhost:27017/lunara';
 
 const CUSTOMER_HOME_ADDRESS = {

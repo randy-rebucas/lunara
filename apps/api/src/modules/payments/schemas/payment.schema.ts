@@ -75,3 +75,5 @@ PaymentSchema.index(
   { orderId: 1, purpose: 1, status: 1 },
   { unique: true, partialFilterExpression: { status: 'pending', orderId: { $exists: true } } },
 );
+// Backs date-range queries used by admin reports/reconciliation.
+PaymentSchema.index({ createdAt: -1 });

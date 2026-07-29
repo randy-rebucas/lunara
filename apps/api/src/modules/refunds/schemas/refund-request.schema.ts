@@ -51,7 +51,7 @@ export class RefundRequest {
   @Prop({ required: true })
   reason!: string;
 
-  @Prop({ required: true, enum: RefundStatus, default: RefundStatus.PENDING })
+  @Prop({ required: true, enum: RefundStatus, default: RefundStatus.PENDING, index: true })
   status!: RefundStatus;
 
   @Prop({ required: true, enum: RefundStage, default: RefundStage.SUBMITTED })
@@ -89,3 +89,5 @@ export class RefundRequest {
 }
 
 export const RefundRequestSchema = SchemaFactory.createForClass(RefundRequest);
+// Backs date-range queries used by admin reports.
+RefundRequestSchema.index({ createdAt: -1 });
