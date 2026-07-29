@@ -1,7 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { CloudinaryStorageService } from '../../common/storage/cloudinary-storage.service';
+import { EmailService } from '../../common/email/email.service';
+import { SettingsService } from '../settings/settings.service';
 import { partnerApplicationDocumentPublicPath } from '../../common/uploads/upload-paths';
 import { CreatePartnerApplicationDto } from './dto/create-partner-application.dto';
 import {
@@ -19,10 +21,14 @@ const UPLOAD_FOLDER = 'lunara/partner-application-documents';
 
 @Injectable()
 export class PartnerApplicationsService {
+  private readonly logger = new Logger(PartnerApplicationsService.name);
+
   constructor(
     @InjectModel(PartnerApplication.name)
     private readonly partnerApplicationModel: Model<PartnerApplicationDocument>,
     private readonly cloudinaryStorageService: CloudinaryStorageService,
+    private readonly emailService: EmailService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   async create(dto: CreatePartnerApplicationDto, files: Record<string, Express.Multer.File[]>) {
@@ -62,11 +68,23 @@ export class PartnerApplicationsService {
     application.documents = documents;
     await application.save();
 
+    void this.notifyAdminNewApplication(application.businessName, application.ownerFullName);
+
     return {
       success: true,
       data: this.serialize(application),
       message: 'Application received. Our partnerships team will reach out within a few days.',
     };
+  }
+
+  private async notifyAdminNewApplication(businessName: string, ownerFullName: string) {
+    try {
+      const adminEmail = await this.settingsService.getAdminNotificationEmail();
+      if (!adminEmail) return;
+      await this.emailService.sendAdminNewApplicationNotice(adminEmail, businessName, ownerFullName);
+    } catch (err) {
+      this.logger.warn(`Admin new-application email skipped: ${(err as Error).message}`);
+    }
   }
 
   async list(status?: string) {

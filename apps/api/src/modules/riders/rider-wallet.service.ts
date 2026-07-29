@@ -1,10 +1,12 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { UserRole } from '@lunara/types';
 import {
   computeRiderWalletBalances,
   parseEarningReference,
@@ -22,6 +24,8 @@ import {
 import { UpdatePayoutMethodDto } from './dto/rider-wallet.dto';
 import { LedgerService } from '../ledger/ledger.service';
 import { SettingsService } from '../settings/settings.service';
+import { AuditLogService } from '../audit/audit-log.service';
+import { User, UserDocument } from '../users/schemas/user.schema';
 import { Rider, RiderDocument } from './schemas/rider.schema';
 import {
   RiderCashRemittance,
@@ -78,6 +82,8 @@ function payoutSnapshotFromRider(rider: RiderDocument) {
 
 @Injectable()
 export class RiderWalletService {
+  private readonly logger = new Logger(RiderWalletService.name);
+
   constructor(
     @InjectModel(Rider.name) private riderModel: Model<RiderDocument>,
     @InjectModel(RiderWalletTransaction.name)
@@ -86,8 +92,10 @@ export class RiderWalletService {
     private withdrawalModel: Model<RiderWithdrawalDocument>,
     @InjectModel(RiderCashRemittance.name)
     private remittanceModel: Model<RiderCashRemittanceDocument>,
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
     private ledgerService: LedgerService,
     private settingsService: SettingsService,
+    private auditLogService: AuditLogService,
   ) {}
 
   private riderObjectId(userId: string) {
@@ -361,10 +369,48 @@ export class RiderWalletService {
       status: RIDER_WITHDRAWAL_STATUS.PENDING,
     });
 
+    void this.tryAutoApproveWithdrawal(withdrawal);
+
     return {
       success: true,
       data: this.serializeWithdrawal(withdrawal),
     };
+  }
+
+  /** Approves the withdrawal automatically when under the configured threshold, mirroring the
+   *  manual admin approveWithdrawal flow. Failures fall back to manual review. */
+  private async tryAutoApproveWithdrawal(withdrawal: RiderWithdrawalDocument) {
+    try {
+      const { enabled, threshold } = await this.settingsService.getAutoApproveConfig(
+        'autoApproveWithdrawals',
+      );
+      if (!enabled || withdrawal.amount > threshold) return;
+
+      const systemAdmin = await this.userModel.findOne({ role: UserRole.ADMIN });
+      if (!systemAdmin) return;
+      const adminUserId = systemAdmin._id.toString();
+
+      await this.approveWithdrawal(
+        withdrawal._id.toString(),
+        adminUserId,
+        'Auto-approved by automation settings',
+      );
+
+      await this.auditLogService.record({
+        actorUserId: adminUserId,
+        actorEmail: systemAdmin.email ?? 'system@automation',
+        actorRole: 'system',
+        method: 'AUTOMATION',
+        path: `/admin/riders/withdrawals/${withdrawal._id.toString()}/approve`,
+        action: 'automation.withdrawal.auto_approved',
+        statusCode: 200,
+        requestBody: { amount: withdrawal.amount },
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Auto-approve skipped for withdrawal ${withdrawal._id}: ${(err as Error).message}`,
+      );
+    }
   }
 
   async listWithdrawals(userId: string, limit = 20) {

@@ -15,6 +15,9 @@ interface AutomationSettings {
   autoApproveRefundsThreshold: number;
   autoApproveWithdrawals: boolean;
   autoApproveWithdrawalsThreshold: number;
+  weeklyStatsEnabled: boolean;
+  weeklyStatsPhone: string;
+  weeklyStatsEmail: string;
 }
 
 function AutomationToggle({
@@ -74,6 +77,8 @@ export default function AutomationSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [sendingTest, setSendingTest] = useState(false);
+  const [testResult, setTestResult] = useState('');
 
   useEffect(() => {
     if (data) setForm(data);
@@ -100,6 +105,19 @@ export default function AutomationSettingsPage() {
 
   function patch(fields: Partial<AutomationSettings>) {
     setForm((f) => (f ? { ...f, ...fields } : f));
+  }
+
+  async function sendTestNow() {
+    setSendingTest(true);
+    setTestResult('');
+    try {
+      await adminFetch('/admin/automation/weekly-stats/send-now', { method: 'POST' });
+      setTestResult('Sent — check the phone and inbox configured above.');
+    } catch (e) {
+      setTestResult(e instanceof Error ? e.message : 'Failed to send test');
+    } finally {
+      setSendingTest(false);
+    }
   }
 
   return (
@@ -163,7 +181,7 @@ export default function AutomationSettingsPage() {
             <AutomationToggle
               id="auto-refunds"
               label="Auto-approve small refunds"
-              description="Approve refund requests with evidence attached automatically when under the threshold. Larger or unclear requests still go to manual review."
+              description="Approve refund requests automatically when the requested amount is under the threshold. Larger requests still go to manual review."
               checked={form.autoApproveRefunds}
               onChange={(autoApproveRefunds) => patch({ autoApproveRefunds })}
               threshold={{
@@ -183,6 +201,52 @@ export default function AutomationSettingsPage() {
                   patch({ autoApproveWithdrawalsThreshold }),
               }}
             />
+          </SectionPanel>
+
+          <SectionPanel
+            title="Weekly reports"
+            description="Send a weekly platform stats summary automatically."
+          >
+            <AutomationToggle
+              id="weekly-stats"
+              label="Weekly stats via SMS + email"
+              description="Every week, text and email a summary of orders, revenue, new customers, and riders joined to the contacts below."
+              checked={form.weeklyStatsEnabled}
+              onChange={(weeklyStatsEnabled) => patch({ weeklyStatsEnabled })}
+            />
+            <div className="flex flex-col gap-3 px-6 py-4 sm:px-8">
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium text-slate-900">SMS phone number</span>
+                <input
+                  type="tel"
+                  className="input-field"
+                  placeholder="+639171234567"
+                  value={form.weeklyStatsPhone}
+                  onChange={(e) => patch({ weeklyStatsPhone: e.target.value })}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium text-slate-900">Email address</span>
+                <input
+                  type="email"
+                  className="input-field"
+                  placeholder="admin@lunara.app"
+                  value={form.weeklyStatsEmail}
+                  onChange={(e) => patch({ weeklyStatsEmail: e.target.value })}
+                />
+              </label>
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  className="btn-outline btn-sm"
+                  disabled={sendingTest || (!form.weeklyStatsPhone && !form.weeklyStatsEmail)}
+                  onClick={() => void sendTestNow()}
+                >
+                  {sendingTest ? 'Sending…' : 'Send test now'}
+                </button>
+                {testResult ? <span className="text-sm text-muted">{testResult}</span> : null}
+              </div>
+            </div>
           </SectionPanel>
         </div>
       ) : null}

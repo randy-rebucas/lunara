@@ -8,6 +8,7 @@ import { SupportTicket, SupportTicketSchema } from './schemas/support-ticket.sch
 import { SupportController } from './support.controller';
 import { SupportService } from './support.service';
 import { LedgerModule } from '../ledger/ledger.module';
+import { SettingsModule } from '../settings/settings.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { LedgerModule } from '../ledger/ledger.module';
     AddressesModule,
     WalletsModule,
     LedgerModule,
+    SettingsModule,
   ],
   controllers: [SupportController],
   providers: [SupportService],

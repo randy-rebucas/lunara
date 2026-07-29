@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -13,6 +14,8 @@ import { AddressesService } from '../addresses/addresses.service';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { WalletsService } from '../wallets/wallets.service';
 import { LedgerService } from '../ledger/ledger.service';
+import { EmailService } from '../../common/email/email.service';
+import { SettingsService } from '../settings/settings.service';
 import { CreateLostItemDto } from './dto/create-lost-item.dto';
 import { CreateAreaRequestDto } from './dto/create-area-request.dto';
 import { CreateTicketDto } from './dto/create-ticket.dto';
@@ -61,6 +64,8 @@ const ELIGIBLE_LOST_ITEM_STATUSES = [
 
 @Injectable()
 export class SupportService {
+  private readonly logger = new Logger(SupportService.name);
+
   constructor(
     @InjectModel(SupportTicket.name) private ticketModel: Model<SupportTicketDocument>,
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
@@ -68,7 +73,19 @@ export class SupportService {
     private addressesService: AddressesService,
     private walletsService: WalletsService,
     private ledgerService: LedgerService,
+    private emailService: EmailService,
+    private settingsService: SettingsService,
   ) {}
+
+  private async notifyAdminNewTicket(ticketId: string, subject: string) {
+    try {
+      const adminEmail = await this.settingsService.getAdminNotificationEmail();
+      if (!adminEmail) return;
+      await this.emailService.sendAdminNewTicketNotice(adminEmail, ticketId, subject);
+    } catch (err) {
+      this.logger.warn(`Admin new-ticket email skipped for ticket ${ticketId}: ${(err as Error).message}`);
+    }
+  }
 
   async ensureSeeded() {
     const count = await this.ticketModel.countDocuments();
@@ -110,6 +127,8 @@ export class SupportService {
         },
       ],
     });
+
+    void this.notifyAdminNewTicket(ticket._id.toString(), ticket.subject);
 
     return {
       success: true,

@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { OrderStatus, PaymentMethod, PaymentStatus } from '@lunara/types';
+import { OrderStatus, PaymentMethod, PaymentStatus, UserRole } from '@lunara/types';
 import {
   generatePaymentReceiptCode,
   isPaymongoMethod,
@@ -18,6 +18,9 @@ import { PaymongoService } from './paymongo.service';
 import { Payment, PaymentDocument } from './schemas/payment.schema';
 import { LedgerService } from '../ledger/ledger.service';
 import { SettingsService } from '../settings/settings.service';
+import { AuditLogService } from '../audit/audit-log.service';
+import { EmailService } from '../../common/email/email.service';
+import { User, UserDocument } from '../users/schemas/user.schema';
 
 @Injectable()
 export class PaymentsService {
@@ -26,13 +29,26 @@ export class PaymentsService {
   constructor(
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
     private walletsService: WalletsService,
     private trackingGateway: TrackingGateway,
     private paymongo: PaymongoService,
     private branchesService: BranchesService,
     private ledgerService: LedgerService,
     private settingsService: SettingsService,
+    private auditLogService: AuditLogService,
+    private emailService: EmailService,
   ) {}
+
+  private async notifyAdminNewOrder(order: OrderDocument) {
+    try {
+      const adminEmail = await this.settingsService.getAdminNotificationEmail();
+      if (!adminEmail) return;
+      await this.emailService.sendAdminNewOrderNotice(adminEmail, order._id.toString(), order.total);
+    } catch (err) {
+      this.logger.warn(`Admin new-order email skipped for order ${order._id}: ${(err as Error).message}`);
+    }
+  }
 
   getCustomerWebUrl() {
     return process.env.CUSTOMER_WEB_URL ?? 'http://localhost:3000';
@@ -631,6 +647,7 @@ export class PaymentsService {
         status: order.status,
         message: 'Long-distance delivery — needs admin approval before dispatch',
       });
+      void this.notifyAdminNewOrder(order);
       return;
     }
 
@@ -663,9 +680,23 @@ export class PaymentsService {
       reason: 'payment_confirmed',
       orderId: order._id.toString(),
     });
+    void this.notifyAdminNewOrder(order);
 
     if (await this.settingsService.isAutomationEnabled('autoDispatchOrders')) {
       await this.branchesService.autoDispatchOrder(order);
+      const systemAdmin = await this.userModel.findOne({ role: UserRole.ADMIN });
+      if (systemAdmin) {
+        await this.auditLogService.record({
+          actorUserId: systemAdmin._id.toString(),
+          actorEmail: systemAdmin.email ?? 'system@automation',
+          actorRole: 'system',
+          method: 'AUTOMATION',
+          path: `/admin/orders/${order._id.toString()}/dispatch`,
+          action: 'automation.order.auto_dispatched',
+          statusCode: 200,
+          requestBody: { orderId: order._id.toString() },
+        });
+      }
     }
   }
 

@@ -119,6 +119,9 @@ export class SettingsService {
       autoApproveRefundsThreshold: settings.autoApproveRefundsThreshold,
       autoApproveWithdrawals: settings.autoApproveWithdrawals,
       autoApproveWithdrawalsThreshold: settings.autoApproveWithdrawalsThreshold,
+      weeklyStatsEnabled: settings.weeklyStatsEnabled,
+      weeklyStatsPhone: settings.weeklyStatsPhone,
+      weeklyStatsEmail: settings.weeklyStatsEmail,
     };
   }
 
@@ -201,5 +204,30 @@ export class SettingsService {
   ) {
     const settings = await this.getOrCreateSettings();
     return Boolean(settings[key]);
+  }
+
+  /** Enabled flag + peso threshold for a threshold-gated auto-approve toggle. */
+  async getAutoApproveConfig(key: 'autoApproveRefunds' | 'autoApproveWithdrawals') {
+    const settings = await this.getOrCreateSettings();
+    const thresholdKey = `${key}Threshold` as 'autoApproveRefundsThreshold' | 'autoApproveWithdrawalsThreshold';
+    return { enabled: Boolean(settings[key]), threshold: settings[thresholdKey] };
+  }
+
+  /** Admin contact email used for real-time event notices (new order/application/ticket/message).
+   *  Reuses the weekly-stats email contact configured in Automation Settings — the only admin
+   *  notification email address currently stored. Returns '' if none is configured. */
+  async getAdminNotificationEmail(): Promise<string> {
+    const settings = await this.getOrCreateSettings();
+    return settings.weeklyStatsEmail ?? '';
+  }
+
+  /** Enabled flag + destination contacts for the weekly SMS/email stats summary. */
+  async getWeeklyStatsConfig() {
+    const settings = await this.getOrCreateSettings();
+    return {
+      enabled: settings.weeklyStatsEnabled,
+      phone: settings.weeklyStatsPhone,
+      email: settings.weeklyStatsEmail,
+    };
   }
 }

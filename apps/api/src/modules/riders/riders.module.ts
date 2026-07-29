@@ -31,6 +31,7 @@ import { SosModule } from '../sos/sos.module';
 import { LedgerModule } from '../ledger/ledger.module';
 import { SettingsModule } from '../settings/settings.module';
 import { LaundryTagsModule } from '../laundry-tags/laundry-tags.module';
+import { AuditLogModule } from '../audit/audit-log.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { LaundryTagsModule } from '../laundry-tags/laundry-tags.module';
     LedgerModule,
     SettingsModule,
     LaundryTagsModule,
+    AuditLogModule,
   ],
   controllers: [RidersController],
   providers: [RidersService, PickupService, DeliveryService, RiderAssignmentService, RiderNotificationService, RiderWalletService],

@@ -1,4 +1,4 @@
-import { IsBoolean, IsNumber, IsOptional, Min } from 'class-validator';
+import { IsBoolean, IsEmail, IsNumber, IsOptional, IsPhoneNumber, Min } from 'class-validator';
 
 export class UpdateAutomationSettingsDto {
   @IsOptional()
@@ -34,4 +34,16 @@ export class UpdateAutomationSettingsDto {
   @IsNumber()
   @Min(0)
   autoApproveWithdrawalsThreshold?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  weeklyStatsEnabled?: boolean;
+
+  @IsOptional()
+  @IsPhoneNumber()
+  weeklyStatsPhone?: string;
+
+  @IsOptional()
+  @IsEmail()
+  weeklyStatsEmail?: string;
 }

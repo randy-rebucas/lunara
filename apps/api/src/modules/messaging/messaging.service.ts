@@ -1,4 +1,4 @@
-import { ForbiddenException, Inject, Injectable, forwardRef } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import type { ChatMessage, MessageAttachment } from '@lunara/types';
@@ -6,11 +6,15 @@ import { Branch, BranchDocument } from '../branches/schemas/branch.schema';
 import { NotificationDispatchService } from '../push/notification-dispatch.service';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import { EmailService } from '../../common/email/email.service';
+import { SettingsService } from '../settings/settings.service';
 import { Conversation, ConversationDocument } from './schemas/conversation.schema';
 import { Message, MessageDocument } from './schemas/message.schema';
 
 @Injectable()
 export class MessagingService {
+  private readonly logger = new Logger(MessagingService.name);
+
   constructor(
     @InjectModel(Conversation.name) private readonly conversationModel: Model<ConversationDocument>,
     @InjectModel(Message.name) private readonly messageModel: Model<MessageDocument>,
@@ -19,6 +23,8 @@ export class MessagingService {
     @Inject(forwardRef(() => TrackingGateway))
     private readonly gateway: TrackingGateway,
     private readonly notificationDispatch: NotificationDispatchService,
+    private readonly emailService: EmailService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   /**
@@ -151,9 +157,24 @@ export class MessagingService {
           conversationId,
         });
       }
+    } else {
+      // Partner sent → notify admin (no push/socket channel for the admin inbox today, so email
+      // is the only signal until one exists).
+      const preview = content?.trim().slice(0, 80) || 'Sent an attachment';
+      void this.notifyAdminNewMessage(senderName, preview);
     }
 
     return wire;
+  }
+
+  private async notifyAdminNewMessage(senderName: string, preview: string) {
+    try {
+      const adminEmail = await this.settingsService.getAdminNotificationEmail();
+      if (!adminEmail) return;
+      await this.emailService.sendAdminNewMessageNotice(adminEmail, senderName, preview);
+    } catch (err) {
+      this.logger.warn(`Admin new-message email skipped: ${(err as Error).message}`);
+    }
   }
 
   async markRead(conversationId: string, role: 'partner' | 'admin') {

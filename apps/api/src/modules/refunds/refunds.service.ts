@@ -2,11 +2,12 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { OrderStatus, PaymentMethod, PaymentStatus } from '@lunara/types';
+import { OrderStatus, PaymentMethod, PaymentStatus, UserRole } from '@lunara/types';
 import { REFUND_FLOW, isRefundablePaymentMethod, isPaymongoMethod } from '@lunara/utils';
 import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
@@ -18,6 +19,8 @@ import { WalletsService } from '../wallets/wallets.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { PartnerOperationsService } from '../partner/partner-operations.service';
 import { EmailService } from '../../common/email/email.service';
+import { SettingsService } from '../settings/settings.service';
+import { AuditLogService } from '../audit/audit-log.service';
 import { CreateRefundDto } from './dto/create-refund.dto';
 import { RefundReviewAction, ReviewRefundDto } from './dto/review-refund.dto';
 import {
@@ -52,6 +55,8 @@ const REFUNDABLE_ORDER_STATUSES = [
 
 @Injectable()
 export class RefundsService {
+  private readonly logger = new Logger(RefundsService.name);
+
   constructor(
     @InjectModel(RefundRequest.name) private refundModel: Model<RefundRequestDocument>,
     @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
@@ -64,6 +69,8 @@ export class RefundsService {
     private ledgerService: LedgerService,
     private emailService: EmailService,
     private partnerOperationsService: PartnerOperationsService,
+    private settingsService: SettingsService,
+    private auditLogService: AuditLogService,
   ) {}
 
   async createRequest(customerId: string, dto: CreateRefundDto) {
@@ -126,7 +133,53 @@ export class RefundsService {
       ],
     });
 
+    void this.tryAutoApprove(refund);
+
     return { success: true, data: this.serializeRefund(refund) };
+  }
+
+  /** Runs the same start_review -> verify_order -> approve -> process steps an admin would, when
+   *  the refund is under the configured auto-approve threshold. Failures fall back to manual review. */
+  private async tryAutoApprove(refund: RefundRequestDocument) {
+    try {
+      const { enabled, threshold } = await this.settingsService.getAutoApproveConfig(
+        'autoApproveRefunds',
+      );
+      if (!enabled || refund.requestedAmount > threshold) return;
+
+      const systemAdmin = await this.userModel.findOne({ role: UserRole.ADMIN });
+      if (!systemAdmin) return;
+      const adminUserId = systemAdmin._id.toString();
+      const note = 'Auto-approved by automation settings';
+
+      await this.reviewRefund(refund._id.toString(), adminUserId, {
+        action: RefundReviewAction.START_REVIEW,
+        adminNote: note,
+      });
+      await this.reviewRefund(refund._id.toString(), adminUserId, {
+        action: RefundReviewAction.VERIFY_ORDER,
+      });
+      await this.reviewRefund(refund._id.toString(), adminUserId, {
+        action: RefundReviewAction.APPROVE,
+        adminNote: note,
+      });
+      await this.reviewRefund(refund._id.toString(), adminUserId, {
+        action: RefundReviewAction.PROCESS,
+      });
+
+      await this.auditLogService.record({
+        actorUserId: adminUserId,
+        actorEmail: systemAdmin.email ?? 'system@automation',
+        actorRole: 'system',
+        method: 'AUTOMATION',
+        path: `/admin/refunds/${refund._id.toString()}/review`,
+        action: 'automation.refund.auto_approved',
+        statusCode: 200,
+        requestBody: { requestedAmount: refund.requestedAmount },
+      });
+    } catch (err) {
+      this.logger.warn(`Auto-approve skipped for refund ${refund._id}: ${(err as Error).message}`);
+    }
   }
 
   async listCustomerRefunds(customerId: string) {

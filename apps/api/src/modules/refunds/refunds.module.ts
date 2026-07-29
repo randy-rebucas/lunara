@@ -11,6 +11,8 @@ import { RefundsController } from './refunds.controller';
 import { RefundsService } from './refunds.service';
 import { LedgerModule } from '../ledger/ledger.module';
 import { PartnerModule } from '../partner/partner.module';
+import { SettingsModule } from '../settings/settings.module';
+import { AuditLogModule } from '../audit/audit-log.module';
 
 @Module({
   imports: [
@@ -25,6 +27,8 @@ import { PartnerModule } from '../partner/partner.module';
     RealtimeModule,
     LedgerModule,
     PartnerModule,
+    SettingsModule,
+    AuditLogModule,
   ],
   controllers: [RefundsController],
   providers: [RefundsService],

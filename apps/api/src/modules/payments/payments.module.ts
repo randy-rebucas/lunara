@@ -10,18 +10,22 @@ import { PaymentsService } from './payments.service';
 import { Payment, PaymentSchema } from './schemas/payment.schema';
 import { LedgerModule } from '../ledger/ledger.module';
 import { SettingsModule } from '../settings/settings.module';
+import { AuditLogModule } from '../audit/audit-log.module';
+import { User, UserSchema } from '../users/schemas/user.schema';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: Payment.name, schema: PaymentSchema },
       { name: Order.name, schema: OrderSchema },
+      { name: User.name, schema: UserSchema },
     ]),
     WalletsModule,
     RealtimeModule,
     forwardRef(() => BranchesModule),
     LedgerModule,
     SettingsModule,
+    AuditLogModule,
   ],
   controllers: [PaymentsController],
   providers: [PaymentsService, PaymongoService],

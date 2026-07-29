@@ -8,6 +8,7 @@ import { Conversation, ConversationSchema } from './schemas/conversation.schema'
 import { Message, MessageSchema } from './schemas/message.schema';
 import { AdminMessagingController, MessagingController } from './messaging.controller';
 import { MessagingService } from './messaging.service';
+import { SettingsModule } from '../settings/settings.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { MessagingService } from './messaging.service';
       { name: User.name, schema: UserSchema },
       { name: Branch.name, schema: BranchSchema },
     ]),
+    SettingsModule,
   ],
   controllers: [MessagingController, AdminMessagingController],
   providers: [MessagingService],

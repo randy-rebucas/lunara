@@ -43,6 +43,7 @@ import { LedgerModule } from './modules/ledger/ledger.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { MessagingModule } from './modules/messaging/messaging.module';
 import { EmailModule } from './common/email/email.module';
+import { SmsModule } from './common/sms/sms.module';
 import { AutomationModule } from './modules/automation/automation.module';
 import { AuditLogModule } from './modules/audit/audit-log.module';
 import { LaundryTagsModule } from './modules/laundry-tags/laundry-tags.module';
@@ -62,6 +63,7 @@ import { AiAgentsModule } from './modules/ai-agents/ai-agents.module';
       serveRoot: '/api/v1/uploads/public',
     }),
     EmailModule,
+    SmsModule,
     StorageModule,
     RedisModule,
     MongooseModule.forRoot(getMongoUri(), mongoConnectionOptions),

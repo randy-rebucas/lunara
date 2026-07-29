@@ -99,4 +99,40 @@ export class EmailService {
       text: `A partner account has been created for you on Lunara.\n\nEmail: ${to}\nTemporary password: ${password}\n\nSign in on the Lunara partner portal to manage your branch. You can change your password after logging in.`,
     });
   }
+
+  async sendAdminNewOrderNotice(to: string, orderId: string, total: number): Promise<void> {
+    await this.send({
+      to,
+      subject: `New paid order #${orderId} — Lunara`,
+      text: `A new order has been paid and is awaiting dispatch.\n\nOrder: #${orderId}\nTotal: ₱${total.toFixed(2)}\n\nAssign a laundry shop in the admin dispatch queue.`,
+    });
+  }
+
+  async sendAdminNewApplicationNotice(
+    to: string,
+    businessName: string,
+    ownerFullName: string,
+  ): Promise<void> {
+    await this.send({
+      to,
+      subject: `New partner application — ${businessName}`,
+      text: `A new partner application was submitted.\n\nBusiness: ${businessName}\nOwner: ${ownerFullName}\n\nReview it in the admin applications queue.`,
+    });
+  }
+
+  async sendAdminNewTicketNotice(to: string, ticketId: string, subject: string): Promise<void> {
+    await this.send({
+      to,
+      subject: `New support ticket — ${subject}`,
+      text: `A new support ticket was submitted.\n\nTicket: #${ticketId}\nSubject: ${subject}\n\nReview it in the admin support queue.`,
+    });
+  }
+
+  async sendAdminNewMessageNotice(to: string, senderName: string, preview: string): Promise<void> {
+    await this.send({
+      to,
+      subject: `New message from ${senderName} — Lunara`,
+      text: `${senderName} sent a new message:\n\n"${preview}"\n\nReply in the admin messages inbox.`,
+    });
+  }
 }

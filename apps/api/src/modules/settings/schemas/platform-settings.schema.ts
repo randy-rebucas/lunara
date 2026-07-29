@@ -100,6 +100,18 @@ export class PlatformSettings {
   @Prop({ default: '' })
   riderAndroidStoreUrl!: string;
 
+  /** Send a weekly SMS + email platform-stats summary to the admin contacts below. */
+  @Prop({ default: false })
+  weeklyStatsEnabled!: boolean;
+
+  /** E.164 phone number that receives the weekly stats SMS via Twilio. */
+  @Prop({ default: '+639179157515' })
+  weeklyStatsPhone!: string;
+
+  /** Email address that receives the weekly stats summary. */
+  @Prop({ default: '' })
+  weeklyStatsEmail!: string;
+
   createdAt!: Date;
   updatedAt!: Date;
 }
