@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { Button } from '@lunara/ui';
 import { buttonResponsiveClass } from '../components/ui/button-layout';
+import { reportClientError } from '../lib/report-client-error';
 
 export default function Error({
   error,
@@ -13,6 +14,7 @@ export default function Error({
 }) {
   useEffect(() => {
     console.error(error);
+    reportClientError(error);
   }, [error]);
 
   return (

@@ -633,7 +633,16 @@ export class BookingService {
     dto: BookingQuoteDto,
   ) {
     const evaluation = await this.branchesService.buildDispatchEvaluationsForPartner(
-      { ...address, line1: address.line1 ?? '' },
+      // `address` here is usually a live Mongoose document (schema fields are getters, not own
+      // enumerable properties) — `{ ...address }` silently drops city/province/etc., so pick each
+      // field explicitly instead of spreading.
+      {
+        line1: address.line1 ?? '',
+        city: address.city,
+        province: address.province,
+        latitude: address.latitude,
+        longitude: address.longitude,
+      },
       bookingTypes[0],
       estimatedWeightKg,
       new Types.ObjectId(partnerContextId),
@@ -663,7 +672,14 @@ export class BookingService {
     dto: BookingQuoteDto,
   ) {
     const evaluation = await this.branchesService.buildDispatchEvaluations(
-      { ...address, line1: address.line1 ?? '' },
+      // Same Mongoose-document-spread pitfall as resolvePartnerBranch above — pick fields explicitly.
+      {
+        line1: address.line1 ?? '',
+        city: address.city,
+        province: address.province,
+        latitude: address.latitude,
+        longitude: address.longitude,
+      },
       bookingTypes[0],
       estimatedWeightKg,
     );

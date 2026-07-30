@@ -6,15 +6,23 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
+import { ErrorLogService } from '../../modules/error-log/error-log.service';
+
+interface AuthedRequest extends Request {
+  user?: { sub?: string; role?: string };
+}
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger('ExceptionFilter');
 
+  constructor(private readonly errorLogService: ErrorLogService) {}
+
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<AuthedRequest>();
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = 'Internal server error';
@@ -41,6 +49,22 @@ export class HttpExceptionFilter implements ExceptionFilter {
       } else {
         message = exception.message;
       }
+    }
+
+    // Only 5xx (server-side failures) get persisted — 4xx are expected client/validation errors
+    // and would flood the log with noise (bad input, expired tokens, etc.).
+    if (status >= 500) {
+      const error = exception instanceof Error ? exception : undefined;
+      void this.errorLogService.record({
+        source: 'api',
+        message: error?.message ?? message,
+        stack: error?.stack,
+        path: request?.originalUrl,
+        method: request?.method,
+        statusCode: status,
+        userId: request?.user?.sub,
+        userRole: request?.user?.role,
+      });
     }
 
     response.status(status).json({

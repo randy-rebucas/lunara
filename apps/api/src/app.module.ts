@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ConfigModule } from '@nestjs/config';
@@ -48,6 +48,8 @@ import { AutomationModule } from './modules/automation/automation.module';
 import { AuditLogModule } from './modules/audit/audit-log.module';
 import { LaundryTagsModule } from './modules/laundry-tags/laundry-tags.module';
 import { AiAgentsModule } from './modules/ai-agents/ai-agents.module';
+import { ErrorLogModule } from './modules/error-log/error-log.module';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 @Module({
   imports: [
@@ -102,7 +104,11 @@ import { AiAgentsModule } from './modules/ai-agents/ai-agents.module';
     AuditLogModule,
     LaundryTagsModule,
     AiAgentsModule,
+    ErrorLogModule,
   ],
-  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
+  providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_FILTER, useClass: HttpExceptionFilter },
+  ],
 })
 export class AppModule {}

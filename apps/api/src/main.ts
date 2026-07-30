@@ -1,7 +1,6 @@
 import './preload-env';
 
 import { Logger, ValidationPipe } from '@nestjs/common';
-import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
@@ -41,7 +40,6 @@ async function bootstrap() {
   );
   app.use(cookieParser());
   app.enableCors({ origin: getAllowedOrigins(), credentials: true });
-  app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

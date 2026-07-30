@@ -61,6 +61,7 @@ const Icons: Record<string, React.ReactNode> = {
   maintenance:    <Icon d="M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m1.404 3.563l5.83 5.83a2.652 2.652 0 003.75-3.75l-5.876-5.877m-3.704 3.797l2.496-3.03c.317-.384.74-.626 1.208-.766m0 0c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95" />,
   auditLog:       <Icon d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />,
   automation:     <Icon d="M13 10V3L4 14h7v7l9-11h-7z" />,
+  errorLogs:      <Icon d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-8.25 3.75h.008v.008h-.008v-.008z" />,
   signout:        <Icon d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />,
 };
 
@@ -120,6 +121,7 @@ const nav: NavItem[] = [
   { href: '/settings',    label: 'System settings', icon: Icons.setup },
   { href: '/automation-settings', label: 'Automation', icon: Icons.automation },
   { href: '/audit-log',   label: 'Audit log',       icon: Icons.auditLog },
+  { href: '/error-logs',  label: 'Error logs',      icon: Icons.errorLogs },
   { href: '/maintenance', label: 'Maintenance',     icon: Icons.maintenance },
 ];
 
