@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, Heart, Minus, Plus } from 'lucide-react';
 import { BookingType } from '@lunara/types';
 import { Button } from '@lunara/ui';
 import { ButtonLink } from '../ui/button-link';
@@ -551,7 +552,7 @@ function WizardActions({
   const primaryDisabled = isConfirmStep ? loading : stepping || !canProceed;
 
   return (
-    <div className="sticky bottom-0 z-10 -mx-4 mt-8 border-t border-border/20 bg-surface-muted/95 px-4 py-4 backdrop-blur-sm sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0">
+    <div className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 -mx-4 mt-8 border-t border-border/20 bg-surface-muted/95 px-4 py-4 backdrop-blur-sm sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0">
       <div className="panel space-y-4">
         {activeQuote && !isConfirmStep && step !== 'review' && (
           <div className="rounded-lg bg-slate-50 px-4 py-3">
@@ -1297,7 +1298,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                         setForm((f) => ({ ...f, branchId: shop.branchId, autoDispatch: false }));
                       }}
                     >
-                      <p className="pr-6 font-medium text-slate-900">{shop.name}</p>
+                      <p className="pr-9 font-medium text-slate-900">{shop.name}</p>
                       <p className="mt-1 text-sm text-muted">
                         {shop.city}
                         {showDistanceHints ? ` · ${shop.distanceLabel}` : ''}
@@ -1322,13 +1323,13 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                         toggleFavoriteBranch(shop.branchId);
                       }}
                       aria-label={isFavorite ? `Remove ${shop.name} from favorites` : `Add ${shop.name} to favorites`}
-                      className="absolute right-3 top-3 text-lg leading-none"
+                      className="absolute right-1 top-1 flex h-11 w-11 items-center justify-center"
                     >
-                      {isFavorite ? (
-                        <span className="text-red-500">♥</span>
-                      ) : (
-                        <span className="text-slate-300 hover:text-slate-400">♡</span>
-                      )}
+                      <Heart
+                        className={isFavorite ? 'h-5 w-5 text-red-500' : 'h-5 w-5 text-slate-300 active:text-slate-400'}
+                        fill={isFavorite ? 'currentColor' : 'none'}
+                        aria-hidden
+                      />
                     </button>
                   </div>
                 );
@@ -1477,7 +1478,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                       <div key={category} className="panel mb-4">
                         <button
                           type="button"
-                          className="flex w-full items-center justify-between gap-4"
+                          className="flex min-h-11 w-full items-center justify-between gap-4 py-1"
                           aria-expanded={!collapsed}
                           onClick={() =>
                             setCollapsedGarmentCategories((prev) => {
@@ -1494,12 +1495,10 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                               <span className="badge-accent text-xs">{selectedCount} selected</span>
                             )}
                           </span>
-                          <span
-                            className={`text-muted transition-transform ${collapsed ? '' : 'rotate-180'}`}
+                          <ChevronDown
+                            className={`h-4 w-4 shrink-0 text-muted transition-transform ${collapsed ? '' : 'rotate-180'}`}
                             aria-hidden
-                          >
-                            ▾
-                          </span>
+                          />
                         </button>
                         {!collapsed && (
                           <div className="mt-2 divide-y divide-slate-100">
@@ -1511,11 +1510,13 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                                     <p className="text-sm font-medium text-slate-900">{garment.label}</p>
                                     <p className="text-xs text-muted">{formatCurrency(garment.price)} each</p>
                                   </div>
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-1">
                                     <Button
                                       type="button"
                                       variant="outline"
                                       size="sm"
+                                      className="h-11 w-11 px-0"
+                                      aria-label={`Decrease ${garment.label} quantity`}
                                       disabled={qty <= 0}
                                       onClick={() =>
                                         updateService({
@@ -1526,13 +1527,15 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                                         })
                                       }
                                     >
-                                      −
+                                      <Minus className="h-4 w-4" aria-hidden />
                                     </Button>
-                                    <span className="w-6 text-center text-sm font-medium">{qty}</span>
+                                    <span className="w-8 text-center text-sm font-medium">{qty}</span>
                                     <Button
                                       type="button"
                                       variant="outline"
                                       size="sm"
+                                      className="h-11 w-11 px-0"
+                                      aria-label={`Increase ${garment.label} quantity`}
                                       onClick={() =>
                                         updateService({
                                           garmentQuantities: {
@@ -1542,7 +1545,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                                         })
                                       }
                                     >
-                                      +
+                                      <Plus className="h-4 w-4" aria-hidden />
                                     </Button>
                                   </div>
                                 </div>

@@ -13,7 +13,7 @@ export function PageShell({
   return (
     <div className="laundry-bg min-h-screen">
       <CustomerNav />
-      <main className={`page-main ${className ?? ''}`.trim()}>
+      <main className={`page-main pb-24 md:pb-10 ${className ?? ''}`.trim()}>
         {narrow ? <div className="page-content-narrow">{children}</div> : children}
       </main>
     </div>

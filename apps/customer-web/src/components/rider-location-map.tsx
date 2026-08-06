@@ -16,7 +16,7 @@ export function RiderLocationMap({ lat, lng }: { lat: number; lng: number }) {
         referrerPolicy="no-referrer-when-downgrade"
       />
       <div className="flex items-center justify-between gap-3 bg-surface px-4 py-3 text-sm">
-        <span className="text-muted">
+        <span className="min-w-0 truncate text-muted">
           Live rider location · {lat.toFixed(4)}, {lng.toFixed(4)}
         </span>
         <a

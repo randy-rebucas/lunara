@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
+import { ArrowDownLeft, ArrowUpRight, RefreshCw } from 'lucide-react';
 import { Button } from '@lunara/ui';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { formatCurrency } from '@lunara/utils';
@@ -109,7 +110,7 @@ export default function WalletPage() {
 
   return (
     <PageShell>
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <PageHeader
           title="Wallet"
           description="Pay for laundry with your balance. Top up anytime before checkout."
@@ -118,10 +119,11 @@ export default function WalletPage() {
           type="button"
           variant="outline"
           size="sm"
-          className="shrink-0"
+          className="min-h-11 shrink-0 self-start"
           disabled={loading || refreshing}
           onClick={() => void handleRefresh()}
         >
+          <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} aria-hidden />
           {refreshing ? 'Refreshing…' : 'Refresh'}
         </Button>
       </div>
@@ -129,7 +131,7 @@ export default function WalletPage() {
       <DataPageStatus loading={loading && !refreshing} error={error} loadingMessage="Loading wallet…" />
 
       {error && (
-        <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => void reload()}>
+        <Button type="button" variant="outline" size="sm" className="mt-3 min-h-11" onClick={() => void reload()}>
           Try again
         </Button>
       )}
@@ -203,14 +205,18 @@ export default function WalletPage() {
                     <Card key={`${t.createdAt}-${i}`}>
                       <CardBody className="flex items-center gap-4 py-4">
                         <span
-                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
                             isCredit
                               ? 'bg-emerald-100 text-emerald-700'
                               : 'bg-red-50 text-red-600'
                           }`}
                           aria-hidden
                         >
-                          {isCredit ? '+' : '−'}
+                          {isCredit ? (
+                            <ArrowDownLeft className="h-4 w-4" />
+                          ) : (
+                            <ArrowUpRight className="h-4 w-4" />
+                          )}
                         </span>
                         <div className="min-w-0 flex-1">
                           <p className="font-medium text-slate-900">{t.description}</p>

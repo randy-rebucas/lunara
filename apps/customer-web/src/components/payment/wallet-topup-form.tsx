@@ -59,7 +59,7 @@ export function WalletTopupForm() {
             key={value}
             type="button"
             onClick={() => setAmount(value)}
-            className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+            className={`min-h-11 rounded-full px-4 text-sm font-semibold transition ${
               amount === value
                 ? 'bg-primary text-white shadow-sm'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200/80'

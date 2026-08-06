@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback } from 'react';
+import { ArrowRight, Check, Circle } from 'lucide-react';
 import { REFUND_FLOW, formatCurrency, formatRefundStatus, refundFlowIndex } from '@lunara/utils';
 import { formatRefundDate, refundStatusBadgeClass } from '../../../../lib/refunds';
 import { ButtonLink } from '../../../../components/ui/button-link';
@@ -46,7 +47,7 @@ export default function RefundDetailPage() {
 
   if (loading || error || !refund) {
     return (
-      <PageShell>
+      <PageShell narrow>
         <Link href="/refunds" className="text-sm text-muted transition-colors hover:text-primary">
           ← Refunds
         </Link>
@@ -58,7 +59,7 @@ export default function RefundDetailPage() {
   const stageIdx = refundFlowIndex(refund.stage);
 
   return (
-    <PageShell>
+    <PageShell narrow>
       <Link href="/refunds" className="text-sm text-muted transition-colors hover:text-primary">
         ← Refunds
       </Link>
@@ -78,11 +79,17 @@ export default function RefundDetailPage() {
             return (
               <li
                 key={step.id}
-                className={`rounded-lg px-4 py-3 text-sm ring-1 ${
+                className={`flex items-center gap-2.5 rounded-lg px-4 py-3 text-sm ring-1 ${
                   active ? 'ring-2 ring-primary/30 bg-primary/5' : done ? 'bg-accent/5 ring-accent/20' : 'bg-surface ring-border/40'
                 }`}
               >
-                {done ? '✓ ' : active ? '→ ' : '○ '}
+                {done ? (
+                  <Check className="h-4 w-4 shrink-0 text-accent" aria-hidden />
+                ) : active ? (
+                  <ArrowRight className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+                ) : (
+                  <Circle className="h-4 w-4 shrink-0 text-slate-300" aria-hidden />
+                )}
                 {step.label}
               </li>
             );

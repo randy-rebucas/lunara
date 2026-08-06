@@ -102,6 +102,7 @@ export default function SubscriptionsPage() {
                     type="button"
                     variant="outline"
                     size="sm"
+                    className="min-h-11"
                     disabled={actioningId === item._id}
                     onClick={() => toggleActive(item)}
                   >
@@ -111,6 +112,7 @@ export default function SubscriptionsPage() {
                     type="button"
                     variant="outline"
                     size="sm"
+                    className="min-h-11"
                     disabled={actioningId === item._id}
                     onClick={() => cancelSubscription(item)}
                   >

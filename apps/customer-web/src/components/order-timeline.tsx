@@ -1,5 +1,6 @@
 'use client';
 
+import { Check } from 'lucide-react';
 import type { CustomerTimelineStep } from '@lunara/utils';
 
 export function OrderTimeline({ steps }: { steps: CustomerTimelineStep[] }) {
@@ -24,7 +25,11 @@ export function OrderTimeline({ steps }: { steps: CustomerTimelineStep[] }) {
                   : 'ring-2 ring-border/60 bg-surface text-slate-400'
             }`}
           >
-            {step.state === 'done' ? '✓' : step.state === 'current' ? '●' : ''}
+            {step.state === 'done' ? (
+              <Check className="h-3.5 w-3.5" aria-hidden />
+            ) : step.state === 'current' ? (
+              <span className="h-2 w-2 rounded-full bg-white" aria-hidden />
+            ) : null}
           </span>
           <div className="min-w-0 flex-1 pt-0.5">
             <p
@@ -36,7 +41,6 @@ export function OrderTimeline({ steps }: { steps: CustomerTimelineStep[] }) {
                     : 'text-slate-400'
               }`}
             >
-              {step.state === 'done' ? '✓ ' : ''}
               {step.label}
             </p>
             {step.timestamp && (

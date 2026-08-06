@@ -137,7 +137,7 @@ export function AddressFormModal({
                     key={opt.value}
                     type="button"
                     onClick={() => setForm((f) => selectAddressType(f, opt.value))}
-                    className={`rounded-full px-3 py-1.5 text-xs font-medium ring-1 ${
+                    className={`min-h-11 rounded-full px-3.5 text-xs font-medium ring-1 ${
                       form.addressType === opt.value
                         ? 'bg-primary text-white ring-primary'
                         : 'bg-surface text-muted ring-border'
@@ -215,12 +215,12 @@ export function AddressFormModal({
             </Button>
 
             {hasAddresses && (
-              <label className="flex items-center gap-2 text-sm text-slate-700">
+              <label className="-mx-1 flex min-h-11 items-center gap-2 rounded px-1 text-sm text-slate-700">
                 <input
                   type="checkbox"
                   checked={form.isDefault}
                   onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
-                  className="accent-primary"
+                  className="h-4 w-4 accent-primary"
                 />
                 Set as default pickup address
               </label>

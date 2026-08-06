@@ -12,7 +12,7 @@ export function NotificationBell() {
   return (
     <Link
       href="/notifications"
-      className={`relative inline-flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
+      className={`relative inline-flex h-11 w-11 items-center justify-center rounded-lg transition-colors ${
         active
           ? 'bg-primary/10 text-primary'
           : 'text-muted hover:bg-slate-100 hover:text-primary'

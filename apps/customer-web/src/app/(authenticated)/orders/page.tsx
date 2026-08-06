@@ -236,7 +236,7 @@ export default function OrdersPage() {
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="shrink-0 text-red-600 hover:bg-red-50 hover:text-red-700"
+                        className="min-h-11 shrink-0 text-red-600 hover:bg-red-50 hover:text-red-700"
                         disabled={cancellingId === o._id}
                         onClick={() => cancelOrder(o)}
                       >
@@ -252,7 +252,7 @@ export default function OrdersPage() {
                         href={`/book?reorder=${o._id}`}
                         variant="outline"
                         size="sm"
-                        className="shrink-0"
+                        className="min-h-11 shrink-0"
                       >
                         Book again
                       </ButtonLink>

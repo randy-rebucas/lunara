@@ -2,6 +2,7 @@
 
 import { useParams, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { Check, Clock } from 'lucide-react';
 import { PaymentStatus } from '@lunara/types';
 import { AuthLoading } from '../../../../../components/auth-loading';
 import { ButtonLink } from '../../../../../components/ui/button-link';
@@ -50,11 +51,11 @@ export default function PaymentSuccessPage() {
   return (
     <PageShell narrow className="text-center">
       <div
-        className={`mx-auto flex h-16 w-16 items-center justify-center rounded-full text-2xl ${
+        className={`mx-auto flex h-16 w-16 items-center justify-center rounded-full ${
           isPaid ? 'bg-accent text-white' : 'bg-primary text-white'
         }`}
       >
-        {isPaid ? '✓' : '₱'}
+        {isPaid ? <Check className="h-7 w-7" aria-hidden /> : <Clock className="h-7 w-7" aria-hidden />}
       </div>
       <h1 className="mt-4 text-2xl font-bold tracking-tight">
         {isPaid ? 'Payment successful' : isCashPending ? 'Booking confirmed' : 'Payment'}

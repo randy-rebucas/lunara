@@ -1,3 +1,5 @@
+import { Check } from 'lucide-react';
+
 const steps = [
   { key: 'phone', label: 'Phone' },
   { key: 'profile', label: 'Profile' },
@@ -26,7 +28,7 @@ export function OnboardingProgress({ current }: { current: OnboardingStep }) {
                     : 'bg-slate-200 text-muted'
               }`}
             >
-              {done ? '✓' : index + 1}
+              {done ? <Check className="h-3.5 w-3.5" aria-hidden /> : index + 1}
             </span>
             <span
               className={`hidden sm:inline ${active ? 'font-semibold text-slate-900' : 'text-muted'}`}

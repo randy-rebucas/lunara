@@ -332,7 +332,7 @@ export default function OrderTrackPage() {
 
   if (pageLoading) {
     return (
-      <PageShell narrow>
+      <PageShell>
         <Link href="/orders" className="text-sm text-muted transition-colors hover:text-primary">
           ← My orders
         </Link>
@@ -343,7 +343,7 @@ export default function OrderTrackPage() {
 
   if (loadError || !order) {
     return (
-      <PageShell narrow>
+      <PageShell>
         <Link href="/orders" className="text-sm text-muted transition-colors hover:text-primary">
           ← My orders
         </Link>
@@ -421,7 +421,7 @@ export default function OrderTrackPage() {
             {canReschedule ? (
               <button
                 type="button"
-                className="mt-1 text-xs font-medium text-primary hover:underline"
+                className="-mx-1 mt-1 min-h-11 rounded px-1 py-2 text-left text-xs font-medium text-primary hover:underline"
                 onClick={() => setRescheduleOpen(true)}
               >
                 Reschedule pickup
@@ -472,7 +472,7 @@ export default function OrderTrackPage() {
                       key={opt.days}
                       type="button"
                       onClick={() => setSubscribeFrequencyDays(opt.days)}
-                      className={`rounded-full px-3 py-1.5 text-xs font-medium ring-1 ${
+                      className={`min-h-11 rounded-full px-3.5 text-xs font-medium ring-1 ${
                         subscribeFrequencyDays === opt.days
                           ? 'bg-primary text-white ring-primary'
                           : 'bg-surface text-muted ring-border'
@@ -484,13 +484,20 @@ export default function OrderTrackPage() {
                 </div>
                 {subscribeError && <p className="mt-2 text-sm text-red-600">{subscribeError}</p>}
                 <div className="mt-4 flex gap-2">
-                  <Button type="button" size="sm" disabled={subscribing} onClick={handleSubscribe}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="min-h-11"
+                    disabled={subscribing}
+                    onClick={handleSubscribe}
+                  >
                     {subscribing ? 'Setting up…' : 'Subscribe'}
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
+                    className="min-h-11"
                     onClick={() => setSubscribeDismissed(true)}
                   >
                     No thanks
@@ -525,7 +532,7 @@ export default function OrderTrackPage() {
               type="button"
               variant="outline"
               size="sm"
-              className="mt-4 border-red-200 text-red-600 hover:bg-red-50"
+              className="mt-4 min-h-11 border-red-200 text-red-600 hover:bg-red-50"
               disabled={cancelling}
               onClick={handleCancelPendingDispatch}
             >

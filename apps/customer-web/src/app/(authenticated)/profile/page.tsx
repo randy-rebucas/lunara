@@ -249,7 +249,13 @@ export default function ProfilePage() {
                     <p className="font-medium text-slate-900">Business account</p>
                     <p className="text-sm text-muted">Unlock a monthly order &amp; spend summary</p>
                   </div>
-                  <Button variant="outline" size="sm" disabled={businessSaving} onClick={toggleBusiness}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="min-h-11"
+                    disabled={businessSaving}
+                    onClick={toggleBusiness}
+                  >
                     {businessSaving ? 'Saving…' : profile?.isBusiness ? 'Enabled' : 'Enable'}
                   </Button>
                 </div>
@@ -301,6 +307,7 @@ export default function ProfilePage() {
               <Button
                 variant="outline"
                 size="sm"
+                className="min-h-11"
                 onClick={() => {
                   setEditingAddress(null);
                   setAddressModalOpen(true);
@@ -349,6 +356,7 @@ export default function ProfilePage() {
                           <Button
                             variant="outline"
                             size="sm"
+                            className="min-h-11"
                             disabled={actioningAddressId === address._id}
                             onClick={() => setDefaultAddress(address)}
                           >
@@ -358,6 +366,7 @@ export default function ProfilePage() {
                         <Button
                           variant="outline"
                           size="sm"
+                          className="min-h-11"
                           disabled={actioningAddressId === address._id}
                           onClick={() => {
                             setEditingAddress(address);
@@ -369,6 +378,7 @@ export default function ProfilePage() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          className="min-h-11"
                           disabled={actioningAddressId === address._id}
                           onClick={() => deleteAddress(address)}
                         >
@@ -404,6 +414,7 @@ export default function ProfilePage() {
                       <Button
                         variant="ghost"
                         size="sm"
+                        className="min-h-11 shrink-0"
                         disabled={actioningFavoriteId === shop.branchId}
                         onClick={() => removeFavorite(shop.branchId)}
                       >

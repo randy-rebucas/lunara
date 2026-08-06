@@ -68,6 +68,7 @@ export default function RefundsListPage() {
           type="button"
           variant="outline"
           size="sm"
+          className="min-h-11"
           disabled={loading || refreshing}
           onClick={() => void handleRefresh()}
         >

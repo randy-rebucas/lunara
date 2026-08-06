@@ -189,30 +189,39 @@ export function SupportCreateSection({ onTicketCreated }: SupportCreateSectionPr
 
         {mode === 'general' && (
           <div className="space-y-3 border-t border-border/60 pt-4">
-            <label className="block text-sm font-medium text-slate-700">
-              Subject
+            <div>
+              <label className="form-label" htmlFor="support-subject">
+                Subject
+              </label>
               <input
-                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
+                id="support-subject"
+                className="input-field"
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
                 placeholder="e.g. Question about my last order"
                 maxLength={120}
               />
-            </label>
-            <label className="block text-sm font-medium text-slate-700">
-              Details
+            </div>
+            <div>
+              <label className="form-label" htmlFor="support-description">
+                Details
+              </label>
               <textarea
-                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
+                id="support-description"
+                className="input-field"
                 rows={4}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Describe your issue so we can help (at least 10 characters)."
               />
-            </label>
-            <label className="block text-sm font-medium text-slate-700">
-              Related order (optional)
+            </div>
+            <div>
+              <label className="form-label" htmlFor="support-related-order">
+                Related order (optional)
+              </label>
               <select
-                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
+                id="support-related-order"
+                className="input-field"
                 value={relatedOrderId}
                 onChange={(e) => setRelatedOrderId(e.target.value)}
               >
@@ -224,10 +233,11 @@ export function SupportCreateSection({ onTicketCreated }: SupportCreateSectionPr
                   </option>
                 ))}
               </select>
-            </label>
+            </div>
             {generalError && <p className="text-sm text-red-600">{generalError}</p>}
             <Button
               type="button"
+              className="w-full sm:w-auto"
               disabled={
                 generalSubmitting || subject.trim().length < 3 || description.trim().length < 10
               }
@@ -294,10 +304,13 @@ export function SupportCreateSection({ onTicketCreated }: SupportCreateSectionPr
             )}
             {addresses.length > 0 && (
               <>
-                <label className="block text-sm font-medium text-slate-700">
-                  Address
+                <div>
+                  <label className="form-label" htmlFor="support-area-address">
+                    Address
+                  </label>
                   <select
-                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
+                    id="support-area-address"
+                    className="input-field"
                     value={selectedAddressId}
                     onChange={(e) => setSelectedAddressId(e.target.value)}
                   >
@@ -307,21 +320,25 @@ export function SupportCreateSection({ onTicketCreated }: SupportCreateSectionPr
                       </option>
                     ))}
                   </select>
-                </label>
-                <label className="block text-sm font-medium text-slate-700">
-                  Note (optional)
+                </div>
+                <div>
+                  <label className="form-label" htmlFor="support-area-note">
+                    Note (optional)
+                  </label>
                   <textarea
-                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
+                    id="support-area-note"
+                    className="input-field"
                     rows={3}
                     value={areaMessage}
                     onChange={(e) => setAreaMessage(e.target.value)}
                     placeholder="Preferred pickup times, building access, etc."
                   />
-                </label>
+                </div>
                 {areaError && <p className="text-sm text-red-600">{areaError}</p>}
                 {areaSuccess && <p className="text-sm font-medium text-emerald-700">{areaSuccess}</p>}
                 <Button
                   type="button"
+                  className="w-full sm:w-auto"
                   disabled={areaSubmitting || !selectedAddressId}
                   onClick={() => void submitAreaRequest()}
                 >

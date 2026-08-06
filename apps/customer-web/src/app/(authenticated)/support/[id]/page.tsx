@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback } from 'react';
+import { ArrowRight, Check, Circle } from 'lucide-react';
 import { LOST_ITEM_FLOW, formatLostItemOutcome, lostItemFlowIndex } from '@lunara/utils';
 import { ButtonLink } from '../../../../components/ui/button-link';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
@@ -87,14 +88,18 @@ export default function CustomerTicketPage() {
                 return (
                   <li
                     key={step.id}
-                    className={`rounded-lg px-4 py-3 text-sm ring-1 ${
+                    className={`flex items-center gap-2.5 rounded-lg px-4 py-3 text-sm ring-1 ${
                       active ? 'ring-2 ring-primary/30 bg-primary/5' : done ? 'bg-accent/5 ring-accent/20' : 'bg-surface ring-border/40'
                     }`}
                   >
-                    <span className="font-medium">
-                      {done ? '✓ ' : active ? '→ ' : '○ '}
-                      {step.label}
-                    </span>
+                    {done ? (
+                      <Check className="h-4 w-4 shrink-0 text-accent" aria-hidden />
+                    ) : active ? (
+                      <ArrowRight className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+                    ) : (
+                      <Circle className="h-4 w-4 shrink-0 text-slate-300" aria-hidden />
+                    )}
+                    <span className="font-medium">{step.label}</span>
                   </li>
                 );
               })}

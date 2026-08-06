@@ -229,7 +229,7 @@ export function PaymentCheckout({ orderId }: PaymentCheckoutProps) {
                   key={t}
                   type="button"
                   onClick={() => setCashTiming(t)}
-                  className={`rounded-full px-4 py-2 text-sm font-medium ${
+                  className={`min-h-11 rounded-full px-4 text-sm font-medium ${
                     cashTiming === t ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600'
                   }`}
                 >

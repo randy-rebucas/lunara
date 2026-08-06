@@ -74,7 +74,7 @@ export default function CustomerSettingsPage() {
 
   if (!settings) {
     return (
-      <PageShell narrow>
+      <PageShell>
         <PageHeader title="Settings" description="Your personal preferences." />
         <p className="text-sm text-muted-foreground">Loading…</p>
       </PageShell>
@@ -82,7 +82,7 @@ export default function CustomerSettingsPage() {
   }
 
   return (
-    <PageShell narrow>
+    <PageShell>
       <PageHeader title="Settings" description="Your personal preferences." />
       {saved && <p className="-mt-4 text-sm font-medium text-emerald-600">Saved</p>}
 

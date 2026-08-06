@@ -26,7 +26,11 @@ export default function NotificationsPage() {
       <DataPageStatus loading={loading && items.length === 0} error={error} loadingMessage="Loading notifications…" />
 
       {error && items.length === 0 ? (
-        <button type="button" onClick={load} className="mt-4 text-sm link-primary">
+        <button
+          type="button"
+          onClick={load}
+          className="-mx-2 mt-4 inline-flex min-h-11 items-center rounded px-2 text-sm link-primary"
+        >
           Try again
         </button>
       ) : null}
@@ -49,7 +53,7 @@ export default function NotificationsPage() {
             type="button"
             onClick={refresh}
             disabled={refreshing}
-            className="text-sm link-primary disabled:opacity-50"
+            className="inline-flex min-h-11 items-center rounded px-2 text-sm link-primary disabled:opacity-50"
           >
             {refreshing ? 'Refreshing…' : 'Refresh'}
           </button>
