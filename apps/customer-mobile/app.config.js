@@ -38,6 +38,23 @@ const adaptiveIcon = fs.existsSync(path.join(brandDir, 'adaptive-icon.png'))
   ? path.join(brandDir, 'adaptive-icon.png')
   : icon;
 
+// Optional partner-supplied typeface: partner-brands/<slug>/fonts/Regular.{ttf,otf} (+ optional Bold).
+// When absent (the default case), the app keeps using the OS system font — no behavior change.
+function findFont(dir, baseName) {
+  for (const ext of ['ttf', 'otf']) {
+    const fontPath = path.join(dir, `${baseName}.${ext}`);
+    if (fs.existsSync(fontPath)) return fontPath;
+  }
+  return undefined;
+}
+
+const fontsDir = partnerBrandDir ? path.join(partnerBrandDir, 'fonts') : undefined;
+const regularFontPath = fontsDir ? findFont(fontsDir, 'Regular') : undefined;
+const boldFontPath = fontsDir ? findFont(fontsDir, 'Bold') : undefined;
+const partnerFontFamily = regularFontPath
+  ? { regular: 'PartnerSans', bold: boldFontPath ? 'PartnerSans-Bold' : 'PartnerSans' }
+  : null;
+
 /** @type {import('expo/config').ExpoConfig} */
 module.exports = {
   ...appJson,
@@ -53,7 +70,22 @@ module.exports = {
     termsUrl: `${websiteUrl}/terms`,
     partnerSlug: partnerSlug ?? null,
     partnerId: manifest?.partnerId ?? null,
+    partnerTheme: manifest?.theme ?? null,
+    partnerFontFamily,
   },
+  plugins: [
+    ...(appJson.plugins ?? []),
+    ...(regularFontPath
+      ? [
+          [
+            'expo-font',
+            {
+              fonts: [regularFontPath, ...(boldFontPath ? [boldFontPath] : [])],
+            },
+          ],
+        ]
+      : []),
+  ],
   icon,
   splash: {
     image: splash,
