@@ -15,6 +15,7 @@ import { Branch, BranchSchema } from './schemas/branch.schema';
 import { BranchCustomService, BranchCustomServiceSchema } from './schemas/branch-custom-service.schema';
 import { BranchCustomAddon, BranchCustomAddonSchema } from './schemas/branch-custom-addon.schema';
 import { ServiceAreasModule } from '../service-areas/service-areas.module';
+import { SettingsModule } from '../settings/settings.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { ServiceAreasModule } from '../service-areas/service-areas.module';
     RealtimeModule,
     CatalogModule,
     ServiceAreasModule,
+    SettingsModule,
     forwardRef(() => RidersModule),
   ],
   controllers: [BranchesController, PublicBranchesController],

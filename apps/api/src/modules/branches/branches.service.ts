@@ -21,6 +21,7 @@ import { Address, AddressDocument } from '../addresses/schemas/address.schema';
 import { CloudinaryStorageService } from '../../common/storage/cloudinary-storage.service';
 import { CatalogService } from '../catalog/catalog.service';
 import { ServiceAreasService } from '../service-areas/service-areas.service';
+import { SettingsService } from '../settings/settings.service';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { Rider, RiderDocument } from '../riders/schemas/rider.schema';
 import { RiderAssignmentService } from '../riders/rider-assignment.service';
@@ -136,6 +137,7 @@ export class BranchesService {
     private catalogService: CatalogService,
     private cloudinaryStorageService: CloudinaryStorageService,
     private serviceAreasService: ServiceAreasService,
+    private settingsService: SettingsService,
     @Inject(forwardRef(() => RiderAssignmentService))
     private riderAssignmentService: RiderAssignmentService,
   ) {}
@@ -753,6 +755,7 @@ export class BranchesService {
   ) {
     await this.ensureSeeded();
     const customerCoords = resolveCoordinates(address.city, address.latitude, address.longitude);
+    const maxDeliveryRadiusKm = await this.settingsService.getMaxDeliveryRadiusKm();
     const branches = await this.branchModel.find({
       isActive: true,
       branchType: 'partner_shop',
@@ -781,6 +784,9 @@ export class BranchesService {
           distanceKm: Math.round(dist * 10) / 10,
           distanceLabel: formatDistanceKm(dist),
           withinRadius: dist <= branch.serviceRadiusKm,
+          // Mirrors buildQuote's own tiering (booking.service.ts) — beyond this, checkout always
+          // rejects the order regardless of branch, so the client must never treat it as pickable.
+          withinMaxDeliveryRadius: dist <= maxDeliveryRadiusKm,
           capacityAvailable:
             activeOrders < branch.maxActiveOrders && todaysOrders < branch.dailyQuotaOrders,
           logoUrl: branch.logoUrl,

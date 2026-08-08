@@ -150,6 +150,9 @@ interface ShopOption {
   distanceKm: number;
   distanceLabel: string;
   withinRadius: boolean;
+  /** Platform-wide delivery ceiling (default 15km) — beyond this, checkout always rejects the
+   * order regardless of branch, so this must gate selectability, not just styling. */
+  withinMaxDeliveryRadius: boolean;
   capacityAvailable: boolean;
   logoUrl?: string;
   pricingMode: BranchPricingMode;
@@ -580,7 +583,11 @@ export default function BookScreen() {
         // force-resolves to it regardless of branchId — see buildQuote's partnerContextId
         // handling), so surfacing other partners' shops here would just be misleading.
         const partnerId = getPartnerId();
-        setShopOptions(partnerId ? (res ?? []).filter((s) => s.partnerUserId === partnerId) : res ?? []);
+        const all = res ?? [];
+        const partnerShops = partnerId ? all.filter((s) => s.partnerUserId === partnerId) : all;
+        // If this partner has no shops assigned yet, an empty list is worse than showing the
+        // full network — fall back to the default (unfiltered) behavior rather than a dead end.
+        setShopOptions(partnerId && partnerShops.length === 0 ? all : partnerShops);
       } catch {
         setShopOptions([]);
       } finally {
@@ -1060,7 +1067,8 @@ export default function BookScreen() {
                           shop.branches.some((b) => b.branchId === form.branchId));
                       const startingPriceLabel = startingPriceLabelFor(shop, flatBagFrom);
                       const schedule = getTodayScheduleSummary(shop.operatingHours, shop.holidays);
-                      const disabled = !shop.withinRadius || !shop.capacityAvailable;
+                      const disabled =
+                        !shop.withinRadius || !shop.withinMaxDeliveryRadius || !shop.capacityAvailable;
                       return (
                         <Pressable
                           key={shop.branchId}
@@ -1137,7 +1145,7 @@ export default function BookScreen() {
                           {!shop.capacityAvailable ? (
                             <Text style={styles.optionGpsMissing}>Currently at capacity</Text>
                           ) : null}
-                          {!shop.withinRadius ? (
+                          {!shop.withinRadius || !shop.withinMaxDeliveryRadius ? (
                             <Text style={styles.optionGpsMissing}>Outside delivery range</Text>
                           ) : null}
                         </Pressable>
@@ -1159,8 +1167,11 @@ export default function BookScreen() {
                     const selected = !form.autoDispatch && form.branchId === branch.branchId;
                     const startingPriceLabel = startingPriceLabelFor(branch, flatBagFrom);
                     const schedule = getTodayScheduleSummary(branch.operatingHours, branch.holidays);
-                    const disabled = !branch.capacityAvailable;
-                    const far = !branch.withinRadius;
+                    // Beyond the platform's hard delivery ceiling, checkout always rejects the
+                    // order — that must block selection outright, not just look dimmer, or the
+                    // customer walks through the whole flow only to hit a wall at quote time.
+                    const disabled = !branch.capacityAvailable || !branch.withinMaxDeliveryRadius;
+                    const far = !branch.withinRadius && branch.withinMaxDeliveryRadius;
                     return (
                       <Pressable
                         key={branch.branchId}
@@ -1228,8 +1239,12 @@ export default function BookScreen() {
                         {!branch.capacityAvailable ? (
                           <Text style={styles.optionGpsMissing}>Currently at capacity</Text>
                         ) : null}
-                        {far ? (
-                          <Text style={styles.optionGpsMissing}>Outside usual delivery range</Text>
+                        {!branch.withinMaxDeliveryRadius ? (
+                          <Text style={styles.optionGpsMissing}>Outside delivery range</Text>
+                        ) : far ? (
+                          <Text style={styles.optionGpsMissing}>
+                            Farther than usual — may need extra approval
+                          </Text>
                         ) : null}
                       </Pressable>
                     );
