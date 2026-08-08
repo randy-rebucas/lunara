@@ -36,12 +36,6 @@
       "env": {
         "LUNARA_PARTNER_SLUG": "jelave"
       }
-    },
-    "production-partner-example": {
-      "extends": "production",
-      "env": {
-        "LUNARA_PARTNER_SLUG": "partner-example"
-      }
     }
   },
   "submit": {

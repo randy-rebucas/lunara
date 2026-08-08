@@ -4,3 +4,7 @@
 
 expo-env.d.ts
 # @end expo-cli
+
+# Mirrored by app.config.js on every config eval — mirrors the active brand's icon
+# (default or partner-brands/<slug>/icon.png) for in-app <Image> use.
+assets/generated-brand-icon.png

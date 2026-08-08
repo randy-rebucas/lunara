@@ -743,14 +743,21 @@ export class BranchesService {
   /** Active partner shops near an address, each with its own marked-up prices, for the customer shop-selection step.
    * Grouped by partner — a partner's other branches are variants of their one shop, not separate
    * listings, so each group headlines its nearest branch and lists the rest under `branches`. */
-  async findNearbyShopsWithPricing(address: {
-    city: string;
-    latitude?: number;
-    longitude?: number;
-  }) {
+  async findNearbyShopsWithPricing(
+    address: {
+      city: string;
+      latitude?: number;
+      longitude?: number;
+    },
+    partnerUserId?: string,
+  ) {
     await this.ensureSeeded();
     const customerCoords = resolveCoordinates(address.city, address.latitude, address.longitude);
-    const branches = await this.branchModel.find({ isActive: true, branchType: 'partner_shop' });
+    const branches = await this.branchModel.find({
+      isActive: true,
+      branchType: 'partner_shop',
+      ...(partnerUserId ? { partnerUserId: new Types.ObjectId(partnerUserId) } : {}),
+    });
 
     const ranked = await Promise.all(
       branches.map(async (branch) => {
@@ -804,13 +811,11 @@ export class BranchesService {
       return {
         ...nearest,
         mainShopId: mainShop.branchId,
-        branches: group.map((b) => ({
-          branchId: b.branchId,
-          name: b.name,
-          isMainShop: b.isMainShop,
-          distanceKm: b.distanceKm,
-          distanceLabel: b.distanceLabel,
-        })),
+        // Each entry already carries everything findNearbyShopsWithPricing computed for it
+        // (pricing, schedule, withinRadius, capacity) — reuse it as-is so the unfiltered
+        // (non-partner) client can render every branch as its own full option, not just the
+        // group headline.
+        branches: group.map((b) => ({ ...b })),
       };
     });
 
@@ -818,17 +823,20 @@ export class BranchesService {
     return { success: true, data: shops };
   }
 
-  async findNearbyShopsForAddressId(userId: string, addressId: string) {
+  async findNearbyShopsForAddressId(userId: string, addressId: string, partnerUserId?: string) {
     const address = await this.addressModel.findOne({
       _id: addressId,
       userId: new Types.ObjectId(userId),
     });
     if (!address) throw new NotFoundException('Address not found');
-    return this.findNearbyShopsWithPricing({
-      city: address.city,
-      latitude: address.latitude,
-      longitude: address.longitude,
-    });
+    return this.findNearbyShopsWithPricing(
+      {
+        city: address.city,
+        latitude: address.latitude,
+        longitude: address.longitude,
+      },
+      partnerUserId,
+    );
   }
 
   /** Validated partner-shop branch document for the customer booking flow — active, correct type. */

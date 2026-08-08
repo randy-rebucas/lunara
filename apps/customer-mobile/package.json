@@ -25,7 +25,7 @@
     "@lunara/types": "*",
     "@lunara/utils": "*",
     "@react-native-async-storage/async-storage": "2.2.0",
-    "expo": "^54.0.0",
+    "expo": "~54.0.36",
     "expo-application": "~7.0.8",
     "expo-camera": "~17.0.10",
     "expo-device": "~8.0.10",

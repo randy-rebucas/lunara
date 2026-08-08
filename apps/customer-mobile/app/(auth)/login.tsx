@@ -20,6 +20,7 @@ import {
   type Country,
 } from '../../src/lib/country-codes';
 import { redirectAfterAuth } from '../../src/lib/onboarding';
+import { brandIconSource } from '../../src/lib/brand-icon';
 import { BrandMark } from '../../src/components/ui/brand-mark';
 import { Button } from '../../src/components/ui/button';
 import { Card } from '../../src/components/ui/card';
@@ -152,7 +153,7 @@ export default function LoginScreen() {
             </View>
           </View>
           <Image
-            source={require('../../assets/icon.png')}
+            source={brandIconSource}
             style={styles.heroImage}
             resizeMode="contain"
           />

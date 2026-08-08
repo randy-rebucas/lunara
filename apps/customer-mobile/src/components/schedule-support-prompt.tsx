@@ -14,7 +14,7 @@ import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { Input } from './ui/input';
 import { useAuthStore } from '../store/auth';
-import { colors, radius, spacing, typography } from '../theme';
+import { brandName, colors, radius, spacing, typography } from '../theme';
 
 interface ScheduleSupportAddress {
   _id: string;
@@ -70,7 +70,7 @@ export function ScheduleSupportPrompt({ address, reason }: ScheduleSupportPrompt
     const subject = encodeURIComponent(`Pickup not available — ${address!.city}`);
     const body = encodeURIComponent(
       [
-        'Hi Lunara support,',
+        `Hi ${brandName} support,`,
         '',
         'I could not schedule a pickup for my address:',
         `${address!.line1}, ${address!.city}, ${address!.province} ${address!.postalCode}`,
@@ -93,7 +93,7 @@ export function ScheduleSupportPrompt({ address, reason }: ScheduleSupportPrompt
           <View style={styles.copy}>
             <Text style={styles.title}>Need pickup in your area?</Text>
             <Text style={styles.body}>
-              Lunara is expanding across Metro Manila. Tell us where you are and we will follow up
+              {brandName} is expanding across Metro Manila. Tell us where you are and we will follow up
               when pickup is available.
             </Text>
             <Text style={styles.address}>{addressSummary}</Text>
@@ -110,7 +110,7 @@ export function ScheduleSupportPrompt({ address, reason }: ScheduleSupportPrompt
           <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
             <Text style={styles.sheetTitle}>Request pickup in your area</Text>
             <Text style={styles.sheetSub}>
-              We will share your address with the Lunara team and contact you about coverage.
+              We will share your address with the {brandName} team and contact you about coverage.
             </Text>
             <Text style={styles.sheetAddress}>{addressSummary}</Text>
             <Input

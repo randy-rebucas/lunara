@@ -54,6 +54,10 @@ npm run dev --workspace=@lunara/ai-agents
 # Run mobile apps (separate terminals — see Mobile Apps below)
 npm run dev --workspace=@lunara/customer-mobile
 npm run dev --workspace=@lunara/rider-mobile
+
+# Run partner brands
+LUNARA_PARTNER_SLUG=jelave npm run dev --workspace=@lunara/customer-mobile
+eas build --platform android --profile production-jelave
 ```
 
 ## Mobile Apps

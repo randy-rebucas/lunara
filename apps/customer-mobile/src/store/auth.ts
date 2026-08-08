@@ -9,7 +9,7 @@ import { parseApiError } from '../lib/api-error';
 import { apiUnreachableMessage } from '../lib/network-error';
 
 /** Baked in at build time per partner-brands/<slug>/manifest.json — null for the default Lunara app. */
-function getPartnerId(): string | null {
+export function getPartnerId(): string | null {
   return (Constants.expoConfig?.extra?.partnerId as string | null) ?? null;
 }
 

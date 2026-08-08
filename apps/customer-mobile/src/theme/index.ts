@@ -4,6 +4,9 @@ import { resolveTheme, type PartnerThemeOverride } from '@lunara/config';
 const partnerTheme = (Constants.expoConfig?.extra?.partnerTheme ?? null) as PartnerThemeOverride | null;
 const resolvedTheme = resolveTheme(partnerTheme ?? undefined);
 
+/** "Lunara" for the default app, or the partner's `theme.appDisplayName` for a white-labeled build. */
+export const brandName = resolvedTheme.appName;
+
 // Set only when partner-brands/<slug>/fonts/Regular.{ttf,otf} exists — see app.config.js.
 // Falls back to the OS system font (undefined fontFamily) otherwise.
 const partnerFontFamily = Constants.expoConfig?.extra?.partnerFontFamily as

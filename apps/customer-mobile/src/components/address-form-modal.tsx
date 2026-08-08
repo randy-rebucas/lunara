@@ -22,7 +22,7 @@ import { ADDRESS_TYPE_OPTIONS, defaultLabelForAddressType } from '@lunara/utils'
 import type { AddressFormValues, CustomerAddress } from '../lib/profile-types';
 import { addressToForm, emptyAddressForm } from '../lib/profile-types';
 import { reverseGeocodeAddress } from '../lib/reverse-geocode';
-import { colors, radius, spacing, typography } from '../theme';
+import { brandName, colors, radius, spacing, typography } from '../theme';
 
 function selectAddressType(form: AddressFormValues, addressType: AddressType): AddressFormValues {
   const suggested = defaultLabelForAddressType(addressType);
@@ -73,7 +73,7 @@ export function AddressFormModal({
       if (status !== 'granted') {
         Alert.alert(
           'Location access needed',
-          'Allow location access so Lunara can pin your pickup address accurately.',
+          `Allow location access so ${brandName} can pin your pickup address accurately.`,
         );
         return;
       }

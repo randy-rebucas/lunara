@@ -8,7 +8,7 @@ import {
   type CashTiming,
 } from '@lunara/utils';
 import { SelectableOption } from './ui/selectable-option';
-import { colors, radius, spacing, typography } from '../theme';
+import { brandName, colors, radius, spacing, typography } from '../theme';
 
 interface PaymentMethodPickerProps {
   method: PaymentMethod;
@@ -38,7 +38,7 @@ export function PaymentMethodPicker({
         <Ionicons name="card-outline" size={18} color={colors.primary} />
         <Text style={styles.heading}>Choose payment method</Text>
       </View>
-      <Text style={styles.sub}>PayMongo, cash, or Lunara wallet</Text>
+      <Text style={styles.sub}>PayMongo, cash, or {brandName} wallet</Text>
 
       <View style={styles.groupLabelRow}>
         <Ionicons name="globe-outline" size={13} color={colors.muted} />
@@ -92,7 +92,7 @@ export function PaymentMethodPicker({
         <Text style={styles.groupLabel}>Wallet</Text>
       </View>
       <SelectableOption
-        title="Lunara Wallet"
+        title={`${brandName} Wallet`}
         subtitle={`Balance: ${formatCurrency(walletBalance)}`}
         selected={method === PaymentMethod.WALLET}
         onPress={() => onMethodChange(PaymentMethod.WALLET)}

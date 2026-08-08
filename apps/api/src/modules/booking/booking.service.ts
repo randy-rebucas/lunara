@@ -72,8 +72,8 @@ export class BookingService {
   }
 
   /** Nearby partner shops with their marked-up prices, for the customer's shop-selection step. */
-  async getShopOptions(userId: string, addressId: string) {
-    return this.branchesService.findNearbyShopsForAddressId(userId, addressId);
+  async getShopOptions(userId: string, addressId: string, partnerContextId?: string) {
+    return this.branchesService.findNearbyShopsForAddressId(userId, addressId, partnerContextId);
   }
 
   async validateAddressForUser(userId: string, addressId: string) {

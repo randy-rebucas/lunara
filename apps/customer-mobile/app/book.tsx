@@ -46,7 +46,7 @@ import {
   type QuoteBreakdown,
 } from '@lunara/utils';
 import { resolveMediaUrl } from '../src/lib/media-url';
-import { colors, radius, spacing, typography } from '../src/theme';
+import { brandName, colors, radius, spacing, typography } from '../src/theme';
 import { BookingProgress } from '../src/components/booking-progress';
 import { Button } from '../src/components/ui/button';
 import { ScheduleSupportPrompt } from '../src/components/schedule-support-prompt';
@@ -61,7 +61,7 @@ import {
   type BookingFormState,
   type BookingStep,
 } from '../src/lib/booking-flow';
-import { useAuthStore } from '../src/store/auth';
+import { useAuthStore, getPartnerId } from '../src/store/auth';
 
 interface ReorderSourceOrder {
   _id: string;
@@ -135,13 +135,9 @@ interface ShopAddonOption {
   customAddonId?: string;
 }
 
-interface ShopBranchVariant {
-  branchId: string;
-  name: string;
-  isMainShop: boolean;
-  distanceKm: number;
-  distanceLabel: string;
-}
+/** Every other branch in the same partner's group carries the same full shape as the group's
+ * headline shop (pricing, schedule, withinRadius, capacity) — see findNearbyShopsWithPricing. */
+type ShopBranchVariant = Omit<ShopOption, 'mainShopId' | 'branches'>;
 
 interface ShopOption {
   branchId: string;
@@ -192,6 +188,46 @@ function buildGarmentSelectionsPayload(form: BookingFormState): GarmentSelection
     .map(([garmentId, qty]) => ({ garmentId, quantity: Number(qty) || 0 }))
     .filter((sel) => sel.quantity > 0);
   return selections.length > 0 ? selections : undefined;
+}
+
+// Services on the same shop can each bill in a different unit, so "cheapest" is computed
+// per-service in its own unit, not one shop-wide unit.
+function startingPriceLabelFor(
+  shop: Pick<ShopOption, 'services'>,
+  flatBagFrom: number | undefined,
+): string | null {
+  const candidates = shop.services
+    .map((s) => {
+      const unit = s.pricingUnit ?? BranchPricingMode.FLAT_BAG;
+      if (unit === BranchPricingMode.PER_LOAD && s.basePricePerLoad != null) {
+        return { amount: s.basePricePerLoad, suffix: ' / load' };
+      }
+      if (unit === BranchPricingMode.PER_PIECE && s.basePricePerPiece != null) {
+        return { amount: s.basePricePerPiece, suffix: ' / piece' };
+      }
+      if (unit === BranchPricingMode.PER_PAIR && s.basePricePerPair != null) {
+        return { amount: s.basePricePerPair, suffix: ' / pair' };
+      }
+      if (unit === BranchPricingMode.PER_ITEM && s.basePricePerItem != null) {
+        return { amount: s.basePricePerItem, suffix: ' / item' };
+      }
+      if (unit === BranchPricingMode.FIXED && s.fixedPrice != null) {
+        return { amount: s.fixedPrice, suffix: '' };
+      }
+      if (unit === BranchPricingMode.FLAT_BAG && flatBagFrom != null) {
+        return { amount: flatBagFrom, suffix: '' };
+      }
+      if (unit === BranchPricingMode.PER_KG) {
+        return { amount: s.customerPricePerKg, suffix: ' / kg' };
+      }
+      return null;
+    })
+    .filter((c): c is { amount: number; suffix: string } => c != null);
+  const cheapest = candidates.reduce<{ amount: number; suffix: string } | null>(
+    (min, c) => (!min || c.amount < min.amount ? c : min),
+    null,
+  );
+  return cheapest ? `From ${formatCurrency(cheapest.amount)}${cheapest.suffix}` : null;
 }
 
 export default function BookScreen() {
@@ -327,7 +363,7 @@ export default function BookScreen() {
     if (!stillAvailable) {
       setForm((f) => (f.branchId === rebookBranchId ? { ...f, branchId: '' } : f));
       setReorderNotice(
-        "Your previous shop isn't available right now — choose another or let Lunara pick one for you.",
+        `Your previous shop isn't available right now — choose another or let ${brandName} pick one for you.`,
       );
     }
   }, [shopOptions, shopsLoading]);
@@ -540,7 +576,11 @@ export default function BookScreen() {
         const res = await apiFetch<ShopOption[]>(
           `/booking/shops?addressId=${encodeURIComponent(addressId)}`,
         );
-        setShopOptions(res ?? []);
+        // A white-labeled partner build only ever books that partner's own shop (the API
+        // force-resolves to it regardless of branchId — see buildQuote's partnerContextId
+        // handling), so surfacing other partners' shops here would just be misleading.
+        const partnerId = getPartnerId();
+        setShopOptions(partnerId ? (res ?? []).filter((s) => s.partnerUserId === partnerId) : res ?? []);
       } catch {
         setShopOptions([]);
       } finally {
@@ -667,7 +707,7 @@ export default function BookScreen() {
       }
     }
     if (step === 'shop' && !form.branchId && !form.autoDispatch) {
-      setError('Select a laundry shop or let Lunara pick one for you');
+      setError(`Select a laundry shop or let ${brandName} pick one for you`);
       return;
     }
     if (step === 'schedule' && !form.scheduledPickupAt) {
@@ -970,7 +1010,7 @@ export default function BookScreen() {
             <View>
               <StepHeading step="shop" title="Choose a laundry shop" />
               {reorderNotice ? <Text style={styles.optionGpsMissing}>{reorderNotice}</Text> : null}
-              {!shopsLoading && shopOptions.length > 0 ? (
+              {!shopsLoading && shopOptions.length > 0 && !getPartnerId() ? (
                 <Pressable
                   style={({ pressed }) => [
                     styles.option,
@@ -989,7 +1029,7 @@ export default function BookScreen() {
                       <View style={styles.shopLogoFallback}>
                         <Ionicons name="flash-outline" size={18} color={colors.primary} />
                       </View>
-                      <Text style={styles.optionTitle}>Let Lunara pick a shop for you</Text>
+                      <Text style={styles.optionTitle}>Let {brandName} pick a shop for you</Text>
                     </View>
                     {form.autoDispatch ? (
                       <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
@@ -1005,134 +1045,196 @@ export default function BookScreen() {
               ) : shopOptions.length === 0 ? (
                 <Text style={styles.sub}>No partner shops are available near this address yet.</Text>
               ) : (
-                shopOptions.map((shop) => {
-                  const selected =
-                    !form.autoDispatch &&
-                    (form.branchId === shop.branchId ||
-                      shop.branches.some((b) => b.branchId === form.branchId));
-                  // Services on the same shop can each bill in a different unit now, so
-                  // "cheapest" is computed per-service in its own unit, not one shop-wide unit.
+                (() => {
                   const flatBagFrom = config?.bagSizes?.length
                     ? Math.min(...config.bagSizes.map((b) => b.price))
                     : undefined;
-                  const candidates = shop.services
-                    .map((s) => {
-                      const unit = s.pricingUnit ?? BranchPricingMode.FLAT_BAG;
-                      if (unit === BranchPricingMode.PER_LOAD && s.basePricePerLoad != null) {
-                        return { amount: s.basePricePerLoad, suffix: ' / load' };
-                      }
-                      if (unit === BranchPricingMode.PER_PIECE && s.basePricePerPiece != null) {
-                        return { amount: s.basePricePerPiece, suffix: ' / piece' };
-                      }
-                      if (unit === BranchPricingMode.PER_PAIR && s.basePricePerPair != null) {
-                        return { amount: s.basePricePerPair, suffix: ' / pair' };
-                      }
-                      if (unit === BranchPricingMode.PER_ITEM && s.basePricePerItem != null) {
-                        return { amount: s.basePricePerItem, suffix: ' / item' };
-                      }
-                      if (unit === BranchPricingMode.FIXED && s.fixedPrice != null) {
-                        return { amount: s.fixedPrice, suffix: '' };
-                      }
-                      if (unit === BranchPricingMode.FLAT_BAG && flatBagFrom != null) {
-                        return { amount: flatBagFrom, suffix: '' };
-                      }
-                      if (unit === BranchPricingMode.PER_KG) {
-                        return { amount: s.customerPricePerKg, suffix: ' / kg' };
-                      }
-                      return null;
-                    })
-                    .filter((c): c is { amount: number; suffix: string } => c != null);
-                  const cheapestCandidate = candidates.reduce<{ amount: number; suffix: string } | null>(
-                    (min, c) => (!min || c.amount < min.amount ? c : min),
-                    null,
-                  );
-                  const startingPriceLabel = cheapestCandidate
-                    ? `From ${formatCurrency(cheapestCandidate.amount)}${cheapestCandidate.suffix}`
-                    : null;
-                  const schedule = getTodayScheduleSummary(shop.operatingHours, shop.holidays);
-                  const disabled = !shop.withinRadius || !shop.capacityAvailable;
-                  return (
-                    <Pressable
-                      key={shop.branchId}
-                      disabled={disabled}
-                      style={({ pressed }) => [
-                        styles.option,
-                        selected && styles.optionSelected,
-                        disabled && styles.optionDisabled,
-                        pressed && !disabled && styles.optionPressed,
-                      ]}
-                      onPress={() => {
-                        setReorderNotice('');
-                        setForm((f) => ({ ...f, branchId: shop.branchId, autoDispatch: false }));
-                      }}
-                      accessibilityRole="radio"
-                      accessibilityState={{ selected, disabled }}
-                    >
-                      <View style={styles.optionTopRow}>
-                        <View style={styles.optionTitleRow}>
-                          {shop.logoUrl ? (
-                            <Image
-                              source={{ uri: resolveMediaUrl(shop.logoUrl) }}
-                              style={styles.shopLogo}
-                            />
-                          ) : (
-                            <View style={styles.shopLogoFallback}>
-                              <Ionicons name="storefront-outline" size={18} color={colors.primary} />
-                            </View>
-                          )}
-                          <Text style={styles.optionTitle}>{shop.name}</Text>
-                        </View>
-                        <View style={styles.optionTopRowActions}>
-                          <Pressable
-                            onPress={() => toggleFavoriteBranch(shop.branchId)}
-                            hitSlop={8}
-                            accessibilityRole="button"
-                            accessibilityLabel={
-                              favoriteBranchIds.has(shop.branchId)
-                                ? `Remove ${shop.name} from favorites`
-                                : `Add ${shop.name} to favorites`
-                            }
-                          >
-                            <Ionicons
-                              name={favoriteBranchIds.has(shop.branchId) ? 'heart' : 'heart-outline'}
-                              size={18}
-                              color={favoriteBranchIds.has(shop.branchId) ? colors.destructive : colors.mutedForeground}
-                            />
-                          </Pressable>
-                          {selected ? (
-                            <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
-                          ) : null}
-                        </View>
-                      </View>
-                      <Text style={styles.optionSub}>
-                        {shop.city} · {shop.distanceLabel}
-                      </Text>
-                      <Text style={schedule.isOpenNow ? styles.scheduleOpen : styles.scheduleClosed}>
-                        {schedule.label}
-                      </Text>
-                      {shop.branches.length > 1 ? (
+
+                  // Partner build: keep the existing "nearest branch headlines, others behind a
+                  // picker sheet" layout, still gated on withinRadius/capacity.
+                  if (getPartnerId()) {
+                    return shopOptions.map((shop) => {
+                      const selected =
+                        !form.autoDispatch &&
+                        (form.branchId === shop.branchId ||
+                          shop.branches.some((b) => b.branchId === form.branchId));
+                      const startingPriceLabel = startingPriceLabelFor(shop, flatBagFrom);
+                      const schedule = getTodayScheduleSummary(shop.operatingHours, shop.holidays);
+                      const disabled = !shop.withinRadius || !shop.capacityAvailable;
+                      return (
                         <Pressable
-                          onPress={() => setBranchSheetShopId(shop.branchId)}
-                          hitSlop={8}
-                          accessibilityRole="button"
+                          key={shop.branchId}
+                          disabled={disabled}
+                          style={({ pressed }) => [
+                            styles.option,
+                            selected && styles.optionSelected,
+                            disabled && styles.optionDisabled,
+                            pressed && !disabled && styles.optionPressed,
+                          ]}
+                          onPress={() => {
+                            setReorderNotice('');
+                            setForm((f) => ({ ...f, branchId: shop.branchId, autoDispatch: false }));
+                          }}
+                          accessibilityRole="radio"
+                          accessibilityState={{ selected, disabled }}
                         >
-                          <Text style={styles.optionBranchLink}>
-                            {shop.branches.length} branches near you — choose one
+                          <View style={styles.optionTopRow}>
+                            <View style={styles.optionTitleRow}>
+                              {shop.logoUrl ? (
+                                <Image
+                                  source={{ uri: resolveMediaUrl(shop.logoUrl) }}
+                                  style={styles.shopLogo}
+                                />
+                              ) : (
+                                <View style={styles.shopLogoFallback}>
+                                  <Ionicons name="storefront-outline" size={18} color={colors.primary} />
+                                </View>
+                              )}
+                              <Text style={styles.optionTitle}>{shop.name}</Text>
+                            </View>
+                            <View style={styles.optionTopRowActions}>
+                              <Pressable
+                                onPress={() => toggleFavoriteBranch(shop.branchId)}
+                                hitSlop={8}
+                                accessibilityRole="button"
+                                accessibilityLabel={
+                                  favoriteBranchIds.has(shop.branchId)
+                                    ? `Remove ${shop.name} from favorites`
+                                    : `Add ${shop.name} to favorites`
+                                }
+                              >
+                                <Ionicons
+                                  name={favoriteBranchIds.has(shop.branchId) ? 'heart' : 'heart-outline'}
+                                  size={18}
+                                  color={favoriteBranchIds.has(shop.branchId) ? colors.destructive : colors.mutedForeground}
+                                />
+                              </Pressable>
+                              {selected ? (
+                                <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                              ) : null}
+                            </View>
+                          </View>
+                          <Text style={styles.optionSub}>
+                            {shop.city} · {shop.distanceLabel}
                           </Text>
+                          <Text style={schedule.isOpenNow ? styles.scheduleOpen : styles.scheduleClosed}>
+                            {schedule.label}
+                          </Text>
+                          {shop.branches.length > 1 ? (
+                            <Pressable
+                              onPress={() => setBranchSheetShopId(shop.branchId)}
+                              hitSlop={8}
+                              accessibilityRole="button"
+                            >
+                              <Text style={styles.optionBranchLink}>
+                                {shop.branches.length} branches near you — choose one
+                              </Text>
+                            </Pressable>
+                          ) : null}
+                          {startingPriceLabel ? (
+                            <Text style={styles.optionPrice}>{startingPriceLabel}</Text>
+                          ) : null}
+                          {!shop.capacityAvailable ? (
+                            <Text style={styles.optionGpsMissing}>Currently at capacity</Text>
+                          ) : null}
+                          {!shop.withinRadius ? (
+                            <Text style={styles.optionGpsMissing}>Outside delivery range</Text>
+                          ) : null}
                         </Pressable>
-                      ) : null}
-                      {startingPriceLabel ? (
-                        <Text style={styles.optionPrice}>{startingPriceLabel}</Text>
-                      ) : null}
-                      {!shop.capacityAvailable ? (
-                        <Text style={styles.optionGpsMissing}>Currently at capacity</Text>
-                      ) : null}
-                      {!shop.withinRadius ? (
-                        <Text style={styles.optionGpsMissing}>Outside delivery range</Text>
-                      ) : null}
-                    </Pressable>
-                  );
-                })
+                      );
+                    });
+                  }
+
+                  // Default (non-partner) build: every branch of every partner is its own row,
+                  // nearest-first. Distance no longer blocks selection — a far branch is just
+                  // visually de-emphasized (blur) while in-range branches are highlighted, so
+                  // customers can still deliberately pick a farther shop if they want to.
+                  // Capacity is a hard constraint (the shop truly can't take the order), so it
+                  // still disables the row.
+                  const allBranches = shopOptions
+                    .flatMap((shop) => shop.branches)
+                    .sort((a, b) => a.distanceKm - b.distanceKm);
+
+                  return allBranches.map((branch) => {
+                    const selected = !form.autoDispatch && form.branchId === branch.branchId;
+                    const startingPriceLabel = startingPriceLabelFor(branch, flatBagFrom);
+                    const schedule = getTodayScheduleSummary(branch.operatingHours, branch.holidays);
+                    const disabled = !branch.capacityAvailable;
+                    const far = !branch.withinRadius;
+                    return (
+                      <Pressable
+                        key={branch.branchId}
+                        disabled={disabled}
+                        style={({ pressed }) => [
+                          styles.option,
+                          selected && styles.optionSelected,
+                          !selected && !far && styles.optionNear,
+                          far && styles.optionFar,
+                          disabled && styles.optionDisabled,
+                          pressed && !disabled && styles.optionPressed,
+                        ]}
+                        onPress={() => {
+                          setReorderNotice('');
+                          setForm((f) => ({ ...f, branchId: branch.branchId, autoDispatch: false }));
+                        }}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected, disabled }}
+                      >
+                        <View style={styles.optionTopRow}>
+                          <View style={styles.optionTitleRow}>
+                            {branch.logoUrl ? (
+                              <Image
+                                source={{ uri: resolveMediaUrl(branch.logoUrl) }}
+                                style={styles.shopLogo}
+                              />
+                            ) : (
+                              <View style={styles.shopLogoFallback}>
+                                <Ionicons name="storefront-outline" size={18} color={colors.primary} />
+                              </View>
+                            )}
+                            <Text style={styles.optionTitle}>{branch.name}</Text>
+                          </View>
+                          <View style={styles.optionTopRowActions}>
+                            <Pressable
+                              onPress={() => toggleFavoriteBranch(branch.branchId)}
+                              hitSlop={8}
+                              accessibilityRole="button"
+                              accessibilityLabel={
+                                favoriteBranchIds.has(branch.branchId)
+                                  ? `Remove ${branch.name} from favorites`
+                                  : `Add ${branch.name} to favorites`
+                              }
+                            >
+                              <Ionicons
+                                name={favoriteBranchIds.has(branch.branchId) ? 'heart' : 'heart-outline'}
+                                size={18}
+                                color={favoriteBranchIds.has(branch.branchId) ? colors.destructive : colors.mutedForeground}
+                              />
+                            </Pressable>
+                            {selected ? (
+                              <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                            ) : null}
+                          </View>
+                        </View>
+                        <Text style={styles.optionSub}>
+                          {branch.city} · {branch.distanceLabel}
+                        </Text>
+                        <Text style={schedule.isOpenNow ? styles.scheduleOpen : styles.scheduleClosed}>
+                          {schedule.label}
+                        </Text>
+                        {startingPriceLabel ? (
+                          <Text style={styles.optionPrice}>{startingPriceLabel}</Text>
+                        ) : null}
+                        {!branch.capacityAvailable ? (
+                          <Text style={styles.optionGpsMissing}>Currently at capacity</Text>
+                        ) : null}
+                        {far ? (
+                          <Text style={styles.optionGpsMissing}>Outside usual delivery range</Text>
+                        ) : null}
+                      </Pressable>
+                    );
+                  });
+                })()
               )}
             </View>
           )}
@@ -1704,7 +1806,7 @@ export default function BookScreen() {
                 </Text>
                 <Text style={styles.summaryLine}>
                   <Text style={styles.summaryMuted}>Shop: </Text>
-                  {form.autoDispatch ? "Lunara's pick (best available)" : selectedShop?.name ?? 'Selected shop'}
+                  {form.autoDispatch ? `${brandName}'s pick (best available)` : selectedShop?.name ?? 'Selected shop'}
                 </Text>
                 <Text style={styles.summaryLine}>
                   <Text style={styles.summaryMuted}>
@@ -1756,7 +1858,7 @@ export default function BookScreen() {
               </View>
               <Text style={styles.confirmNote}>
                 {form.autoDispatch
-                  ? "After payment, Lunara dispatches your order to the best available shop nearby."
+                  ? `After payment, ${brandName} dispatches your order to the best available shop nearby.`
                   : `Your order goes straight to ${selectedShop?.name ?? 'your selected shop'} after payment.`}{' '}
                 Pickup riders are notified once dispatched. Final amount may adjust after weigh-in.
               </Text>
@@ -1835,6 +1937,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   optionSelected: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
+  optionNear: { borderColor: colors.accentDark },
+  optionFar: { opacity: 0.5 },
   optionDisabled: { opacity: 0.4 },
   optionPressed: { opacity: 0.9 },
   optionTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

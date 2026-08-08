@@ -9,7 +9,7 @@ import { KeyboardSafeScrollView } from '../../src/components/ui/keyboard-safe-sc
 import { DataLoadState } from '../../src/components/data-load-state';
 import { useAuthStore } from '../../src/store/auth';
 import type { AppNotification } from '../../src/lib/notification-types';
-import { colors, radius, spacing, typography } from '../../src/theme';
+import { brandName, colors, radius, spacing, typography } from '../../src/theme';
 
 interface ReviewData {
   _id: string;
@@ -128,7 +128,7 @@ export default function OrderReviewScreen() {
             <View style={styles.heroText}>
               <Text style={styles.title}>Rate your laundry</Text>
               <Text style={styles.sub}>
-                Your feedback helps Lunara improve service and partner quality.
+                Your feedback helps {brandName} improve service and partner quality.
               </Text>
             </View>
           </View>

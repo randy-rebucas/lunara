@@ -36,7 +36,7 @@ import {
 } from '../../src/lib/profile-types';
 import { resolveMediaUrl } from '../../src/lib/media-url';
 import { useAuthStore } from '../../src/store/auth';
-import { colors, radius, spacing, typography } from '../../src/theme';
+import { brandName, colors, radius, spacing, typography } from '../../src/theme';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -283,7 +283,7 @@ export default function ProfileScreen() {
           onPress: () => {
             const subject = encodeURIComponent('Account deletion request');
             const body = encodeURIComponent(
-              'Please delete my Lunara customer account and associated personal data.',
+              `Please delete my ${brandName} customer account and associated personal data.`,
             );
             void Linking.openURL(`mailto:${appConfig.supportEmail}?subject=${subject}&body=${body}`);
           },
@@ -643,7 +643,7 @@ export default function ProfileScreen() {
                 <Ionicons name="reader-outline" size={20} color={colors.primary} />
                 <View style={styles.prefCopy}>
                   <Text style={styles.prefTitle}>Terms of service</Text>
-                  <Text style={styles.prefHint}>Rules for using Lunara</Text>
+                  <Text style={styles.prefHint}>Rules for using {brandName}</Text>
                 </View>
                 <Ionicons name="open-outline" size={16} color={colors.mutedForeground} />
               </Pressable>
@@ -683,16 +683,16 @@ export default function ProfileScreen() {
                 <View style={styles.prefCopy}>
                   <Text style={styles.prefTitle}>Secure payments</Text>
                   <Text style={styles.prefHint}>
-                    Pay with GCash, card, cash, or your Lunara wallet at checkout
+                    Pay with GCash, card, cash, or your {brandName} wallet at checkout
                   </Text>
                 </View>
               </View>
             </Card>
 
             <ShareInviteCard
-              payload={buildAppSharePayload(getShareWebsiteUrl(), appConfig.name)}
+              payload={buildAppSharePayload(getShareWebsiteUrl(), brandName)}
               title="Invite friends"
-              description="Share Lunara on WhatsApp, Facebook, or X so friends can book laundry too."
+              description={`Share ${brandName} on WhatsApp, Facebook, or X so friends can book laundry too.`}
             />
 
             <Button label="Sign out" variant="outline" onPress={handleLogout} style={styles.logoutBtn} />
