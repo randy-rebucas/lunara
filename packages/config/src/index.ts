@@ -40,6 +40,7 @@ export function getShareWebsiteUrl(): string {
 
 export interface PartnerThemeOverride {
   appDisplayName?: string;
+  tagline?: string;
   colors?: Partial<typeof theme.colors>;
   fonts?: Partial<typeof theme.fonts>;
 }
@@ -52,6 +53,7 @@ export interface PartnerThemeOverride {
 export function resolveTheme(override?: PartnerThemeOverride) {
   return {
     appName: override?.appDisplayName ?? appConfig.name,
+    tagline: override?.tagline ?? appConfig.tagline,
     colors: { ...theme.colors, ...(override?.colors ?? {}) },
     fonts: { ...theme.fonts, ...(override?.fonts ?? {}) },
   };

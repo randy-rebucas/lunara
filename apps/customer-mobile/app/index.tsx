@@ -1,12 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
-import { appConfig } from '@lunara/config';
+import { getPartnerId } from '../src/store/auth';
 import { BrandMark } from '../src/components/ui/brand-mark';
 import { Button } from '../src/components/ui/button';
 import { Card } from '../src/components/ui/card';
 import { Screen } from '../src/components/ui/screen';
-import { colors, radius, spacing, typography } from '../src/theme';
+import { brandName, brandTagline, colors, radius, spacing, typography } from '../src/theme';
 
 const FEATURES = [
   { label: 'Book pickup', desc: 'Schedule in minutes', icon: 'calendar-outline' as const, color: colors.primary, bg: colors.primaryLight },
@@ -22,9 +22,9 @@ export default function SplashScreen() {
       <View style={styles.hero}>
         <View style={styles.heroGlow} />
         <BrandMark size="lg" />
-        <Text style={styles.brandWord}>{appConfig.name.toUpperCase()}</Text>
+        <Text style={styles.brandWord}>{brandName.toUpperCase()}</Text>
         <Text style={styles.title}>Laundry{'\n'}made simple</Text>
-        <Text style={styles.subtitle}>{appConfig.tagline}</Text>
+        <Text style={styles.subtitle}>{brandTagline}</Text>
       </View>
 
       <View style={styles.content}>
@@ -68,6 +68,8 @@ export default function SplashScreen() {
             New here? <Text style={styles.promoBold}>Get 20% off</Text> your first order!
           </Text>
         </Card>
+
+        {getPartnerId() ? <Text style={styles.poweredBy}>Powered by Lunara</Text> : null}
       </View>
     </Screen>
   );
@@ -180,4 +182,9 @@ const styles = StyleSheet.create({
   },
   promoText: { ...typography.bodySm, color: colors.foreground, flex: 1 },
   promoBold: { fontWeight: '700', color: colors.primary },
+  poweredBy: {
+    ...typography.caption,
+    textAlign: 'center',
+    marginTop: spacing.lg,
+  },
 });

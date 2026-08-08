@@ -7,6 +7,9 @@ const resolvedTheme = resolveTheme(partnerTheme ?? undefined);
 /** "Lunara" for the default app, or the partner's `theme.appDisplayName` for a white-labeled build. */
 export const brandName = resolvedTheme.appName;
 
+/** Default Lunara tagline, or the partner's `theme.tagline` when set in their manifest.json. */
+export const brandTagline = resolvedTheme.tagline;
+
 // Set only when partner-brands/<slug>/fonts/Regular.{ttf,otf} exists — see app.config.js.
 // Falls back to the OS system font (undefined fontFamily) otherwise.
 const partnerFontFamily = Constants.expoConfig?.extra?.partnerFontFamily as
