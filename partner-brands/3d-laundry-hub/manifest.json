@@ -1,0 +1,25 @@
+{
+  "partnerId": "12345",
+  "appName": "3D Laundry Hub",
+  "slug": "3d-laundry-hub-customer",
+  "iosBundleId": "com.3dlaundryhub.customer",
+  "androidPackage": "com.3dlaundryhub.customer",
+  "easProjectId": "12345",
+  "splashBackgroundColor": "#ffffff",
+  "theme": {
+    "appDisplayName": "3D Laundry Hub",
+    "colors": {
+      "primary": "#4f46e5",
+      "secondary": "#06b6d4",
+      "accent": "#22c55e",
+      "background": "#ffffff",
+      "foreground": "#0f172a",
+      "muted": "#64748b",
+      "border": "#e2e8f0",
+      "destructive": "#ef4444"
+    },
+    "fonts": {
+      "sans": "Inter, system-ui, sans-serif"
+    }
+  }
+}

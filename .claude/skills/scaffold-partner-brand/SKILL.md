@@ -23,36 +23,43 @@ The user wants to start a new partner brand's mobile build, or is missing
 
 ```
 partner-brands/<slug>/
-  manifest.json       # filled from the answers below; partnerId/easProjectId left blank if unknown
+  manifest.json       # filled from the required args below — partnerId/easProjectId included, not blank
   ASSETS.md            # spec sheet + remaining manual steps, mirrors partner-brands/jelave/ASSETS.md
-  icon.png              # 1024x1024 solid placeholder in the partner's primary color
+  icon.png              # real 1024x1024 icon, copied in from --iconPath (not a placeholder)
   adaptive-icon.png     # 1024x1024 solid placeholder (Android foreground layer)
   splash.png            # 1284x2778 solid placeholder in the partner's background color
   feature-graphic.png   # 1024x500 solid placeholder (Play Store listing only, not read by app.config.js)
 ```
 
-The generated PNGs are **solid-color placeholders**, not final art — they exist so
-`app.config.js` and `eas build` don't fail on a missing file while real logo/splash art is being
-designed. Say this explicitly to the user and tell them to replace the files before shipping to
-production or submitting to a store listing.
+`icon.png` is copied in verbatim from a real file the user provides — it is never generated.
+`adaptive-icon.png`, `splash.png`, and `feature-graphic.png` are still **solid-color
+placeholders**, not final art — they exist so `app.config.js` and `eas build` don't fail on a
+missing file while real splash/store art is being designed. Say this explicitly to the user and
+tell them to replace those three files before shipping to production or submitting to a store
+listing.
 
 ## Steps
 
 1. Gather what's known: `slug` (kebab-case, matches `LUNARA_PARTNER_SLUG`), `appName`,
-   `appDisplayName`, brand colors (primary/secondary/accent/background/foreground/muted/border/
-   destructive — reuse `apps/api/src/modules/partners/schemas/partner.schema.ts` defaults for any
-   the user doesn't specify), `iosBundleId`, `androidPackage`. Ask the user for whatever isn't
-   given rather than inventing bundle IDs or a slug.
-2. `partnerId` and `easProjectId` are usually not known yet at scaffold time — leave them as empty
-   strings in `manifest.json` with a comment-equivalent note in `ASSETS.md` on how to fill them
-   (partnerId comes from the admin API after creating the `Partner` record; easProjectId from
-   `LUNARA_PARTNER_SLUG=<slug> eas project:init`, per `partner-brands/DEPLOY_PLAY_STORE.md`).
-3. Run the generator:
+   `appDisplayName`, `partnerId` (owner User ObjectId from the `Partner` record — created via
+   admin-web or `POST /admin/partners` first if it doesn't exist yet), `easProjectId` (run
+   `LUNARA_PARTNER_SLUG=<slug> eas project:init` from `apps/customer-mobile` first if it doesn't
+   exist yet, per `partner-brands/DEPLOY_PLAY_STORE.md`), a real 1024x1024 `.png` icon file path,
+   brand colors (primary/secondary/accent/background/foreground/muted/border/destructive — reuse
+   `apps/api/src/modules/partners/schemas/partner.schema.ts` defaults for any the user doesn't
+   specify), `iosBundleId`, `androidPackage`. All of `slug`, `appName`, `displayName`,
+   `partnerId`, `easProjectId`, and the icon path are **required** — the generator refuses to run
+   without them. Ask the user for whatever isn't given rather than inventing bundle IDs, a slug,
+   or blank IDs.
+2. Run the generator:
    ```
    node .claude/skills/scaffold-partner-brand/generate.mjs \
      --slug <slug> \
      --appName "<App Name>" \
      --displayName "<Display Name>" \
+     --partnerId <ownerUserObjectId> \
+     --easProjectId <easProjectId> \
+     --iconPath "<path/to/icon-1024x1024.png>" \
      --iosBundleId <com.partner.customer> \
      --androidPackage <com.partner.customer> \
      --primary <#hex> --secondary <#hex> --accent <#hex> \
@@ -62,13 +69,9 @@ production or submitting to a store listing.
    Omit any color flag to use the `PartnerBrandColors` schema defaults. The script refuses to
    overwrite an existing `partner-brands/<slug>/` directory unless `--force` is passed — check
    with the user before forcing.
-4. After scaffolding, tell the user the remaining manual steps (mirrors
-   `partner-brands/DEPLOY_PLAY_STORE.md` §1–3):
-   - Create the `Partner` record via admin-web or `POST /admin/partners`, then paste the returned
-     `_id`'s owner-user ObjectId into `manifest.json → partnerId`.
-   - Run `LUNARA_PARTNER_SLUG=<slug> eas project:init` from `apps/customer-mobile`, paste the
-     project id into `manifest.json → easProjectId`.
-   - Replace the placeholder PNGs with real design assets at the same filenames/dimensions.
+3. After scaffolding, tell the user the remaining manual steps:
+   - Replace `adaptive-icon.png`, `splash.png`, and `feature-graphic.png` with real design assets
+     at the same filenames/dimensions before shipping to production or a store listing.
    - Upload the same logo (or a web-optimized variant) as the partner's web brand assets via
      admin-web, since those are stored separately in Cloudinary and not derived from this folder.
 

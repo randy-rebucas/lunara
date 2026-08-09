@@ -43,12 +43,23 @@ function fail(msg) {
 
 if (!args.slug) fail('--slug is required (kebab-case, matches LUNARA_PARTNER_SLUG)');
 if (!args.appName) fail('--appName is required');
+if (!args.displayName) fail('--displayName is required (the app display name shown on-device)');
+if (!args.partnerId) fail('--partnerId is required (owner User ObjectId from the Partner record)');
+if (!args.easProjectId) fail('--easProjectId is required (run `LUNARA_PARTNER_SLUG=<slug> eas project:init` first)');
+if (!args.iconPath) fail('--iconPath is required (path to a real 1024x1024 .png icon — placeholders are no longer generated)');
 if (!args.iosBundleId) fail('--iosBundleId is required');
 if (!args.androidPackage) fail('--androidPackage is required');
 
+if (path.extname(args.iconPath).toLowerCase() !== '.png') {
+  fail(`--iconPath must point to a .png file (got ${args.iconPath})`);
+}
+if (!fs.existsSync(args.iconPath)) {
+  fail(`--iconPath file not found: ${args.iconPath}`);
+}
+
 const slug = args.slug;
 const appName = args.appName;
-const displayName = args.displayName || appName;
+const displayName = args.displayName;
 
 const colors = {
   primary: args.primary || DEFAULT_COLORS.primary,
@@ -141,12 +152,12 @@ function writePlaceholder(filename, width, height, hex) {
 // ---- manifest.json ----
 
 const manifest = {
-  partnerId: args.partnerId || '',
+  partnerId: args.partnerId,
   appName,
   slug: args.mobileSlug || `${slug}-customer`,
   iosBundleId: args.iosBundleId,
   androidPackage: args.androidPackage,
-  easProjectId: args.easProjectId || '',
+  easProjectId: args.easProjectId,
   splashBackgroundColor: colors.background,
   theme: {
     appDisplayName: displayName,
@@ -169,7 +180,7 @@ shipping to production or submitting a store listing.
 
 | File | Size | Required |
 |------|------|----------|
-| \`icon.png\` | 1024×1024 px | Yes |
+| \`icon.png\` | 1024×1024 px | Yes — copied in from \`--iconPath\` |
 | \`splash.png\` | 1284×2778 px (or any ratio) | No — falls back to icon.png |
 | \`adaptive-icon.png\` | 1024×1024 px (Android foreground layer) | No — falls back to icon.png |
 | \`feature-graphic.png\` | 1024×500 px (Play Store listing only) | No — not read by app.config.js |
@@ -189,26 +200,26 @@ shipping to production or submitting a store listing.
 
 ## Steps after adding real assets
 
-1. Fill in \`partnerId\` in \`manifest.json\` — the owner User's ObjectId, from the \`Partner\` record
-   created via admin-web or \`POST /admin/partners\`.
-2. Fill in \`easProjectId\` — run \`LUNARA_PARTNER_SLUG=${slug} eas project:init\` from
-   \`apps/customer-mobile\` and paste the printed project id here.
-3. Upload the partner's web brand assets (logo/icon/splash/favicon) separately via admin-web —
+1. Replace \`splash.png\`, \`adaptive-icon.png\`, and \`feature-graphic.png\` (still solid-color
+   placeholders) with real design assets before shipping to production or submitting a store
+   listing. \`icon.png\` was already copied in from a real file at scaffold time.
+2. Upload the partner's web brand assets (logo/icon/splash/favicon) separately via admin-web —
    they live in Cloudinary against the \`Partner\` record, not this folder.
-4. Run \`LUNARA_PARTNER_SLUG=${slug} eas build --profile production\` from \`apps/customer-mobile\`
+3. Run \`LUNARA_PARTNER_SLUG=${slug} eas build --profile production\` from \`apps/customer-mobile\`
    (add a \`production-${slug}\` profile to \`eas.json\` first — see
    \`partner-brands/DEPLOY_PLAY_STORE.md\`).
 `;
 
 fs.writeFileSync(path.join(outDir, 'ASSETS.md'), assetsMd);
 
-// ---- placeholder images ----
+// ---- icon (real file) + placeholder images ----
 
 console.log(`Scaffolding partner-brands/${slug}/`);
-writePlaceholder('icon.png', 1024, 1024, colors.primary);
+fs.copyFileSync(args.iconPath, path.join(outDir, 'icon.png'));
+console.log(`  icon.png  (copied from ${args.iconPath})`);
 writePlaceholder('adaptive-icon.png', 1024, 1024, colors.primary);
 writePlaceholder('splash.png', 1284, 2778, colors.background);
 writePlaceholder('feature-graphic.png', 1024, 500, colors.primary);
 console.log('  manifest.json');
 console.log('  ASSETS.md');
-console.log('\nDone. partnerId and easProjectId left blank in manifest.json — fill in once known.');
+console.log('\nDone. partnerId and easProjectId filled in from --partnerId/--easProjectId.');
