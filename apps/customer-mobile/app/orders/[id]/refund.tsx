@@ -10,7 +10,7 @@ import { Input } from '../../../src/components/ui/input';
 import { KeyboardSafeScrollView } from '../../../src/components/ui/keyboard-safe-scroll-view';
 import { DataLoadState } from '../../../src/components/data-load-state';
 import { useAuthStore } from '../../../src/store/auth';
-import { colors, radius, spacing, typography } from '../../../src/theme';
+import { brandName, colors, radius, spacing, typography } from '../../../src/theme';
 
 export default function RequestRefundScreen() {
   const router = useRouter();
@@ -103,7 +103,7 @@ export default function RequestRefundScreen() {
               </View>
               <Text style={styles.totalAmount}>{formatCurrency(orderTotal)}</Text>
               <Text style={styles.totalHint}>
-                Approved refunds are credited to your Lunara Wallet.
+                Approved refunds are credited to your {brandName} Wallet.
               </Text>
             </Card>
           ) : null}

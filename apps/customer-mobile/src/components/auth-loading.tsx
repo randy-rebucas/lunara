@@ -1,13 +1,12 @@
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import { appConfig } from '@lunara/config';
 import { BrandMark } from './ui/brand-mark';
-import { colors, spacing, typography } from '../theme';
+import { brandName, colors, spacing, typography } from '../theme';
 
 export function AuthLoadingScreen() {
   return (
     <View style={styles.wrap}>
       <BrandMark size="lg" />
-      <Text style={styles.title}>{appConfig.name}</Text>
+      <Text style={styles.title}>{brandName}</Text>
       <ActivityIndicator color={colors.primary} style={styles.spinner} />
       <Text style={styles.hint}>Loading your session…</Text>
     </View>

@@ -1,6 +1,5 @@
 import { Image, StyleSheet, View, type ViewStyle } from 'react-native';
-
-const brandIcon = require('../../../assets/icon.png');
+import { brandIconSource } from '../../lib/brand-icon';
 
 interface BrandMarkProps {
   size?: 'sm' | 'md' | 'lg';
@@ -17,7 +16,7 @@ export function BrandMark({ size = 'md', style }: BrandMarkProps) {
   const box = sizes[size];
   return (
     <View style={[styles.mark, { width: box, height: box }, style]}>
-      <Image source={brandIcon} style={{ width: box, height: box }} resizeMode="contain" accessibilityLabel="Lunara" />
+      <Image source={brandIconSource} style={{ width: box, height: box }} resizeMode="contain" accessibilityLabel="Brand" />
     </View>
   );
 }

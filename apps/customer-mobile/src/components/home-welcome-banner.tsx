@@ -3,8 +3,7 @@ import { Card } from './ui/card';
 import { getDisplayName, getTimeOfDayGreeting } from '../lib/home-greeting';
 import type { CustomerProfile } from '../lib/profile-types';
 import { colors, radius, spacing, typography } from '../theme';
-
-const brandIcon = require('../../assets/icon.png');
+import { brandIconSource } from '../lib/brand-icon';
 
 interface HomeWelcomeBannerProps {
   profile: CustomerProfile | null;
@@ -31,10 +30,10 @@ export function HomeWelcomeBanner({ profile, user }: HomeWelcomeBannerProps) {
         </View>
         <View style={styles.illustration}>
           <Image
-            source={brandIcon}
+            source={brandIconSource}
             style={styles.illustrationImage}
             resizeMode="contain"
-            accessibilityLabel="Lunara"
+            accessibilityLabel="Brand"
           />
         </View>
       </View>

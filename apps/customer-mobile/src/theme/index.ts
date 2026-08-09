@@ -1,10 +1,29 @@
-import { theme as baseTheme } from '@lunara/config';
+import Constants from 'expo-constants';
+import { resolveTheme, type PartnerThemeOverride } from '@lunara/config';
 
-/** Mobile design tokens — aligned with customer-web laundry theme */
+const partnerTheme = (Constants.expoConfig?.extra?.partnerTheme ?? null) as PartnerThemeOverride | null;
+const resolvedTheme = resolveTheme(partnerTheme ?? undefined);
+
+/** "Lunara" for the default app, or the partner's `theme.appDisplayName` for a white-labeled build. */
+export const brandName = resolvedTheme.appName;
+
+/** Default Lunara tagline, or the partner's `theme.tagline` when set in their manifest.json. */
+export const brandTagline = resolvedTheme.tagline;
+
+// Set only when partner-brands/<slug>/fonts/Regular.{ttf,otf} exists — see app.config.js.
+// Falls back to the OS system font (undefined fontFamily) otherwise.
+const partnerFontFamily = Constants.expoConfig?.extra?.partnerFontFamily as
+  | { regular: string; bold: string }
+  | null
+  | undefined;
+const fontRegular = partnerFontFamily?.regular;
+const fontBold = partnerFontFamily?.bold;
+
+/** Mobile design tokens — partner-brand colors merged over the default Lunara theme */
 export const colors = {
-  ...baseTheme.colors,
+  ...resolvedTheme.colors,
   surface: '#FFFFFF',
-  surfaceMuted: baseTheme.colors.background,
+  surfaceMuted: resolvedTheme.colors.background,
   primaryLight: '#EEF2FF',
   primaryBorder: '#C7D2FE',
   primaryDark: '#4338CA',
@@ -57,18 +76,19 @@ export const shadow = {
 } as const;
 
 export const typography = {
-  hero: { fontSize: 32, fontWeight: '700' as const, letterSpacing: -0.5, color: colors.foreground },
-  title: { fontSize: 24, fontWeight: '700' as const, color: colors.foreground },
-  heading: { fontSize: 20, fontWeight: '700' as const, color: colors.foreground },
-  subheading: { fontSize: 18, fontWeight: '600' as const, color: colors.foreground },
-  body: { fontSize: 15, lineHeight: 22, color: colors.slate700 },
-  bodySm: { fontSize: 13, lineHeight: 20, color: colors.muted },
-  caption: { fontSize: 12, lineHeight: 18, color: colors.mutedForeground },
+  hero: { fontSize: 32, fontWeight: '700' as const, letterSpacing: -0.5, color: colors.foreground, fontFamily: fontBold },
+  title: { fontSize: 24, fontWeight: '700' as const, color: colors.foreground, fontFamily: fontBold },
+  heading: { fontSize: 20, fontWeight: '700' as const, color: colors.foreground, fontFamily: fontBold },
+  subheading: { fontSize: 18, fontWeight: '600' as const, color: colors.foreground, fontFamily: fontBold },
+  body: { fontSize: 15, lineHeight: 22, color: colors.slate700, fontFamily: fontRegular },
+  bodySm: { fontSize: 13, lineHeight: 20, color: colors.muted, fontFamily: fontRegular },
+  caption: { fontSize: 12, lineHeight: 18, color: colors.mutedForeground, fontFamily: fontRegular },
   label: {
     fontSize: 11,
     fontWeight: '600' as const,
     color: colors.mutedForeground,
     textTransform: 'uppercase' as const,
     letterSpacing: 0.5,
+    fontFamily: fontBold,
   },
 } as const;

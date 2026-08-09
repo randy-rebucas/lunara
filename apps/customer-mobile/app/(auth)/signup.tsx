@@ -10,12 +10,10 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { appConfig } from '@lunara/config';
 import { formatPhone } from '@lunara/utils';
 import {
   COUNTRIES,
   buildE164,
-  detectCountry,
   isValidLocalNumber,
   type Country,
 } from '../../src/lib/country-codes';
@@ -27,7 +25,7 @@ import { OnboardingProgress } from '../../src/components/onboarding-progress';
 import { Screen } from '../../src/components/ui/screen';
 import { redirectAfterAuth } from '../../src/lib/onboarding';
 import { useAuthStore } from '../../src/store/auth';
-import { colors, radius, spacing, typography } from '../../src/theme';
+import { brandName, colors, radius, spacing, typography } from '../../src/theme';
 
 type Step = 'phone' | 'otp';
 
@@ -41,7 +39,7 @@ export default function SignUpScreen() {
   const [step, setStep] = useState<Step>('phone');
 
   // Country picker
-  const [country, setCountry] = useState<Country>(() => detectCountry());
+  const [country, setCountry] = useState<Country>(COUNTRIES[0]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerQuery, setPickerQuery] = useState('');
 
@@ -154,7 +152,7 @@ export default function SignUpScreen() {
         {/* Brand header */}
         <View style={styles.header}>
           <BrandMark size="sm" />
-          <Text style={styles.brandName}>{appConfig.name}</Text>
+          <Text style={styles.brandName}>{brandName}</Text>
         </View>
 
         <Card elevated style={styles.formCard}>

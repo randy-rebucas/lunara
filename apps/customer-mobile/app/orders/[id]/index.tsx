@@ -28,7 +28,7 @@ import { Button } from '../../../src/components/ui/button';
 import { Card } from '../../../src/components/ui/card';
 import { Input } from '../../../src/components/ui/input';
 import { PickupSchedulePicker } from '../../../src/components/pickup-schedule-picker';
-import { colors, radius, spacing, typography } from '../../../src/theme';
+import { brandName, colors, radius, spacing, typography } from '../../../src/theme';
 import { useOrderTrackingSocket } from '../../../src/hooks/use-order-tracking-socket';
 import { DataLoadState } from '../../../src/components/data-load-state';
 import { OrderTimeline } from '../../../src/components/order-timeline';
@@ -205,7 +205,7 @@ export default function OrderTrackScreen() {
     if (justBooked && !bookedBannerShown.current) {
       bookedBannerShown.current = true;
       pushNotification(
-        'Payment received — Lunara is assigning your laundry partner. Pickup starts after dispatch.',
+        `Payment received — ${brandName} is assigning your laundry partner. Pickup starts after dispatch.`,
       );
     }
   }, [justBooked, pushNotification]);
@@ -572,8 +572,8 @@ export default function OrderTrackScreen() {
           </View>
           <Text style={styles.bannerText}>
             {isCashPending
-              ? `Booking confirmed. Pay ${formatCurrency(order.total)} in cash on ${order.cashTiming === 'delivery' ? 'delivery' : 'pickup'}. Lunara is assigning your partner branch.`
-              : 'Payment received. Lunara HQ is dispatching your order to the best partner laundry shop.'}
+              ? `Booking confirmed. Pay ${formatCurrency(order.total)} in cash on ${order.cashTiming === 'delivery' ? 'delivery' : 'pickup'}. ${brandName} is assigning your partner branch.`
+              : `Payment received. ${brandName} is dispatching your order to the best partner laundry shop.`}
           </Text>
         </Card>
       )}
@@ -788,7 +788,7 @@ export default function OrderTrackScreen() {
             <Ionicons name="checkmark" size={22} color={colors.onPrimary} />
           </View>
           <Text style={styles.doneTitle}>All done!</Text>
-          <Text style={styles.doneSub}>Thanks for using Lunara.</Text>
+          <Text style={styles.doneSub}>Thanks for using {brandName}.</Text>
           {canReview ? (
             <Button label="Rate your experience" onPress={openReviewModal} style={styles.doneAction} />
           ) : null}

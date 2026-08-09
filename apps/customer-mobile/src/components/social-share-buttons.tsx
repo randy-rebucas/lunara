@@ -4,7 +4,7 @@ import type { SharePayload, SocialPlatform } from '@lunara/utils';
 import { SOCIAL_SHARE_OPTIONS } from '@lunara/utils';
 import { openSocialShare, shareNative } from '../lib/share';
 import { Card } from './ui/card';
-import { colors, radius, spacing, typography } from '../theme';
+import { brandName, colors, radius, spacing, typography } from '../theme';
 
 const PLATFORM_ICONS: Record<SocialPlatform, keyof typeof Ionicons.glyphMap> = {
   whatsapp: 'logo-whatsapp',
@@ -65,7 +65,7 @@ interface ShareInviteCardProps {
 
 export function ShareInviteCard({
   payload,
-  title = 'Share Lunara',
+  title = `Share ${brandName}`,
   description = 'Tell friends about pickup & delivery laundry in Metro Manila.',
 }: ShareInviteCardProps) {
   return (

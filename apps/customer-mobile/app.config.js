@@ -38,6 +38,41 @@ const adaptiveIcon = fs.existsSync(path.join(brandDir, 'adaptive-icon.png'))
   ? path.join(brandDir, 'adaptive-icon.png')
   : icon;
 
+// In-app <Image> logos (login screen, home banner, BrandMark) can't `require()` a path that only
+// resolves at build time — Metro needs a literal, always-present specifier. So mirror whichever
+// icon is active (partner or default) into a fixed filename every config eval; JS just requires
+// that one file and gets whichever brand was active for this build.
+const generatedIconPath = path.join(projectRoot, 'assets', 'generated-brand-icon.png');
+fs.copyFileSync(icon, generatedIconPath);
+
+// Optional partner-supplied typeface: partner-brands/<slug>/fonts/Regular.{ttf,otf} (+ optional Bold).
+// When absent (the default case), the app keeps using the OS system font — no behavior change.
+function findFont(dir, baseName) {
+  for (const ext of ['ttf', 'otf']) {
+    const fontPath = path.join(dir, `${baseName}.${ext}`);
+    if (fs.existsSync(fontPath)) return fontPath;
+  }
+  return undefined;
+}
+
+const fontsDir = partnerBrandDir ? path.join(partnerBrandDir, 'fonts') : undefined;
+const regularFontPath = fontsDir ? findFont(fontsDir, 'Regular') : undefined;
+const boldFontPath = fontsDir ? findFont(fontsDir, 'Bold') : undefined;
+const partnerFontFamily = regularFontPath
+  ? { regular: 'PartnerSans', bold: boldFontPath ? 'PartnerSans-Bold' : 'PartnerSans' }
+  : null;
+
+// The display name customers actually see — partner's app name for a white-labeled build,
+// else the default Lunara app name.
+const brandDisplayName = manifest?.theme?.appDisplayName ?? manifest?.appName ?? appJson.name;
+
+// Native permission-prompt strings (location/photo/camera) are baked into Info.plist /
+// AndroidManifest at prebuild time via these plugin configs, so they can't be swapped at JS
+// runtime like the in-app copy — rewrite the "Lunara" wording here instead, at config-eval time.
+const brandedPlugins = JSON.parse(
+  JSON.stringify(appJson.plugins ?? []).split('Lunara').join(brandDisplayName),
+);
+
 /** @type {import('expo/config').ExpoConfig} */
 module.exports = {
   ...appJson,
@@ -47,13 +82,28 @@ module.exports = {
     ...appJson.extra,
     eas: {
       ...appJson.extra?.eas,
-      projectId: manifest?.easProjectId ?? '08355e56-d5dc-4fe0-b11c-8b6a27691dc5',
+      projectId: manifest?.easProjectId ?? 'fc74f707-99b0-483a-ae64-6157a2946569',
     },
     privacyUrl: `${websiteUrl}/privacy`,
     termsUrl: `${websiteUrl}/terms`,
     partnerSlug: partnerSlug ?? null,
     partnerId: manifest?.partnerId ?? null,
+    partnerTheme: manifest?.theme ?? null,
+    partnerFontFamily,
   },
+  plugins: [
+    ...brandedPlugins,
+    ...(regularFontPath
+      ? [
+          [
+            'expo-font',
+            {
+              fonts: [regularFontPath, ...(boldFontPath ? [boldFontPath] : [])],
+            },
+          ],
+        ]
+      : []),
+  ],
   icon,
   splash: {
     image: splash,

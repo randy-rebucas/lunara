@@ -43,13 +43,19 @@ export class BookingController {
   @Get('shops')
   @Roles(UserRole.CUSTOMER)
   getShops(
-    @Req() req: { user: { sub: string } },
+    @Req() req: { user: { sub: string }; headers: Record<string, string | undefined> },
     @Query('addressId') addressId: string,
   ) {
     if (!addressId?.trim()) {
       throw new BadRequestException('Select a pickup address first');
     }
-    return this.bookingService.getShopOptions(req.user.sub, addressId.trim());
+    // Same stale/malformed-header guard as quote/createOrder — never crash the shop list.
+    const rawPartnerContextId = req.headers['x-lunara-partner-id']?.trim() || undefined;
+    const partnerContextId =
+      rawPartnerContextId && Types.ObjectId.isValid(rawPartnerContextId)
+        ? rawPartnerContextId
+        : undefined;
+    return this.bookingService.getShopOptions(req.user.sub, addressId.trim(), partnerContextId);
   }
 
   @Post('quote')

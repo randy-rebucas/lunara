@@ -11,21 +11,20 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { appConfig } from '@lunara/config';
 import {
   COUNTRIES,
   buildE164,
-  detectCountry,
   isValidLocalNumber,
   type Country,
 } from '../../src/lib/country-codes';
 import { redirectAfterAuth } from '../../src/lib/onboarding';
+import { brandIconSource } from '../../src/lib/brand-icon';
 import { BrandMark } from '../../src/components/ui/brand-mark';
 import { Button } from '../../src/components/ui/button';
 import { Card } from '../../src/components/ui/card';
 import { Input } from '../../src/components/ui/input';
 import { Screen } from '../../src/components/ui/screen';
-import { colors, radius, spacing, typography } from '../../src/theme';
+import { brandName, brandTagline, colors, radius, spacing, typography } from '../../src/theme';
 import { useAuthStore } from '../../src/store/auth';
 
 const DEV_EMAIL = __DEV__ ? 'customer@lunara.dev' : '';
@@ -44,7 +43,7 @@ export default function LoginScreen() {
   const { loginWithOtp, loginWithEmail, requestOtp, apiFetch } = useAuthStore();
   const [mode, setMode] = useState<'otp' | 'email'>('otp');
   const [otpStep, setOtpStep] = useState<OtpStep>('phone');
-  const [country, setCountry] = useState<Country>(() => detectCountry());
+  const [country, setCountry] = useState<Country>(COUNTRIES[0]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerQuery, setPickerQuery] = useState('');
   const [localPhone, setLocalPhone] = useState('');
@@ -147,12 +146,12 @@ export default function LoginScreen() {
           <View style={styles.brandRow}>
             <BrandMark size="sm" />
             <View>
-              <Text style={styles.brandName}>{appConfig.name}</Text>
-              <Text style={styles.tagline}>Laundry made simple</Text>
+              <Text style={styles.brandName}>{brandName}</Text>
+              <Text style={styles.tagline}>{brandTagline}</Text>
             </View>
           </View>
           <Image
-            source={require('../../assets/icon.png')}
+            source={brandIconSource}
             style={styles.heroImage}
             resizeMode="contain"
           />

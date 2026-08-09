@@ -9,7 +9,7 @@ import { Card } from '../../../src/components/ui/card';
 import { DataLoadState } from '../../../src/components/data-load-state';
 import { KeyboardSafeScrollView } from '../../../src/components/ui/keyboard-safe-scroll-view';
 import { useAuthStore } from '../../../src/store/auth';
-import { colors, radius, spacing, typography } from '../../../src/theme';
+import { brandName, colors, radius, spacing, typography } from '../../../src/theme';
 
 interface PaymentReceipt {
   _id: string;
@@ -21,7 +21,7 @@ interface PaymentReceipt {
 
 function methodLabel(method: string) {
   if (method === 'cash') return 'Cash';
-  if (method === 'wallet') return 'Lunara Wallet';
+  if (method === 'wallet') return `${brandName} Wallet`;
   if (method === 'gcash') return 'GCash';
   if (method === 'card') return 'Card';
   return method.replace(/_/g, ' ');

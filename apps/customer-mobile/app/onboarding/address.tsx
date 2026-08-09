@@ -14,7 +14,7 @@ import { fetchOnboardingStatus, getOnboardingPath } from '../../src/lib/onboardi
 import type { GeocodedAddressFields } from '../../src/lib/reverse-geocode';
 import { reverseGeocodeAddress } from '../../src/lib/reverse-geocode';
 import { useAuthStore } from '../../src/store/auth';
-import { colors, radius, spacing, typography } from '../../src/theme';
+import { brandName, colors, radius, spacing, typography } from '../../src/theme';
 
 type InputMethod = 'manual' | 'location' | 'map';
 
@@ -80,7 +80,7 @@ export default function OnboardingAddressScreen() {
       if (status !== 'granted') {
         Alert.alert(
           'Location access needed',
-          'Allow location access so Lunara can pin your pickup address accurately.',
+          `Allow location access so ${brandName} can pin your pickup address accurately.`,
         );
         setMethod('manual');
         return;
