@@ -4,6 +4,7 @@ import { DiscoveryModule } from '@nestjs/core';
 import { AiConversation, AiConversationSchema } from './schemas/ai-conversation.schema';
 import { AiMessage, AiMessageSchema } from './schemas/ai-message.schema';
 import { AiGuestUsage, AiGuestUsageSchema } from './schemas/ai-guest-usage.schema';
+import { User, UserSchema } from '../users/schemas/user.schema';
 import { AiAgentsController } from './ai-agents.controller';
 import { AiAgentsService } from './ai-agents.service';
 import { AiToolRegistry } from './tools/registry';
@@ -39,6 +40,7 @@ import { BranchesModule } from '../branches/branches.module';
       { name: AiConversation.name, schema: AiConversationSchema },
       { name: AiMessage.name, schema: AiMessageSchema },
       { name: AiGuestUsage.name, schema: AiGuestUsageSchema },
+      { name: User.name, schema: UserSchema },
     ]),
     OrdersModule,
     RidersModule,

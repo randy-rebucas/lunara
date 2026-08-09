@@ -10,7 +10,11 @@ type ParallaxLayer = { ref: React.RefObject<HTMLElement | null>; speed: number }
  */
 export function useHeroParallax(layers: ParallaxLayer[]) {
   const layersRef = useRef(layers);
-  layersRef.current = layers;
+
+  // Keep the ref in sync after each commit rather than mutating it during render.
+  useEffect(() => {
+    layersRef.current = layers;
+  });
 
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;

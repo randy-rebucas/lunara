@@ -17,8 +17,12 @@ import { AiConversation, AiConversationDocument } from './schemas/ai-conversatio
 import { AiMessage, AiMessageDocument } from './schemas/ai-message.schema';
 import { AiGuestUsage, AiGuestUsageDocument } from './schemas/ai-guest-usage.schema';
 import { SendMessageDto } from './dto/send-message.dto';
+import { EscalateDto, GuestEscalateDto } from './dto/escalate.dto';
 import { sanitizeMessage } from './sanitize-message';
 import { AiToolRegistry } from './tools/registry';
+import { EmailService } from '../../common/email/email.service';
+import { SupportService } from '../support/support.service';
+import { User, UserDocument } from '../users/schemas/user.schema';
 
 const HISTORY_WINDOW = 20;
 const MAX_TOKENS = 1024;
@@ -45,7 +49,10 @@ export class AiAgentsService {
     @InjectModel(AiConversation.name) private conversationModel: Model<AiConversationDocument>,
     @InjectModel(AiMessage.name) private messageModel: Model<AiMessageDocument>,
     @InjectModel(AiGuestUsage.name) private guestUsageModel: Model<AiGuestUsageDocument>,
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
     private toolRegistry: AiToolRegistry,
+    private emailService: EmailService,
+    private supportService: SupportService,
   ) {}
 
   listAgents(audience: PersonaAudience) {
@@ -294,6 +301,55 @@ export class AiAgentsService {
           createdAt: new Date().toISOString(),
         },
       },
+    };
+  }
+
+  /**
+   * "Talk to a human" hand-off for a signed-in customer — opens a real support ticket (so it's
+   * tracked in /support and the admin queue) and always emails the fixed chat-escalation inbox,
+   * regardless of the configurable admin-notification-email setting.
+   */
+  async escalateToHuman(userId: string, dto: EscalateDto) {
+    const message = sanitizeMessage(dto.message);
+    if (!message) throw new BadRequestException('Message cannot be empty');
+
+    const user = await this.userModel.findById(userId).select('email');
+    const ticketResult = await this.supportService.createGeneralTicket(userId, {
+      subject: `Chat hand-off: ${message}`.slice(0, 100),
+      description: `Escalated from the AI chat widget.\n\n${message}`,
+    });
+
+    await this.emailService.sendChatEscalation({
+      fromEmail: user?.email ?? ticketResult.data.customerEmail ?? 'unknown@lunara.app',
+      message,
+      transcript: dto.transcript,
+      ticketId: ticketResult.data._id,
+    });
+
+    return {
+      success: true,
+      data: { ticket: ticketResult.data },
+      message: "We've let our support team know — they'll follow up by email.",
+    };
+  }
+
+  /** "Talk to a human" hand-off for a logged-out visitor — no account to attach a ticket to, so
+   * this just emails the fixed chat-escalation inbox with their contact details. */
+  async escalateGuestToHuman(dto: GuestEscalateDto) {
+    const message = sanitizeMessage(dto.message);
+    if (!message) throw new BadRequestException('Message cannot be empty');
+
+    await this.emailService.sendChatEscalation({
+      fromName: dto.name,
+      fromEmail: dto.email,
+      message,
+      transcript: dto.transcript,
+    });
+
+    return {
+      success: true,
+      data: null,
+      message: "Thanks — we've emailed our support team and they'll get back to you.",
     };
   }
 

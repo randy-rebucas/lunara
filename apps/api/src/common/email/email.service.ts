@@ -135,4 +135,25 @@ export class EmailService {
       text: `${senderName} sent a new message:\n\n"${preview}"\n\nReply in the admin messages inbox.`,
     });
   }
+
+  /** "Talk to a human" hand-off from the AI chat widget — always goes to the fixed support inbox. */
+  async sendChatEscalation(params: {
+    fromName?: string;
+    fromEmail: string;
+    message: string;
+    transcript?: string;
+    ticketId?: string;
+  }): Promise<void> {
+    const to = process.env.CHAT_ESCALATION_EMAIL ?? 'admin@localpro.asia';
+    const who = params.fromName ? `${params.fromName} <${params.fromEmail}>` : params.fromEmail;
+    const ticketLine = params.ticketId ? `Ticket: #${params.ticketId}\n` : '';
+    const transcriptBlock = params.transcript
+      ? `\n\nRecent chat transcript:\n${params.transcript}`
+      : '';
+    await this.send({
+      to,
+      subject: `Chat escalation — ${who}`,
+      text: `A visitor asked to talk to a human from the AI chat widget.\n\n${ticketLine}From: ${who}\nMessage: ${params.message}${transcriptBlock}`,
+    });
+  }
 }
