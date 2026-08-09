@@ -23,6 +23,8 @@ import { appConfig } from '@lunara/config';
 /**
  * CSS-only phone frame — no raster mockup images. Content is decorative
  * (aria-hidden) miniature app UI rendered at a fixed intrinsic width.
+ * Styled after a modern iPhone: metallic chamfered edge, Dynamic Island,
+ * and side buttons (mute switch + volume rocker, power button).
  */
 export function PhoneFrame({
   children,
@@ -35,12 +37,29 @@ export function PhoneFrame({
 }) {
   return (
     <figure className={cn('w-56 shrink-0', className)}>
-      <div className="rounded-[2.4rem] bg-slate-900 p-[6px] shadow-[0_24px_48px_-16px_rgb(15_23_42/0.35)] ring-1 ring-slate-950/60">
-        <div className="relative overflow-hidden rounded-[2rem] bg-surface">
-          {/* Notch pill */}
-          <div className="absolute left-1/2 top-2 z-10 h-4 w-16 -translate-x-1/2 rounded-full bg-slate-900" aria-hidden />
-          <div className="aspect-[9/19] overflow-hidden" aria-hidden>
-            {children}
+      <div className="relative">
+        {/* Side buttons — decorative, sit on the metallic edge below */}
+        <span className="absolute left-[-2px] top-[16%] z-0 h-[4%] w-[3px] rounded-l-sm bg-gradient-to-r from-slate-600 to-slate-800" aria-hidden />
+        <span className="absolute left-[-2px] top-[23%] z-0 h-[7%] w-[3px] rounded-l-sm bg-gradient-to-r from-slate-600 to-slate-800" aria-hidden />
+        <span className="absolute left-[-2px] top-[32%] z-0 h-[7%] w-[3px] rounded-l-sm bg-gradient-to-r from-slate-600 to-slate-800" aria-hidden />
+        <span className="absolute right-[-2px] top-[26%] z-0 h-[10%] w-[3px] rounded-r-sm bg-gradient-to-l from-slate-600 to-slate-800" aria-hidden />
+
+        {/* Metallic chamfered edge */}
+        <div className="relative rounded-[3rem] bg-gradient-to-br from-slate-700 via-slate-900 to-slate-950 p-[3px] shadow-[0_24px_48px_-16px_rgb(15_23_42/0.4)]">
+          {/* Black bezel */}
+          <div className="rounded-[2.85rem] bg-black p-[9px]">
+            <div className="relative overflow-hidden rounded-[2.35rem] bg-surface ring-1 ring-white/10">
+              {/* Dynamic Island */}
+              <div
+                className="absolute left-1/2 top-[1.6%] z-10 h-[4.5%] w-[38%] -translate-x-1/2 rounded-full bg-black"
+                aria-hidden
+              >
+                <span className="absolute right-[18%] top-1/2 h-[40%] w-[10%] -translate-y-1/2 rounded-full bg-slate-800/80" aria-hidden />
+              </div>
+              <div className="aspect-[9/19.5] overflow-hidden" aria-hidden>
+                {children}
+              </div>
+            </div>
           </div>
         </div>
       </div>
