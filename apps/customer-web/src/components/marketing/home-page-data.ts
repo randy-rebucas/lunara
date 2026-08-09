@@ -272,7 +272,6 @@ export const EXPANDING_AREAS = [
   'Pasig & Ortigas',
   'Manila & Ermita',
   'Parañaque & Las Piñas',
-  'Cebu Metro',
 ] as const;
 
 export const CUSTOMER_REVIEWS = [
