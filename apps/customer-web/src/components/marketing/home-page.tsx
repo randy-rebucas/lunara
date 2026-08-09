@@ -1,8 +1,9 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import QRCode from 'react-qr-code';
 import {
   ArrowRight,
@@ -28,6 +29,8 @@ import {
   accentClasses,
 } from './marketing-design';
 import { MarketingShell } from './marketing-shell';
+import { Reveal } from './reveal';
+import { useHeroParallax } from './use-hero-parallax';
 import {
   PhoneFrame,
   ScreenBooking,
@@ -154,11 +157,23 @@ function AppStoreBadge({ store }: { store: 'ios' | 'android' }) {
 function HeroBubbles() {
   return (
     <>
-      <span className="bubble left-[4%] top-[12%] hidden h-16 w-16 lg:block" aria-hidden />
+      <span className="bubble left-[6%] top-[16%] h-8 w-8 sm:h-10 sm:w-10 lg:left-[4%] lg:top-[12%] lg:h-16 lg:w-16" aria-hidden />
       <span className="bubble right-[2%] top-[6%] hidden h-24 w-24 lg:block" aria-hidden />
       <span className="bubble bottom-[8%] right-[38%] hidden h-10 w-10 lg:block" aria-hidden />
-      <span className="bubble bottom-[18%] left-[42%] hidden h-6 w-6 lg:block" aria-hidden />
+      <span className="bubble right-[8%] bottom-[14%] h-5 w-5 sm:h-6 sm:w-6 lg:left-[42%] lg:right-auto lg:bottom-[18%] lg:h-6 lg:w-6" aria-hidden />
     </>
+  );
+}
+
+/** Small soap-bubble accent for sections that don't have the full hero cluster. */
+function Bubbles({ className }: { className?: string }) {
+  return (
+    <div className={cn('pointer-events-none absolute inset-0 overflow-hidden', className)} aria-hidden>
+      <span className="bubble left-[8%] top-[20%] h-10 w-10 sm:h-14 sm:w-14" />
+      <span className="bubble right-[10%] top-[10%] h-7 w-7 sm:h-9 sm:w-9" />
+      <span className="bubble right-[22%] bottom-[15%] hidden h-16 w-16 sm:block" />
+      <span className="bubble left-[30%] bottom-[8%] h-5 w-5 sm:h-6 sm:w-6" />
+    </div>
   );
 }
 
@@ -184,6 +199,15 @@ export function HomePage() {
   const router = useRouter();
   const [serviceAreas, setServiceAreas] = useState<ServiceArea[]>([...SERVICE_AREAS]);
 
+  const bubblesRef = useRef<HTMLDivElement>(null);
+  const phoneLeftRef = useRef<HTMLDivElement>(null);
+  const phoneRightRef = useRef<HTMLDivElement>(null);
+  useHeroParallax([
+    { ref: bubblesRef, speed: -0.06 },
+    { ref: phoneLeftRef, speed: 0.05 },
+    { ref: phoneRightRef, speed: 0.09 },
+  ]);
+
   useEffect(() => {
     if (isLoading || !isAuthenticated) return;
     fetchOnboardingStatus(api).then((status) => {
@@ -205,36 +229,40 @@ export function HomePage() {
       {/* ── Hero ── */}
       <section className="relative overflow-hidden bg-gradient-to-b from-blue-50/80 via-surface-muted to-surface-muted">
         <div className="marketing-container relative pb-16 pt-12 sm:pt-16 lg:pb-24 lg:pt-20">
-          <HeroBubbles />
+          <div ref={bubblesRef} className="parallax-layer absolute inset-0">
+            <HeroBubbles />
+          </div>
 
           <div className="relative grid items-center gap-12 lg:grid-cols-[1fr_1.05fr] lg:gap-8">
             <div className="max-w-xl">
-              <span className="badge-primary">Philippines · Door-to-door laundry</span>
+              <Reveal>
+                <span className="badge-primary">Philippines · Door-to-door laundry</span>
 
-              <h1 className="mt-6 text-4xl font-extrabold tracking-tight text-slate-900 sm:text-5xl lg:text-[3.5rem] lg:leading-[1.08]">
-                Laundry day,
-                <br />
-                <span className="text-primary">simplified.</span>
-              </h1>
+                <h1 className="mt-6 text-4xl font-extrabold tracking-tight text-slate-900 sm:text-5xl lg:text-[3.5rem] lg:leading-[1.08]">
+                  Laundry day,
+                  <br />
+                  <span className="text-primary">simplified.</span>
+                </h1>
 
-              <p className="mt-6 max-w-md text-lg leading-relaxed text-muted">
-                Book laundry pickup in seconds. Track your order in real time, pay securely, and
-                have freshly cleaned clothes delivered back to your doorstep.
-              </p>
+                <p className="mt-6 max-w-md text-lg leading-relaxed text-muted">
+                  Book laundry pickup in seconds. Track your order in real time, pay securely, and
+                  have freshly cleaned clothes delivered back to your doorstep.
+                </p>
 
-              <MarketingActions className="mt-8" gap="loose">
-                <ButtonLink href="/signup" size="lg" layout="responsive">
-                  Book a pickup
-                </ButtonLink>
-                <ButtonLink href="/partners" variant="outline" size="lg" layout="responsive">
-                  Become a partner
-                </ButtonLink>
-              </MarketingActions>
+                <MarketingActions className="mt-8" gap="loose">
+                  <ButtonLink href="/signup" size="lg" layout="responsive">
+                    Book a pickup
+                  </ButtonLink>
+                  <ButtonLink href="/partners" variant="outline" size="lg" layout="responsive">
+                    Become a partner
+                  </ButtonLink>
+                </MarketingActions>
+              </Reveal>
 
               {/* Trust chips */}
               <dl className="mt-10 grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-4">
-                {TRUST_CHIPS.map((chip) => (
-                  <div key={chip.title} className="flex flex-col items-start gap-2">
+                {TRUST_CHIPS.map((chip, index) => (
+                  <Reveal as="div" key={chip.title} delay={100 + index * 60} className="flex flex-col items-start gap-2">
                     <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
                       <chip.icon className="h-5 w-5" aria-hidden />
                     </span>
@@ -242,22 +270,26 @@ export function HomePage() {
                       <dt className="text-sm font-semibold text-slate-900">{chip.title}</dt>
                       <dd className="text-xs text-muted">{chip.subtitle}</dd>
                     </div>
-                  </div>
+                  </Reveal>
                 ))}
               </dl>
             </div>
 
             {/* Phone trio */}
             <div className="relative mx-auto flex items-center justify-center">
-              <PhoneFrame className="z-0 hidden -rotate-6 sm:block sm:-mr-10 sm:w-48">
-                <ScreenHome />
-              </PhoneFrame>
+              <div ref={phoneLeftRef} className="parallax-layer">
+                <PhoneFrame className="z-0 hidden -rotate-6 sm:block sm:-mr-10 sm:w-48">
+                  <ScreenHome />
+                </PhoneFrame>
+              </div>
               <PhoneFrame className="z-10 w-56 sm:w-60">
                 <ScreenBooking />
               </PhoneFrame>
-              <PhoneFrame className="z-0 hidden rotate-6 sm:block sm:-ml-10 sm:w-48">
-                <ScreenTracking />
-              </PhoneFrame>
+              <div ref={phoneRightRef} className="parallax-layer">
+                <PhoneFrame className="z-0 hidden rotate-6 sm:block sm:-ml-10 sm:w-48">
+                  <ScreenTracking />
+                </PhoneFrame>
+              </div>
             </div>
           </div>
         </div>
@@ -265,7 +297,7 @@ export function HomePage() {
 
       {/* ── Founding partners strip ── */}
       <section aria-label="Founding partners" className="border-y border-border/40 bg-surface">
-        <div className="marketing-container py-8">
+        <Reveal as="div" className="marketing-container py-8">
           <p className="text-center text-xs font-semibold uppercase tracking-widest text-muted-foreground">
             Trusted by our founding partners
           </p>
@@ -292,7 +324,7 @@ export function HomePage() {
               More partner laundries coming soon
             </li>
           </ul>
-        </div>
+        </Reveal>
       </section>
 
       {/* ── Features ── */}
@@ -303,12 +335,14 @@ export function HomePage() {
         />
 
         <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {FEATURES.map((feature) => {
+          {FEATURES.map((feature, index) => {
             const accent = accentClasses(feature.accent);
             return (
-              <article
+              <Reveal
+                as="article"
                 key={feature.title}
-                className="card flex h-full flex-col p-6 hover:shadow-[var(--shadow-elevated)]"
+                delay={(index % 3) * 60}
+                className="card flex h-full flex-col p-6 transition-[box-shadow,transform] duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow-elevated)]"
               >
                 <span
                   className={cn(
@@ -320,7 +354,7 @@ export function HomePage() {
                 </span>
                 <h3 className="mt-4 font-semibold text-slate-900">{feature.title}</h3>
                 <p className="mt-1.5 text-sm leading-relaxed text-muted">{feature.description}</p>
-              </article>
+              </Reveal>
             );
           })}
         </div>
@@ -335,7 +369,12 @@ export function HomePage() {
 
         <ol className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
           {HOW_IT_WORKS.map((item, index) => (
-            <li key={item.step} className="relative flex flex-col items-center text-center">
+            <Reveal
+              as="li"
+              key={item.step}
+              delay={index * 80}
+              className="relative flex flex-col items-center text-center"
+            >
               <div className="relative">
                 <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                   <item.icon className="h-7 w-7" aria-hidden />
@@ -357,14 +396,14 @@ export function HomePage() {
                   aria-hidden
                 />
               ) : null}
-            </li>
+            </Reveal>
           ))}
         </ol>
       </MarketingSection>
 
       {/* ── App showcase ── */}
       <MarketingSection>
-        <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] lg:gap-12">
+        <Reveal as="div" className="grid items-center gap-10 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] lg:gap-12">
           <div className="min-w-0">
             <h2 className="text-3xl font-bold tracking-tight text-slate-900">
               Everything you need in one app
@@ -395,14 +434,25 @@ export function HomePage() {
               <ScreenNotifications />
             </PhoneFrame>
           </div>
-        </div>
+        </Reveal>
       </MarketingSection>
 
       {/* ── Partner growth + live tracking ── */}
       <MarketingSection tint="muted">
         <div className="grid gap-6 lg:grid-cols-2">
           {/* Grow your laundry business */}
-          <div className="card-elevated flex flex-col p-8 sm:p-10">
+          <Reveal as="div" className="card-elevated flex flex-col overflow-hidden">
+            <div className="relative h-40 w-full sm:h-48">
+              <Image
+                src="https://images.unsplash.com/photo-1757252872525-01d7703533d9?fm=jpg&q=80&w=1200&auto=format&fit=crop"
+                alt=""
+                fill
+                sizes="(min-width: 1024px) 50vw, 100vw"
+                className="object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-white via-white/10 to-transparent" aria-hidden />
+            </div>
+            <div className="flex flex-1 flex-col p-8 pt-2 sm:p-10 sm:pt-4">
             <span className="badge-primary w-fit">For laundry shops</span>
             <h2 className="mt-4 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
               Grow your laundry business with {appConfig.name}
@@ -431,10 +481,15 @@ export function HomePage() {
                 Learn more
               </ButtonLink>
             </MarketingActions>
-          </div>
+            </div>
+          </Reveal>
 
           {/* Real-time tracking */}
-          <div className="card-elevated relative flex flex-col overflow-hidden bg-slate-900 p-8 text-white sm:p-10">
+          <Reveal
+            as="div"
+            delay={120}
+            className="card-elevated relative flex flex-col overflow-hidden bg-slate-900 p-8 text-white sm:p-10"
+          >
             {/* Grid backdrop + route line */}
             <div
               className="absolute inset-0 opacity-20 [background-image:linear-gradient(rgb(148_163_184/0.3)_1px,transparent_1px),linear-gradient(90deg,rgb(148_163_184/0.3)_1px,transparent_1px)] [background-size:32px_32px]"
@@ -493,7 +548,7 @@ export function HomePage() {
                 {serviceAreas[0]?.name ?? 'Your laundry shop'}
               </p>
             </div>
-          </div>
+          </Reveal>
         </div>
       </MarketingSection>
 
@@ -504,39 +559,40 @@ export function HomePage() {
           description={`What customers say about booking with ${appConfig.name}.`}
         />
 
-        <Carousel
-          className="mt-12"
-          items={CUSTOMER_REVIEWS}
-          getKey={(review) => review.name}
-          renderItem={(review) => (
-            <blockquote className="card h-full">
-              <div className="card-body flex h-full flex-col">
-                <StarRating count={review.rating} />
+        <Reveal as="div" className="mt-12">
+          <Carousel
+            items={CUSTOMER_REVIEWS}
+            getKey={(review) => review.name}
+            renderItem={(review) => (
+              <blockquote className="card h-full">
+                <div className="card-body flex h-full flex-col">
+                  <StarRating count={review.rating} />
 
-                <p className="mt-4 flex-1 text-sm leading-relaxed text-slate-700">
-                  &ldquo;{review.quote}&rdquo;
-                </p>
+                  <p className="mt-4 flex-1 text-sm leading-relaxed text-slate-700">
+                    &ldquo;{review.quote}&rdquo;
+                  </p>
 
-                <footer className="mt-4 flex items-center gap-3 border-t border-border/40 pt-4">
-                  <span
-                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold ${avatarBg[review.avatarColor]}`}
-                    aria-hidden
-                  >
-                    {review.initials}
-                  </span>
-                  <div>
-                    <p className="font-semibold text-slate-900">{review.name}</p>
-                    <p className="text-xs text-muted">{review.location} · Verified customer</p>
-                  </div>
-                </footer>
-              </div>
-            </blockquote>
-          )}
-        />
+                  <footer className="mt-4 flex items-center gap-3 border-t border-border/40 pt-4">
+                    <span
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold ${avatarBg[review.avatarColor]}`}
+                      aria-hidden
+                    >
+                      {review.initials}
+                    </span>
+                    <div>
+                      <p className="font-semibold text-slate-900">{review.name}</p>
+                      <p className="text-xs text-muted">{review.location} · Verified customer</p>
+                    </div>
+                  </footer>
+                </div>
+              </blockquote>
+            )}
+          />
+        </Reveal>
 
         <dl className="mt-12 grid grid-cols-2 gap-6 lg:grid-cols-4">
-          {STATS.map((stat) => (
-            <div key={stat.label} className="flex flex-col items-center text-center">
+          {STATS.map((stat, index) => (
+            <Reveal as="div" key={stat.label} delay={index * 70} className="flex flex-col items-center text-center">
               <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                 <stat.icon className="h-6 w-6" aria-hidden />
               </span>
@@ -546,7 +602,7 @@ export function HomePage() {
               <dd className="order-1 mt-3 text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
                 {stat.value}
               </dd>
-            </div>
+            </Reveal>
           ))}
         </dl>
       </MarketingSection>
@@ -559,11 +615,13 @@ export function HomePage() {
         />
 
         <div className="mt-12 grid gap-6 md:grid-cols-3">
-          {serviceAreas.slice(0, 3).map((branch) => (
-            <Link
+          {serviceAreas.slice(0, 3).map((branch, index) => (
+            <Reveal
+              as={Link}
               key={branch.id}
+              delay={index * 70}
               href={`/service-areas/${branch.id}`}
-              className="card flex h-full flex-col p-6 hover:shadow-[var(--shadow-elevated)]"
+              className="card flex h-full flex-col p-6 transition-[box-shadow,transform] duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow-elevated)]"
             >
               <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
                 <MapPin className="h-5 w-5" aria-hidden />
@@ -574,7 +632,7 @@ export function HomePage() {
               <p className="mt-4 text-xs text-muted-foreground">
                 ~{branch.radiusKm} km service radius
               </p>
-            </Link>
+            </Reveal>
           ))}
         </div>
 
@@ -603,10 +661,12 @@ export function HomePage() {
         />
 
         <div className="mt-12 grid gap-6 md:grid-cols-3">
-          {PRICING_TIERS.map((tier) => (
-            <div
+          {PRICING_TIERS.map((tier, index) => (
+            <Reveal
+              as="div"
               key={tier.service}
-              className="card-elevated flex h-full flex-col p-6 hover:shadow-[var(--shadow-elevated-lg)] sm:p-8"
+              delay={index * 70}
+              className="card-elevated flex h-full flex-col p-6 transition-[box-shadow,transform] duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow-elevated-lg)] sm:p-8"
             >
               <div className="flex items-start justify-between">
                 <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -632,7 +692,7 @@ export function HomePage() {
                   Book now
                 </ButtonLink>
               </div>
-            </div>
+            </Reveal>
           ))}
         </div>
 
@@ -643,8 +703,20 @@ export function HomePage() {
 
       {/* ── Download app banner ── */}
       <MarketingSection id="download-app" tint="muted">
-        <div className="card-elevated overflow-hidden bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900">
-          <div className="flex flex-col items-center gap-8 p-8 text-center sm:p-10 lg:flex-row lg:justify-between lg:text-left">
+        <Reveal as="div" className="card-elevated relative overflow-hidden bg-slate-900">
+          <Image
+            src="https://images.unsplash.com/photo-1598769398698-bab7f1b4cadd?fm=jpg&q=80&w=1600&auto=format&fit=crop"
+            alt=""
+            fill
+            sizes="100vw"
+            className="object-cover opacity-40"
+          />
+          <div
+            className="absolute inset-0 bg-gradient-to-r from-slate-900 via-slate-900/95 to-slate-900/70"
+            aria-hidden
+          />
+          <Bubbles />
+          <div className="relative flex flex-col items-center gap-8 p-8 text-center sm:p-10 lg:flex-row lg:justify-between lg:text-left">
             <div className="max-w-xl">
               <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
                 Download the {appConfig.name} app
@@ -677,7 +749,7 @@ export function HomePage() {
               </p>
             </div>
           </div>
-        </div>
+        </Reveal>
       </MarketingSection>
 
       {/* ── FAQ ── */}
@@ -688,8 +760,8 @@ export function HomePage() {
         />
 
         <div className="faq-list mx-auto mt-10 max-w-3xl">
-          {HOME_FAQS.map((item) => (
-            <details key={item.id} className="faq-item group">
+          {HOME_FAQS.map((item, index) => (
+            <Reveal as="details" key={item.id} delay={Math.min(index * 50, 250)} className="faq-item group">
               <summary className="faq-question">
                 <span>{item.question}</span>
                 <FaqChevron />
@@ -697,7 +769,7 @@ export function HomePage() {
               <div className="faq-answer-wrap">
                 <p className="faq-answer">{item.answer}</p>
               </div>
-            </details>
+            </Reveal>
           ))}
         </div>
 
@@ -710,8 +782,9 @@ export function HomePage() {
       </MarketingSection>
 
       {/* ── Join strip ── */}
-      <MarketingSection tint="bordered" className="pb-20 sm:pb-24">
-        <div className="flex flex-col items-center justify-between gap-6 text-center sm:flex-row sm:text-left">
+      <MarketingSection tint="bordered" className="relative overflow-hidden pb-20 sm:pb-24">
+        <Bubbles />
+        <Reveal as="div" className="relative flex flex-col items-center justify-between gap-6 text-center sm:flex-row sm:text-left">
           <div>
             <h2 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
               Work with {appConfig.name}
@@ -728,7 +801,7 @@ export function HomePage() {
               Drive with {appConfig.name}
             </ButtonLink>
           </MarketingActions>
-        </div>
+        </Reveal>
       </MarketingSection>
     </MarketingShell>
   );
