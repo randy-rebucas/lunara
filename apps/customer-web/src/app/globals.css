@@ -45,13 +45,50 @@
 
   /* Soap-bubble decoration for hero / banners */
   .bubble {
-    @apply pointer-events-none absolute rounded-full;
+    @apply pointer-events-none absolute overflow-hidden rounded-full;
     background:
-      radial-gradient(circle at 30% 30%, rgb(255 255 255 / 0.9) 0%, rgb(255 255 255 / 0.15) 35%, transparent 60%),
-      radial-gradient(circle at 70% 70%, rgb(147 197 253 / 0.35) 0%, transparent 55%);
+      /* thin iridescent film band near the rim */
+      radial-gradient(
+        circle at 50% 50%,
+        transparent 62%,
+        rgb(196 181 253 / 0.28) 72%,
+        rgb(134 239 172 / 0.22) 80%,
+        rgb(253 224 71 / 0.2) 87%,
+        rgb(96 165 250 / 0.3) 94%,
+        transparent 100%
+      ),
+      /* soft blue body tint */
+      radial-gradient(circle at 65% 70%, rgb(59 130 246 / 0.16) 0%, transparent 55%);
+    border: 1px solid rgb(255 255 255 / 0.55);
     box-shadow:
-      inset 0 0 12px rgb(191 219 254 / 0.55),
-      0 4px 16px rgb(37 99 235 / 0.08);
+      inset -5px -5px 12px rgb(37 99 235 / 0.18),
+      inset 4px 4px 8px rgb(255 255 255 / 0.7),
+      0 4px 16px rgb(37 99 235 / 0.1);
+  }
+
+  /* Primary glossy highlight — the big soft catchlight near the top-left of a soap bubble */
+  .bubble::before {
+    content: '';
+    position: absolute;
+    left: 16%;
+    top: 14%;
+    width: 34%;
+    height: 34%;
+    border-radius: 9999px;
+    background: radial-gradient(circle, rgb(255 255 255 / 0.95) 0%, rgb(255 255 255 / 0.3) 60%, transparent 100%);
+    filter: blur(0.5px);
+  }
+
+  /* Secondary highlight — a small crisp glint */
+  .bubble::after {
+    content: '';
+    position: absolute;
+    right: 26%;
+    bottom: 22%;
+    width: 10%;
+    height: 10%;
+    border-radius: 9999px;
+    background: rgb(255 255 255 / 0.65);
   }
 
   /* Canonical page width — matches home page header/main shell */
@@ -243,37 +280,46 @@
   }
 
   .bubble {
-    animation: bubble-float 8s ease-in-out infinite;
+    animation: bubble-rise 11s ease-in-out infinite;
   }
 
   .bubble:nth-of-type(2) {
-    animation-duration: 10s;
-    animation-delay: -3s;
-  }
-
-  .bubble:nth-of-type(3) {
-    animation-duration: 6.5s;
-    animation-delay: -1.5s;
-  }
-
-  .bubble:nth-of-type(4) {
-    animation-duration: 7.5s;
+    animation-duration: 14s;
     animation-delay: -4s;
   }
 
-  @keyframes bubble-float {
-    0%,
-    100% {
+  .bubble:nth-of-type(3) {
+    animation-duration: 9s;
+    animation-delay: -2s;
+  }
+
+  .bubble:nth-of-type(4) {
+    animation-duration: 12.5s;
+    animation-delay: -6s;
+  }
+
+  /* Rises from its start position, drifting slightly side to side, and fades out before
+     looping back to the bottom so the reset is invisible. */
+  @keyframes bubble-rise {
+    0% {
       transform: translate3d(0, 0, 0);
+      opacity: 0;
     }
-    25% {
-      transform: translate3d(3px, -9px, 0);
+    10% {
+      opacity: 1;
     }
-    50% {
-      transform: translate3d(-4px, -18px, 0);
+    35% {
+      transform: translate3d(8px, -45px, 0);
     }
-    75% {
-      transform: translate3d(3px, -8px, 0);
+    65% {
+      transform: translate3d(-6px, -95px, 0);
+    }
+    85% {
+      opacity: 1;
+    }
+    100% {
+      transform: translate3d(4px, -150px, 0);
+      opacity: 0;
     }
   }
 }
