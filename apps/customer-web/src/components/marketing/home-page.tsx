@@ -474,10 +474,10 @@ export function HomePage() {
             </ul>
 
             <MarketingActions className="mt-8">
-              <ButtonLink href="/partners/apply" size="lg" layout="responsive">
+              <ButtonLink href="/partners/apply" layout="responsive">
                 Become a founding partner
               </ButtonLink>
-              <ButtonLink href="/partners" variant="outline" size="lg" layout="responsive">
+              <ButtonLink href="/partners" variant="outline" layout="responsive">
                 Learn more
               </ButtonLink>
             </MarketingActions>
