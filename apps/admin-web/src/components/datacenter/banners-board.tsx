@@ -24,10 +24,33 @@ function formatValidity(b: Banner) {
   return `${b.startsAt ? fmt(b.startsAt) : 'Now'} – ${b.endsAt ? fmt(b.endsAt) : 'Open'}`;
 }
 
+type SortKey = 'order' | 'title' | 'status' | 'startsAt';
+
+function sortBanners(banners: Banner[], sortKey: SortKey): Banner[] {
+  const sorted = [...banners];
+  switch (sortKey) {
+    case 'title':
+      sorted.sort((a, b) => a.title.localeCompare(b.title));
+      break;
+    case 'status':
+      sorted.sort((a, b) => Number(b.isActive) - Number(a.isActive));
+      break;
+    case 'startsAt':
+      sorted.sort((a, b) => (a.startsAt ?? '').localeCompare(b.startsAt ?? ''));
+      break;
+    case 'order':
+    default:
+      sorted.sort((a, b) => a.sortOrder - b.sortOrder);
+      break;
+  }
+  return sorted;
+}
+
 export function BannersBoard() {
   const load = useCallback(() => adminFetch<Banner[]>('/admin/banners'), []);
   const { data, loading, error, reload } = useAdminQuery(load, []);
-  const banners = data ?? [];
+  const [sortKey, setSortKey] = useState<SortKey>('order');
+  const banners = sortBanners(data ?? [], sortKey);
 
   const [showCreate, setShowCreate] = useState(false);
   const [title, setTitle] = useState('');
@@ -108,6 +131,36 @@ export function BannersBoard() {
     }
   }
 
+  async function move(b: Banner, direction: -1 | 1) {
+    const ordered = sortBanners(data ?? [], 'order');
+    const index = ordered.findIndex((x) => x._id === b._id);
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= ordered.length) return;
+    const [moved] = ordered.splice(index, 1);
+    ordered.splice(targetIndex, 0, moved);
+
+    // Banners can share the same sortOrder (e.g. all default to 0), so a plain
+    // swap of two equal values is a no-op. Re-normalize the whole list to
+    // sequential positions instead so every move produces a visible change.
+    setActioningId(b._id);
+    try {
+      const patches = ordered
+        .map((item, i) => ({ item, i }))
+        .filter((pair) => pair.item.sortOrder !== pair.i);
+      await Promise.all(
+        patches.map((pair) =>
+          adminFetch(`/admin/banners/${pair.item._id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ sortOrder: pair.i }),
+          }),
+        ),
+      );
+      await reload();
+    } finally {
+      setActioningId(null);
+    }
+  }
+
   async function remove(b: Banner) {
     if (!window.confirm(`Delete banner "${b.title}"?`)) return;
     setActioningId(b._id);
@@ -133,9 +186,24 @@ export function BannersBoard() {
         title="Banners"
         description="Active banners shown in the customer apps, in the order below."
         actions={
-          <button type="button" className="btn-primary btn-sm" onClick={() => setShowCreate((v) => !v)}>
-            {showCreate ? 'Cancel' : 'New banner'}
-          </button>
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-1.5 text-sm text-slate-600">
+              Sort by
+              <select
+                className="rounded-lg border border-border px-2 py-1.5 text-sm"
+                value={sortKey}
+                onChange={(e) => setSortKey(e.target.value as SortKey)}
+              >
+                <option value="order">Manual order</option>
+                <option value="title">Title</option>
+                <option value="status">Status</option>
+                <option value="startsAt">Start date</option>
+              </select>
+            </label>
+            <button type="button" className="btn-primary btn-sm" onClick={() => setShowCreate((v) => !v)}>
+              {showCreate ? 'Cancel' : 'New banner'}
+            </button>
+          </div>
         }
       />
 
@@ -215,7 +283,7 @@ export function BannersBoard() {
         </Card>
       )}
 
-      <div className="list-stack">
+      <div className="flex flex-col gap-4">
         {banners.map((b) => (
           <Card key={b._id}>
             <CardBody className="flex items-center gap-4">
@@ -240,6 +308,28 @@ export function BannersBoard() {
                 {b.isActive ? 'Active' : 'Inactive'}
               </span>
               <div className="flex shrink-0 gap-2">
+                {sortKey === 'order' && (
+                  <div className="flex flex-col gap-0.5">
+                    <button
+                      type="button"
+                      aria-label="Move up"
+                      className="btn-outline btn-sm px-2 py-0.5 leading-none disabled:opacity-30"
+                      disabled={actioningId === b._id || banners[0]?._id === b._id}
+                      onClick={() => move(b, -1)}
+                    >
+                      ▲
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Move down"
+                      className="btn-outline btn-sm px-2 py-0.5 leading-none disabled:opacity-30"
+                      disabled={actioningId === b._id || banners[banners.length - 1]?._id === b._id}
+                      onClick={() => move(b, 1)}
+                    >
+                      ▼
+                    </button>
+                  </div>
+                )}
                 <button
                   type="button"
                   className="btn-outline btn-sm"
