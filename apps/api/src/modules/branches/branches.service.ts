@@ -1096,11 +1096,23 @@ export class BranchesService {
     await this.ensureSeeded();
     const branches = await this.branchModel
       .find(this.operationalBranchFilter())
-      .select('name city province serviceRadiusKm logoUrl machines')
+      .select('name city province serviceRadiusKm logoUrl machines partnerUserId')
       .sort({ name: 1 });
+    const ownerProfiles = await this.userProfileModel
+      .find({ userId: { $in: branches.map((b) => b.partnerUserId) } })
+      .select('userId displayName avatarUrl')
+      .lean();
+    const ownerByPartnerId = new Map(ownerProfiles.map((p) => [p.userId.toString(), p]));
     return {
       success: true,
-      data: branches.map((b) => this.toPublicBranch(b)),
+      data: branches.map((b) => {
+        const owner = ownerByPartnerId.get(b.partnerUserId.toString());
+        return {
+          ...this.toPublicBranch(b),
+          partnerId: b.partnerUserId.toString(),
+          partnerName: owner?.displayName,
+        };
+      }),
     };
   }
 

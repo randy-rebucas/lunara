@@ -48,6 +48,7 @@ import {
   STATS,
   TRUST_CHIPS,
   fetchActiveServiceAreas,
+  groupServiceAreasByPartner,
   type ServiceArea,
 } from './home-page-data';
 
@@ -269,16 +270,23 @@ export function HomePage() {
             Trusted by our founding partners
           </p>
           <ul className="mt-5 flex flex-wrap items-center justify-center gap-x-10 gap-y-4">
-            {serviceAreas.slice(0, 4).map((branch) => (
-              <li key={branch.id}>
-                <Link
-                  href={`/service-areas/${branch.id}`}
-                  className="text-lg font-bold tracking-tight text-slate-400 transition-colors hover:text-primary"
-                >
-                  {branch.name}
-                </Link>
-              </li>
-            ))}
+            {groupServiceAreasByPartner(serviceAreas)
+              .slice(0, 4)
+              .map((partner) => (
+                <li key={partner.partnerId} className="text-center">
+                  <Link
+                    href={`/service-areas/${partner.branches[0].id}`}
+                    className="text-lg font-bold tracking-tight text-slate-400 transition-colors hover:text-primary"
+                  >
+                    {partner.partnerName}
+                  </Link>
+                  {partner.branches.length > 1 ? (
+                    <p className="mt-0.5 text-xs font-medium text-muted">
+                      {partner.branches.map((b) => b.city).join(' · ')}
+                    </p>
+                  ) : null}
+                </li>
+              ))}
             <li className="flex items-center gap-2 text-sm font-medium text-muted">
               <Store className="h-4 w-4 text-primary" aria-hidden />
               More partner laundries coming soon
