@@ -10,6 +10,7 @@ import { assertProductionJwtSecrets } from './common/config/jwt-config';
 import { assertProductionCorsOrigins, getAllowedOrigins } from './common/config/cors-config';
 import { assertProductionPaymentConfig } from './common/config/payment-config';
 import { assertProductionMongoUri, assertProductionRedisUrl } from './common/config/database-config';
+import { assertProductionEmailConfig } from './common/config/email-config';
 
 async function bootstrap() {
   assertProductionJwtSecrets();
@@ -17,6 +18,7 @@ async function bootstrap() {
   assertProductionPaymentConfig();
   assertProductionMongoUri();
   assertProductionRedisUrl();
+  assertProductionEmailConfig();
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     rawBody: true,

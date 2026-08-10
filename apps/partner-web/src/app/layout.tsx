@@ -1,10 +1,11 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { Toaster } from 'sonner';
 import brandIcon from '@lunara/brand/icon';
 import { AuthGuard } from '../components/auth-guard';
 import { ErrorBoundary } from '../components/error-boundary';
 import { PortalShell } from '../components/portal-shell';
+import { ServiceWorkerRegister } from '../components/sw-register';
 import './globals.css';
 
 const inter = Inter({
@@ -16,10 +17,22 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: 'Lunara Partner Portal',
   description: 'Laundry shop operations — orders, staff, inventory, revenue',
+  manifest: '/manifest.json',
   icons: {
     icon: brandIcon.src,
-    apple: brandIcon.src,
+    apple: '/icons/icon-192.png',
   },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Lunara Partner',
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: '#4F46E5',
+  width: 'device-width',
+  initialScale: 1,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -32,6 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </AuthGuard>
         </ErrorBoundary>
         <Toaster position="bottom-right" richColors />
+        <ServiceWorkerRegister />
       </body>
     </html>
   );
