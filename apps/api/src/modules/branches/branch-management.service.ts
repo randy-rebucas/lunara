@@ -7,7 +7,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { OrderStatus, UserRole } from '@lunara/types';
-import { BRANCH_TYPE_LABELS, type BranchPerformanceMetrics } from '@lunara/utils';
+import { BRANCH_TYPE_LABELS, GARMENT_CATALOG, type BranchPerformanceMetrics } from '@lunara/utils';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { BranchesService } from './branches.service';
@@ -331,6 +331,9 @@ export class BranchManagementService {
       machines: DEFAULT_MACHINES,
       isActive: true,
       location: { type: 'Point', coordinates: dto.coordinates },
+      // New shops start dry cleaning fully unconfigured — the partner opts garments in one by
+      // one, rather than silently offering (and getting booked for) every catalog item on day one.
+      hiddenGarmentItemIds: GARMENT_CATALOG.map((g) => g.id),
     });
 
     return {

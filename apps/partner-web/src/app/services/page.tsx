@@ -230,6 +230,7 @@ export default function ServicesPage() {
   const [hiddenServiceTypes, setHiddenServiceTypes] = useState<string[]>([]);
   const [hiddenAddonSlugs, setHiddenAddonSlugs] = useState<string[]>([]);
   const [hiddenGarmentItemIds, setHiddenGarmentItemIds] = useState<string[]>([]);
+  const [garmentPrices, setGarmentPrices] = useState<Record<string, string>>({});
   const [collapsedGarmentCategories, setCollapsedGarmentCategories] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -282,7 +283,10 @@ export default function ServicesPage() {
     );
     setHiddenServiceTypes(pricing.hiddenServiceTypes);
     setHiddenAddonSlugs(pricing.hiddenAddonSlugs);
+    const catalog = pricing.garmentCatalog ?? GARMENT_CATALOG;
     setHiddenGarmentItemIds(pricing.hiddenGarmentItemIds);
+    setCollapsedGarmentCategories(new Set(getGarmentCategories(catalog)));
+    setGarmentPrices(Object.fromEntries(catalog.map((g) => [g.id, String(g.price)])));
     setServiceUnits(
       Object.fromEntries(pricing.services.map((s) => [s.type, s.pricingUnit ?? 'flat_bag'])),
     );
@@ -337,7 +341,14 @@ export default function ServicesPage() {
         }),
         partnerFetch(`/partner/branches/${selectedBranchId}/hidden-catalog`, {
           method: 'PATCH',
-          body: JSON.stringify({ hiddenServiceTypes, hiddenAddonSlugs, hiddenGarmentItemIds }),
+          body: JSON.stringify({
+            hiddenServiceTypes,
+            hiddenAddonSlugs,
+            hiddenGarmentItemIds,
+            garmentPricing: (pricing.garmentCatalog ?? GARMENT_CATALOG)
+              .filter((g) => garmentPrices[g.id] !== '' && garmentPrices[g.id] != null)
+              .map((g) => ({ garmentId: g.id, price: Number(garmentPrices[g.id]) })),
+          }),
         }),
       ]);
       setSaved(true);
@@ -366,6 +377,10 @@ export default function ServicesPage() {
     setHiddenGarmentItemIds((prev) =>
       hide ? [...prev, garmentId] : prev.filter((id) => id !== garmentId),
     );
+  }
+
+  function setGarmentPrice(garmentId: string, value: string) {
+    setGarmentPrices((prev) => ({ ...prev, [garmentId]: value }));
   }
 
   function toggleGarmentCategory(garmentIds: string[], offerAll: boolean) {
@@ -974,18 +989,29 @@ export default function ServicesPage() {
                           {garments.map((g) => {
                             const isHiddenLocal = hiddenGarmentItemIds.includes(g.id);
                             return (
-                              <label
+                              <div
                                 key={g.id}
                                 className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs text-muted"
                               >
+                                <label className="flex flex-1 items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={!isHiddenLocal}
+                                    onChange={(e) => toggleHiddenGarment(g.id, !e.target.checked)}
+                                  />
+                                  <span className="flex-1 text-slate-900">{g.label}</span>
+                                </label>
+                                <span>₱</span>
                                 <input
-                                  type="checkbox"
-                                  checked={!isHiddenLocal}
-                                  onChange={(e) => toggleHiddenGarment(g.id, !e.target.checked)}
+                                  type="number"
+                                  min={0}
+                                  step="0.01"
+                                  disabled={isHiddenLocal}
+                                  className="input-field w-20 py-1 text-xs disabled:opacity-50"
+                                  value={garmentPrices[g.id] ?? String(g.price)}
+                                  onChange={(e) => setGarmentPrice(g.id, e.target.value)}
                                 />
-                                <span className="flex-1 text-slate-900">{g.label}</span>
-                                <span>{formatPeso(g.price)}</span>
-                              </label>
+                              </div>
                             );
                           })}
                         </div>

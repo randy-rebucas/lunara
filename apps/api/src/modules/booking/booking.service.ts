@@ -171,6 +171,7 @@ export class BookingService {
     if (!catalogService) throw new BadRequestException('Invalid or inactive service type');
 
     const garmentPriced = isGarmentPricedBookingType(service.bookingType);
+    const branchGarmentCatalog = this.branchesService.resolveBranchGarmentCatalog(branch);
     if (garmentPriced) {
       if (!service.garmentSelections?.length) {
         throw new BadRequestException('Select at least one garment for this service');
@@ -311,6 +312,7 @@ export class BookingService {
       priceableService,
       [],
       0,
+      branchGarmentCatalog,
     );
   }
 

@@ -721,6 +721,8 @@ export function calculateQuote(
   addonOptions?: BookingAddonOption[],
   /** Resolved server-side per address (city vs. provincial tier); falls back to the flat default for client-side previews before the server confirms. */
   deliveryFeeOverride?: number,
+  /** This shop's own garment price overrides (falls back to GARMENT_CATALOG when omitted). */
+  garmentCatalog?: GarmentItem[],
 ): QuoteBreakdown {
   const service = serviceOverride ?? getService(input.bookingType);
   if (!service) throw new Error('Unknown service type');
@@ -744,7 +746,7 @@ export function calculateQuote(
   const pieceCount = input.enteredPieceCount;
 
   const serviceSubtotal = garmentPriced
-    ? computeGarmentSubtotal(input.garmentSelections ?? [])
+    ? computeGarmentSubtotal(input.garmentSelections ?? [], garmentCatalog ?? GARMENT_CATALOG)
     : computeServiceSubtotal(pricingMode, input.rates, {
         bag,
         weightKg,

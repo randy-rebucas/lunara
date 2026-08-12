@@ -240,12 +240,24 @@ export class BranchesService {
     }));
   }
 
-  /** GARMENT_CATALOG filtered to what this shop actually does dry cleaning for — mirrors how
-   * serializeShopPricing/serializeShopAddonPricing filter by hiddenServiceTypes/hiddenAddonSlugs. */
+  /** GARMENT_CATALOG with each item's price swapped for this shop's own override, when set —
+   * mirrors resolveBranchServicePrice/resolveAddonRateForUnit for garment pricing. */
+  resolveBranchGarmentCatalog(branch: BranchDocument): typeof GARMENT_CATALOG {
+    const overrides = new Map((branch.garmentPricing ?? []).map((p) => [p.garmentId, p.price]));
+    if (overrides.size === 0) return GARMENT_CATALOG;
+    return GARMENT_CATALOG.map((garment) =>
+      overrides.has(garment.id) ? { ...garment, price: overrides.get(garment.id)! } : garment,
+    );
+  }
+
+  /** GARMENT_CATALOG (with this shop's price overrides applied) filtered to what this shop
+   * actually does dry cleaning for — mirrors how serializeShopPricing/serializeShopAddonPricing
+   * filter by hiddenServiceTypes/hiddenAddonSlugs. */
   private serializeShopGarmentCatalog(branch: BranchDocument, includeHidden = false) {
-    if (includeHidden) return GARMENT_CATALOG;
+    const catalog = this.resolveBranchGarmentCatalog(branch);
+    if (includeHidden) return catalog;
     const hidden = new Set(branch.hiddenGarmentItemIds ?? []);
-    return GARMENT_CATALOG.filter((garment) => !hidden.has(garment.id));
+    return catalog.filter((garment) => !hidden.has(garment.id));
   }
 
   private async serializeShopPricing(branch: BranchDocument, includeHidden = false) {
@@ -255,8 +267,11 @@ export class BranchesService {
       services
         .filter((service) => includeHidden || !hidden.has(service.type))
         .map(async (service) => {
-          const basePricePerKg = await this.resolveBranchServicePrice(branch, service.type);
+          // Inline resolveBranchServicePrice's fallback instead of calling it: `service` here
+          // already carries the same pricePerKg that a re-query by type would return, so calling
+          // it would re-fetch this exact document from Mongo once per service for no new data.
           const override = branch.servicePricing?.find((p) => p.serviceType === service.type);
+          const basePricePerKg = override?.basePricePerKg ?? service.pricePerKg ?? 0;
           return {
             type: service.type,
             label: service.label,
@@ -340,10 +355,21 @@ export class BranchesService {
               isCustom: false,
             };
           }
-          const basePrice = await this.resolveBranchAddonPrice(branch, addon.id);
+          // Inline resolveBranchAddonPrice/resolveAddonRateForUnit's fallbacks instead of calling
+          // them: `addon` here already carries the same catalog price those would otherwise
+          // re-query Mongo for, once per addon, for no new data.
           const override = branch.addonPricing?.find((p) => p.addonSlug === addon.id);
           const pricingUnit = override?.pricingUnit ?? BranchPricingMode.FLAT_BAG;
-          const activeRate = await this.resolveAddonRateForUnit(branch, addon.id, pricingUnit);
+          const basePrice = override?.basePrice ?? addon.price;
+          const rateByUnit: Partial<Record<BranchPricingMode, number | undefined>> = {
+            [BranchPricingMode.PER_KG]: override?.basePricePerKg,
+            [BranchPricingMode.PER_LOAD]: override?.basePricePerLoad,
+            [BranchPricingMode.PER_PIECE]: override?.basePricePerPiece,
+            [BranchPricingMode.PER_PAIR]: override?.basePricePerPair,
+            [BranchPricingMode.PER_ITEM]: override?.basePricePerItem,
+            [BranchPricingMode.FIXED]: override?.fixedPrice,
+          };
+          const activeRate = rateByUnit[pricingUnit] ?? (pricingUnit in rateByUnit ? 0 : basePrice);
           return {
             slug: addon.id,
             label: addon.label,
@@ -587,10 +613,18 @@ export class BranchesService {
   }
 
   async updateHiddenCatalog(branchId: string, dto: UpdateBranchHiddenCatalogDto) {
+    if (dto.garmentPricing !== undefined) {
+      const catalogIds = new Set(GARMENT_CATALOG.map((g) => g.id));
+      const unknown = dto.garmentPricing.find((p) => !catalogIds.has(p.garmentId));
+      if (unknown) {
+        throw new BadRequestException(`Unknown garment id: ${unknown.garmentId}`);
+      }
+    }
     const update: Record<string, unknown> = {};
     if (dto.hiddenServiceTypes !== undefined) update.hiddenServiceTypes = dto.hiddenServiceTypes;
     if (dto.hiddenAddonSlugs !== undefined) update.hiddenAddonSlugs = dto.hiddenAddonSlugs;
     if (dto.hiddenGarmentItemIds !== undefined) update.hiddenGarmentItemIds = dto.hiddenGarmentItemIds;
+    if (dto.garmentPricing !== undefined) update.garmentPricing = dto.garmentPricing;
     const branch = await this.branchModel.findByIdAndUpdate(branchId, { $set: update }, { new: true });
     if (!branch) throw new NotFoundException('Branch not found');
     return {
@@ -599,6 +633,7 @@ export class BranchesService {
         hiddenServiceTypes: branch.hiddenServiceTypes,
         hiddenAddonSlugs: branch.hiddenAddonSlugs,
         hiddenGarmentItemIds: branch.hiddenGarmentItemIds,
+        garmentPricing: branch.garmentPricing,
       },
     };
   }
@@ -973,7 +1008,16 @@ export class BranchesService {
       [BranchPricingMode.PER_ITEM]: 'basePricePerItem',
       [BranchPricingMode.FIXED]: 'fixedPrice',
     };
+    const activeAddons = await this.catalogService.listActiveAddons();
+    const customAddons = await this.customAddonModel.find({ branchId: new Types.ObjectId(branchId) });
+    const knownSlugs = new Set([
+      ...activeAddons.map((a) => a.id),
+      ...customAddons.map((c) => `${CUSTOM_ADDON_ID_PREFIX}${c.slug}`),
+    ]);
     for (const row of pricing) {
+      if (!knownSlugs.has(row.addonSlug)) {
+        throw new BadRequestException(`Unknown add-on slug: ${row.addonSlug}`);
+      }
       const rateKey = row.pricingUnit ? rateKeyByUnit[row.pricingUnit] : undefined;
       if (rateKey && row[rateKey] == null) {
         throw new BadRequestException(

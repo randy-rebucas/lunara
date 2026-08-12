@@ -1,5 +1,15 @@
-import { IsArray, IsEnum, IsOptional, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsArray, IsEnum, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
 import { BookingType } from '@lunara/types';
+
+export class BranchGarmentPriceDto {
+  @IsString()
+  garmentId!: string;
+
+  @IsNumber()
+  @Min(0)
+  price!: number;
+}
 
 export class UpdateBranchHiddenCatalogDto {
   @IsOptional()
@@ -16,4 +26,10 @@ export class UpdateBranchHiddenCatalogDto {
   @IsArray()
   @IsString({ each: true })
   hiddenGarmentItemIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BranchGarmentPriceDto)
+  garmentPricing?: BranchGarmentPriceDto[];
 }

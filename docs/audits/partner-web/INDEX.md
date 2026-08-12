@@ -21,7 +21,7 @@ One row per module audited with the `audit-module` skill. Findings counts are
 | Reports | [reports.md](reports.md) | 2026-07-23 | 0 / 1 |
 | Revenue | [revenue.md](revenue.md) | 2026-07-23 | 0 / 1 |
 | Scan tag | [scan.md](scan.md) | 2026-07-23 | 0 / 0 |
-| Services & pricing | [services.md](services.md) | 2026-07-23 | 0 / 3 |
+| Services & pricing | [services.md](services.md) | 2026-08-12 (re-audited) | 0 / 7 |
 | Settlements | [settlements.md](settlements.md) | 2026-07-23 | 0 / 1 |
 | Shelf lookup | [shelf-lookup.md](shelf-lookup.md) | 2026-07-23 | 0 / 1 |
 | Shop settings | [settings.md](settings.md) | 2026-07-23 | 1 / 2 |

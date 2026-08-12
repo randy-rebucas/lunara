@@ -189,6 +189,18 @@ class BranchAddonPrice {
   pricingUnit?: BranchPricingMode;
 }
 
+@Schema({ _id: false })
+class BranchGarmentPrice {
+  /** GARMENT_CATALOG item id (from @lunara/utils). */
+  @Prop({ required: true })
+  garmentId!: string;
+
+  /** Shop's own price for this garment, charged directly to the customer (garments carry no
+   * separate markup step — mirrors GARMENT_CATALOG.price). */
+  @Prop({ required: true, min: 0 })
+  price!: number;
+}
+
 @Schema({ timestamps: true, collection: 'branches' })
 export class Branch {
   @Prop({ required: true, unique: true })
@@ -286,6 +298,11 @@ export class Branch {
    * Empty = offers every garment. Only meaningful when DRY_CLEANING isn't itself hidden. */
   @Prop({ type: [String], default: [] })
   hiddenGarmentItemIds!: string[];
+
+  /** This shop's own price per garment (dry cleaning); falls back to GARMENT_CATALOG's reference
+   * price when a garment id is missing. */
+  @Prop({ type: [BranchGarmentPrice], default: [] })
+  garmentPricing!: BranchGarmentPrice[];
 
   @Prop({ type: PartnerPortalSettings, default: () => ({ ...DEFAULT_PARTNER_PORTAL_SETTINGS }) })
   portalSettings!: PartnerPortalSettings;
