@@ -16,6 +16,7 @@ import { BranchCustomService, BranchCustomServiceSchema } from './schemas/branch
 import { BranchCustomAddon, BranchCustomAddonSchema } from './schemas/branch-custom-addon.schema';
 import { ServiceAreasModule } from '../service-areas/service-areas.module';
 import { SettingsModule } from '../settings/settings.module';
+import { PartnersModule } from '../partners/partners.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { SettingsModule } from '../settings/settings.module';
     CatalogModule,
     ServiceAreasModule,
     SettingsModule,
+    PartnersModule,
     forwardRef(() => RidersModule),
   ],
   controllers: [BranchesController, PublicBranchesController],

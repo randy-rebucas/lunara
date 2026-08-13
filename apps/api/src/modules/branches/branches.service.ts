@@ -22,6 +22,7 @@ import { CloudinaryStorageService } from '../../common/storage/cloudinary-storag
 import { CatalogService } from '../catalog/catalog.service';
 import { ServiceAreasService } from '../service-areas/service-areas.service';
 import { SettingsService } from '../settings/settings.service';
+import { PartnerTerritoriesService } from '../partners/partner-territories.service';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { Rider, RiderDocument } from '../riders/schemas/rider.schema';
 import { RiderAssignmentService } from '../riders/rider-assignment.service';
@@ -138,6 +139,7 @@ export class BranchesService {
     private cloudinaryStorageService: CloudinaryStorageService,
     private serviceAreasService: ServiceAreasService,
     private settingsService: SettingsService,
+    private partnerTerritoriesService: PartnerTerritoriesService,
     @Inject(forwardRef(() => RiderAssignmentService))
     private riderAssignmentService: RiderAssignmentService,
   ) {}
@@ -1423,6 +1425,23 @@ export class BranchesService {
     const nearest = await this.findNearestForAddress(address, partnerUserId);
     const branches = await this.branchModel.find(this.operationalBranchFilter(partnerUserId));
 
+    // Unscoped (shared admin queue) evaluation: don't let an address inside another partner's
+    // exclusive territory get ranked against branches that aren't that partner's.
+    if (!partnerUserId) {
+      const exclusiveOwnerIds = await this.partnerTerritoriesService.findExclusiveOwnerUserIdsContaining([
+        nearest.customerCoordinates.longitude,
+        nearest.customerCoordinates.latitude,
+      ]);
+      if (exclusiveOwnerIds.size > 0) {
+        const allowedBranchIds = new Set(
+          branches
+            .filter((b) => exclusiveOwnerIds.has(b.partnerUserId.toString()))
+            .map((b) => b._id.toString()),
+        );
+        nearest.ranked = nearest.ranked.filter((r) => allowedBranchIds.has(r.branchId));
+      }
+    }
+
     // Exclude shops that have opted out of this booking type (Branch.hiddenServiceTypes) —
     // dispatch (manual admin queue and autoDispatchOrder) must never route an order to a shop
     // that explicitly said it doesn't offer this service.
@@ -1494,6 +1513,18 @@ export class BranchesService {
     estimatedWeightKg: number,
     partnerUserId: Types.ObjectId,
   ) {
+    const territory = await this.partnerTerritoriesService.findByOwnerUserId(partnerUserId);
+    if (territory) {
+      const coords = resolveCoordinates(address.city, address.latitude, address.longitude);
+      const inTerritory = this.partnerTerritoriesService.isAddressInTerritory(territory, coords);
+      if (!inTerritory) {
+        // Per Multi-tenant.md decision #3 — no fallback to the shared admin dispatch queue,
+        // checkout must fail outright when the address is outside this partner's own turf.
+        throw new BadRequestException(
+          'This address is outside our delivery area for this shop. Please try a different address.',
+        );
+      }
+    }
     return this.buildDispatchEvaluations(address, bookingType, estimatedWeightKg, partnerUserId);
   }
 

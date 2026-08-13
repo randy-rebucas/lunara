@@ -355,6 +355,24 @@ export interface PartnerBrandConfig {
   status: 'draft' | 'pending_review' | 'live';
 }
 
+export interface PartnerTerritory {
+  _id: string;
+  partnerId: string;
+  name: string;
+  slug: string;
+  boundaryType: 'radius' | 'polygon';
+  center?: { type: string; coordinates: [number, number] };
+  radiusKm?: number;
+  boundary?: { type: 'Polygon' | 'MultiPolygon'; coordinates: unknown };
+  isExclusive: boolean;
+  status: 'active' | 'pending' | 'suspended';
+  primaryContactName?: string;
+  primaryContactPhone?: string;
+  opsNotes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface RecipientInfo {
   email: string | null;
   phone: string | null;

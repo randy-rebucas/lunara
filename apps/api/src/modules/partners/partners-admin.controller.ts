@@ -22,7 +22,9 @@ import {
   SetPartnerActiveDto,
   UpdatePartnerBrandConfigDto,
 } from './dto/partner.dto';
+import { UpsertPartnerTerritoryDto } from './dto/partner-territory.dto';
 import { PartnersService } from './partners.service';
+import { PartnerTerritoriesService } from './partner-territories.service';
 
 const ASSET_FIELDS = ['logoUrl', 'iconUrl', 'splashUrl', 'faviconUrl'] as const;
 type AssetField = (typeof ASSET_FIELDS)[number];
@@ -34,6 +36,7 @@ export class PartnersAdminController {
   constructor(
     private readonly partnersService: PartnersService,
     private readonly cloudinaryStorageService: CloudinaryStorageService,
+    private readonly partnerTerritoriesService: PartnerTerritoriesService,
   ) {}
 
   @Get()
@@ -85,5 +88,21 @@ export class PartnersAdminController {
     const { previousUrl, ...response } = await this.partnersService.setAssetUrl(id, field as AssetField, result.secure_url);
     await this.cloudinaryStorageService.deleteFile('lunara/partner-brands', previousUrl);
     return response;
+  }
+
+  @Get(':id/territory')
+  async getTerritory(@Param('id') id: string) {
+    const territory = await this.partnerTerritoriesService.findByPartnerId(id);
+    return { success: true, data: territory };
+  }
+
+  @Post(':id/territory')
+  async upsertTerritory(@Param('id') id: string, @Body() dto: UpsertPartnerTerritoryDto) {
+    return this.partnerTerritoriesService.upsertForPartner(id, dto);
+  }
+
+  @Patch(':id/territory')
+  async patchTerritory(@Param('id') id: string, @Body() dto: UpsertPartnerTerritoryDto) {
+    return this.partnerTerritoriesService.upsertForPartner(id, dto);
   }
 }
