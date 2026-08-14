@@ -57,7 +57,7 @@ export function CommandCenterBoard({ partnerId }: { partnerId: string }) {
               Command Center
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted sm:text-base">
-              Today's operations for this partner's territory.
+              Today&apos;s operations for this partner&apos;s territory.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
