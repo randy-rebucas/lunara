@@ -332,6 +332,11 @@ export class AdminController {
     return this.adminService.getShopDetail(id);
   }
 
+  @Get('shops/:id/command-center')
+  getCommandCenter(@Param('id') id: string) {
+    return this.adminService.getCommandCenter(id);
+  }
+
   @Patch('shops/:id')
   setShopActive(@Param('id') id: string, @Body() dto: SetShopActiveDto) {
     return this.branchManagementService.setPartnerActive(id, dto.isActive);

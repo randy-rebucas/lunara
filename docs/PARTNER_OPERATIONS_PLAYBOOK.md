@@ -41,7 +41,7 @@ The board updates live via websocket — you don't need to manually refresh to s
 
 Go to **Services** → pick the branch you're editing (only shown if you have more than one).
 
-- **Base service prices** (per kg, per service type) and **add-on prices** — edit inline, saved on submit. Customers pay your price plus Lunara's markup on add-ons; the base wash service uses a flat platform-wide bag price regardless of your per-kg rate — see [`PARTNER_PRICING_GUIDE.md`](./PARTNER_PRICING_GUIDE.md) for exactly how that works.
+- **Base service prices** (per kg, per service type) and **add-on prices** — edit inline, saved on submit. Customers pay your price plus Lunara's markup on add-ons; by default the base wash service uses a flat platform-wide bag price regardless of your per-kg rate, but if your shop is switched to per-kilo or per-load mode you set your own base wash price — see [`PARTNER_PRICING_GUIDE.md`](./PARTNER_PRICING_GUIDE.md) for exactly how that works.
 - **Hide a built-in service/add-on** you don't offer — toggle it off; it's hidden, not deleted, so you can bring it back later.
 - **Add a custom service or add-on** — your own item at your own price, managed separately from the standard catalog (its own add/delete, not part of the bulk pricing save).
 
@@ -60,7 +60,7 @@ Edit quantity and low-stock threshold inline. Turn on **"Notify on low stock"** 
 
 ## 5. Staff
 
-**Staff** page → **Add staff**: email, phone, display name, and a password (min 8 characters, confirmed twice). If you have more than one branch, you must also pick which branch this staff member works at.
+**Staff** page → **Add staff**: email and a password (min 8 characters, confirmed twice) are required; phone (min 10 characters if provided) and display name are optional. If you have more than one branch, you must also pick which branch this staff member works at.
 
 You can reassign a staff member to a different branch at any time from the same page. The stats bar shows how many staff are active, total active jobs across your team, and flags anyone currently juggling more than 3 active jobs as "busy" — useful for spotting when you need to redistribute work.
 
@@ -76,7 +76,7 @@ Refunds are **admin-only** — you won't see a refunds page in partner-web, and 
 
 - **Revenue** page — your day-by-day earnings chart and a list of recent orders, filterable by All / Cash / Digital payment. Cash orders show whether cash has actually been collected yet. **Export** gives you a CSV. The copy is explicit: *amounts shown are your payout after Lunara's processing*, not the raw order total.
 - **Settlements** page — your batched payouts. Each settlement row expands to show the individual orders it covers. You can also see your current **payable balance** (what's owed but not yet settled) and your configured payout method.
-- **Payout cadence**: settlements are paid out **weekly, every Saturday**, via whichever method you've configured.
+- **Payout cadence**: when auto-settlement is enabled, settlements are generated **weekly, every Sunday**, via whichever method you've configured. Admins can also generate settlements manually at other times.
 
 For exactly how the commission/fee math works, see [`platform-commission.md`](./platform-commission.md).
 
@@ -107,7 +107,7 @@ Staff logins see Preferences as read-only ("Only shop partners can change these 
 | How do I get more branches added? | Ask Lunara admin — new branches are created for you, marked as variants of your one main shop. |
 | Why can't my staff advance an order someone else claimed? | Jobs are claimed per staff member once accepted — only that person (or you, the owner) can advance it. |
 | Can I issue a refund myself? | No — refunds are admin-only. |
-| When do I get paid? | Weekly, every Saturday, to your configured payout method. |
+| When do I get paid? | Weekly, every Sunday, when auto-settlement is on (admins can also settle manually), to your configured payout method. |
 | Do promo codes cost me money? | No — see [`PARTNER_PRICING_GUIDE.md`](./PARTNER_PRICING_GUIDE.md). |
 | Where do I turn off new orders temporarily? | Settings → Preferences → "Accepting new orders." |
 

@@ -1237,6 +1237,124 @@ export class AdminService {
     };
   }
 
+  /** Partner-scoped operational snapshot for the Command Center dashboard — same shape of
+   * calculation as the network-wide control tower pulse, filtered to one partner's branches. */
+  async getCommandCenter(id: string) {
+    const partner = await this.userModel.findOne({ _id: id, role: UserRole.PARTNER });
+    if (!partner) {
+      throw new NotFoundException('Partner not found');
+    }
+    const partnerId = partner._id;
+
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const activeNowStatuses = Object.values(OrderStatus).filter(
+      (s) => !COMPLETED.includes(s) && !CANCELLED.includes(s) && s !== OrderStatus.PENDING && s !== OrderStatus.PENDING_DISPATCH,
+    );
+
+    const branches = await this.branchModel
+      .find({ partnerUserId: partnerId })
+      .select('name isActive assignedRiderId maxActiveOrders')
+      .lean();
+
+    const [
+      todayCreated,
+      inProgressNow,
+      activeCustomerIds,
+      ratingRow,
+      pickupsToday,
+      deliveredToday,
+      capacityCounts,
+    ] = await Promise.all([
+      this.orderModel
+        .find({ partnerId, createdAt: { $gte: startOfDay } })
+        .select('status total')
+        .lean(),
+      this.orderModel.countDocuments({ partnerId, status: { $in: activeNowStatuses } }),
+      this.orderModel.distinct('customerId', { partnerId, createdAt: { $gte: startOfDay } }),
+      this.reviewModel.aggregate<{ _id: null; avgRating: number; reviewCount: number }>([
+        { $match: { partnerId } },
+        { $group: { _id: null, avgRating: { $avg: '$rating' }, reviewCount: { $sum: 1 } } },
+      ]),
+      this.orderModel
+        .find({ partnerId, 'pickup.collectedAt': { $gte: startOfDay } })
+        .select('pickup.collectedAt slaPickupDueAt')
+        .lean(),
+      this.orderModel
+        .find({ partnerId, 'delivery.deliveredAt': { $gte: startOfDay } })
+        .select('delivery.deliveredAt scheduledDeliveryAt')
+        .lean(),
+      Promise.all(
+        branches.map((b) =>
+          this.orderModel.countDocuments({ branchId: b._id, status: { $in: activeNowStatuses } }),
+        ),
+      ),
+    ]);
+
+    let completedToday = 0;
+    let cancelledToday = 0;
+    let revenueToday = 0;
+    for (const o of todayCreated) {
+      if (COMPLETED.includes(o.status)) {
+        completedToday += 1;
+        revenueToday += o.total;
+      } else if (CANCELLED.includes(o.status)) {
+        cancelledToday += 1;
+      }
+    }
+
+    const rateOf = (onTime: number, measured: number) =>
+      measured > 0 ? Math.round((onTime / measured) * 100) : null;
+
+    let pickupOnTime = 0;
+    for (const o of pickupsToday) {
+      const collectedAt = o.pickup?.collectedAt;
+      if (!collectedAt || !o.slaPickupDueAt) continue;
+      if (new Date(collectedAt).getTime() <= new Date(o.slaPickupDueAt).getTime() + 60 * 60000) pickupOnTime += 1;
+    }
+
+    let deliveryOnTime = 0;
+    for (const o of deliveredToday) {
+      const deliveredAt = o.delivery?.deliveredAt;
+      if (!deliveredAt || !o.scheduledDeliveryAt) continue;
+      if (new Date(deliveredAt).getTime() <= new Date(o.scheduledDeliveryAt).getTime() + 60 * 60000) deliveryOnTime += 1;
+    }
+
+    const rating = ratingRow[0];
+
+    return {
+      success: true,
+      data: {
+        today: {
+          orders: todayCreated.length,
+          completed: completedToday,
+          inProgress: inProgressNow,
+          revenue: revenueToday,
+          activeCustomers: activeCustomerIds.length,
+          activeRiders: new Set(branches.filter((b) => b.assignedRiderId).map((b) => b.assignedRiderId!.toString()))
+            .size,
+          activeBranches: branches.filter((b) => b.isActive).length,
+        },
+        operations: {
+          pickupSlaRate: rateOf(pickupOnTime, pickupsToday.length),
+          deliverySlaRate: rateOf(deliveryOnTime, deliveredToday.length),
+          cancellationRate:
+            todayCreated.length > 0 ? Math.round((cancelledToday / todayCreated.length) * 100) : 0,
+          customerRating: rating ? Math.round(rating.avgRating * 10) / 10 : null,
+        },
+        capacity: branches.map((b, i) => ({
+          branchId: b._id.toString(),
+          branchName: b.name,
+          activeOrders: capacityCounts[i],
+          maxActiveOrders: b.maxActiveOrders,
+          utilizationPct:
+            b.maxActiveOrders > 0 ? Math.round((capacityCounts[i] / b.maxActiveOrders) * 100) : 0,
+        })),
+      },
+    };
+  }
+
   async getRevenue() {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { filterBySearch, ListControls } from '../list-controls';
+import { StatTile, TILE_TONES } from '../ui/stat-tile';
 import { adminFetch } from '../../lib/admin-api';
 import { formatPesoWhole } from '../../lib/format-peso';
 import { useAdminQuery } from '../../lib/use-admin-query';
@@ -163,48 +164,6 @@ function formatHours(hours: DayHours[]) {
 }
 
 // ── Small blocks ─────────────────────────────────────────────────────────
-const TILE_TONES = {
-  primary: 'bg-primary/[0.04] ring-primary/15',
-  accent: 'bg-accent/[0.04] ring-accent/20',
-  secondary: 'bg-secondary/[0.04] ring-secondary/15',
-  amber: 'bg-amber-500/[0.04] ring-amber-500/20',
-  rose: 'bg-rose-500/[0.04] ring-rose-500/20',
-} as const;
-
-function StatTile({
-  label,
-  value,
-  sub,
-  tone,
-  onClick,
-  active,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  tone: keyof typeof TILE_TONES;
-  onClick?: () => void;
-  active?: boolean;
-}) {
-  const cls = `rounded-xl p-4 text-left ring-1 transition-all ${TILE_TONES[tone]} ${
-    active ? 'ring-2 ring-primary/40' : ''
-  }`;
-  const inner = (
-    <>
-      <p className="text-xs font-medium text-muted">{label}</p>
-      <p className="dc-value mt-1">{value}</p>
-      {sub ? <p className="dc-sublabel mt-0.5">{sub}</p> : null}
-    </>
-  );
-  return onClick ? (
-    <button type="button" onClick={onClick} className={`${cls} hover:shadow-[var(--shadow-elevated)]`}>
-      {inner}
-    </button>
-  ) : (
-    <div className={cls}>{inner}</div>
-  );
-}
-
 function RailSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="border-t border-border/60 px-5 py-4 first:border-0">
@@ -876,6 +835,12 @@ function PartnerDetailsDrawer({
             <div className="border-t border-border/60 px-5 py-4">
               <p className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-muted">Quick actions</p>
               <div className="space-y-2">
+                <Link
+                  href={`/partners/${shop._id}/command-center`}
+                  className="btn-outline btn-sm block w-full text-left"
+                >
+                  Open command center
+                </Link>
                 <button type="button" className="btn-outline btn-sm w-full text-left" onClick={() => onAddBranch(shop)}>
                   Add branch
                 </button>

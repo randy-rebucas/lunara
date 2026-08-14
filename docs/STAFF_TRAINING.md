@@ -29,9 +29,12 @@ never other branches or other partners.
 | View revenue / settlements / ledger balance | ❌ | ✅ |
 | Change shop settings (hours, services, pricing) | ❌ | ✅ |
 
-Role gating is enforced server-side (`@Roles(PARTNER, STAFF, ADMIN)` on
-each endpoint in `apps/api/src/modules/partner/partner.controller.ts`), so
-the UI hides actions staff shouldn't see, and the API rejects them too.
+Role gating is enforced server-side (`@Roles(...)` decorators per endpoint
+in `apps/api/src/modules/partner/partner.controller.ts` — staff-facing
+endpoints allow PARTNER, STAFF, and ADMIN, while owner-only actions like
+staff management restrict to PARTNER, and some reporting endpoints allow
+PARTNER and ADMIN but not STAFF), so the UI hides actions staff shouldn't
+see, and the API rejects them too.
 
 ---
 
@@ -119,7 +122,7 @@ Orders move through these in-shop stages (Kanban-style — staff can move an
 order freely between any of the 8 stages, not strictly linearly, since
 real shop floors don't always work step-by-step):
 
-`Sorting → Washing → Drying → Folding → Ironing → Quality check → Ready for delivery`
+`Received → Sorting → Washing → Drying → Folding → Ironing → Quality check → Ready for delivery`
 
 - Use **Advance** to push an order to the next expected stage, or **Move**
   to place it directly on a specific stage (e.g. sending it back to
@@ -191,7 +194,7 @@ Staff should hand these off rather than attempt them:
 |---|---|---|
 | Incoming orders | `/orders/incoming` | Accept new assigned orders |
 | Order detail | `/orders/[id]` | Receiving, shelf slot, processing, dispatch |
-| Processing queue | `/orders/queue` (via processing views) | Work the Kanban pipeline |
+| Processing queue | `/orders` | Work the Kanban pipeline |
 | Order history | `/orders/history` | Look up past orders |
 | Find on shelf | `/shelf-lookup` | Locate a bag by slot or tag code |
 | Inventory | `/inventory` | Check/update branch stock |

@@ -471,9 +471,14 @@ export default function PartnerBrandingDetailPage() {
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">{partner.legalName}</h1>
           <p className="mt-1 text-sm text-muted">{partner.slug}</p>
         </div>
-        <button type="button" className="btn-outline btn-sm" onClick={toggleActive} disabled={saving}>
-          {partner.isActive ? 'Deactivate' : 'Activate'}
-        </button>
+        <div className="flex items-center gap-2">
+          <Link href={`/partners/${partner._id}/command-center`} className="btn-outline btn-sm">
+            Command center
+          </Link>
+          <button type="button" className="btn-outline btn-sm" onClick={toggleActive} disabled={saving}>
+            {partner.isActive ? 'Deactivate' : 'Activate'}
+          </button>
+        </div>
       </div>
 
       {actionError ? <div className="alert-error mb-4" role="alert">{actionError}</div> : null}

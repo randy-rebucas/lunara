@@ -6,6 +6,7 @@ import { CompareLineChart, DonutChart } from './dash-charts';
 import type { DonutSegment } from './dash-charts';
 import { FleetMap, FleetMapLegend, LEG_COLORS } from './fleet-map';
 import { LiveBadge } from '../ui/stat-card';
+import { StatTile } from '../ui/stat-tile';
 import { adminFetch } from '../../lib/admin-api';
 import { formatOrderId, formatSlugLabel } from '../../lib/format-label';
 import { formatPeso } from '../../lib/format-peso';
@@ -147,60 +148,6 @@ function hourLabel(hour: number): string {
 }
 
 // ── Small blocks ───────────────────────────────────────────────────────────
-const TILE_TONES = {
-  primary: 'bg-primary/[0.04] ring-primary/15',
-  secondary: 'bg-secondary/[0.04] ring-secondary/15',
-  accent: 'bg-accent/[0.04] ring-accent/20',
-  amber: 'bg-amber-500/[0.04] ring-amber-500/20',
-  violet: 'bg-violet-500/[0.04] ring-violet-500/20',
-  rose: 'bg-rose-500/[0.04] ring-rose-500/20',
-} as const;
-
-function StatTile({
-  label,
-  value,
-  sub,
-  delta,
-  tone,
-  href,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  delta?: number | null;
-  tone: keyof typeof TILE_TONES;
-  href?: string;
-}) {
-  const trendClass =
-    delta == null || delta === 0
-      ? 'dc-metric-trend-flat'
-      : delta > 0
-        ? 'dc-metric-trend-up'
-        : 'dc-metric-trend-down';
-  const inner = (
-    <>
-      <p className="text-xs font-medium text-muted">{label}</p>
-      <p className="dc-value mt-1">{value}</p>
-      <div className="mt-1 flex items-center gap-1.5">
-        {delta != null ? (
-          <span className={`dc-metric-trend ${trendClass}`}>
-            {delta > 0 ? '▲' : delta < 0 ? '▼' : '–'} {Math.abs(delta)}%
-          </span>
-        ) : null}
-        {sub ? <span className="dc-sublabel">{sub}</span> : null}
-      </div>
-    </>
-  );
-  const cls = `block rounded-xl p-4 ring-1 ${TILE_TONES[tone]}`;
-  return href ? (
-    <Link href={href} className={`${cls} transition-all hover:shadow-[var(--shadow-elevated)]`}>
-      {inner}
-    </Link>
-  ) : (
-    <div className={cls}>{inner}</div>
-  );
-}
-
 function PanelHeader({
   title,
   sub,

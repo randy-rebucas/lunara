@@ -25,7 +25,7 @@ Role-by-role journeys through the Lunara platform. Each journey lists the steps,
 4. **Book laundry** — `/book` — service type → address → schedule → weight → add-ons → estimate → confirm
    - No shop is chosen by the customer (managed network — admin assigns later)
 5. **Pay** — `/checkout/{orderId}` — PayMongo (GCash/Maya/card), cash on pickup/delivery, or wallet
-   - If paying by wallet and balance is low: **top up** at `/wallet` (₱500 increments)
+   - If paying by wallet and balance is low: **top up** at `/wallet` (preset amounts ₱500/₱1000/₱2000)
    - Order status → `pending_dispatch`
 6. **Track order** — `/orders/{id}` — timeline view, live WebSocket updates, rider GPS once en route
    - Notifications bell shows dispatch/status events with deep links (customer-mobile also gets local banners + FCM if EAS build)
@@ -79,7 +79,7 @@ Role-by-role journeys through the Lunara platform. Each journey lists the steps,
 **Entry:** partner-web (http://localhost:3003), login `staff@lunara.dev` / `password123` (redirects to processing queue)
 
 1. **View queue** — accept a job, or process if partner already assigned
-2. **Step through stages** — weight → tag → sort → wash → dry → fold → iron (optional) → QC → pack, each with optional progress photo URL
+2. **Step through stages** — received → sorting → washing → drying → folding → ironing (optional) → quality check → ready for delivery, each with optional progress photo URL
 3. **Ready for delivery** — final stage triggers admin dispatcher to assign a delivery rider
 
 ---
@@ -91,8 +91,8 @@ Role-by-role journeys through the Lunara platform. Each journey lists the steps,
 1. **Login**
 2. **Complete profile + KYC documents** — driver's license, OR/CR, NBI clearance, selfie — required before going online (`POST /riders/online` returns 403 until admin-approved)
 3. **Go online** — joins `riders:online` room, becomes eligible for offers
-4. **Pickup task** — accept offer/assignment → navigate → arrive → verify customer (last 4 of phone) → collect → photo → generate receipt → drop at shop (₱80 earned)
-5. **Delivery task** (after partner marks ready) — accept → navigate → pick up from shop → out for delivery → arrive → customer verifies/signs → photo → complete (₱120 earned)
+4. **Pickup task** — accept offer/assignment → navigate → arrive → verify customer (last 4 of phone) → collect → photo → generate receipt → drop at shop (payout is admin-configurable via platform settings; fallback ₱35)
+5. **Delivery task** (after partner marks ready) — accept → navigate → pick up from shop → out for delivery → arrive → customer verifies/signs → photo → complete (payout is admin-configurable via platform settings; fallback ₱35)
 6. **Earnings** — view today/total on Home and Earnings screen
 7. **Notifications** — bell + local banners for new offers/assignments (FCM if EAS dev build); tap to open `/pickup/[id]` or `/delivery/[id]`
 8. **SOS** — emergency button on active pickup/delivery screens — notifies dispatch + shares live location
@@ -123,7 +123,7 @@ rider_assigned_pickup ─► Rider: arrive → verify → collect → photo → 
 received_at_shop ──────► Partner: receive → verify weight → confirm items
         │
         ▼
-Processing stages (sorting → washing → drying → folding → ironing → QC → packing)
+Processing stages (received → sorting → washing → drying → folding → ironing → quality check)
         │
         ▼
 ready_for_delivery ────► Admin assigns delivery rider

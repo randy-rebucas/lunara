@@ -82,7 +82,7 @@ module.exports = {
     ...appJson.extra,
     eas: {
       ...appJson.extra?.eas,
-      projectId: manifest?.easProjectId ?? 'fc74f707-99b0-483a-ae64-6157a2946569',
+      projectId: manifest?.easProjectId ?? appJson.extra.eas.projectId,
     },
     privacyUrl: `${websiteUrl}/privacy`,
     termsUrl: `${websiteUrl}/terms`,

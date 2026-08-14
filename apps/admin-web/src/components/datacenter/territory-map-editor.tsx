@@ -4,11 +4,16 @@
  * Draws/edits a partner territory's service-area boundary on Google Maps — either a draggable,
  * resizable radius circle, or a drawn/editable polygon. Follows the same "mount vanilla
  * google.maps.* overlay inside a useMap() hook" pattern as branch-address-editor.tsx, since
- * @vis.gl/react-google-maps has no first-class Circle/Polygon/DrawingManager wrapper.
+ * @vis.gl/react-google-maps has no first-class Circle/Polygon wrapper.
+ *
+ * Polygon tracing is implemented by hand (plain map click listeners building up a
+ * `google.maps.Polygon`) rather than `google.maps.drawing.DrawingManager` — Google deprecated the
+ * Drawing library in Aug 2025 and is removing it entirely, so `importLibrary('drawing')` no longer
+ * resolves.
  */
 
-import { APIProvider, Map, Marker, useMap, useMapsLibrary } from '@vis.gl/react-google-maps';
-import { useEffect, useRef, useState } from 'react';
+import { APIProvider, Map, Marker, useMap } from '@vis.gl/react-google-maps';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 
 const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? '';
 
@@ -83,28 +88,32 @@ function RadiusOverlay({ center, radiusKm, onChange }: RadiusOverlayProps) {
   return null;
 }
 
-/** @types/google.maps ships a stub `DrawingManager` (no constructor args, no setMap/
- * setDrawingMode) despite the real runtime API supporting them — this is the minimal shape we
- * actually use. */
-interface DrawingManagerLike {
-  setMap(map: google.maps.Map | null): void;
-  setDrawingMode(mode: google.maps.drawing.OverlayType | null): void;
+export interface PolygonDrawHandle {
+  /** Closes off the in-progress trace (needs >= 3 points) and commits it as the editable polygon. */
+  finish(): void;
+  /** Discards the in-progress trace without changing the existing polygon. */
+  cancel(): void;
 }
 
 interface PolygonOverlayProps {
   /** Closed ring [lng, lat][] (first point repeated at the end), or null when no polygon yet. */
   path: LngLat[] | null;
   drawing: boolean;
-  onDrawingStarted: () => void;
+  onPointCountChange: (count: number) => void;
+  onDrawingFinished: () => void;
   onChange: (path: LngLat[]) => void;
 }
 
-/** Editable polygon; supports drawing a fresh one via the Drawing library when `drawing` is true. */
-function PolygonOverlay({ path, drawing, onDrawingStarted, onChange }: PolygonOverlayProps) {
+/** Editable polygon; while `drawing` is true, clicks on the map append vertices to a fresh trace. */
+const PolygonOverlay = forwardRef<PolygonDrawHandle, PolygonOverlayProps>(function PolygonOverlay(
+  { path, drawing, onPointCountChange, onDrawingFinished, onChange },
+  ref,
+) {
   const map = useMap();
-  const drawingLib = useMapsLibrary('drawing');
   const polygonRef = useRef<google.maps.Polygon | null>(null);
-  const drawingManagerRef = useRef<DrawingManagerLike | null>(null);
+  const drawPointsRef = useRef<google.maps.LatLng[]>([]);
+  const tracePolygonRef = useRef<google.maps.Polygon | null>(null);
+  const keptRef = useRef(false);
 
   const emitFromPolygon = (polygon: google.maps.Polygon) => {
     const latLngs = polygon.getPath().getArray();
@@ -114,9 +123,17 @@ function PolygonOverlay({ path, drawing, onDrawingStarted, onChange }: PolygonOv
     onChange(ring);
   };
 
-  // Render/update the editable polygon from `path`.
+  const attachEditableListeners = (polygon: google.maps.Polygon) => {
+    const emit = () => emitFromPolygon(polygon);
+    polygon.getPath().addListener('set_at', emit);
+    polygon.getPath().addListener('insert_at', emit);
+    polygon.getPath().addListener('remove_at', emit);
+    polygon.addListener('dragend', emit);
+  };
+
+  // Render/update the editable polygon from `path` (only while not actively tracing a new one).
   useEffect(() => {
-    if (!map) return;
+    if (!map || drawing) return;
     if (!path || path.length < 4) {
       polygonRef.current?.setMap(null);
       polygonRef.current = null;
@@ -135,15 +152,11 @@ function PolygonOverlay({ path, drawing, onDrawingStarted, onChange }: PolygonOv
         fillOpacity: 0.12,
       });
       polygonRef.current = polygon;
-      const emit = () => emitFromPolygon(polygon);
-      polygon.getPath().addListener('set_at', emit);
-      polygon.getPath().addListener('insert_at', emit);
-      polygon.getPath().addListener('remove_at', emit);
-      polygon.addListener('dragend', emit);
+      attachEditableListeners(polygon);
     } else {
       polygonRef.current.setPath(ring);
     }
-  }, [map, path]);
+  }, [map, path, drawing]);
 
   useEffect(() => {
     return () => {
@@ -152,57 +165,61 @@ function PolygonOverlay({ path, drawing, onDrawingStarted, onChange }: PolygonOv
     };
   }, [map]);
 
-  // Drawing-mode: let the admin trace a new polygon from scratch.
-  // @types/google.maps' DrawingManager stub is incomplete (no constructor args, no
-  // setMap/setDrawingMode) even though the real runtime class supports them — cast through the
-  // permissive constructor below rather than fighting the stub.
+  // Tracing mode: collect click points into a plain (non-editable) polygon preview.
   useEffect(() => {
-    if (!map || !drawingLib || !drawing) return;
-    const DrawingManagerCtor = drawingLib.DrawingManager as unknown as new (
-      opts: Record<string, unknown>,
-    ) => DrawingManagerLike;
-    const manager = new DrawingManagerCtor({
-      drawingMode: google.maps.drawing.OverlayType.POLYGON,
-      drawingControl: false,
-      polygonOptions: {
-        editable: true,
-        draggable: true,
-        strokeColor: '#4f46e5',
-        strokeWeight: 2,
-        fillColor: '#4f46e5',
-        fillOpacity: 0.12,
-      },
+    if (!map || !drawing) return;
+    drawPointsRef.current = [];
+    keptRef.current = false;
+    const trace = new google.maps.Polygon({
+      map,
+      paths: [],
+      editable: false,
+      draggable: false,
+      clickable: false,
+      strokeColor: '#4f46e5',
+      strokeWeight: 2,
+      fillColor: '#4f46e5',
+      fillOpacity: 0.12,
     });
-    manager.setMap(map);
-    drawingManagerRef.current = manager;
+    tracePolygonRef.current = trace;
 
-    const completeListener = google.maps.event.addListener(
-      manager,
-      'polygoncomplete',
-      (polygon: google.maps.Polygon) => {
-        manager.setDrawingMode(null);
-        polygonRef.current?.setMap(null);
-        polygonRef.current = polygon;
-        const emit = () => emitFromPolygon(polygon);
-        polygon.getPath().addListener('set_at', emit);
-        polygon.getPath().addListener('insert_at', emit);
-        polygon.getPath().addListener('remove_at', emit);
-        polygon.addListener('dragend', emit);
-        emit();
-        onDrawingStarted();
-      },
-    );
+    const clickListener = map.addListener('click', (e: google.maps.MapMouseEvent) => {
+      if (!e.latLng) return;
+      drawPointsRef.current.push(e.latLng);
+      trace.setPath(drawPointsRef.current);
+      onPointCountChange(drawPointsRef.current.length);
+    });
 
     return () => {
-      google.maps.event.removeListener(completeListener);
-      manager.setMap(null);
-      drawingManagerRef.current = null;
+      clickListener.remove();
+      if (!keptRef.current) {
+        trace.setMap(null);
+      }
+      tracePolygonRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, drawingLib, drawing]);
+  }, [map, drawing]);
+
+  useImperativeHandle(ref, () => ({
+    finish() {
+      const trace = tracePolygonRef.current;
+      if (!trace || drawPointsRef.current.length < 3) return;
+      keptRef.current = true;
+      trace.setOptions({ editable: true, draggable: true, clickable: true });
+      polygonRef.current?.setMap(null);
+      polygonRef.current = trace;
+      attachEditableListeners(trace);
+      emitFromPolygon(trace);
+      onDrawingFinished();
+    },
+    cancel() {
+      onPointCountChange(0);
+      onDrawingFinished();
+    },
+  }));
 
   return null;
-}
+});
 
 export interface TerritoryMapEditorProps {
   boundaryType: 'radius' | 'polygon';
@@ -224,6 +241,8 @@ export function TerritoryMapEditor({
   heightClass = 'h-80',
 }: TerritoryMapEditorProps) {
   const [drawing, setDrawing] = useState(false);
+  const [pointCount, setPointCount] = useState(0);
+  const drawHandleRef = useRef<PolygonDrawHandle>(null);
 
   if (!GOOGLE_MAPS_API_KEY) {
     return (
@@ -234,20 +253,45 @@ export function TerritoryMapEditor({
   }
 
   return (
-    <APIProvider apiKey={GOOGLE_MAPS_API_KEY} libraries={['drawing', 'marker']}>
+    <APIProvider apiKey={GOOGLE_MAPS_API_KEY} libraries={['marker']}>
       <div className="space-y-2">
         {boundaryType === 'polygon' ? (
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              className="btn-outline btn-sm"
-              onClick={() => setDrawing(true)}
-              disabled={drawing}
-            >
-              {polygonPath ? 'Redraw boundary' : 'Draw boundary'}
-            </button>
-            {drawing ? <span className="text-xs text-muted">Click the map to trace the boundary; double-click to finish.</span> : null}
-            {!drawing && polygonPath ? (
+            {!drawing ? (
+              <button
+                type="button"
+                className="btn-outline btn-sm"
+                onClick={() => {
+                  setPointCount(0);
+                  setDrawing(true);
+                }}
+              >
+                {polygonPath ? 'Redraw boundary' : 'Draw boundary'}
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="btn-primary btn-sm"
+                  disabled={pointCount < 3}
+                  onClick={() => drawHandleRef.current?.finish()}
+                >
+                  Finish ({pointCount} point{pointCount === 1 ? '' : 's'})
+                </button>
+                <button
+                  type="button"
+                  className="btn-outline btn-sm"
+                  onClick={() => drawHandleRef.current?.cancel()}
+                >
+                  Cancel
+                </button>
+              </>
+            )}
+            {drawing ? (
+              <span className="text-xs text-muted">
+                Click the map to place boundary points, then Finish (needs at least 3).
+              </span>
+            ) : polygonPath ? (
               <span className="text-xs text-muted">Drag the points to fine-tune, or redraw from scratch.</span>
             ) : null}
           </div>
@@ -261,6 +305,7 @@ export function TerritoryMapEditor({
             defaultZoom={12}
             gestureHandling="greedy"
             disableDefaultUI={false}
+            disableDoubleClickZoom={drawing}
             style={{ width: '100%', height: '100%', borderRadius: '0.5rem' }}
           >
             {boundaryType === 'radius' ? (
@@ -277,9 +322,11 @@ export function TerritoryMapEditor({
               </>
             ) : (
               <PolygonOverlay
+                ref={drawHandleRef}
                 path={polygonPath}
                 drawing={drawing}
-                onDrawingStarted={() => setDrawing(false)}
+                onPointCountChange={setPointCount}
+                onDrawingFinished={() => setDrawing(false)}
                 onChange={onPolygonChange}
               />
             )}
