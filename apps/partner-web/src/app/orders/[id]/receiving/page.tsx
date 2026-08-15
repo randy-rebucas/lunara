@@ -152,6 +152,23 @@ export default function ShopReceivingPage() {
         </div>
       )}
 
+      {!view.canReceive && !view.canVerifyWeight && !view.canConfirmItems && !view.isComplete && (
+        <div className="card card-body mt-6 border-l-4 border-amber-400">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+              <Icon d={ICONS.truck} />
+            </span>
+            <div className="min-w-0">
+              <p className="font-semibold text-slate-900">Waiting for rider</p>
+              <p className="mt-1 text-sm text-muted">
+                The laundry has been picked up and is on its way to your shop. This page will
+                unlock once the rider drops it off — check back shortly or refresh.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {view.canReceive && (
         <ActionCard icon={ICONS.box} title="Receive laundry" description="Confirm bags arrived from the rider.">
           <label className="form-label" htmlFor="receive-note">
