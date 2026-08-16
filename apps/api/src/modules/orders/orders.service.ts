@@ -428,6 +428,78 @@ export class OrdersService {
     throw new BadRequestException('This order can no longer be cancelled');
   }
 
+  async cancelByAdmin(adminUserId: string, orderId: string, reason: string) {
+    const order = await this.orderModel.findById(orderId);
+    if (!order) throw new NotFoundException('Order not found');
+
+    if (
+      [OrderStatus.COMPLETED, OrderStatus.CANCELLED, OrderStatus.REFUNDED].includes(order.status)
+    ) {
+      throw new BadRequestException('This order can no longer be cancelled');
+    }
+
+    const customerId = order.customerId.toString();
+    const paidPayment = await this.paymentModel
+      .findOne({ orderId: order._id, status: PaymentStatus.PAID })
+      .sort({ createdAt: -1 });
+
+    let refunded = false;
+    if (
+      paidPayment &&
+      paidPayment.status !== PaymentStatus.REFUNDED &&
+      (paidPayment.method === PaymentMethod.WALLET || isPaymongoMethod(paidPayment.method))
+    ) {
+      await this.walletsService.credit(
+        customerId,
+        paidPayment.amount,
+        `refund-order-${orderId}`,
+        `Refund for order ${orderId} cancelled by admin: ${reason}`,
+      );
+      paidPayment.status = PaymentStatus.REFUNDED;
+      await paidPayment.save();
+
+      await this.ledgerService.post(
+        `cancel-refund:${paidPayment._id.toString()}`,
+        'refund',
+        paidPayment._id.toString(),
+        [
+          {
+            accountType: 'order_revenue_clearing',
+            direction: 'debit',
+            amount: paidPayment.amount,
+            description: `Refund reverses recognized revenue for order ${orderId.slice(-6)} cancelled by admin`,
+          },
+          {
+            accountType: 'customer_wallet_liability',
+            accountSubject: customerId,
+            direction: 'credit',
+            amount: paidPayment.amount,
+            description: `Refund credited to wallet for order ${orderId.slice(-6)} cancelled by admin`,
+          },
+        ],
+      );
+
+      refunded = true;
+    }
+
+    order.status = OrderStatus.CANCELLED;
+    order.statusHistory.push({
+      status: OrderStatus.CANCELLED,
+      timestamp: new Date(),
+      note: reason,
+      updatedBy: adminUserId,
+    });
+    await order.save();
+
+    this.trackingGateway.emitOrderStatus(order._id.toString(), OrderStatus.CANCELLED);
+    this.trackingGateway.emitDispatchQueueUpdated({
+      reason: 'admin_cancelled',
+      orderId: order._id.toString(),
+    });
+
+    return { success: true, data: { cancelled: true, refunded } };
+  }
+
   private readonly RESCHEDULABLE_STATUSES = [
     OrderStatus.PENDING,
     OrderStatus.PENDING_DISPATCH,

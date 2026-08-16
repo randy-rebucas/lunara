@@ -172,6 +172,7 @@ export default function AdminOrderOpsPage() {
   const [reassignMode, setReassignMode] = useState(false);
   const [conflictNote, setConflictNote] = useState('');
   const [resolution, setResolution] = useState('');
+  const [cancelReason, setCancelReason] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -234,6 +235,8 @@ export default function AdminOrderOpsPage() {
     o.dispatchStatus === 'dispatched' &&
     !partnerAccepted &&
     (o.status === 'shop_assigned' || o.status === 'confirmed' || o.status === 'ready_for_delivery');
+
+  const canCancelOrder = !['completed', 'cancelled', 'refunded'].includes(o.status);
 
   const opsState = deriveOrderOpsState(o, { awaitingPartnerAccept, canAssignPickup, canAssignDelivery });
   const opsCopy = orderOpsCopy[opsState];
@@ -737,6 +740,40 @@ export default function AdminOrderOpsPage() {
                 </div>
               </div>
             </OpsPanel>
+
+            {canCancelOrder && (
+              <OpsPanel
+                title="Cancel order"
+                description="Cancels the order and refunds any paid amount to the customer's wallet."
+              >
+                <div>
+                  <label htmlFor="cancel-reason" className="form-label">Reason</label>
+                  <input
+                    id="cancel-reason"
+                    className="input-field"
+                    placeholder="Why is this order being cancelled?"
+                    value={cancelReason}
+                    onChange={(e) => setCancelReason(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    disabled={busy || !cancelReason.trim()}
+                    className="btn-outline btn-sm mt-2 !border-red-300 !text-red-600 hover:!bg-red-50"
+                    onClick={() => {
+                      if (!window.confirm('Cancel this order? Any paid amount will be refunded to the wallet.')) return;
+                      void run(() =>
+                        adminFetch(`/admin/operations/orders/${id}/cancel`, {
+                          method: 'POST',
+                          body: JSON.stringify({ reason: cancelReason }),
+                        }),
+                      ).then(() => setCancelReason(''));
+                    }}
+                  >
+                    Cancel order
+                  </button>
+                </div>
+              </OpsPanel>
+            )}
 
           </div>
         </div>

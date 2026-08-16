@@ -1,5 +1,5 @@
 import { OrderStatus } from '@lunara/types';
-import { IsDateString, IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class UpdateOrderStatusDto {
   @IsEnum(OrderStatus)
@@ -13,6 +13,12 @@ export class UpdateOrderStatusDto {
 export class RescheduleOrderDto {
   @IsDateString()
   scheduledPickupAt!: string;
+}
+
+export class CancelOrderDto {
+  @IsString()
+  @IsNotEmpty()
+  reason!: string;
 }
 
 export class AssignRiderDto {

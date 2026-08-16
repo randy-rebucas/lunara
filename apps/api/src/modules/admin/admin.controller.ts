@@ -67,6 +67,8 @@ import { CreateSettlementDto } from '../partner/dto/create-settlement.dto';
 import { PushNotificationService } from '../push/push-notification.service';
 import { ServiceAreasService } from '../service-areas/service-areas.service';
 import { CreateServiceAreaDto, UpdateServiceAreaDto } from '../service-areas/dto/service-area.dto';
+import { OrdersService } from '../orders/orders.service';
+import { CancelOrderDto } from '../orders/dto/order.dto';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -89,6 +91,7 @@ export class AdminController {
     private readonly cloudinaryStorageService: CloudinaryStorageService,
     private readonly pushService: PushNotificationService,
     private readonly serviceAreasService: ServiceAreasService,
+    private readonly ordersService: OrdersService,
   ) {}
 
   @Get('sos/active')
@@ -194,6 +197,15 @@ export class AdminController {
   @Post('operations/orders/:orderId/resolve-conflict')
   resolveConflict(@Param('orderId') orderId: string, @Body() dto: ResolveConflictDto) {
     return this.adminOperationsService.resolveConflict(orderId, dto.resolution);
+  }
+
+  @Post('operations/orders/:orderId/cancel')
+  cancelOrder(
+    @Param('orderId') orderId: string,
+    @Req() req: { user: { sub: string } },
+    @Body() dto: CancelOrderDto,
+  ) {
+    return this.ordersService.cancelByAdmin(req.user.sub, orderId, dto.reason);
   }
 
   @Get('dashboard')
