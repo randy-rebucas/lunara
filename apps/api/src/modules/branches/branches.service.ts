@@ -239,6 +239,7 @@ export class BranchesService {
       label: custom.label,
       description: custom.description,
       price: custom.price,
+      applicableServiceTypes: custom.applicableServiceTypes as BookingType[] | undefined,
     }));
   }
 
@@ -285,7 +286,16 @@ export class BranchesService {
             basePricePerItem: override?.basePricePerItem,
             fixedPrice: override?.fixedPrice,
             pricingUnit: override?.pricingUnit ?? branch.pricingMode ?? BranchPricingMode.FLAT_BAG,
+            // What the customer actually pays (base rate + Lunara's markup) — clients must price
+            // and display off these, never the raw baseXxx fields above, which are the partner's
+            // own rate before markup (see priceOneService, the only place base rates are marked up
+            // for real orders).
             customerPricePerKg: applyShopMarkup(basePricePerKg),
+            customerPricePerLoad: override?.basePricePerLoad != null ? applyShopMarkup(override.basePricePerLoad) : undefined,
+            customerPricePerPiece: override?.basePricePerPiece != null ? applyShopMarkup(override.basePricePerPiece) : undefined,
+            customerPricePerPair: override?.basePricePerPair != null ? applyShopMarkup(override.basePricePerPair) : undefined,
+            customerPricePerItem: override?.basePricePerItem != null ? applyShopMarkup(override.basePricePerItem) : undefined,
+            customerFixedPrice: override?.fixedPrice != null ? applyShopMarkup(override.fixedPrice) : undefined,
             isCustom: false,
           };
         }),
@@ -309,6 +319,11 @@ export class BranchesService {
         fixedPrice: custom.fixedPrice,
         pricingUnit: unit,
         customerPricePerKg: applyShopMarkup(this.resolveCustomServiceRate(custom, unit)),
+        customerPricePerLoad: custom.basePricePerLoad != null ? applyShopMarkup(custom.basePricePerLoad) : undefined,
+        customerPricePerPiece: custom.basePricePerPiece != null ? applyShopMarkup(custom.basePricePerPiece) : undefined,
+        customerPricePerPair: custom.basePricePerPair != null ? applyShopMarkup(custom.basePricePerPair) : undefined,
+        customerPricePerItem: custom.basePricePerItem != null ? applyShopMarkup(custom.basePricePerItem) : undefined,
+        customerFixedPrice: custom.fixedPrice != null ? applyShopMarkup(custom.fixedPrice) : undefined,
         isCustom: true,
         customServiceId: custom._id.toString(),
       };
@@ -386,6 +401,7 @@ export class BranchesService {
             pricingUnit,
             customerPrice: applyShopMarkup(activeRate),
             isCustom: false,
+            applicableServiceTypes: override?.applicableServiceTypes,
           };
         }),
     );
@@ -402,6 +418,7 @@ export class BranchesService {
       customerPrice: applyShopMarkup(custom.price),
       isCustom: true,
       customAddonId: custom._id.toString(),
+      applicableServiceTypes: custom.applicableServiceTypes,
     }));
 
     return [...globalItems, ...customItems];
@@ -412,7 +429,14 @@ export class BranchesService {
   async listPriceableAddonOptions(branch: BranchDocument) {
     const globalAddons = await this.catalogService.listActiveAddons();
     const hidden = new Set(branch.hiddenAddonSlugs ?? []);
-    const visibleGlobal = globalAddons.filter((addon) => !hidden.has(addon.id));
+    const visibleGlobal = globalAddons
+      .filter((addon) => !hidden.has(addon.id))
+      .map((addon) => {
+        const override = branch.addonPricing?.find((p) => p.addonSlug === addon.id);
+        return override?.applicableServiceTypes?.length
+          ? { ...addon, applicableServiceTypes: override.applicableServiceTypes as BookingType[] }
+          : addon;
+      });
     const customAddons = await this.listCustomAddonOptions(branch);
     return [...visibleGlobal, ...customAddons];
   }
@@ -577,6 +601,7 @@ export class BranchesService {
         description: dto.description,
         price: dto.price,
         imageUrl: dto.imageUrl ?? null,
+        applicableServiceTypes: dto.applicableServiceTypes ?? [],
       });
       return { success: true, data: { _id: created._id.toString() } };
     } catch (err) {
@@ -1000,6 +1025,7 @@ export class BranchesService {
       basePricePerItem?: number;
       fixedPrice?: number;
       pricingUnit?: BranchPricingMode;
+      applicableServiceTypes?: BookingType[];
     }[],
   ) {
     const rateKeyByUnit: Partial<Record<BranchPricingMode, RateKey>> = {

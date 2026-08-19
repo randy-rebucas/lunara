@@ -1,4 +1,5 @@
-import { IsNumber, IsOptional, IsString, Matches, Min } from 'class-validator';
+import { IsArray, IsEnum, IsNumber, IsOptional, IsString, Matches, Min } from 'class-validator';
+import { BookingType } from '@lunara/types';
 
 export class CreateBranchCustomAddonDto {
   @IsString()
@@ -18,4 +19,10 @@ export class CreateBranchCustomAddonDto {
   @IsOptional()
   @IsString()
   imageUrl?: string;
+
+  /** Booking types this add-on may be attached to (empty/omitted = applies to any service). */
+  @IsOptional()
+  @IsArray()
+  @IsEnum(BookingType, { each: true })
+  applicableServiceTypes?: BookingType[];
 }

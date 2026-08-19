@@ -33,6 +33,10 @@ export class BranchCustomAddon {
   @Prop({ default: 0 })
   sortOrder!: number;
 
+  /** Booking types this add-on may be attached to (empty/unset = applies to any service). */
+  @Prop({ type: [String], default: [] })
+  applicableServiceTypes?: string[];
+
   createdAt!: Date;
   updatedAt!: Date;
 }

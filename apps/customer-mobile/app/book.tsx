@@ -119,6 +119,11 @@ interface ShopServiceOption {
   fixedPrice?: number;
   pricingUnit?: BranchPricingMode;
   customerPricePerKg: number;
+  customerPricePerLoad?: number;
+  customerPricePerPiece?: number;
+  customerPricePerPair?: number;
+  customerPricePerItem?: number;
+  customerFixedPrice?: number;
   isCustom?: boolean;
   customServiceId?: string;
 }
@@ -133,6 +138,7 @@ interface ShopAddonOption {
   isPercentOfService?: boolean;
   isCustom?: boolean;
   customAddonId?: string;
+  applicableServiceTypes?: string[];
 }
 
 /** Every other branch in the same partner's group carries the same full shape as the group's
@@ -202,20 +208,20 @@ function startingPriceLabelFor(
   const candidates = shop.services
     .map((s) => {
       const unit = s.pricingUnit ?? BranchPricingMode.FLAT_BAG;
-      if (unit === BranchPricingMode.PER_LOAD && s.basePricePerLoad != null) {
-        return { amount: s.basePricePerLoad, suffix: ' / load' };
+      if (unit === BranchPricingMode.PER_LOAD && s.customerPricePerLoad != null) {
+        return { amount: s.customerPricePerLoad, suffix: ' / load' };
       }
-      if (unit === BranchPricingMode.PER_PIECE && s.basePricePerPiece != null) {
-        return { amount: s.basePricePerPiece, suffix: ' / piece' };
+      if (unit === BranchPricingMode.PER_PIECE && s.customerPricePerPiece != null) {
+        return { amount: s.customerPricePerPiece, suffix: ' / piece' };
       }
-      if (unit === BranchPricingMode.PER_PAIR && s.basePricePerPair != null) {
-        return { amount: s.basePricePerPair, suffix: ' / pair' };
+      if (unit === BranchPricingMode.PER_PAIR && s.customerPricePerPair != null) {
+        return { amount: s.customerPricePerPair, suffix: ' / pair' };
       }
-      if (unit === BranchPricingMode.PER_ITEM && s.basePricePerItem != null) {
-        return { amount: s.basePricePerItem, suffix: ' / item' };
+      if (unit === BranchPricingMode.PER_ITEM && s.customerPricePerItem != null) {
+        return { amount: s.customerPricePerItem, suffix: ' / item' };
       }
-      if (unit === BranchPricingMode.FIXED && s.fixedPrice != null) {
-        return { amount: s.fixedPrice, suffix: '' };
+      if (unit === BranchPricingMode.FIXED && s.customerFixedPrice != null) {
+        return { amount: s.customerFixedPrice, suffix: '' };
       }
       if (unit === BranchPricingMode.FLAT_BAG && flatBagFrom != null) {
         return { amount: flatBagFrom, suffix: '' };
@@ -387,11 +393,11 @@ export default function BookScreen() {
           label: s.label,
           description: s.description ?? catalogMatch?.description ?? '',
           pricePerKg: s.customerPricePerKg,
-          basePricePerLoad: s.basePricePerLoad,
-          basePricePerPiece: s.basePricePerPiece,
-          basePricePerPair: s.basePricePerPair,
-          basePricePerItem: s.basePricePerItem,
-          fixedPrice: s.fixedPrice,
+          basePricePerLoad: s.customerPricePerLoad,
+          basePricePerPiece: s.customerPricePerPiece,
+          basePricePerPair: s.customerPricePerPair,
+          basePricePerItem: s.customerPricePerItem,
+          fixedPrice: s.customerFixedPrice,
           pricingUnit: s.pricingUnit ?? (s.isCustom ? BranchPricingMode.PER_KG : BranchPricingMode.FLAT_BAG),
           minWeightKg: catalogMatch?.minWeightKg ?? 5,
           isCustom: s.isCustom ?? false,
@@ -413,27 +419,57 @@ export default function BookScreen() {
   }, [config, selectedShop]);
 
   const addons = useMemo(() => {
+    // Percent-of-service add-ons (Express/Same-Day) are order-level, not scoped to any specific
+    // service — always shown regardless of applicableServiceTypes.
+    const appliesToSelection = (applicableServiceTypes?: string[], isPercentOfService?: boolean) =>
+      isPercentOfService ||
+      !form.bookingType ||
+      !!applicableServiceTypes?.includes(form.bookingType);
     if (selectedShop) {
-      return selectedShop.addons.map((a) => {
-        const catalogMatch = config?.addons.find((ca) => ca.id === a.slug);
-        return {
-          id: a.slug,
-          label: a.label,
-          description: a.description ?? catalogMatch?.description ?? '',
-          price: a.customerPrice,
-          pricingUnit: a.pricingUnit ?? BranchPricingMode.FLAT_BAG,
-          isPercentOfService: a.isPercentOfService,
-          imageUrl: catalogMatch?.imageUrl,
-          isCustom: a.isCustom ?? false,
-        };
-      });
+      return selectedShop.addons
+        .filter((a) => appliesToSelection(a.applicableServiceTypes, a.isPercentOfService))
+        .map((a) => {
+          const catalogMatch = config?.addons.find((ca) => ca.id === a.slug);
+          return {
+            id: a.slug,
+            label: a.label,
+            description: a.description ?? catalogMatch?.description ?? '',
+            price: a.customerPrice,
+            pricingUnit: a.pricingUnit ?? BranchPricingMode.FLAT_BAG,
+            isPercentOfService: a.isPercentOfService,
+            imageUrl: catalogMatch?.imageUrl,
+            isCustom: a.isCustom ?? false,
+          };
+        });
     }
     return (config?.addons ?? []).map((a) => ({
       ...a,
       pricingUnit: BranchPricingMode.FLAT_BAG,
       isCustom: false,
     }));
-  }, [config, selectedShop]);
+  }, [config, selectedShop, form.bookingType]);
+
+  // Add-ons a partner connected to the selected service are pre-checked for the customer (still
+  // removable) the first time they appear — tracked in a ref so a manual uncheck sticks afterward.
+  const autoAddedAddonIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const connectedIds = addons.filter((a) => !a.isPercentOfService).map((a) => a.id);
+    const newlyConnected = connectedIds.filter((id) => !autoAddedAddonIdsRef.current.has(id));
+    if (newlyConnected.length === 0) return;
+    newlyConnected.forEach((id) => autoAddedAddonIdsRef.current.add(id));
+    setForm((f) => {
+      const toAdd = newlyConnected.filter((id) => !f.addonIds.includes(id));
+      return toAdd.length === 0 ? f : { ...f, addonIds: [...f.addonIds, ...toAdd] };
+    });
+  }, [addons]);
+
+  useEffect(() => {
+    setForm((f) => {
+      const validIds = new Set(addons.map((a) => a.id));
+      const pruned = f.addonIds.filter((id) => validIds.has(id));
+      return pruned.length === f.addonIds.length ? f : { ...f, addonIds: pruned };
+    });
+  }, [addons]);
 
   // Each service on a shop can bill in its own unit now, so this must be resolved per selected
   // service (and re-derived whenever bookingType/customServiceId changes), not once per shop.
@@ -500,13 +536,15 @@ export default function BookScreen() {
           bagSizeId: form.bagSizeId || undefined,
           addonIds: form.addonIds,
           pricingMode: shopPricingMode,
+          // Local preview must price off what the customer actually pays, not the partner's raw
+          // rate, or this preview would undercount versus the real order total.
           rates: {
-            basePricePerKg: shopService?.basePricePerKg,
-            basePricePerLoad: shopService?.basePricePerLoad,
-            basePricePerPiece: shopService?.basePricePerPiece,
-            basePricePerPair: shopService?.basePricePerPair,
-            basePricePerItem: shopService?.basePricePerItem,
-            fixedPrice: shopService?.fixedPrice,
+            basePricePerKg: shopService?.customerPricePerKg,
+            basePricePerLoad: shopService?.customerPricePerLoad,
+            basePricePerPiece: shopService?.customerPricePerPiece,
+            basePricePerPair: shopService?.customerPricePerPair,
+            basePricePerItem: shopService?.customerPricePerItem,
+            fixedPrice: shopService?.customerFixedPrice,
           },
           enteredWeightKg,
           enteredLoadCount,
@@ -1677,6 +1715,9 @@ export default function BookScreen() {
                             </View>
                           </View>
                           <Text style={styles.optionSub}>{a.description}</Text>
+                          {!a.isPercentOfService && (
+                            <Text style={styles.addonIncludedBadge}>Included with your service</Text>
+                          )}
                           {disabled ? (
                             <Text style={styles.optionGpsMissing}>
                               Not available for pickups at 3:00 PM or later
@@ -1975,6 +2016,7 @@ const styles = StyleSheet.create({
   optionPrice: { marginTop: spacing.sm - 2, fontSize: 13, color: colors.primary, fontWeight: '500' },
   optionGps: { marginTop: spacing.sm - 2, fontSize: 12, color: colors.accentDark, fontWeight: '500' },
   optionGpsMissing: { marginTop: spacing.sm - 2, fontSize: 12, color: colors.warning, fontWeight: '500' },
+  addonIncludedBadge: { marginTop: spacing.xs, fontSize: 12, color: colors.accentDark, fontWeight: '500' },
   scheduleOpen: { marginTop: spacing.xs, fontSize: 12, color: colors.accentDark, fontWeight: '500' },
   scheduleClosed: { marginTop: spacing.xs, fontSize: 12, color: colors.mutedForeground, fontWeight: '500' },
   optionBranchLink: {

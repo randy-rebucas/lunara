@@ -223,6 +223,19 @@ export class BookingService {
         };
       }
     }
+    // Every non-flat-bag rate is the partner's own raw price — mark each one up by Lunara's cut
+    // before it's used to price the order (flat-bag is a fixed platform price, never marked up here).
+    if (pricingRates) {
+      pricingRates = {
+        basePricePerKg: pricingRates.basePricePerKg != null ? applyShopMarkup(pricingRates.basePricePerKg) : undefined,
+        basePricePerLoad: pricingRates.basePricePerLoad != null ? applyShopMarkup(pricingRates.basePricePerLoad) : undefined,
+        basePricePerPiece: pricingRates.basePricePerPiece != null ? applyShopMarkup(pricingRates.basePricePerPiece) : undefined,
+        basePricePerPair: pricingRates.basePricePerPair != null ? applyShopMarkup(pricingRates.basePricePerPair) : undefined,
+        basePricePerItem: pricingRates.basePricePerItem != null ? applyShopMarkup(pricingRates.basePricePerItem) : undefined,
+        fixedPrice: pricingRates.fixedPrice != null ? applyShopMarkup(pricingRates.fixedPrice) : undefined,
+        minWeightKg: pricingRates.minWeightKg,
+      };
+    }
     if (!garmentPriced) {
       if (pricingMode !== BranchPricingMode.FLAT_BAG) {
         const rates = pricingRates ?? {};
@@ -403,6 +416,18 @@ export class BookingService {
     if (invalidAddon) {
       throw new BadRequestException('Invalid or inactive add-on');
     }
+    // Percent-of-service add-ons (Express/Same-Day) are order-level, not scoped to any specific
+    // service — they're always applicable regardless of the (possibly empty) applicableServiceTypes.
+    const inapplicableAddon = addonIds.find((id) => {
+      const addon = priceableAddons.find((a) => a.id === id);
+      return (
+        !addon?.isPercentOfService &&
+        !addon?.applicableServiceTypes?.some((t) => bookingTypes.includes(t))
+      );
+    });
+    if (inapplicableAddon) {
+      throw new BadRequestException('That add-on is not available for the selected service');
+    }
     if (
       addonIds.includes(EXPRESS_RETURN_ADDON_ID) &&
       !isExpressReturnAllowed(dto.scheduledPickupAt)
@@ -547,13 +572,16 @@ export class BookingService {
       | undefined;
     if (primaryQuote.pricingMode !== BranchPricingMode.FLAT_BAG) {
       const servicePrice = branch.servicePricing?.find((p) => p.serviceType === primaryDto.bookingType);
+      // Mark up every rate the same way priceOneService does — this snapshot is what shop-receiving
+      // later re-prices from once the actual weight/load/piece count is confirmed, so it must carry
+      // the customer-facing (marked-up) rate, not the partner's raw one.
       pricingSnapshot = {
-        basePricePerKg: servicePrice?.basePricePerKg,
-        basePricePerLoad: servicePrice?.basePricePerLoad,
-        basePricePerPiece: servicePrice?.basePricePerPiece,
-        basePricePerPair: servicePrice?.basePricePerPair,
-        basePricePerItem: servicePrice?.basePricePerItem,
-        fixedPrice: servicePrice?.fixedPrice,
+        basePricePerKg: servicePrice?.basePricePerKg != null ? applyShopMarkup(servicePrice.basePricePerKg) : undefined,
+        basePricePerLoad: servicePrice?.basePricePerLoad != null ? applyShopMarkup(servicePrice.basePricePerLoad) : undefined,
+        basePricePerPiece: servicePrice?.basePricePerPiece != null ? applyShopMarkup(servicePrice.basePricePerPiece) : undefined,
+        basePricePerPair: servicePrice?.basePricePerPair != null ? applyShopMarkup(servicePrice.basePricePerPair) : undefined,
+        basePricePerItem: servicePrice?.basePricePerItem != null ? applyShopMarkup(servicePrice.basePricePerItem) : undefined,
+        fixedPrice: servicePrice?.fixedPrice != null ? applyShopMarkup(servicePrice.fixedPrice) : undefined,
       };
     }
 

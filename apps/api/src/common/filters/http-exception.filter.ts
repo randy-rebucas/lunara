@@ -19,13 +19,13 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
   constructor(private readonly errorLogService: ErrorLogService) {}
 
-  catch(exception: unknown, host: ArgumentsHost) {
+  async catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<AuthedRequest>();
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
-    let message = 'Internal server error';
+    let message = 'Something went wrong on our end. Please try again in a moment.';
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -40,13 +40,17 @@ export class HttpExceptionFilter implements ExceptionFilter {
           message = (b['message'] as string[]).join(', ');
         }
       }
+      // An HttpException can still carry status >= 500 (e.g. a deliberate
+      // InternalServerErrorException) — those get the same generic, reference-coded message as an
+      // unexpected error in production, since their raw message can also leak internal detail.
+      if (status >= 500 && process.env.NODE_ENV === 'production') {
+        message = 'Something went wrong on our end. Please try again in a moment.';
+      }
     } else if (exception instanceof Error) {
       // Non-HttpException errors (e.g. raw Mongoose/driver failures) can contain internal
       // detail (connection strings, field/collection names) that shouldn't reach clients in
       // production — log the real message server-side and return a generic one instead.
-      if (process.env.NODE_ENV === 'production') {
-        this.logger.error(exception.message, exception.stack);
-      } else {
+      if (process.env.NODE_ENV !== 'production') {
         message = exception.message;
       }
     }
@@ -55,7 +59,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
     // and would flood the log with noise (bad input, expired tokens, etc.).
     if (status >= 500) {
       const error = exception instanceof Error ? exception : undefined;
-      void this.errorLogService.record({
+      if (!(exception instanceof Error)) {
+        this.logger.error(`Non-Error exception thrown: ${JSON.stringify(exception)}`);
+      }
+      const logId = await this.errorLogService.record({
         source: 'api',
         message: error?.message ?? message,
         stack: error?.stack,
@@ -65,6 +72,18 @@ export class HttpExceptionFilter implements ExceptionFilter {
         userId: request?.user?.sub,
         userRole: request?.user?.role,
       });
+      // Last 8 chars of the Mongo ObjectId is enough to look the entry up in /admin/error-logs
+      // without printing a full internal id to the end user.
+      const reference = logId ? logId.slice(-8) : undefined;
+      response.status(status).json({
+        success: false,
+        error: {
+          message: reference ? `${message} (reference: ${reference})` : message,
+          statusCode: status,
+          reference,
+        },
+      });
+      return;
     }
 
     response.status(status).json({

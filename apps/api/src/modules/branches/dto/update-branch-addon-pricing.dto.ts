@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import { ValidateNested, IsArray, IsString, IsNumber, IsOptional, IsEnum, Min } from 'class-validator';
 import { BranchPricingMode } from '@lunara/utils';
+import { BookingType } from '@lunara/types';
 
 export class BranchAddonPriceDto {
   @IsString()
@@ -43,6 +44,12 @@ export class BranchAddonPriceDto {
   @IsOptional()
   @IsEnum(BranchPricingMode)
   pricingUnit?: BranchPricingMode;
+
+  /** Booking types this add-on may be attached to (empty/omitted = applies to any service). */
+  @IsOptional()
+  @IsArray()
+  @IsEnum(BookingType, { each: true })
+  applicableServiceTypes?: BookingType[];
 }
 
 export class UpdateBranchAddonPricingDto {

@@ -109,10 +109,11 @@ export class ProcessingService {
     if (!order) throw new NotFoundException('Order not found');
     const branchId = await resolvePortalBranchId(this.userModel, userId, role);
     assertOrderPortalAccess(order, userId, role, branchId);
+    const paymentsByOrderId = await loadLatestOrderPaymentsByOrderId(this.paymentModel, [order._id]);
     if (!PARTNER_PROCESSING_QUEUE_STATUSES.includes(order.status)) {
-      return { success: true, data: this.buildPreProcessingView(order) };
+      return { success: true, data: this.buildPreProcessingView(order, paymentsByOrderId) };
     }
-    return { success: true, data: await this.buildProcessingView(order) };
+    return { success: true, data: await this.buildProcessingView(order, paymentsByOrderId) };
   }
 
   async acceptJob(orderId: string, userId: string, role: UserRole) {
@@ -473,8 +474,12 @@ export class ProcessingService {
     };
   }
 
-  private buildPreProcessingView(order: OrderDocument) {
+  private buildPreProcessingView(
+    order: OrderDocument,
+    paymentsByOrderId?: Map<string, PaymentDocument>,
+  ) {
     const label = formatPartnerPreProcessingLabel(order.status);
+    const paymentSummary = buildOrderPaymentSummary(paymentsByOrderId?.get(order._id.toString()));
     return {
       preProcessing: true,
       order: {
@@ -482,9 +487,18 @@ export class ProcessingService {
         status: order.status,
         bookingType: order.bookingType,
         total: order.total,
+        items: order.items,
+        subtotal: order.subtotal,
+        discount: order.discount,
+        deliveryFee: order.deliveryFee,
+        couponCode: order.couponCode,
+        scheduledPickupAt: order.scheduledPickupAt,
+        scheduledDeliveryAt: order.scheduledDeliveryAt,
         estimatedWeightKg: order.estimatedWeightKg,
         subscriptionId: order.subscriptionId?.toString(),
         pickup: order.pickup,
+        paymentMethod: paymentSummary.paymentMethod,
+        paymentLabel: buildPartnerPaymentLabel(paymentSummary),
       },
       processing: order.laundryProcessing,
       currentStep: {
@@ -503,7 +517,10 @@ export class ProcessingService {
     };
   }
 
-  private async buildProcessingView(order: OrderDocument) {
+  private async buildProcessingView(
+    order: OrderDocument,
+    paymentsByOrderId?: Map<string, PaymentDocument>,
+  ) {
     const currentStepId = this.resolveCurrentStepId(order);
     const currentStep = getProcessingStep(currentStepId);
     const nextStep = getNextProcessingStep(currentStepId, {
@@ -512,6 +529,7 @@ export class ProcessingService {
 
     const tagId = order.laundryProcessing?.tagId;
     const tag = tagId ? await this.laundryTagsService.getById(tagId.toString()).catch(() => null) : null;
+    const paymentSummary = buildOrderPaymentSummary(paymentsByOrderId?.get(order._id.toString()));
 
     return {
       order: {
@@ -519,9 +537,18 @@ export class ProcessingService {
         status: order.status,
         bookingType: order.bookingType,
         total: order.total,
+        items: order.items,
+        subtotal: order.subtotal,
+        discount: order.discount,
+        deliveryFee: order.deliveryFee,
+        couponCode: order.couponCode,
+        scheduledPickupAt: order.scheduledPickupAt,
+        scheduledDeliveryAt: order.scheduledDeliveryAt,
         estimatedWeightKg: order.estimatedWeightKg,
         subscriptionId: order.subscriptionId?.toString(),
         pickup: order.pickup,
+        paymentMethod: paymentSummary.paymentMethod,
+        paymentLabel: buildPartnerPaymentLabel(paymentSummary),
       },
       processing: {
         ...(order.laundryProcessing as unknown as Record<string, unknown>),

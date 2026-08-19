@@ -24,10 +24,15 @@ export class ErrorLogService {
 
   constructor(@InjectModel(ErrorLog.name) private errorLogModel: Model<ErrorLogDocument>) {}
 
-  /** Fire-and-forget — a failure to log an error must never mask or throw over the original error. */
-  async record(input: RecordErrorLogInput) {
+  /**
+   * Fire-and-forget from the caller's perspective (a failure to log must never mask or throw over
+   * the original error), but returns the created log's id so callers that DO want it — the
+   * exception filter, to hand the user a support reference — can surface it without waiting on
+   * anything beyond this one write.
+   */
+  async record(input: RecordErrorLogInput): Promise<string | undefined> {
     try {
-      await this.errorLogModel.create({
+      const created = await this.errorLogModel.create({
         source: input.source,
         message: input.message.slice(0, MAX_MESSAGE_LENGTH),
         stack: input.stack?.slice(0, MAX_STACK_LENGTH),
@@ -38,8 +43,10 @@ export class ErrorLogService {
         userRole: input.userRole,
         context: input.context ?? null,
       });
+      return created._id.toString();
     } catch (err) {
       this.logger.warn(`Failed to persist error log: ${(err as Error).message}`);
+      return undefined;
     }
   }
 

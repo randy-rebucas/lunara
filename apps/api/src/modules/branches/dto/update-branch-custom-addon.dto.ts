@@ -1,4 +1,5 @@
-import { IsBoolean, IsNumber, IsOptional, IsString, Matches, Min } from 'class-validator';
+import { IsArray, IsBoolean, IsEnum, IsNumber, IsOptional, IsString, Matches, Min } from 'class-validator';
+import { BookingType } from '@lunara/types';
 
 export class UpdateBranchCustomAddonDto {
   @IsOptional()
@@ -26,4 +27,9 @@ export class UpdateBranchCustomAddonDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @IsEnum(BookingType, { each: true })
+  applicableServiceTypes?: BookingType[];
 }

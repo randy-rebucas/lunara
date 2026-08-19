@@ -273,6 +273,89 @@ export default function StaffOrderProcessingPage() {
         </div>
       )}
 
+      {(view.order.items?.length || view.order.subtotal !== undefined) && (
+        <div className="mt-4 rounded-lg border border-border/60 bg-surface px-4 py-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Order breakdown</p>
+          <div className="mt-2 space-y-1.5 text-sm">
+            {view.order.items?.map((item, i) => (
+              <div key={i} className="flex items-center justify-between text-slate-600">
+                <span className="capitalize">
+                  {item.notes?.startsWith('Add-on:')
+                    ? item.notes.replace(/^Add-on:\s*/, '')
+                    : item.serviceType.replace(/_/g, ' ')}
+                  {item.quantity > 1 ? ` × ${item.quantity}` : ''}
+                </span>
+                <span>₱{(item.unitPrice * item.quantity).toFixed(2)}</span>
+              </div>
+            ))}
+            {view.order.subtotal !== undefined && (
+              <div className="flex items-center justify-between text-slate-600">
+                <span>Subtotal</span>
+                <span>₱{view.order.subtotal.toFixed(2)}</span>
+              </div>
+            )}
+            {!!view.order.deliveryFee && (
+              <div className="flex items-center justify-between text-slate-600">
+                <span>Delivery fee</span>
+                <span>₱{view.order.deliveryFee.toFixed(2)}</span>
+              </div>
+            )}
+            {!!view.order.discount && (
+              <div className="flex items-center justify-between text-accent">
+                <span>Discount{view.order.couponCode ? ` (${view.order.couponCode})` : ''}</span>
+                <span>-₱{view.order.discount.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex items-center justify-between border-t border-border/60 pt-1.5 font-semibold text-slate-900">
+              <span>Total</span>
+              <span>₱{view.order.total}</span>
+            </div>
+          </div>
+
+          {(view.order.scheduledPickupAt ||
+            view.order.scheduledDeliveryAt ||
+            view.order.paymentLabel ||
+            view.order.estimatedWeightKg) && (
+            <div className="mt-3 space-y-1.5 border-t border-border/60 pt-3 text-sm text-slate-600">
+              {view.order.scheduledPickupAt && (
+                <div className="flex items-center justify-between">
+                  <span>Scheduled pickup</span>
+                  <span className="text-slate-900">
+                    {new Date(view.order.scheduledPickupAt).toLocaleString('en-PH', {
+                      dateStyle: 'medium',
+                      timeStyle: 'short',
+                    })}
+                  </span>
+                </div>
+              )}
+              {view.order.scheduledDeliveryAt && (
+                <div className="flex items-center justify-between">
+                  <span>Scheduled delivery</span>
+                  <span className="text-slate-900">
+                    {new Date(view.order.scheduledDeliveryAt).toLocaleString('en-PH', {
+                      dateStyle: 'medium',
+                      timeStyle: 'short',
+                    })}
+                  </span>
+                </div>
+              )}
+              {view.order.estimatedWeightKg !== undefined && (
+                <div className="flex items-center justify-between">
+                  <span>Estimated weight</span>
+                  <span className="text-slate-900">{view.order.estimatedWeightKg} kg</span>
+                </div>
+              )}
+              {view.order.paymentLabel && (
+                <div className="flex items-center justify-between">
+                  <span>Payment</span>
+                  <span className="text-slate-900">{view.order.paymentLabel}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {preProcessing && (
         <InfoBanner icon={ICONS.truck} tone="slate" title={view.currentStep.label}>
           {view.currentStep.description ??

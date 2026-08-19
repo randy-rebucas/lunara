@@ -80,7 +80,7 @@ export interface BagSizeOption {
 /** Flat, platform-wide bag pricing — replaces per-kg weight-based pricing for all booking types. */
 export const BAG_SIZES: BagSizeOption[] = [
   { id: 'small', label: 'Small', capacityKg: 5, price: 249 },
-  { id: 'medium', label: 'Medium', capacityKg: 8, price: 349 },
+  { id: 'medium', label: 'Medium', capacityKg: 7, price: 349 },
   { id: 'large', label: 'Large', capacityKg: 12, price: 449 },
   { id: 'xl', label: 'XL', capacityKg: 15, price: 549 },
 ];
@@ -114,6 +114,8 @@ export interface BookingAddonOption {
    * pricingUnit. When true, this add-on's total is serviceSubtotal × price/100, not a flat/unit rate. */
   isPercentOfService?: boolean;
   imageUrl?: string;
+  /** Booking types this add-on may be attached to (empty/unset = applies to any service). */
+  applicableServiceTypes?: BookingType[];
 }
 
 export interface ServiceAreaRule {

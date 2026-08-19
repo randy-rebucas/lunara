@@ -187,6 +187,10 @@ class BranchAddonPrice {
    * Falls back to FLAT_BAG (today's behavior) when unset. */
   @Prop({ enum: BranchPricingMode })
   pricingUnit?: BranchPricingMode;
+
+  /** Booking types this add-on may be attached to at this shop (empty/unset = applies to any service). */
+  @Prop({ type: [String], default: [] })
+  applicableServiceTypes?: string[];
 }
 
 @Schema({ _id: false })
