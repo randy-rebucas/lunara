@@ -309,7 +309,7 @@ export function HomePage() {
                 <li key={partner.partnerId}>
                   <Link
                     href={`/service-areas/${partner.branches[0].id}`}
-                    className="flex h-16 w-32 items-center justify-center"
+                    className="flex h-16 w-32 items-center justify-center rounded-xl border border-border/60 bg-white p-2"
                     aria-label={partner.partnerName}
                     title={partner.partnerName}
                   >
