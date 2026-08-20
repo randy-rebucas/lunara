@@ -15,20 +15,26 @@ export function StaffProfileModal({
   onSaved: () => Promise<void> | void;
 }) {
   const [nameDraft, setNameDraft] = useState(staff.displayName ?? '');
+  const [phoneDraft, setPhoneDraft] = useState(staff.phone ?? '');
   const [saving, setSaving] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [permissionSaving, setPermissionSaving] = useState(false);
 
-  async function handleSaveName() {
-    const trimmed = nameDraft.trim();
-    if (!trimmed || trimmed === staff.displayName) return;
+  async function handleSave() {
+    const trimmedName = nameDraft.trim();
+    const trimmedPhone = phoneDraft.trim();
     setSaving(true);
     try {
-      await updateStaffProfile(staff._id, trimmed);
+      await updateStaffProfile(
+        staff._id,
+        trimmedName !== staff.displayName ? trimmedName : undefined,
+        undefined,
+        trimmedPhone !== (staff.phone ?? '') ? trimmedPhone : undefined,
+      );
       await onSaved();
-      toast.success('Name updated');
+      toast.success('Profile updated');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not update name');
+      toast.error(err instanceof Error ? err.message : 'Could not update profile');
     } finally {
       setSaving(false);
     }
@@ -102,6 +108,17 @@ export function StaffProfileModal({
           />
         </label>
 
+        <label className="mt-4 block">
+          <span className="mb-1 block text-sm font-medium text-slate-900">Phone</span>
+          <input
+            type="tel"
+            className="input"
+            placeholder="+63917…"
+            value={phoneDraft}
+            onChange={(e) => setPhoneDraft(e.target.value)}
+          />
+        </label>
+
         <div className="mt-4 flex items-center justify-between rounded-lg border border-border p-3">
           <div>
             <p className="text-sm font-medium text-slate-900">Settings access</p>
@@ -126,10 +143,14 @@ export function StaffProfileModal({
           <button
             type="button"
             className="btn-primary"
-            disabled={saving || !nameDraft.trim() || nameDraft.trim() === staff.displayName}
-            onClick={() => void handleSaveName()}
+            disabled={
+              saving ||
+              !nameDraft.trim() ||
+              (nameDraft.trim() === staff.displayName && phoneDraft.trim() === (staff.phone ?? ''))
+            }
+            onClick={() => void handleSave()}
           >
-            {saving ? 'Saving…' : 'Save name'}
+            {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
       </div>

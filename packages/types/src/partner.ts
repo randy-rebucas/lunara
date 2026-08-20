@@ -169,6 +169,7 @@ export interface PartnerOwnProfile {
   displayName?: string;
   avatarUrl?: string;
   canManageSettings?: boolean;
+  phone?: string;
 }
 
 export interface PartnerInventoryItem {

@@ -195,12 +195,14 @@ export async function updateStaffProfile(
   staffId: string,
   displayName?: string,
   canManageSettings?: boolean,
+  phone?: string,
 ): Promise<PartnerOwnProfile> {
   return partnerFetch<PartnerOwnProfile>(`/partner/staff/${staffId}/profile`, {
     method: 'PATCH',
     body: JSON.stringify({
       ...(displayName !== undefined ? { displayName } : {}),
       ...(canManageSettings !== undefined ? { canManageSettings } : {}),
+      ...(phone !== undefined ? { phone } : {}),
     }),
   });
 }

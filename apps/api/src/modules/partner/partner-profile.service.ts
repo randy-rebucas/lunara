@@ -77,14 +77,22 @@ export class PartnerProfileService {
       );
     }
 
+    if (dto.phone !== undefined) {
+      const phone = dto.phone.trim();
+      await this.userModel.updateOne(
+        { _id: staffUserId },
+        phone ? { phone } : { $unset: { phone: '' } },
+      );
+    }
+
     if (dto.displayName === undefined) {
       const profile = await this.userProfileModel
         .findOne({ userId: new Types.ObjectId(staffUserId) })
         .lean();
-      return { success: true, data: { ...formatProfile(profile), canManageSettings: dto.canManageSettings } };
+      return { success: true, data: { ...formatProfile(profile), canManageSettings: dto.canManageSettings, phone: dto.phone } };
     }
     const profile = await this.upsertProfile(staffUserId, { displayName: dto.displayName });
-    return { success: true, data: { ...formatProfile(profile), canManageSettings: dto.canManageSettings } };
+    return { success: true, data: { ...formatProfile(profile), canManageSettings: dto.canManageSettings, phone: dto.phone } };
   }
 
   async updateStaffAvatar(
