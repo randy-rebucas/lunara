@@ -309,16 +309,16 @@ export function HomePage() {
                 <li key={partner.partnerId}>
                   <Link
                     href={`/service-areas/${partner.branches[0].id}`}
-                    className="inline-flex items-center justify-center"
+                    className="flex h-16 w-32 items-center justify-center"
                     aria-label={partner.partnerName}
                     title={partner.partnerName}
                   >
                     <Image
                       src={partner.logoUrl!}
                       alt={partner.partnerName}
-                      width={120}
-                      height={40}
-                      className="h-9 w-auto object-contain"
+                      width={128}
+                      height={64}
+                      className="h-full w-full object-contain"
                     />
                   </Link>
                 </li>
