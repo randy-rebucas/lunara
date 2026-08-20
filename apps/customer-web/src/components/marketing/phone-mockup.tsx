@@ -38,32 +38,17 @@ export function PhoneFrame({
   return (
     <figure className={cn('w-56 shrink-0', className)}>
       <div className="relative">
-        {/* Side buttons — decorative, sit on the metallic edge below */}
-        <span className="absolute left-[-2px] top-[15%] z-0 h-[3%] w-[2.5px] rounded-l-sm bg-gradient-to-r from-slate-600 to-slate-800" aria-hidden />
-        <span className="absolute left-[-2px] top-[21%] z-0 h-[6%] w-[2.5px] rounded-l-sm bg-gradient-to-r from-slate-600 to-slate-800" aria-hidden />
-        <span className="absolute left-[-2px] top-[29%] z-0 h-[6%] w-[2.5px] rounded-l-sm bg-gradient-to-r from-slate-600 to-slate-800" aria-hidden />
-        <span className="absolute right-[-2px] top-[19%] z-0 h-[8%] w-[2.5px] rounded-r-sm bg-gradient-to-l from-slate-600 to-slate-800" aria-hidden />
+        {/* Side buttons — decorative nubs sitting on the outline */}
+        <span className="absolute left-[-3px] top-[16%] z-0 h-[3%] w-[3px] rounded-l-sm bg-slate-900" aria-hidden />
+        <span className="absolute left-[-3px] top-[23%] z-0 h-[7%] w-[3px] rounded-l-sm bg-slate-900" aria-hidden />
+        <span className="absolute left-[-3px] top-[32%] z-0 h-[7%] w-[3px] rounded-l-sm bg-slate-900" aria-hidden />
+        <span className="absolute right-[-3px] top-[26%] z-0 h-[9%] w-[3px] rounded-r-sm bg-slate-900" aria-hidden />
 
-        {/* Metallic chamfered edge */}
-        <div className="relative rounded-[20%] bg-gradient-to-br from-slate-700 via-slate-900 to-slate-950 p-[3px] shadow-[0_24px_48px_-16px_rgb(15_23_42/0.4)]">
-          {/* Black bezel */}
-          <div className="rounded-[19%] bg-black p-[8px]">
-            <div className="relative overflow-hidden rounded-[16%] bg-surface ring-1 ring-white/10">
-              {/* Dynamic Island */}
-              <div
-                className="absolute left-1/2 top-[1.8%] z-10 h-[3.2%] w-[28%] -translate-x-1/2 rounded-full bg-black"
-                aria-hidden
-              >
-                <span className="absolute right-[16%] top-1/2 h-[45%] w-[16%] -translate-y-1/2 rounded-full bg-slate-800/80" aria-hidden />
-              </div>
-              <div className="aspect-[9/19.5] overflow-hidden" aria-hidden>
-                {children}
-              </div>
-              {/* Home indicator */}
-              <div
-                className="pointer-events-none absolute bottom-[1%] left-1/2 z-10 h-[0.5%] w-[32%] -translate-x-1/2 rounded-full bg-slate-900/70"
-                aria-hidden
-              />
+        {/* Thin outline frame — flat, line-art style */}
+        <div className="relative rounded-[16%] border-[6px] border-slate-900 bg-white p-[3px]">
+          <div className="relative overflow-hidden rounded-[13%] bg-surface">
+            <div className="aspect-[9/19.5] overflow-hidden" aria-hidden>
+              {children}
             </div>
           </div>
         </div>
