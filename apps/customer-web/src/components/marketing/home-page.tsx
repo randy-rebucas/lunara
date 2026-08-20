@@ -303,34 +303,24 @@ export function HomePage() {
           </p>
           <ul className="mt-5 flex flex-wrap items-center justify-center gap-x-10 gap-y-4">
             {groupServiceAreasByPartner(serviceAreas)
+              .filter((partner) => partner.logoUrl)
               .slice(0, 4)
               .map((partner) => (
-                <li key={partner.partnerId} className="text-center">
+                <li key={partner.partnerId}>
                   <Link
                     href={`/service-areas/${partner.branches[0].id}`}
-                    className="inline-flex items-center justify-center opacity-70 grayscale transition-[opacity,filter] hover:opacity-100 hover:grayscale-0"
+                    className="inline-flex items-center justify-center"
                     aria-label={partner.partnerName}
                     title={partner.partnerName}
                   >
-                    {partner.logoUrl ? (
-                      <Image
-                        src={partner.logoUrl}
-                        alt={partner.partnerName}
-                        width={120}
-                        height={40}
-                        className="h-9 w-auto object-contain"
-                      />
-                    ) : (
-                      <span className="text-lg font-bold tracking-tight text-slate-400">
-                        {partner.partnerName}
-                      </span>
-                    )}
+                    <Image
+                      src={partner.logoUrl!}
+                      alt={partner.partnerName}
+                      width={120}
+                      height={40}
+                      className="h-9 w-auto object-contain"
+                    />
                   </Link>
-                  {partner.branches.length > 1 ? (
-                    <p className="mt-0.5 text-xs font-medium text-muted">
-                      {partner.branches.map((b) => b.city).join(' · ')}
-                    </p>
-                  ) : null}
                 </li>
               ))}
             <li className="flex items-center gap-2 text-sm font-medium text-muted">
