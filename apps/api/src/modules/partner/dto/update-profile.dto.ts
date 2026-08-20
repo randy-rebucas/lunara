@@ -1,4 +1,4 @@
-import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class UpdateProfileDto {
   @IsOptional()
@@ -11,6 +11,11 @@ export class UpdateProfileDto {
   @IsString()
   @MaxLength(32)
   phone?: string;
+
+  /** Staff-only: editable by the owning partner/admin. */
+  @IsOptional()
+  @IsEmail()
+  email?: string;
 
   /** Staff-only: toggled by the owning partner/admin to grant/revoke settings access. */
   @IsOptional()

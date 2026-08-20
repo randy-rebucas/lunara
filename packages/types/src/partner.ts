@@ -170,6 +170,7 @@ export interface PartnerOwnProfile {
   avatarUrl?: string;
   canManageSettings?: boolean;
   phone?: string;
+  email?: string;
 }
 
 export interface PartnerInventoryItem {

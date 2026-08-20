@@ -53,6 +53,7 @@ import { PromotionsService } from '../promotions/promotions.service';
 import { resolvePortalBranchId } from './partner-access';
 import { UpdatePartnerSettingsDto } from './dto/update-partner-settings.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ResetStaffPasswordDto } from './dto/reset-staff-password.dto';
 import {
   ConfirmShopItemsDto,
   ReceiveLaundryDto,
@@ -406,6 +407,16 @@ export class PartnerController {
     @Body() dto: UpdateProfileDto,
   ) {
     return this.profileService.updateStaffProfile(req.user.sub, staffId, dto, req.user.role);
+  }
+
+  @Post('staff/:staffId/reset-password')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  resetStaffPassword(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('staffId') staffId: string,
+    @Body() dto: ResetStaffPasswordDto,
+  ) {
+    return this.profileService.resetStaffPassword(req.user.sub, staffId, dto, req.user.role);
   }
 
   @Post('staff/:staffId/profile/avatar')

@@ -1,11 +1,13 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import * as bcrypt from 'bcrypt';
 import { Model, Types } from 'mongoose';
 import { UserRole } from '@lunara/types';
 import { Branch, BranchDocument } from '../branches/schemas/branch.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { UserProfile, UserProfileDocument } from '../users/schemas/user-profile.schema';
 import { CloudinaryStorageService } from '../../common/storage/cloudinary-storage.service';
+import { ResetStaffPasswordDto } from './dto/reset-staff-password.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 
 function formatProfile(profile?: Pick<UserProfile, 'displayName' | 'avatarUrl'> | null) {
@@ -85,14 +87,41 @@ export class PartnerProfileService {
       );
     }
 
+    if (dto.email !== undefined) {
+      const email = dto.email.trim().toLowerCase();
+      const existing = await this.userModel.findOne({ email, _id: { $ne: staffUserId } }).select('_id');
+      if (existing) {
+        throw new ConflictException('A user with this email already exists');
+      }
+      await this.userModel.updateOne({ _id: staffUserId }, { email });
+    }
+
     if (dto.displayName === undefined) {
       const profile = await this.userProfileModel
         .findOne({ userId: new Types.ObjectId(staffUserId) })
         .lean();
-      return { success: true, data: { ...formatProfile(profile), canManageSettings: dto.canManageSettings, phone: dto.phone } };
+      return {
+        success: true,
+        data: { ...formatProfile(profile), canManageSettings: dto.canManageSettings, phone: dto.phone, email: dto.email },
+      };
     }
     const profile = await this.upsertProfile(staffUserId, { displayName: dto.displayName });
-    return { success: true, data: { ...formatProfile(profile), canManageSettings: dto.canManageSettings, phone: dto.phone } };
+    return {
+      success: true,
+      data: { ...formatProfile(profile), canManageSettings: dto.canManageSettings, phone: dto.phone, email: dto.email },
+    };
+  }
+
+  async resetStaffPassword(
+    partnerUserId: string,
+    staffUserId: string,
+    dto: ResetStaffPasswordDto,
+    role: UserRole,
+  ) {
+    await this.assertOwnsStaff(partnerUserId, staffUserId, role);
+    const passwordHash = await bcrypt.hash(dto.password, 12);
+    await this.userModel.updateOne({ _id: staffUserId }, { passwordHash });
+    return { success: true };
   }
 
   async updateStaffAvatar(

@@ -196,6 +196,7 @@ export async function updateStaffProfile(
   displayName?: string,
   canManageSettings?: boolean,
   phone?: string,
+  email?: string,
 ): Promise<PartnerOwnProfile> {
   return partnerFetch<PartnerOwnProfile>(`/partner/staff/${staffId}/profile`, {
     method: 'PATCH',
@@ -203,7 +204,15 @@ export async function updateStaffProfile(
       ...(displayName !== undefined ? { displayName } : {}),
       ...(canManageSettings !== undefined ? { canManageSettings } : {}),
       ...(phone !== undefined ? { phone } : {}),
+      ...(email !== undefined ? { email } : {}),
     }),
+  });
+}
+
+export async function resetStaffPassword(staffId: string, password: string): Promise<void> {
+  await partnerFetch(`/partner/staff/${staffId}/reset-password`, {
+    method: 'POST',
+    body: JSON.stringify({ password }),
   });
 }
 

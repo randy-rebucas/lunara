@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import type { PartnerStaffMember } from '@lunara/types';
-import { updateStaffProfile, uploadStaffAvatar } from '../lib/partner-api';
+import { resetStaffPassword, updateStaffProfile, uploadStaffAvatar } from '../lib/partner-api';
 
 export function StaffProfileModal({
   staff,
@@ -16,13 +16,19 @@ export function StaffProfileModal({
 }) {
   const [nameDraft, setNameDraft] = useState(staff.displayName ?? '');
   const [phoneDraft, setPhoneDraft] = useState(staff.phone ?? '');
+  const [emailDraft, setEmailDraft] = useState(staff.email ?? '');
   const [saving, setSaving] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [permissionSaving, setPermissionSaving] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
 
   async function handleSave() {
     const trimmedName = nameDraft.trim();
     const trimmedPhone = phoneDraft.trim();
+    const trimmedEmail = emailDraft.trim();
     setSaving(true);
     try {
       await updateStaffProfile(
@@ -30,6 +36,7 @@ export function StaffProfileModal({
         trimmedName !== staff.displayName ? trimmedName : undefined,
         undefined,
         trimmedPhone !== (staff.phone ?? '') ? trimmedPhone : undefined,
+        trimmedEmail !== (staff.email ?? '') ? trimmedEmail : undefined,
       );
       await onSaved();
       toast.success('Profile updated');
@@ -37,6 +44,29 @@ export function StaffProfileModal({
       toast.error(err instanceof Error ? err.message : 'Could not update profile');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleResetPassword() {
+    setPasswordError('');
+    if (newPassword.length < 8) {
+      setPasswordError('Password must be at least 8 characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Passwords do not match.');
+      return;
+    }
+    setPasswordSaving(true);
+    try {
+      await resetStaffPassword(staff._id, newPassword);
+      setNewPassword('');
+      setConfirmPassword('');
+      toast.success('Password reset');
+    } catch (err) {
+      setPasswordError(err instanceof Error ? err.message : 'Could not reset password');
+    } finally {
+      setPasswordSaving(false);
     }
   }
 
@@ -73,7 +103,7 @@ export function StaffProfileModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl">
         <h3 className="text-lg font-semibold text-slate-900">Edit staff profile</h3>
-        <p className="mt-1 text-sm text-muted">{staff.email ?? staff._id}</p>
+        <p className="mt-1 text-sm text-muted">{staff._id}</p>
 
         <div className="mt-4 flex items-center gap-3">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-lg font-semibold text-primary">
@@ -109,6 +139,17 @@ export function StaffProfileModal({
         </label>
 
         <label className="mt-4 block">
+          <span className="mb-1 block text-sm font-medium text-slate-900">Email</span>
+          <input
+            type="email"
+            className="input"
+            placeholder="staff@yourshop.com"
+            value={emailDraft}
+            onChange={(e) => setEmailDraft(e.target.value)}
+          />
+        </label>
+
+        <label className="mt-4 block">
           <span className="mb-1 block text-sm font-medium text-slate-900">Phone</span>
           <input
             type="tel"
@@ -136,6 +177,39 @@ export function StaffProfileModal({
           </button>
         </div>
 
+        <div className="mt-4 rounded-lg border border-border p-3">
+          <p className="text-sm font-medium text-slate-900">Reset password</p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <input
+              type="password"
+              className="input"
+              placeholder="New password"
+              minLength={8}
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+            />
+            <input
+              type="password"
+              className="input"
+              placeholder="Confirm password"
+              minLength={8}
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+            />
+          </div>
+          {passwordError && <p className="mt-2 text-sm text-red-600">{passwordError}</p>}
+          <button
+            type="button"
+            className="btn-outline btn-sm mt-2"
+            disabled={passwordSaving || !newPassword || !confirmPassword}
+            onClick={() => void handleResetPassword()}
+          >
+            {passwordSaving ? 'Resetting…' : 'Reset password'}
+          </button>
+        </div>
+
         <div className="mt-6 flex justify-end gap-2">
           <button type="button" className="btn-ghost" onClick={onClose}>
             Close
@@ -146,7 +220,9 @@ export function StaffProfileModal({
             disabled={
               saving ||
               !nameDraft.trim() ||
-              (nameDraft.trim() === staff.displayName && phoneDraft.trim() === (staff.phone ?? ''))
+              (nameDraft.trim() === staff.displayName &&
+                phoneDraft.trim() === (staff.phone ?? '') &&
+                emailDraft.trim() === (staff.email ?? ''))
             }
             onClick={() => void handleSave()}
           >
