@@ -768,6 +768,30 @@ export class PartnerOperationsService {
     };
   }
 
+  async removeStaff(userId: string, role: UserRole, staffId: string) {
+    const ownedBranchIds = await this.listOwnedBranchIds(userId, role);
+
+    const staff = await this.userModel.findOne({
+      _id: staffId,
+      role: UserRole.STAFF,
+      ...(role === UserRole.PARTNER ? { branchId: { $in: ownedBranchIds } } : {}),
+    });
+    if (!staff) throw new NotFoundException('Staff member not found');
+
+    const activeJobs = await this.orderModel.countDocuments({
+      'laundryProcessing.assignedStaffId': staff._id,
+      status: { $nin: [OrderStatus.COMPLETED, OrderStatus.CANCELLED, OrderStatus.REFUNDED] },
+    });
+    if (activeJobs > 0) {
+      throw new BadRequestException('Reassign this staff member\'s active jobs before removing them');
+    }
+
+    staff.isActive = false;
+    await staff.save();
+
+    return { success: true };
+  }
+
   async assignStaff(orderId: string, staffId: string, partnerUserId: string, role: UserRole) {
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');

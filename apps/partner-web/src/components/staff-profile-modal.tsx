@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import type { PartnerStaffMember } from '@lunara/types';
-import { resetStaffPassword, updateStaffProfile, uploadStaffAvatar } from '../lib/partner-api';
+import { removeStaff, resetStaffPassword, updateStaffProfile, uploadStaffAvatar } from '../lib/partner-api';
 
 export function StaffProfileModal({
   staff,
@@ -24,6 +24,9 @@ export function StaffProfileModal({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordError, setPasswordError] = useState('');
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState('');
 
   async function handleSave() {
     const trimmedName = nameDraft.trim();
@@ -67,6 +70,21 @@ export function StaffProfileModal({
       setPasswordError(err instanceof Error ? err.message : 'Could not reset password');
     } finally {
       setPasswordSaving(false);
+    }
+  }
+
+  async function handleRemove() {
+    setRemoveError('');
+    setRemoving(true);
+    try {
+      await removeStaff(staff._id);
+      await onSaved();
+      toast.success('Staff account removed');
+      onClose();
+    } catch (err) {
+      setRemoveError(err instanceof Error ? err.message : 'Could not remove staff account');
+    } finally {
+      setRemoving(false);
     }
   }
 
@@ -208,6 +226,42 @@ export function StaffProfileModal({
           >
             {passwordSaving ? 'Resetting…' : 'Reset password'}
           </button>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3">
+          <p className="text-sm font-medium text-red-700">Remove staff account</p>
+          <p className="mt-1 text-xs text-red-600">
+            {confirmingRemove
+              ? 'This will deactivate their account and sign them out. This cannot be undone from here.'
+              : 'They will no longer be able to sign in or be assigned orders.'}
+          </p>
+          {removeError && <p className="mt-2 text-sm text-red-700">{removeError}</p>}
+          <div className="mt-2 flex gap-2">
+            {confirmingRemove ? (
+              <>
+                <button
+                  type="button"
+                  className="btn-sm rounded-lg bg-red-600 px-3 py-1.5 text-white hover:bg-red-700 disabled:opacity-50"
+                  disabled={removing}
+                  onClick={() => void handleRemove()}
+                >
+                  {removing ? 'Removing…' : 'Confirm remove'}
+                </button>
+                <button
+                  type="button"
+                  className="btn-outline btn-sm"
+                  disabled={removing}
+                  onClick={() => setConfirmingRemove(false)}
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button type="button" className="btn-outline btn-sm" onClick={() => setConfirmingRemove(true)}>
+                Remove staff
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="mt-6 flex justify-end gap-2">

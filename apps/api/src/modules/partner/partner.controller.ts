@@ -525,6 +525,15 @@ export class PartnerController {
     return this.operationsService.reassignStaffBranch(req.user.sub, req.user.role, staffId, dto);
   }
 
+  @Delete('staff/:staffId')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  removeStaff(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('staffId') staffId: string,
+  ) {
+    return this.operationsService.removeStaff(req.user.sub, req.user.role, staffId);
+  }
+
   @Post('orders/:orderId/assign-staff')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   assignStaff(

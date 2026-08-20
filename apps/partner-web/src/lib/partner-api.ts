@@ -216,6 +216,10 @@ export async function resetStaffPassword(staffId: string, password: string): Pro
   });
 }
 
+export async function removeStaff(staffId: string): Promise<void> {
+  await partnerFetch(`/partner/staff/${staffId}`, { method: 'DELETE' });
+}
+
 export async function uploadStaffAvatar(staffId: string, file: File): Promise<PartnerOwnProfile> {
   return uploadAvatar(`/partner/staff/${staffId}/profile/avatar`, file);
 }
