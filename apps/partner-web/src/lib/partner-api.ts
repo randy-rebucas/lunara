@@ -1,4 +1,4 @@
-import type { PartnerOwnProfile, PortalRole, PortalUser } from '@lunara/types';
+import type { PartnerBranchRider, PartnerOwnProfile, PortalRole, PortalUser } from '@lunara/types';
 import { UserRole } from '@lunara/types';
 import { assertApiUrlConfigured, resolveApiOrigin, resolveApiV1BaseUrl } from '@lunara/utils';
 import { parseApiError } from './api-error';
@@ -218,6 +218,10 @@ export async function resetStaffPassword(staffId: string, password: string): Pro
 
 export async function removeStaff(staffId: string): Promise<void> {
   await partnerFetch(`/partner/staff/${staffId}`, { method: 'DELETE' });
+}
+
+export async function listAssignedRiders(): Promise<PartnerBranchRider[]> {
+  return partnerFetch<PartnerBranchRider[]>('/partner/riders');
 }
 
 export async function uploadStaffAvatar(staffId: string, file: File): Promise<PartnerOwnProfile> {

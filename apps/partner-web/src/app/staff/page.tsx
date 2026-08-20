@@ -2,13 +2,13 @@
 
 import Link from 'next/link';
 import { useCallback, useMemo, useState } from 'react';
-import type { PartnerStaffMember } from '@lunara/types';
+import type { PartnerBranchRider, PartnerStaffMember } from '@lunara/types';
 import { AuthLoading } from '../../components/auth-loading';
 import { DataPageStatus } from '../../components/data-page-status';
 import { StaffProfileModal } from '../../components/staff-profile-modal';
 import { PageHeader } from '../../components/ui/page-header';
 import { useRequirePartner } from '../../hooks/use-protected-page';
-import { partnerFetch } from '../../lib/partner-api';
+import { listAssignedRiders, partnerFetch } from '../../lib/partner-api';
 import { usePartnerQuery } from '../../lib/use-partner-query';
 
 interface BranchOption {
@@ -43,6 +43,7 @@ export default function StaffTeamPage() {
   const [branchId, setBranchId] = useState('');
   const [reassigningId, setReassigningId] = useState<string | null>(null);
   const [reassignError, setReassignError] = useState('');
+  const [activeTab, setActiveTab] = useState<'staff' | 'riders'>('staff');
 
   const load = useCallback(async () => {
     return partnerFetch<PartnerStaffMember[]>('/partner/staff');
@@ -56,6 +57,16 @@ export default function StaffTeamPage() {
 
   const { data: branches } = usePartnerQuery(loadBranches, []);
   const hasMultipleBranches = (branches?.length ?? 0) > 1;
+
+  const loadRiders = useCallback(async () => {
+    return listAssignedRiders();
+  }, []);
+
+  const {
+    data: branchRiders,
+    loading: ridersLoading,
+    error: ridersError,
+  } = usePartnerQuery(loadRiders, []);
 
   const stats = useMemo(() => {
     const members = staff ?? [];
@@ -158,6 +169,33 @@ export default function StaffTeamPage() {
         }
       />
 
+      <div className="mt-6 flex gap-2 border-b border-border">
+        <button
+          type="button"
+          className={`px-4 py-2 text-sm font-medium ${
+            activeTab === 'staff'
+              ? 'border-b-2 border-primary text-primary'
+              : 'text-muted hover:text-slate-700'
+          }`}
+          onClick={() => setActiveTab('staff')}
+        >
+          Staff
+        </button>
+        <button
+          type="button"
+          className={`px-4 py-2 text-sm font-medium ${
+            activeTab === 'riders'
+              ? 'border-b-2 border-primary text-primary'
+              : 'text-muted hover:text-slate-700'
+          }`}
+          onClick={() => setActiveTab('riders')}
+        >
+          Riders
+        </button>
+      </div>
+
+      {activeTab === 'staff' && (
+      <>
       {formSuccess && <div className="alert-success mt-4">{formSuccess}</div>}
 
       {showForm && (
@@ -376,6 +414,75 @@ export default function StaffTeamPage() {
           </p>
         )}
       </div>
+      </>
+      )}
+
+      {activeTab === 'riders' && (
+        <div className="mt-6">
+          <p className="text-sm text-muted">
+            Riders are onboarded and assigned by Lunara admin. This shows who&apos;s currently assigned to
+            your shop(s) for pickup and delivery.
+          </p>
+
+          <div className="mt-4">
+            <DataPageStatus loading={ridersLoading} error={ridersError} loadingMessage="Loading riders…" />
+          </div>
+
+          <div className="section-panel mt-4 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Branch</th>
+                    <th>Rider</th>
+                    <th>Contact</th>
+                    <th>Vehicle</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(branchRiders ?? []).map((br: PartnerBranchRider) => (
+                    <tr key={br.branchId}>
+                      <td className="font-medium text-slate-900">
+                        {br.branchName} ({br.branchCode})
+                      </td>
+                      <td>
+                        {br.rider ? (
+                          [br.rider.firstName, br.rider.lastName].filter(Boolean).join(' ') ||
+                          br.rider.email ||
+                          br.rider._id
+                        ) : (
+                          <span className="text-muted">Unassigned</span>
+                        )}
+                      </td>
+                      <td className="text-muted">
+                        {br.rider ? [br.rider.email, br.rider.phone].filter(Boolean).join(' · ') || '—' : '—'}
+                      </td>
+                      <td className="text-muted">
+                        {br.rider
+                          ? [br.rider.vehicleType, br.rider.plateNumber].filter(Boolean).join(' · ') || '—'
+                          : '—'}
+                      </td>
+                      <td>
+                        {br.rider ? (
+                          <span className={br.rider.isOnline ? 'badge-success' : 'badge-neutral'}>
+                            {br.rider.isOnline ? (br.rider.shiftStatus ?? 'Online') : 'Offline'}
+                          </span>
+                        ) : (
+                          <span className="badge-neutral">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {!ridersLoading && !ridersError && (branchRiders ?? []).length === 0 && (
+              <p className="p-6 text-sm text-muted">No branches to show riders for.</p>
+            )}
+          </div>
+        </div>
+      )}
 
       {editingStaff && (
         <StaffProfileModal

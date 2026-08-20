@@ -7,6 +7,7 @@ import { Customer, CustomerSchema } from '../customers/schemas/customer.schema';
 import { LaundryService, LaundryServiceSchema } from '../catalog/schemas/laundry-service.schema';
 import { LaundryAddon, LaundryAddonSchema } from '../catalog/schemas/laundry-addon.schema';
 import { RidersModule } from '../riders/riders.module';
+import { Rider, RiderSchema } from '../riders/schemas/rider.schema';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { PartnerController } from './partner.controller';
 import { PartnerOperationsService } from './partner-operations.service';
@@ -39,6 +40,7 @@ import { PromotionsModule } from '../promotions/promotions.module';
       { name: LaundryService.name, schema: LaundryServiceSchema },
       { name: LaundryAddon.name, schema: LaundryAddonSchema },
       { name: UserProfile.name, schema: UserProfileSchema },
+      { name: Rider.name, schema: RiderSchema },
     ]),
     RealtimeModule,
     RidersModule,

@@ -173,6 +173,25 @@ export interface PartnerOwnProfile {
   email?: string;
 }
 
+export interface PartnerAssignedRider {
+  _id: string;
+  email?: string;
+  phone?: string;
+  firstName?: string;
+  lastName?: string;
+  vehicleType?: string;
+  plateNumber?: string;
+  isOnline: boolean;
+  shiftStatus?: string;
+}
+
+export interface PartnerBranchRider {
+  branchId: string;
+  branchName: string;
+  branchCode: string;
+  rider: PartnerAssignedRider | null;
+}
+
 export interface PartnerInventoryItem {
   _id: string;
   sku: string;

@@ -23,6 +23,7 @@ import { Customer, CustomerDocument } from '../customers/schemas/customer.schema
 import { UserProfile, UserProfileDocument } from '../users/schemas/user-profile.schema';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { RiderAssignmentService } from '../riders/rider-assignment.service';
+import { Rider, RiderDocument } from '../riders/schemas/rider.schema';
 import { ShopInventoryDocument, ShopInventoryItem } from './schemas/shop-inventory.schema';
 import {
   PartnerSettlement,
@@ -101,6 +102,7 @@ export class PartnerOperationsService {
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
     @InjectModel(PartnerSettlement.name) private settlementModel: Model<PartnerSettlementDocument>,
     @InjectModel(UserProfile.name) private userProfileModel: Model<UserProfileDocument>,
+    @InjectModel(Rider.name) private riderModel: Model<RiderDocument>,
     private trackingGateway: TrackingGateway,
     private riderAssignmentService: RiderAssignmentService,
     private partnerOrderNotifications: PartnerOrderNotificationService,
@@ -688,6 +690,58 @@ export class PartnerOperationsService {
     return {
       success: true,
       data: staff.map((s) => this.formatStaffMember(s, jobMap, profileMap, branchMap)),
+    };
+  }
+
+  /** Riders are hired/onboarded by admin, then assigned to a branch as its default pickup/delivery rider.
+   * This lists that assignment so partners can see who's working their shop(s). */
+  async listAssignedRiders(userId: string, role: UserRole) {
+    const ownedBranchIds = await this.listOwnedBranchIds(userId, role);
+    const branchFilter =
+      role === UserRole.PARTNER ? { $in: ownedBranchIds } : await this.resolvePartnerBranchId(userId, role);
+    const branches = await this.branchModel
+      .find({ _id: branchFilter })
+      .select('name code assignedRiderId')
+      .sort({ name: 1 });
+
+    const riderUserIds = branches
+      .map((b) => b.assignedRiderId)
+      .filter((id): id is Types.ObjectId => Boolean(id));
+
+    const [riderUsers, riderProfiles] = await Promise.all([
+      this.userModel.find({ _id: { $in: riderUserIds } }).select('email phone'),
+      this.riderModel
+        .find({ userId: { $in: riderUserIds } })
+        .select('userId firstName lastName vehicleType plateNumber isOnline shiftStatus'),
+    ]);
+    const userMap = new Map(riderUsers.map((u) => [u._id.toString(), u]));
+    const profileMap = new Map(riderProfiles.map((p) => [p.userId.toString(), p]));
+
+    return {
+      success: true,
+      data: branches.map((b) => {
+        const riderId = b.assignedRiderId?.toString();
+        const riderUser = riderId ? userMap.get(riderId) : undefined;
+        const riderProfile = riderId ? profileMap.get(riderId) : undefined;
+        return {
+          branchId: b._id.toString(),
+          branchName: b.name,
+          branchCode: b.code,
+          rider: riderId
+            ? {
+                _id: riderId,
+                email: riderUser?.email,
+                phone: riderUser?.phone,
+                firstName: riderProfile?.firstName,
+                lastName: riderProfile?.lastName,
+                vehicleType: riderProfile?.vehicleType,
+                plateNumber: riderProfile?.plateNumber,
+                isOnline: riderProfile?.isOnline ?? false,
+                shiftStatus: riderProfile?.shiftStatus,
+              }
+            : null,
+        };
+      }),
     };
   }
 

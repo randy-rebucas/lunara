@@ -506,6 +506,12 @@ export class PartnerController {
     return this.operationsService.listStaff(req.user.sub, req.user.role);
   }
 
+  @Get('riders')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  listAssignedRiders(@Req() req: { user: { sub: string; role: UserRole } }) {
+    return this.operationsService.listAssignedRiders(req.user.sub, req.user.role);
+  }
+
   @Post('staff')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   createStaff(
