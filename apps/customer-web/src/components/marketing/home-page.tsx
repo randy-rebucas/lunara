@@ -308,9 +308,23 @@ export function HomePage() {
                 <li key={partner.partnerId} className="text-center">
                   <Link
                     href={`/service-areas/${partner.branches[0].id}`}
-                    className="text-lg font-bold tracking-tight text-slate-400 transition-colors hover:text-primary"
+                    className="inline-flex items-center justify-center opacity-70 grayscale transition-[opacity,filter] hover:opacity-100 hover:grayscale-0"
+                    aria-label={partner.partnerName}
+                    title={partner.partnerName}
                   >
-                    {partner.partnerName}
+                    {partner.logoUrl ? (
+                      <Image
+                        src={partner.logoUrl}
+                        alt={partner.partnerName}
+                        width={120}
+                        height={40}
+                        className="h-9 w-auto object-contain"
+                      />
+                    ) : (
+                      <span className="text-lg font-bold tracking-tight text-slate-400">
+                        {partner.partnerName}
+                      </span>
+                    )}
                   </Link>
                   {partner.branches.length > 1 ? (
                     <p className="mt-0.5 text-xs font-medium text-muted">

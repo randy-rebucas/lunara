@@ -182,6 +182,7 @@ export interface ServiceArea {
   branches?: ServiceAreaSibling[];
   partnerId?: string;
   partnerName?: string;
+  isMainShop?: boolean;
 }
 
 type PublicBranchApiShape = {
@@ -197,6 +198,7 @@ type PublicBranchApiShape = {
   branches?: ServiceAreaSibling[];
   partnerId?: string;
   partnerName?: string;
+  isMainShop?: boolean;
 };
 
 function toServiceArea(branch: PublicBranchApiShape): ServiceArea {
@@ -214,21 +216,27 @@ function toServiceArea(branch: PublicBranchApiShape): ServiceArea {
     branches: branch.branches,
     partnerId: branch.partnerId,
     partnerName: branch.partnerName,
+    isMainShop: branch.isMainShop,
   };
 }
 
 /** Groups service areas by partner, falling back to one group per branch when no partnerId is present. */
 export function groupServiceAreasByPartner(areas: ServiceArea[]) {
-  const groups = new Map<string, { partnerId: string; partnerName: string; branches: ServiceArea[] }>();
+  const groups = new Map<
+    string,
+    { partnerId: string; partnerName: string; logoUrl?: string; branches: ServiceArea[] }
+  >();
   for (const area of areas) {
     const key = area.partnerId ?? area.id;
     const existing = groups.get(key);
     if (existing) {
       existing.branches.push(area);
+      if (area.isMainShop && area.logoUrl) existing.logoUrl = area.logoUrl;
     } else {
       groups.set(key, {
         partnerId: key,
         partnerName: area.partnerName || area.name,
+        logoUrl: area.logoUrl,
         branches: [area],
       });
     }

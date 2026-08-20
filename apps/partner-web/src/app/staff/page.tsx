@@ -75,6 +75,27 @@ export default function StaffTeamPage() {
     return { count: members.length, activeJobs, busy };
   }, [staff]);
 
+  const riderGroups = useMemo(() => {
+    const groups = new Map<
+      string,
+      { key: string; rider: PartnerBranchRider['rider']; branches: PartnerBranchRider[] }
+    >();
+    for (const br of branchRiders ?? []) {
+      const key = br.rider?._id ?? 'unassigned';
+      const existing = groups.get(key);
+      if (existing) {
+        existing.branches.push(br);
+      } else {
+        groups.set(key, { key, rider: br.rider, branches: [br] });
+      }
+    }
+    return Array.from(groups.values()).sort((a, b) => {
+      if (a.key === 'unassigned') return 1;
+      if (b.key === 'unassigned') return -1;
+      return 0;
+    });
+  }, [branchRiders]);
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setFormError('');
@@ -433,51 +454,55 @@ export default function StaffTeamPage() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Branch</th>
                     <th>Rider</th>
                     <th>Contact</th>
                     <th>Vehicle</th>
                     <th>Status</th>
+                    <th>Branches</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(branchRiders ?? []).map((br: PartnerBranchRider) => (
-                    <tr key={br.branchId}>
+                  {riderGroups.map((g) => (
+                    <tr key={g.key}>
                       <td className="font-medium text-slate-900">
-                        {br.branchName} ({br.branchCode})
-                      </td>
-                      <td>
-                        {br.rider ? (
-                          [br.rider.firstName, br.rider.lastName].filter(Boolean).join(' ') ||
-                          br.rider.email ||
-                          br.rider._id
-                        ) : (
-                          <span className="text-muted">Unassigned</span>
-                        )}
+                        {g.rider
+                          ? [g.rider.firstName, g.rider.lastName].filter(Boolean).join(' ') ||
+                            g.rider.email ||
+                            g.rider._id
+                          : <span className="text-muted">Unassigned</span>}
                       </td>
                       <td className="text-muted">
-                        {br.rider ? [br.rider.email, br.rider.phone].filter(Boolean).join(' · ') || '—' : '—'}
+                        {g.rider ? [g.rider.email, g.rider.phone].filter(Boolean).join(' · ') || '—' : '—'}
                       </td>
                       <td className="text-muted">
-                        {br.rider
-                          ? [br.rider.vehicleType, br.rider.plateNumber].filter(Boolean).join(' · ') || '—'
+                        {g.rider
+                          ? [g.rider.vehicleType, g.rider.plateNumber].filter(Boolean).join(' · ') || '—'
                           : '—'}
                       </td>
                       <td>
-                        {br.rider ? (
-                          <span className={br.rider.isOnline ? 'badge-success' : 'badge-neutral'}>
-                            {br.rider.isOnline ? (br.rider.shiftStatus ?? 'Online') : 'Offline'}
+                        {g.rider ? (
+                          <span className={g.rider.isOnline ? 'badge-success' : 'badge-neutral'}>
+                            {g.rider.isOnline ? (g.rider.shiftStatus ?? 'Online') : 'Offline'}
                           </span>
                         ) : (
                           <span className="badge-neutral">—</span>
                         )}
+                      </td>
+                      <td>
+                        <div className="flex flex-wrap gap-1">
+                          {g.branches.map((b) => (
+                            <span key={b.branchId} className="badge-neutral">
+                              {b.branchName} ({b.branchCode})
+                            </span>
+                          ))}
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            {!ridersLoading && !ridersError && (branchRiders ?? []).length === 0 && (
+            {!ridersLoading && !ridersError && riderGroups.length === 0 && (
               <p className="p-6 text-sm text-muted">No branches to show riders for.</p>
             )}
           </div>

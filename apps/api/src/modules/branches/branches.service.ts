@@ -1168,7 +1168,7 @@ export class BranchesService {
     await this.ensureSeeded();
     const branches = await this.branchModel
       .find(this.operationalBranchFilter())
-      .select('name city province serviceRadiusKm logoUrl machines partnerUserId')
+      .select('name city province serviceRadiusKm logoUrl machines partnerUserId isMainShop')
       .sort({ name: 1 });
     const ownerProfiles = await this.userProfileModel
       .find({ userId: { $in: branches.map((b) => b.partnerUserId) } })
@@ -1183,6 +1183,7 @@ export class BranchesService {
           ...this.toPublicBranch(b),
           partnerId: b.partnerUserId.toString(),
           partnerName: owner?.displayName,
+          isMainShop: b.isMainShop,
         };
       }),
     };
