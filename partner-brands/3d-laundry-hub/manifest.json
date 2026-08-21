@@ -2,8 +2,8 @@
   "partnerId": "6a8697f6f01685464b84aa5b",
   "appName": "3D Laundry Hub",
   "slug": "3d-laundry-hub",
-  "iosBundleId": "com.3dlaundryhub.customer",
-  "androidPackage": "com.3dlaundryhub.customer",
+  "iosBundleId": "com.treedlaundryhub.customer",
+  "androidPackage": "com.treedlaundryhub.customer",
   "easProjectId": "87df1d77-f85c-46c9-b677-664df1ff54bd",
   "splashBackgroundColor": "#cfe4fb",
   "theme": {
