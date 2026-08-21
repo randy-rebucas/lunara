@@ -7,6 +7,7 @@ import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { ReviewsModule } from '../reviews/reviews.module';
 import { User, UserSchema } from '../users/schemas/user.schema';
+import { UserProfile, UserProfileSchema } from '../users/schemas/user-profile.schema';
 import { RidersController } from './riders.controller';
 import { DeliveryService } from './delivery.service';
 import { PickupService } from './pickup.service';
@@ -42,6 +43,7 @@ import { AuditLogModule } from '../audit/audit-log.module';
       { name: Branch.name, schema: BranchSchema },
       { name: Customer.name, schema: CustomerSchema },
       { name: User.name, schema: UserSchema },
+      { name: UserProfile.name, schema: UserProfileSchema },
       { name: Notification.name, schema: NotificationSchema },
       { name: Review.name, schema: ReviewSchema },
       { name: RiderWalletTransaction.name, schema: RiderWalletTransactionSchema },

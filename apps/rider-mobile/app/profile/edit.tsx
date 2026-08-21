@@ -1,13 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import * as Location from 'expo-location';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRiderOperations } from '../../src/context/rider-operations';
 import { Input } from '../../src/components/ui/input';
 import { KeyboardSafeScrollView } from '../../src/components/ui/keyboard-safe-scroll-view';
 import { Screen } from '../../src/components/ui/screen';
 import { DataLoadState } from '../../src/components/data-load-state';
 import { riderFetch } from '../../src/api';
+import { reverseGeocodeAddress } from '../../src/lib/reverse-geocode';
 import { VEHICLE_TYPES, type RiderMe, type VehicleType } from '../../src/lib/rider-types';
 import { colors, radius, shadow, spacing, typography } from '../../src/theme';
 
@@ -193,6 +195,9 @@ export default function EditProfileScreen() {
   const [city, setCity] = useState('');
   const [province, setProvince] = useState('');
   const [postalCode, setPostalCode] = useState('');
+  const [lat, setLat] = useState<number | undefined>(undefined);
+  const [lng, setLng] = useState<number | undefined>(undefined);
+  const [locating, setLocating] = useState(false);
   const [vehicleType, setVehicleType] = useState<VehicleType>('motorcycle');
   const [plateNumber, setPlateNumber] = useState('');
   const [orCrNumber, setOrCrNumber] = useState('');
@@ -210,6 +215,8 @@ export default function EditProfileScreen() {
       setCity(data.homeAddress?.city ?? '');
       setProvince(data.homeAddress?.province ?? '');
       setPostalCode(data.homeAddress?.postalCode ?? '');
+      setLat(data.homeAddress?.lat);
+      setLng(data.homeAddress?.lng);
       setVehicleType((data.vehicleType as VehicleType) ?? 'motorcycle');
       setPlateNumber(data.plateNumber ?? '');
       setOrCrNumber(data.orCrNumber ?? '');
@@ -223,6 +230,35 @@ export default function EditProfileScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  async function useCurrentLocation() {
+    if (locating) return;
+    setLocating(true);
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Location access needed', 'Allow location access to pick your current address.');
+        return;
+      }
+      const position = await Location.getCurrentPositionAsync({});
+      const { latitude, longitude } = position.coords;
+      setLat(latitude);
+      setLng(longitude);
+
+      const geocoded = await reverseGeocodeAddress(latitude, longitude);
+      if (geocoded) {
+        setLine1(geocoded.line1);
+        if (geocoded.line2) setLine2(geocoded.line2);
+        setCity(geocoded.city);
+        setProvince(geocoded.province);
+        if (geocoded.postalCode) setPostalCode(geocoded.postalCode);
+      }
+    } catch (e) {
+      Alert.alert('Could not get location', e instanceof Error ? e.message : 'Please try again.');
+    } finally {
+      setLocating(false);
+    }
+  }
 
   async function saveProfile() {
     setError('');
@@ -248,6 +284,8 @@ export default function EditProfileScreen() {
             city: city.trim() || undefined,
             province: province.trim() || undefined,
             postalCode: postalCode.trim() || undefined,
+            lat,
+            lng,
           },
           vehicleType,
           plateNumber: plateNumber.trim() || undefined,
@@ -334,6 +372,21 @@ export default function EditProfileScreen() {
 
         {/* ── Home address ── */}
         <Section icon="location-outline" title="Home Address">
+          <Pressable
+            style={({ pressed }) => [styles.locateBtn, pressed && styles.locateBtnPressed]}
+            onPress={useCurrentLocation}
+            disabled={locating}
+            accessibilityRole="button"
+          >
+            {locating ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Ionicons name="locate-outline" size={15} color={colors.primary} />
+            )}
+            <Text style={styles.locateBtnText}>
+              {locating ? 'Getting your location…' : 'Use current location'}
+            </Text>
+          </Pressable>
           <Field label="ADDRESS LINE 1">
             <Input
               placeholder="House no., street name"
@@ -456,6 +509,24 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   nameField: { flex: 1 },
+  locateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+    backgroundColor: colors.primaryLight,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.sm + 2,
+    marginBottom: spacing.md,
+  },
+  locateBtnPressed: { opacity: 0.85 },
+  locateBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.primary,
+  },
   readOnly: {
     opacity: 0.55,
     backgroundColor: colors.surfaceMuted,

@@ -27,6 +27,7 @@ import { Customer, CustomerDocument } from '../customers/schemas/customer.schema
 import { Notification, NotificationDocument } from '../reviews/schemas/notification.schema';
 import { Review, ReviewDocument } from '../reviews/schemas/review.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import { UserProfile, UserProfileDocument } from '../users/schemas/user-profile.schema';
 import { UpdateLocationDto, UpdateRiderEmploymentDto, UpdateRiderProfileDto } from './dto/rider.dto';
 import {
   isRiderCompliant,
@@ -61,6 +62,7 @@ export class RidersService {
     @InjectModel(Branch.name) private branchModel: Model<BranchDocument>,
     @InjectModel(Notification.name) private notificationModel: Model<NotificationDocument>,
     @InjectModel(Review.name) private reviewModel: Model<ReviewDocument>,
+    @InjectModel(UserProfile.name) private userProfileModel: Model<UserProfileDocument>,
     private riderNotificationService: RiderNotificationService,
     private riderWalletService: RiderWalletService,
     private ledgerService: LedgerService,
@@ -170,6 +172,7 @@ export class RidersService {
     userId: string,
     rider: RiderDocument,
     user: Pick<UserDocument, 'email' | 'phone'> | null,
+    avatarUrl?: string,
   ) {
     const compliance = isRiderCompliant(rider, user);
     const displayFirstName =
@@ -183,6 +186,7 @@ export class RidersService {
       shiftStatus: rider.shiftStatus ?? (rider.isOnline ? 'online' : 'offline'),
       firstName: rider.firstName,
       lastName: rider.lastName,
+      avatarUrl,
       homeAddress: rider.homeAddress ?? null,
       vehicleType: rider.vehicleType,
       plateNumber: rider.plateNumber,
@@ -216,10 +220,46 @@ export class RidersService {
     void this.riderNotificationService.syncOverduePickupReminders(userId).catch(() => {});
     const rider = await this.findOrCreate(userId);
     const user = await this.userModel.findById(userId).select('email phone');
+    const profile = await this.userProfileModel
+      .findOne({ userId: new Types.ObjectId(userId) })
+      .select('avatarUrl')
+      .lean();
     return {
       success: true,
-      data: this.serializeMePayload(userId, rider, user),
+      data: this.serializeMePayload(userId, rider, user, profile?.avatarUrl),
     };
+  }
+
+  async uploadAvatar(userId: string, file: Express.Multer.File) {
+    const previousAvatarUrl = (
+      await this.userProfileModel.findOne({ userId: new Types.ObjectId(userId) }).select('avatarUrl').lean()
+    )?.avatarUrl;
+    const result = await this.cloudinaryStorageService.uploadBuffer(
+      file.buffer,
+      'lunara/user-avatars',
+      `${userId}-${Date.now()}`,
+      'image',
+      file.mimetype,
+    );
+    await this.userProfileModel.findOneAndUpdate(
+      { userId: new Types.ObjectId(userId) },
+      { $set: { avatarUrl: result.secure_url } },
+      { upsert: true },
+    );
+    await this.cloudinaryStorageService.deleteFile('lunara/user-avatars', previousAvatarUrl);
+    return this.getMe(userId);
+  }
+
+  async removeAvatar(userId: string) {
+    const previousAvatarUrl = (
+      await this.userProfileModel.findOne({ userId: new Types.ObjectId(userId) }).select('avatarUrl').lean()
+    )?.avatarUrl;
+    await this.userProfileModel.findOneAndUpdate(
+      { userId: new Types.ObjectId(userId) },
+      { $unset: { avatarUrl: '' } },
+    );
+    await this.cloudinaryStorageService.deleteFile('lunara/user-avatars', previousAvatarUrl);
+    return this.getMe(userId);
   }
 
   async creditEarning(userId: string, orderId: string, type: Extract<RiderEarningType, 'pickup' | 'delivery'>) {
@@ -566,6 +606,8 @@ export class RidersService {
         ...(dto.homeAddress.postalCode !== undefined
           ? { postalCode: dto.homeAddress.postalCode.trim() }
           : {}),
+        ...(dto.homeAddress.lat !== undefined ? { lat: dto.homeAddress.lat } : {}),
+        ...(dto.homeAddress.lng !== undefined ? { lng: dto.homeAddress.lng } : {}),
       };
     }
 

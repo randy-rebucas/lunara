@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -51,6 +52,7 @@ const imageMemoryUploadOptions = (maxSizeBytes: number) => ({
 const taskPhotoUploadOptions = imageMemoryUploadOptions(8 * 1024 * 1024);
 const remittanceProofUploadOptions = imageMemoryUploadOptions(8 * 1024 * 1024);
 const riderDocumentUploadOptions = imageMemoryUploadOptions(5 * 1024 * 1024);
+const avatarUploadOptions = imageMemoryUploadOptions(5 * 1024 * 1024);
 
 @Controller('riders')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -237,6 +239,25 @@ export class RidersController {
   @Roles(UserRole.RIDER)
   updateMe(@Req() req: { user: { sub: string } }, @Body() dto: UpdateRiderProfileDto) {
     return this.ridersService.updateProfile(req.user.sub, dto);
+  }
+
+  @Post('me/avatar')
+  @Roles(UserRole.RIDER)
+  @UseInterceptors(FileInterceptor('avatar', avatarUploadOptions))
+  async uploadAvatar(
+    @Req() req: { user: { sub: string } },
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('Avatar image is required');
+    }
+    return this.ridersService.uploadAvatar(req.user.sub, file);
+  }
+
+  @Delete('me/avatar')
+  @Roles(UserRole.RIDER)
+  removeAvatar(@Req() req: { user: { sub: string } }) {
+    return this.ridersService.removeAvatar(req.user.sub);
   }
 
   @Post('me/documents/:type')

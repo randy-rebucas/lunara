@@ -38,6 +38,12 @@ class RiderHomeAddress {
 
   @Prop()
   postalCode?: string;
+
+  @Prop()
+  lat?: number;
+
+  @Prop()
+  lng?: number;
 }
 
 @Schema({ _id: false })

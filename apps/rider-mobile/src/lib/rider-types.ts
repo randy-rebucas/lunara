@@ -110,6 +110,8 @@ export interface RiderHomeAddress {
   city?: string;
   province?: string;
   postalCode?: string;
+  lat?: number;
+  lng?: number;
 }
 
 export interface RiderCompliance {
@@ -129,6 +131,7 @@ export interface RiderMe {
   shiftStatus?: ShiftStatus;
   firstName?: string;
   lastName?: string;
+  avatarUrl?: string;
   homeAddress?: RiderHomeAddress | null;
   vehicleType?: string;
   plateNumber?: string;

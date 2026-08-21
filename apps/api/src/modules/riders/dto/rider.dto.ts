@@ -69,6 +69,14 @@ export class UpdateRiderHomeAddressDto {
   @MinLength(1)
   @MaxLength(20)
   postalCode?: string;
+
+  @IsOptional()
+  @IsNumber()
+  lat?: number;
+
+  @IsOptional()
+  @IsNumber()
+  lng?: number;
 }
 
 export class UpdateRiderProfileDto {

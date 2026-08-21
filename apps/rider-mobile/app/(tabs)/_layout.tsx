@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRiderOperations } from '../../src/context/rider-operations';
 import { RiderAlertsBell } from '../../src/components/rider-alerts-bell';
+import { TasksHeaderActions } from '../../src/components/tasks-header-actions';
 import { TAB_BAR_CONTENT_HEIGHT } from '../../src/hooks/use-tab-bar-height';
 import { colors, spacing } from '../../src/theme';
 
@@ -70,6 +71,7 @@ function TabsNavigator() {
           title: 'Tasks',
           tabBarIcon: tabIcon('list-outline'),
           tabBarBadge: taskBadgeCount > 0 ? (taskBadgeCount > 9 ? '9+' : taskBadgeCount) : undefined,
+          headerRight: () => <TasksHeaderActions />,
         }}
       />
       <Tabs.Screen

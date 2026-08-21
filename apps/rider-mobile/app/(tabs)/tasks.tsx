@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useRiderOperations } from '../../src/context/rider-operations';
 import { EmptyState } from '../../src/components/ui/empty-state';
 import { Screen } from '../../src/components/ui/screen';
@@ -443,7 +443,6 @@ const cardStyles = StyleSheet.create({
 // ── Tasks screen ──────────────────────────────────────────────────────────────
 
 export default function TasksScreen() {
-  const router = useRouter();
   const tabPadding = useTabScreenPadding();
   const { filter: filterParam } = useLocalSearchParams<{ filter?: string }>();
   const initialFilter =
@@ -624,25 +623,7 @@ export default function TasksScreen() {
     <>
       {/* ── Title row ── */}
       <View style={styles.titleRow}>
-        <View>
-          <Text style={styles.title}>Tasks</Text>
-          <Text style={styles.subtitle}>Filter by assignment stage.</Text>
-        </View>
-        <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-          <Pressable
-            style={styles.sortBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Scan a laundry tag"
-            onPress={() => router.push('/scan?mode=lookup_tag')}
-          >
-            <Ionicons name="qr-code-outline" size={15} color={colors.primary} />
-            <Text style={styles.sortBtnText}>Scan tag</Text>
-          </Pressable>
-          <Pressable style={styles.sortBtn} accessibilityRole="button" accessibilityLabel="Sort tasks">
-            <Ionicons name="funnel-outline" size={15} color={colors.primary} />
-            <Text style={styles.sortBtnText}>Sort</Text>
-          </Pressable>
-        </View>
+        <Text style={styles.subtitle}>Filter by assignment stage.</Text>
       </View>
 
       {/* ── Filter chips with counts ── */}
@@ -706,39 +687,13 @@ export default function TasksScreen() {
 const styles = StyleSheet.create({
   // ── Title ──
   titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     marginBottom: spacing.sm,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: colors.foreground,
-    letterSpacing: -0.3,
   },
   subtitle: {
     ...typography.caption,
     color: colors.mutedForeground,
     marginTop: 2,
   },
-  sortBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    borderWidth: 1,
-    borderColor: colors.primaryBorder,
-    backgroundColor: colors.primaryLight,
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-  },
-  sortBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-
   // ── Filter chips ──
   chipsRow: {
     paddingBottom: spacing.lg,

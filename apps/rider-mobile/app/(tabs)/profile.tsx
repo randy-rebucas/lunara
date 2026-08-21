@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { ActivityIndicator, Alert, Image, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { formatCurrency } from '@lunara/utils';
 import { ComplianceBanner } from '../../src/components/compliance-banner';
 import { useRiderOperations } from '../../src/context/rider-operations';
@@ -8,41 +9,94 @@ import { LocationPermissionBanner } from '../../src/components/ui/location-permi
 import { Screen } from '../../src/components/ui/screen';
 import { StatusBadge } from '../../src/components/ui/status-badge';
 import { useTabScreenPadding } from '../../src/hooks/use-tab-bar-height';
+import { pickRiderAvatar } from '../../src/lib/rider-avatar';
+import type { RiderMe } from '../../src/lib/rider-types';
 import { useAuthStore } from '../../src/store/auth';
 import { colors, radius, shadow, spacing, typography } from '../../src/theme';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
+const AVATAR_SIZE = 64;
+
 // ── Avatar ────────────────────────────────────────────────────────────────────
 
-function Avatar({ name }: { name: string }) {
+interface AvatarProps {
+  name: string;
+  avatarUrl?: string;
+  uploading: boolean;
+  onPress: () => void;
+}
+
+function Avatar({ name, avatarUrl, uploading, onPress }: AvatarProps) {
   const initials = name
     .split(' ')
     .slice(0, 2)
     .map((w) => w[0]?.toUpperCase() ?? '')
     .join('');
   return (
-    <View style={avatarStyles.wrap}>
-      <Text style={avatarStyles.text}>{initials || '?'}</Text>
-    </View>
+    <Pressable
+      onPress={onPress}
+      disabled={uploading}
+      style={avatarStyles.wrap}
+      accessibilityRole="button"
+      accessibilityLabel={uploading ? 'Uploading profile photo' : 'Change profile photo'}
+    >
+      {avatarUrl ? (
+        <Image source={{ uri: avatarUrl }} style={avatarStyles.image} />
+      ) : (
+        <View style={avatarStyles.fallback}>
+          <Text style={avatarStyles.text}>{initials || '?'}</Text>
+        </View>
+      )}
+      <View style={avatarStyles.editBadge}>
+        {uploading ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <Ionicons name="camera" size={12} color="#fff" />
+        )}
+      </View>
+    </Pressable>
   );
 }
 
 const avatarStyles = StyleSheet.create({
   wrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    marginBottom: spacing.md,
+  },
+  image: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
+    backgroundColor: colors.border,
+  },
+  fallback: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.md,
   },
   text: {
     fontSize: 22,
     fontWeight: '800',
     color: '#fff',
     letterSpacing: 0.5,
+  },
+  editBadge: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.surface,
   },
 });
 
@@ -166,10 +220,13 @@ export default function ProfileScreen() {
     unreadCount,
     refreshing,
     onRefresh,
+    refresh,
     handleLogout,
     locationDenied,
     requestLocationPermission,
   } = useRiderOperations();
+  const apiUpload = useAuthStore((s) => s.apiUpload);
+  const [avatarUploading, setAvatarUploading] = useState(false);
 
   const email = authUser?.email ?? me?.user?.email ?? '—';
   const phone = me?.user?.phone ?? '—';
@@ -177,6 +234,21 @@ export default function ProfileScreen() {
   const plateNumber = me?.plateNumber ?? '—';
   const compliance = me?.compliance;
   const approvedDocs = compliance?.approvedDocumentCount ?? 0;
+
+  async function handleAvatarPress() {
+    if (avatarUploading) return;
+    try {
+      const formData = await pickRiderAvatar();
+      if (!formData) return;
+      setAvatarUploading(true);
+      await apiUpload<RiderMe>('/riders/me/avatar', formData);
+      refresh();
+    } catch (e) {
+      Alert.alert('Upload failed', e instanceof Error ? e.message : 'Could not upload photo');
+    } finally {
+      setAvatarUploading(false);
+    }
+  }
 
   return (
     <Screen
@@ -193,7 +265,12 @@ export default function ProfileScreen() {
 
       {/* ── Profile hero ── */}
       <View style={styles.hero}>
-        <Avatar name={name} />
+        <Avatar
+          name={name}
+          avatarUrl={me?.avatarUrl}
+          uploading={avatarUploading}
+          onPress={handleAvatarPress}
+        />
         <Text style={styles.heroName}>{name}</Text>
         <Text style={styles.heroContact}>{email}</Text>
         {phone !== '—' ? <Text style={styles.heroContact}>{phone}</Text> : null}
