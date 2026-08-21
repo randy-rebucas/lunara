@@ -463,6 +463,8 @@ export interface PartnerProcessingView {
     pickup?: { actualWeightKg?: number; receiptCode?: string; droppedAtShop?: string };
     paymentMethod?: string;
     paymentLabel?: string;
+    customerName?: string;
+    customerPhone?: string;
   };
   currentStep: { id: string; label: string; description?: string; orderStatus?: string };
   nextStep: { id: string; label: string } | null;

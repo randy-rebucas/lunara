@@ -109,11 +109,25 @@ export class ProcessingService {
     if (!order) throw new NotFoundException('Order not found');
     const branchId = await resolvePortalBranchId(this.userModel, userId, role);
     assertOrderPortalAccess(order, userId, role, branchId);
-    const paymentsByOrderId = await loadLatestOrderPaymentsByOrderId(this.paymentModel, [order._id]);
+    const [paymentsByOrderId, customer] = await Promise.all([
+      loadLatestOrderPaymentsByOrderId(this.paymentModel, [order._id]),
+      this.loadCustomerInfo(order.customerId),
+    ]);
     if (!PARTNER_PROCESSING_QUEUE_STATUSES.includes(order.status)) {
-      return { success: true, data: this.buildPreProcessingView(order, paymentsByOrderId) };
+      return { success: true, data: this.buildPreProcessingView(order, paymentsByOrderId, customer) };
     }
-    return { success: true, data: await this.buildProcessingView(order, paymentsByOrderId) };
+    return { success: true, data: await this.buildProcessingView(order, paymentsByOrderId, customer) };
+  }
+
+  private async loadCustomerInfo(customerId: Types.ObjectId) {
+    const [customer, user] = await Promise.all([
+      this.customerModel.findOne({ userId: customerId }).select('firstName lastName').lean(),
+      this.userModel.findById(customerId).select('phone').lean(),
+    ]);
+    return {
+      customerName: customer ? `${customer.firstName ?? ''} ${customer.lastName ?? ''}`.trim() || undefined : undefined,
+      customerPhone: user?.phone,
+    };
   }
 
   async acceptJob(orderId: string, userId: string, role: UserRole) {
@@ -477,6 +491,7 @@ export class ProcessingService {
   private buildPreProcessingView(
     order: OrderDocument,
     paymentsByOrderId?: Map<string, PaymentDocument>,
+    customer?: { customerName?: string; customerPhone?: string },
   ) {
     const label = formatPartnerPreProcessingLabel(order.status);
     const paymentSummary = buildOrderPaymentSummary(paymentsByOrderId?.get(order._id.toString()));
@@ -499,6 +514,8 @@ export class ProcessingService {
         pickup: order.pickup,
         paymentMethod: paymentSummary.paymentMethod,
         paymentLabel: buildPartnerPaymentLabel(paymentSummary),
+        customerName: customer?.customerName,
+        customerPhone: customer?.customerPhone,
       },
       processing: order.laundryProcessing,
       currentStep: {
@@ -520,6 +537,7 @@ export class ProcessingService {
   private async buildProcessingView(
     order: OrderDocument,
     paymentsByOrderId?: Map<string, PaymentDocument>,
+    customer?: { customerName?: string; customerPhone?: string },
   ) {
     const currentStepId = this.resolveCurrentStepId(order);
     const currentStep = getProcessingStep(currentStepId);
@@ -549,6 +567,8 @@ export class ProcessingService {
         pickup: order.pickup,
         paymentMethod: paymentSummary.paymentMethod,
         paymentLabel: buildPartnerPaymentLabel(paymentSummary),
+        customerName: customer?.customerName,
+        customerPhone: customer?.customerPhone,
       },
       processing: {
         ...(order.laundryProcessing as unknown as Record<string, unknown>),

@@ -17,6 +17,7 @@ export interface User extends BaseDocument {
   email?: string;
   phone?: string;
   role: UserRole;
+  branchId?: string;
   isActive: boolean;
   lastLoginAt?: string;
 }
