@@ -24,6 +24,12 @@
         "LUNARA_PARTNER_SLUG": "jelave"
       }
     },
+    "preview-3d-laundry-hub": {
+      "extends": "preview",
+      "env": {
+        "LUNARA_PARTNER_SLUG": "3d-laundry-hub"
+      }
+    },
     "production": {
       "autoIncrement": true,
       "node": "20.0.0",
@@ -35,6 +41,12 @@
       "extends": "production",
       "env": {
         "LUNARA_PARTNER_SLUG": "jelave"
+      }
+    },
+    "production-3d-laundry-hub": {
+      "extends": "production",
+      "env": {
+        "LUNARA_PARTNER_SLUG": "3d-laundry-hub"
       }
     }
   },

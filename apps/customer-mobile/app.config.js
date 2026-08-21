@@ -93,6 +93,14 @@ module.exports = {
   },
   plugins: [
     ...brandedPlugins,
+    [
+      'expo-splash-screen',
+      {
+        image: splash,
+        resizeMode: 'contain',
+        backgroundColor: manifest?.splashBackgroundColor ?? '#ffffff',
+      },
+    ],
     ...(regularFontPath
       ? [
           [
@@ -105,11 +113,6 @@ module.exports = {
       : []),
   ],
   icon,
-  splash: {
-    image: splash,
-    resizeMode: 'contain',
-    backgroundColor: manifest?.splashBackgroundColor ?? '#ffffff',
-  },
   android: {
     ...appJson.android,
     package: manifest?.androidPackage ?? appJson.android.package,

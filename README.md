@@ -58,6 +58,9 @@ npm run dev --workspace=@lunara/rider-mobile
 # Run partner brands
 LUNARA_PARTNER_SLUG=jelave npm run dev --workspace=@lunara/customer-mobile
 eas build --platform android --profile production-jelave
+
+LUNARA_PARTNER_SLUG=3d-laundry-hub npm run dev --workspace=@lunara/customer-mobile
+eas build --platform android --profile production-3d-laundry-hub
 ```
 
 ## Mobile Apps
