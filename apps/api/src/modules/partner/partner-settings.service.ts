@@ -31,7 +31,9 @@ export class PartnerSettingsService {
       const branch =
         role === UserRole.ADMIN
           ? await this.branchModel.findOne({ branchType: 'partner_shop' }).sort({ name: 1 })
-          : await this.branchModel.findOne({ partnerUserId: new Types.ObjectId(userId) });
+          : await this.branchModel
+              .findOne({ partnerUserId: new Types.ObjectId(userId) })
+              .sort({ isMainShop: -1, name: 1 });
       if (!branch) throw new NotFoundException('Partner shop branch not found');
       return branch;
     }

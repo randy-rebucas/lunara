@@ -6,6 +6,17 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { ReviewsService } from './reviews.service';
 
+/** No auth — consumed by the public marketing site (homepage testimonials). */
+@Controller('public/reviews')
+export class PublicReviewsController {
+  constructor(private readonly reviewsService: ReviewsService) {}
+
+  @Get('featured')
+  listFeatured(@Query('limit') limit = '12') {
+    return this.reviewsService.listFeatured(Number(limit));
+  }
+}
+
 @Controller()
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ReviewsController {

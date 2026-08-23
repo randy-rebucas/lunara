@@ -13,7 +13,7 @@ import {
   View,
 } from 'react-native';
 import { KeyboardSafeScrollView } from '../../../src/components/ui/keyboard-safe-scroll-view';
-import { OrderStatus, PaymentMethod, PaymentStatus } from '@lunara/types';
+import { OrderStatus, PaymentMethod, PaymentStatus, type OperatingHours } from '@lunara/types';
 import {
   buildCustomerTimeline,
   formatCashTimingLabel,
@@ -22,7 +22,6 @@ import {
   formatPaymentMethodLabel,
   formatPaymentStatusLabel,
   type BranchHoliday,
-  type PickupSlot,
 } from '@lunara/utils';
 import { Button } from '../../../src/components/ui/button';
 import { Card } from '../../../src/components/ui/card';
@@ -126,8 +125,9 @@ export default function OrderTrackScreen() {
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewError, setReviewError] = useState('');
   const [rescheduleModalOpen, setRescheduleModalOpen] = useState(false);
-  const [rescheduleSlots, setRescheduleSlots] = useState<PickupSlot[]>([]);
+  const [rescheduleOperatingHours, setRescheduleOperatingHours] = useState<OperatingHours | null>(null);
   const [rescheduleHolidays, setRescheduleHolidays] = useState<BranchHoliday[]>([]);
+  const [rescheduleServerNow, setRescheduleServerNow] = useState<string | undefined>(undefined);
   const [rescheduleSelectedStartAt, setRescheduleSelectedStartAt] = useState('');
   const [rescheduleLoading, setRescheduleLoading] = useState(false);
   const [rescheduleSubmitting, setRescheduleSubmitting] = useState(false);
@@ -317,21 +317,23 @@ export default function OrderTrackScreen() {
     setRescheduleSelectedStartAt('');
     setRescheduleModalOpen(true);
     if (!order.pickupAddressId) {
-      setRescheduleError('Could not load pickup slots for this order.');
+      setRescheduleError('Could not load pickup schedule for this order.');
       return;
     }
     setRescheduleLoading(true);
     try {
       const branchParam = order.branchId ? `&branchId=${encodeURIComponent(order.branchId)}` : '';
       const avail = await apiFetch<{
-        slots: PickupSlot[];
+        operatingHours: OperatingHours;
         holidays?: BranchHoliday[];
+        serverNow?: string;
       }>(`/booking/availability?addressId=${encodeURIComponent(order.pickupAddressId)}${branchParam}`);
-      setRescheduleSlots(avail.slots);
+      setRescheduleOperatingHours(avail.operatingHours);
       setRescheduleHolidays(avail.holidays ?? []);
+      setRescheduleServerNow(avail.serverNow);
     } catch (e) {
-      setRescheduleError(e instanceof Error ? e.message : 'Could not load pickup slots');
-      setRescheduleSlots([]);
+      setRescheduleError(e instanceof Error ? e.message : 'Could not load pickup schedule');
+      setRescheduleOperatingHours(null);
     } finally {
       setRescheduleLoading(false);
     }
@@ -828,16 +830,17 @@ export default function OrderTrackScreen() {
             </View>
 
             {rescheduleLoading ? (
-              <Text style={styles.meta}>Loading available pickup slots…</Text>
-            ) : rescheduleSlots.length > 0 ? (
+              <Text style={styles.meta}>Loading available pickup schedule…</Text>
+            ) : rescheduleOperatingHours ? (
               <PickupSchedulePicker
-                slots={rescheduleSlots}
+                operatingHours={rescheduleOperatingHours}
+                holidays={rescheduleHolidays}
+                serverNow={rescheduleServerNow}
                 selectedStartAt={rescheduleSelectedStartAt}
                 onSelectStartAt={setRescheduleSelectedStartAt}
-                holidays={rescheduleHolidays}
               />
             ) : !rescheduleError ? (
-              <Text style={styles.meta}>No pickup slots available for this address.</Text>
+              <Text style={styles.meta}>No pickup schedule available for this address.</Text>
             ) : null}
 
             {rescheduleError ? (

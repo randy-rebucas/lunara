@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Heart, Minus, Plus } from 'lucide-react';
-import { BookingType } from '@lunara/types';
+import { BookingType, type OperatingHours } from '@lunara/types';
 import { Button } from '@lunara/ui';
 import { ButtonLink } from '../ui/button-link';
 import { buttonResponsiveClass } from '../ui/button-layout';
@@ -34,10 +34,9 @@ import {
   type LaundryServiceOption,
   type MultiServiceQuoteBreakdown,
   type PartnerCoverageInfo,
-  isPickupSlotBookable,
-  type PickupSlot,
   type QuoteBreakdown,
   resolveMediaUrl,
+  validatePickupTime,
 } from '@lunara/utils';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { OrderPartnerCoverageNotice } from '../order-partner-coverage-notice';
@@ -507,7 +506,7 @@ function canProceedStep(
   form: BookingFormState,
   localQuote: MultiServiceQuoteBreakdown | null,
   addresses: AddressOption[],
-  slots: PickupSlot[],
+  schedule: { operatingHours: OperatingHours; holidays: BranchHoliday[] } | null,
 ): boolean {
   switch (step) {
     case 'service':
@@ -519,9 +518,8 @@ function canProceedStep(
     case 'schedule':
       return (
         Boolean(form.scheduledPickupAt) &&
-        slots.some(
-          (slot) => slot.startAt === form.scheduledPickupAt && isPickupSlotBookable(slot),
-        )
+        Boolean(schedule) &&
+        validatePickupTime(form.scheduledPickupAt, schedule!.operatingHours, schedule!.holidays).valid
       );
     case 'weight':
       return Boolean(localQuote) && Boolean(localQuote?.meetsWeightMinimum);
@@ -639,8 +637,9 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
   const [config, setConfig] = useState<BookingConfig | null>(null);
   const [configLoading, setConfigLoading] = useState(true);
   const [addresses, setAddresses] = useState<AddressOption[]>([]);
-  const [slots, setSlots] = useState<PickupSlot[]>([]);
+  const [operatingHours, setOperatingHours] = useState<OperatingHours | null>(null);
   const [holidays, setHolidays] = useState<BranchHoliday[]>([]);
+  const [serverNow, setServerNow] = useState<string | undefined>(undefined);
   const [areaLabel, setAreaLabel] = useState('');
   const [dispatchNote, setDispatchNote] = useState('');
   const [availableServices, setAvailableServices] = useState<BookingType[]>([]);
@@ -891,8 +890,11 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
       const res = await api.get<{
         areaLabel: string;
         availableServices: BookingType[];
-        slots: PickupSlot[];
+        operatingHours: OperatingHours;
         holidays?: BranchHoliday[];
+        minLeadMs?: number;
+        dayCount?: number;
+        serverNow?: string;
         dispatchNote?: string;
         partnerCoverage?: PartnerCoverageInfo;
       }>(`/booking/availability?addressId=${encodeURIComponent(addressId)}`);
@@ -901,21 +903,12 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
 
       setAreaLabel(res.data.areaLabel);
       setAvailableServices(res.data.availableServices);
-      setSlots(res.data.slots);
+      setOperatingHours(res.data.operatingHours);
       setHolidays(res.data.holidays ?? []);
+      setServerNow(res.data.serverNow);
       setDispatchNote(res.data.dispatchNote ?? '');
       setPartnerCoverage(res.data.partnerCoverage ?? null);
       setCoverageAddressId(addressId);
-      const firstAvailable = res.data.slots.find((s) => isPickupSlotBookable(s));
-      if (firstAvailable) {
-        setForm((f) =>
-          f.addressId !== addressId
-            ? f
-            : f.scheduledPickupAt
-              ? f
-              : { ...f, scheduledPickupAt: firstAvailable.startAt },
-        );
-      }
     },
     [api],
   );
@@ -951,7 +944,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
       setCoverageAddressId('');
       setAreaLabel('');
       setAvailableServices([]);
-      setSlots([]);
+      setOperatingHours(null);
       setDispatchNote('');
       setShopOptions([]);
       return;
@@ -1017,7 +1010,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
 
   async function goNext() {
     setError('');
-    if (!canProceedStep(step, form, localQuote, addresses, slots)) {
+    if (!canProceedStep(step, form, localQuote, addresses, operatingHours ? { operatingHours, holidays } : null)) {
       if (step === 'service') setError('Select a service');
       else if (step === 'address') setError('Select a pickup address');
       else if (step === 'schedule') setError('Select a pickup time');
@@ -1181,8 +1174,18 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
 
   const activeQuote = quote ?? localQuote;
   const selectedAddress = addresses.find((a) => a._id === form.addressId);
-  const selectedSlot = slots.find((s) => s.startAt === form.scheduledPickupAt);
-  const canProceed = canProceedStep(step, form, localQuote, addresses, slots);
+  const scheduleForValidation = operatingHours ? { operatingHours, holidays } : null;
+  const pickupLabel = form.scheduledPickupAt
+    ? new Intl.DateTimeFormat('en-PH', {
+        timeZone: 'Asia/Manila',
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      }).format(new Date(form.scheduledPickupAt))
+    : 'Selected pickup time';
+  const canProceed = canProceedStep(step, form, localQuote, addresses, scheduleForValidation);
 
   if (configLoading) {
     return (
@@ -1454,24 +1457,25 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
               areaLabel ? `Serving ${areaLabel}. Pick a convenient pickup window.` : undefined
             }
           />
-          {slots.length === 0 ? (
+          {!operatingHours ? (
             <>
               <div className="panel text-sm text-muted">
-                No slots available. Try another day or address.
+                No pickup schedule available. Try another day or address.
               </div>
               <ScheduleSupportPrompt
                 address={selectedAddress ?? null}
-                reason="No pickup slots are available for this address yet."
+                reason="No pickup schedule is available for this address yet."
               />
             </>
           ) : (
             <PickupSchedulePicker
-              slots={slots}
+              operatingHours={operatingHours}
+              holidays={holidays}
+              serverNow={serverNow}
               selectedStartAt={form.scheduledPickupAt}
               onSelectStartAt={(startAt) =>
                 setForm((f) => ({ ...f, scheduledPickupAt: startAt }))
               }
-              holidays={holidays}
             />
           )}
         </section>
@@ -1918,7 +1922,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
               <SummaryRow label="Address" value={selectedAddress?.label ?? 'Selected address'} />
               <SummaryRow
                 label="Pickup"
-                value={selectedSlot?.label ?? 'Selected slot'}
+                value={pickupLabel}
               />
               {activeQuote.services.map((serviceQuote, idx) =>
                 serviceQuote.garmentSelections?.length ? (

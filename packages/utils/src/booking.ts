@@ -128,14 +128,6 @@ export interface ServiceAreaRule {
   services: BookingType[];
 }
 
-export interface PickupSlot {
-  id: string;
-  label: string;
-  startAt: string;
-  endAt: string;
-  available: boolean;
-}
-
 export interface AddressInput {
   city: string;
   province: string;
@@ -640,6 +632,55 @@ function manilaHourOf(isoOrDate: string | Date): number {
   );
 }
 
+/** Manila (UTC+8, no DST) wall-clock date/time parts of an instant, regardless of runtime timezone. */
+function manilaParts(date: Date) {
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Manila',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  const parts = fmt.formatToParts(date);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+  const hour = get('hour');
+  return {
+    year: get('year'),
+    month: get('month'),
+    day: get('day'),
+    hour: hour === 24 ? 0 : hour,
+    minute: get('minute'),
+  };
+}
+
+/** A calendar date (as seen in Manila), independent of any instant or runtime timezone. */
+interface ManilaDate {
+  year: number;
+  month: number;
+  day: number;
+}
+
+function manilaDateKey(d: ManilaDate): string {
+  return `${d.year}-${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')}`;
+}
+
+/** Day-of-week (0=Sun..6=Sat) for a Manila calendar date. */
+function manilaWeekday(d: ManilaDate): number {
+  return new Date(Date.UTC(d.year, d.month - 1, d.day)).getUTCDay();
+}
+
+function addManilaDays(d: ManilaDate, days: number): ManilaDate {
+  const utc = new Date(Date.UTC(d.year, d.month - 1, d.day + days));
+  return { year: utc.getUTCFullYear(), month: utc.getUTCMonth() + 1, day: utc.getUTCDate() };
+}
+
+/** UTC instant for a given wall-clock hour/minute on a Manila calendar date (fixed UTC+8, no DST). */
+function manilaWallTimeToUtc(d: ManilaDate, hour = 0, minute = 0): Date {
+  return new Date(Date.UTC(d.year, d.month - 1, d.day, hour - 8, minute));
+}
+
 /** No slot chosen yet → don't block add-on browsing prematurely. */
 export function isExpressReturnAllowed(scheduledPickupAt?: string | null): boolean {
   if (!scheduledPickupAt) return true;
@@ -820,100 +861,35 @@ export function calculateQuote(
   };
 }
 
-/** Deterministic slot capacity for demo schedule availability. */
-function slotCapacityUsed(slotId: string) {
-  let hash = 0;
-  for (let i = 0; i < slotId.length; i++) hash = (hash + slotId.charCodeAt(i) * (i + 1)) % 100;
-  return hash;
+/** How many orders may be scheduled into a single hourly pickup window before it's full, derived
+ * from the branch's real daily order quota spread across its typical operating hours. */
+export function estimateSlotCapacityPerHour(
+  dailyQuotaOrders: number,
+  operatingHours: OperatingHours = DEFAULT_OPERATING_HOURS,
+): number {
+  const openDayHourCounts = operatingHours
+    .filter((d) => !d.isClosed)
+    .map((d) => Math.max(1, Math.ceil(parseTimeToHour(d.closeTime)) - Math.floor(parseTimeToHour(d.openTime))));
+  const avgHoursPerOpenDay =
+    openDayHourCounts.length > 0
+      ? openDayHourCounts.reduce((a, b) => a + b, 0) / openDayHourCounts.length
+      : 9;
+  return Math.max(1, Math.round(dailyQuotaOrders / avgHoursPerOpenDay));
+}
+
+/** Real booking pressure for validatePickupTime: how many orders are already scheduled into each
+ * hourly window (keyed by that hour's UTC start ISO string), and how many a window can hold before
+ * it's full. Omit entirely when there's no specific branch to check against yet (e.g. before a shop
+ * is chosen) — times are then all treated as available rather than guessed at. */
+export interface PickupSlotCapacity {
+  perSlot: number;
+  bookedBySlot: Record<string, number>;
 }
 
 export const PICKUP_SCHEDULE_DAY_COUNT = 7;
 
 /** Minimum lead time before slot start when it becomes bookable. */
 export const PICKUP_SLOT_MIN_LEAD_MS = 30 * 60 * 1000;
-
-export function isPickupSlotBookable(slot: PickupSlot, fromDate: Date = new Date()): boolean {
-  if (!slot.available) return false;
-  return new Date(slot.startAt).getTime() >= fromDate.getTime() + PICKUP_SLOT_MIN_LEAD_MS;
-}
-
-export function pickupSlotDayKey(isoOrDate: string | Date) {
-  const d = typeof isoOrDate === 'string' ? new Date(isoOrDate) : isoOrDate;
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-export function groupPickupSlotsByDay(slots: PickupSlot[]) {
-  const map = new Map<string, PickupSlot[]>();
-  for (const slot of slots) {
-    const key = pickupSlotDayKey(slot.startAt);
-    const list = map.get(key) ?? [];
-    list.push(slot);
-    map.set(key, list);
-  }
-  for (const list of map.values()) {
-    list.sort((a, b) => a.startAt.localeCompare(b.startAt));
-  }
-  return map;
-}
-
-export interface PickupScheduleDay {
-  key: string;
-  date: Date;
-  weekday: string;
-  dayLabel: string;
-  monthLabel: string;
-  isToday: boolean;
-  slots: PickupSlot[];
-  hasAvailable: boolean;
-  /** Set when the shop is closed this day for a one-off holiday (as opposed to just having no
-   * remaining bookable slots or being closed on this weekday recurringly). */
-  holidayLabel?: string;
-}
-
-export function buildPickupScheduleDays(
-  slots: PickupSlot[],
-  fromDate: Date = new Date(),
-  dayCount = PICKUP_SCHEDULE_DAY_COUNT,
-  holidays: BranchHoliday[] = [],
-): PickupScheduleDay[] {
-  const byDay = groupPickupSlotsByDay(slots);
-  const start = new Date(fromDate);
-  start.setHours(0, 0, 0, 0);
-  const todayKey = pickupSlotDayKey(start);
-
-  const days: PickupScheduleDay[] = [];
-  for (let i = 0; i < dayCount; i++) {
-    const date = new Date(start);
-    date.setDate(start.getDate() + i);
-    const key = pickupSlotDayKey(date);
-    const daySlots = byDay.get(key) ?? [];
-    const holiday = findHolidayForDate(holidays, date);
-    days.push({
-      key,
-      date,
-      weekday: date.toLocaleDateString('en-PH', { weekday: 'short' }),
-      dayLabel: String(date.getDate()),
-      monthLabel: date.toLocaleDateString('en-PH', { month: 'short' }),
-      isToday: key === todayKey,
-      slots: daySlots,
-      hasAvailable: daySlots.some((s) => isPickupSlotBookable(s)),
-      holidayLabel: holiday?.label ?? (holiday ? 'Holiday' : undefined),
-    });
-  }
-  return days;
-}
-
-export function formatPickupSlotTimeWindow(slot: PickupSlot, locale = 'en-PH') {
-  const start = new Date(slot.startAt);
-  const end = new Date(slot.endAt);
-  const opts: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit' };
-  return `${start.toLocaleTimeString(locale, opts)} – ${end.toLocaleTimeString(locale, opts)}`;
-}
-
-/** First pickup window start hour (8:00 AM). */
-export const PICKUP_WINDOW_START_HOUR = 8;
-/** Last pickup window end hour (5:00 PM) — windows run hourly up to this. */
-export const PICKUP_WINDOW_END_HOUR = 17;
 
 /** Fallback hours (every day, 8AM–5PM) used for branches/days with no configured hours. */
 export const DEFAULT_OPERATING_HOURS: OperatingHours = Array.from({ length: 7 }, () => ({
@@ -937,14 +913,12 @@ export interface BranchHoliday {
   label?: string;
 }
 
-/** YYYY-MM-DD for a Date, in local time (matches BranchHoliday.date format). */
-export function dateKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-export function findHolidayForDate(holidays: BranchHoliday[] | undefined, d: Date): BranchHoliday | undefined {
+function findHolidayForManilaDate(
+  holidays: BranchHoliday[] | undefined,
+  d: ManilaDate,
+): BranchHoliday | undefined {
   if (!holidays?.length) return undefined;
-  const key = dateKey(d);
+  const key = manilaDateKey(d);
   return holidays.find((h) => h.date === key);
 }
 
@@ -961,17 +935,20 @@ export function getTodayScheduleSummary(
   holidays: BranchHoliday[] = [],
   now: Date = new Date(),
 ): TodayScheduleSummary {
-  const holiday = findHolidayForDate(holidays, now);
+  const nowParts = manilaParts(now);
+  const nowDate: ManilaDate = nowParts;
+
+  const holiday = findHolidayForManilaDate(holidays, nowDate);
   if (holiday) {
     return { isOpenNow: false, label: holiday.label ? `Closed for ${holiday.label}` : 'Closed for holiday' };
   }
 
-  const dayHours = resolveDayHours(operatingHours, now.getDay());
+  const dayHours = resolveDayHours(operatingHours, manilaWeekday(nowDate));
   if (dayHours.isClosed) {
     return { isOpenNow: false, label: 'Closed today' };
   }
 
-  const nowHour = now.getHours() + now.getMinutes() / 60;
+  const nowHour = nowParts.hour + nowParts.minute / 60;
   const openHour = parseTimeToHour(dayHours.openTime);
   const closeHour = parseTimeToHour(dayHours.closeTime);
 
@@ -990,55 +967,186 @@ function formatHourLabel(hour: number): string {
   return `${displayHour}:00 ${period}`;
 }
 
-function buildHourlyPickupWindows(startHour: number, endHour: number) {
-  const windows: { start: number; end: number; label: string }[] = [];
-  for (let h = startHour; h < endHour; h++) {
-    windows.push({ start: h, end: h + 1, label: `${formatHourLabel(h)} – ${formatHourLabel(h + 1)}` });
-  }
-  return windows;
+/** Like formatHourLabel, but preserves minutes for fractional hours (e.g. 8.5 -> "8:30 AM"). */
+function formatDecimalHourLabel(hour: number): string {
+  const h = Math.floor(hour);
+  const m = Math.round((hour - h) * 60);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const displayHour = h % 12 === 0 ? 12 : h % 12;
+  return `${displayHour}:${String(m).padStart(2, '0')} ${period}`;
 }
 
-export function generatePickupSlots(
-  fromDate: Date = new Date(),
-  days = 7,
+function parseManilaDateKey(key: string): ManilaDate {
+  const [year, month, day] = key.split('-').map(Number);
+  return { year, month, day };
+}
+
+/** Combines a YYYY-MM-DD Manila calendar date + "HH:mm" wall-clock time into the correct UTC ISO
+ * instant for that moment in Asia/Manila, regardless of the runtime's own timezone. */
+export function manilaDateAndTimeToIso(dateKey: string, time: string): string {
+  const day = parseManilaDateKey(dateKey);
+  const hour = Math.floor(parseTimeToHour(time));
+  const minute = Math.round((parseTimeToHour(time) - hour) * 60);
+  return manilaWallTimeToUtc(day, hour, minute).toISOString();
+}
+
+/** Bumps a day's opening time forward to respect the minimum pickup lead time, only relevant for
+ * today (future days are never lead-time-constrained). Returns undefined if the whole remaining
+ * day is inside the lead-time window (i.e. there's no bookable time left today). */
+function earliestBookableTimeForDay(
+  dayHours: DayOperatingHours,
+  isToday: boolean,
+  now: Date,
+): string | undefined {
+  const closeHour = parseTimeToHour(dayHours.closeTime);
+  if (!isToday) return dayHours.openTime;
+
+  const earliestInstant = new Date(now.getTime() + PICKUP_SLOT_MIN_LEAD_MS);
+  const earliestParts = manilaParts(earliestInstant);
+  const earliestHour = earliestParts.hour + earliestParts.minute / 60;
+  const openHour = parseTimeToHour(dayHours.openTime);
+  const boundedHour = Math.max(openHour, earliestHour);
+  if (boundedHour >= closeHour) return undefined;
+
+  // Round up to the next 15-minute mark so the suggested time is always itself bookable.
+  const roundedMinutes = Math.ceil((boundedHour * 60) / 15) * 15;
+  const h = Math.floor(roundedMinutes / 60);
+  const m = roundedMinutes % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+export interface PickupDayInfo {
+  /** YYYY-MM-DD, Manila calendar date. */
+  key: string;
+  date: Date;
+  weekday: string;
+  dayLabel: string;
+  monthLabel: string;
+  isToday: boolean;
+  /** Closed either for the recurring weekday, or a one-off holiday. */
+  isClosed: boolean;
+  holidayLabel?: string;
+  openTime?: string;
+  closeTime?: string;
+  /** Earliest "HH:mm" bookable on this day (accounts for min lead time on today); undefined when
+   * the day is closed, or (for today) there's no bookable time left before closing. */
+  earliestBookableTime?: string;
+}
+
+/** Builds the day-picker strip data: which of the next `dayCount` days are open, closed, or
+ * holidays, and each open day's hours — no pre-materialized time slots, just what a free-form
+ * time picker needs to constrain and label its inputs. */
+export function buildPickupDayOptions(
   operatingHours: OperatingHours = DEFAULT_OPERATING_HOURS,
   holidays: BranchHoliday[] = [],
-): PickupSlot[] {
-  const slots: PickupSlot[] = [];
+  dayCount = PICKUP_SCHEDULE_DAY_COUNT,
+  now: Date = new Date(),
+): PickupDayInfo[] {
+  const startDate: ManilaDate = manilaParts(now);
+  const days: PickupDayInfo[] = [];
 
-  for (let d = 0; d < days; d++) {
-    const day = new Date(fromDate);
-    day.setHours(0, 0, 0, 0);
-    day.setDate(day.getDate() + d);
+  for (let i = 0; i < dayCount; i++) {
+    const day = addManilaDays(startDate, i);
+    const instant = manilaWallTimeToUtc(day);
+    const holiday = findHolidayForManilaDate(holidays, day);
+    const dayHours = resolveDayHours(operatingHours, manilaWeekday(day));
+    const isClosed = Boolean(holiday) || dayHours.isClosed;
+    const isToday = i === 0;
 
-    if (findHolidayForDate(holidays, day)) continue;
+    days.push({
+      key: manilaDateKey(day),
+      date: instant,
+      weekday: instant.toLocaleDateString('en-PH', { weekday: 'short', timeZone: 'Asia/Manila' }),
+      dayLabel: String(day.day),
+      monthLabel: instant.toLocaleDateString('en-PH', { month: 'short', timeZone: 'Asia/Manila' }),
+      isToday,
+      isClosed,
+      holidayLabel: holiday ? (holiday.label ?? 'Holiday') : undefined,
+      openTime: isClosed ? undefined : dayHours.openTime,
+      closeTime: isClosed ? undefined : dayHours.closeTime,
+      earliestBookableTime: isClosed ? undefined : earliestBookableTimeForDay(dayHours, isToday, now),
+    });
+  }
 
-    const dayHours = resolveDayHours(operatingHours, day.getDay());
-    if (dayHours.isClosed) continue;
+  return days;
+}
 
-    const startHour = Math.floor(parseTimeToHour(dayHours.openTime));
-    const endHour = Math.ceil(parseTimeToHour(dayHours.closeTime));
-    const windows = buildHourlyPickupWindows(startHour, endHour);
+export interface PickupTimeValidationResult {
+  valid: boolean;
+  reason?: 'invalid_input' | 'past' | 'lead_time' | 'holiday' | 'closed_day' | 'outside_hours' | 'capacity_full';
+  message?: string;
+  /** ISO start of the hour bucket this time falls into — used for capacity lookups. */
+  hourBucketIso?: string;
+}
 
-    for (const w of windows) {
-      const start = new Date(day);
-      start.setHours(w.start, 0, 0, 0);
-      const end = new Date(day);
-      end.setHours(w.end, 0, 0, 0);
+/** Single source of truth for whether an arbitrary pickup timestamp is bookable: not in the past,
+ * respects the minimum lead time, falls within that Manila day's operating hours, isn't a holiday,
+ * and (when capacity data is supplied) hasn't hit the branch's real per-hour order cap. Shared by
+ * server-side submission checks and client-side pre-flight validation (client omits `capacity`,
+ * since only the server knows live booked counts — the server call is the real backstop). */
+export function validatePickupTime(
+  scheduledPickupAt: string,
+  operatingHours: OperatingHours = DEFAULT_OPERATING_HOURS,
+  holidays: BranchHoliday[] = [],
+  now: Date = new Date(),
+  capacity?: PickupSlotCapacity,
+): PickupTimeValidationResult {
+  const instant = new Date(scheduledPickupAt);
+  if (Number.isNaN(instant.getTime())) {
+    return { valid: false, reason: 'invalid_input', message: 'Invalid pickup time' };
+  }
+  if (instant.getTime() < now.getTime()) {
+    return { valid: false, reason: 'past', message: 'That pickup time has already passed' };
+  }
+  if (instant.getTime() < now.getTime() + PICKUP_SLOT_MIN_LEAD_MS) {
+    const minutes = Math.round(PICKUP_SLOT_MIN_LEAD_MS / 60000);
+    return {
+      valid: false,
+      reason: 'lead_time',
+      message: `Pickup must be at least ${minutes} minutes from now`,
+    };
+  }
 
-      if (start.getTime() < fromDate.getTime() + PICKUP_SLOT_MIN_LEAD_MS) continue;
+  const day: ManilaDate = manilaParts(instant);
+  const holiday = findHolidayForManilaDate(holidays, day);
+  if (holiday) {
+    return {
+      valid: false,
+      reason: 'holiday',
+      message: holiday.label ? `Closed for ${holiday.label}` : 'Closed for holiday',
+    };
+  }
 
-      const id = start.toISOString();
-      const used = slotCapacityUsed(id);
-      slots.push({
-        id,
-        label: `${day.toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' })} · ${w.label}`,
-        startAt: start.toISOString(),
-        endAt: end.toISOString(),
-        available: used < 85,
-      });
+  const dayHours = resolveDayHours(operatingHours, manilaWeekday(day));
+  if (dayHours.isClosed) {
+    return { valid: false, reason: 'closed_day', message: 'Shop is closed that day' };
+  }
+
+  const instantParts = manilaParts(instant);
+  const pickedHour = instantParts.hour + instantParts.minute / 60;
+  const openHour = parseTimeToHour(dayHours.openTime);
+  const closeHour = parseTimeToHour(dayHours.closeTime);
+  if (pickedHour < openHour || pickedHour >= closeHour) {
+    return {
+      valid: false,
+      reason: 'outside_hours',
+      message: `Pickup must be between ${formatDecimalHourLabel(openHour)} and ${formatDecimalHourLabel(closeHour)}`,
+    };
+  }
+
+  const hourBucketIso = manilaWallTimeToUtc(day, Math.floor(pickedHour), 0).toISOString();
+
+  if (capacity) {
+    const booked = capacity.bookedBySlot[hourBucketIso] ?? 0;
+    if (booked >= capacity.perSlot) {
+      return {
+        valid: false,
+        reason: 'capacity_full',
+        message: 'That hour is fully booked — try a nearby time',
+        hourBucketIso,
+      };
     }
   }
 
-  return slots;
+  return { valid: true, hourBucketIso };
 }

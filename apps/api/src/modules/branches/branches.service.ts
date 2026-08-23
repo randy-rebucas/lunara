@@ -7,14 +7,18 @@ import {
   BranchPricingMode,
   DEFAULT_OPERATING_HOURS,
   distanceKm,
+  estimateSlotCapacityPerHour,
   estimateTurnaroundHours,
   formatDistanceKm,
   GARMENT_CATALOG,
   getTodayScheduleSummary,
   buildPartnerCoverageNotice,
+  PICKUP_SCHEDULE_DAY_COUNT,
   rankBranchesForDispatch,
   resolveCoordinates,
   scoreBranchPerformance,
+  validatePickupTime,
+  type BranchHoliday,
   type PartnerCoverageInfo,
 } from '@lunara/utils';
 import { Address, AddressDocument } from '../addresses/schemas/address.schema';
@@ -1878,6 +1882,72 @@ export class BranchesService {
 
   async sumBranchWeightLoadKg(branchId: Types.ObjectId) {
     return this.sumBranchWeightLoadKgInternal(branchId);
+  }
+
+  /** Real count of orders already scheduled into each hourly pickup window for this branch, keyed
+   * by that window's startAt ISO string — used to mark pickup slots full instead of guessing. */
+  async getScheduledPickupCounts(
+    branchId: Types.ObjectId,
+    from: Date,
+    to: Date,
+  ): Promise<Record<string, number>> {
+    const rows = await this.orderModel.aggregate<{ _id: Date; count: number }>([
+      {
+        $match: {
+          branchId,
+          scheduledPickupAt: { $gte: from, $lt: to },
+          status: { $ne: OrderStatus.CANCELLED },
+        },
+      },
+      { $group: { _id: '$scheduledPickupAt', count: { $sum: 1 } } },
+    ]);
+    const counts: Record<string, number> = {};
+    for (const row of rows) counts[new Date(row._id).toISOString()] = row.count;
+    return counts;
+  }
+
+  /** Once a shop is chosen (customer-picked or Lunara-dispatched), pickup times must reflect that
+   * shop's own hours and holidays (stricter and authoritative); otherwise fall back to the union of
+   * every active branch's hours, with no holiday filtering (white-labeled / not-yet-chosen flow —
+   * no single shop's holiday calendar applies yet). Shared by booking (new orders) and order
+   * rescheduling so both agree on what's bookable. */
+  async resolvePickupSchedule(branchId?: string) {
+    if (!branchId) {
+      return { operatingHours: await this.getUnionOperatingHours(), holidays: [] as BranchHoliday[] };
+    }
+    const branch = await this.getActivePartnerShop(branchId);
+    const holidays = await this.resolveBranchHolidays(branch);
+    return { operatingHours: branch.operatingHours, holidays, branch };
+  }
+
+  /** Real per-hour capacity for a specific branch, computed from its actual scheduled pickups
+   * against its own daily order quota — undefined when no branch has been chosen yet, since there's
+   * nothing real to check availability against (times are then all treated as available). */
+  async resolvePickupCapacity(
+    branch: Awaited<ReturnType<BranchesService['getActivePartnerShop']>> | undefined,
+    operatingHours: OperatingHours,
+    fromDate: Date,
+    days: number,
+  ) {
+    if (!branch) return undefined;
+    const to = new Date(fromDate.getTime() + days * 24 * 60 * 60 * 1000);
+    const bookedBySlot = await this.getScheduledPickupCounts(branch._id as Types.ObjectId, fromDate, to);
+    const perSlot = estimateSlotCapacityPerHour(branch.dailyQuotaOrders, operatingHours);
+    return { perSlot, bookedBySlot };
+  }
+
+  /** Single entry point for "is this arbitrary customer-chosen pickup time actually bookable" —
+   * used by both new-booking submission and order rescheduling so they enforce the same rules
+   * (operating hours, holidays, minimum lead time, real per-hour capacity). */
+  async validatePickupTimeForBranch(branchId: string | undefined, scheduledPickupAt: string) {
+    const { operatingHours, holidays, branch } = await this.resolvePickupSchedule(branchId);
+    const capacity = await this.resolvePickupCapacity(
+      branch,
+      operatingHours,
+      new Date(),
+      PICKUP_SCHEDULE_DAY_COUNT,
+    );
+    return validatePickupTime(scheduledPickupAt, operatingHours, holidays, new Date(), capacity);
   }
 
   private async countActiveOrders(branchId: Types.ObjectId) {

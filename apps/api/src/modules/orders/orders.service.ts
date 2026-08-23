@@ -522,10 +522,14 @@ export class OrdersService {
       );
     }
 
-    const nextPickupAt = new Date(scheduledPickupAt);
-    if (Number.isNaN(nextPickupAt.getTime()) || nextPickupAt.getTime() <= Date.now()) {
-      throw new BadRequestException('Please choose a future pickup date and time');
+    const pickupCheck = await this.branchesService.validatePickupTimeForBranch(
+      order.branchId?.toString(),
+      scheduledPickupAt,
+    );
+    if (!pickupCheck.valid) {
+      throw new BadRequestException(pickupCheck.message ?? 'Please choose a valid pickup date and time');
     }
+    const nextPickupAt = new Date(scheduledPickupAt);
 
     order.scheduledPickupAt = nextPickupAt;
     order.statusHistory.push({

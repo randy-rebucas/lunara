@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BookingType, PaymentMethod } from '@lunara/types';
+import { BookingType, PaymentMethod, type OperatingHours } from '@lunara/types';
 import {
   BOOKING_MACHINE_LOAD_INFO,
   BOOKING_MACHINE_LOAD_MIN_KG,
@@ -41,9 +41,8 @@ import {
   type GarmentItem,
   type GarmentSelection,
   type LaundryServiceOption,
-  isPickupSlotBookable,
-  type PickupSlot,
   type QuoteBreakdown,
+  validatePickupTime,
 } from '@lunara/utils';
 import { resolveMediaUrl } from '../src/lib/media-url';
 import { brandName, colors, radius, spacing, typography } from '../src/theme';
@@ -262,8 +261,9 @@ export default function BookScreen() {
   });
   const [config, setConfig] = useState<BookingConfig | null>(null);
   const [addresses, setAddresses] = useState<AddressOption[]>([]);
-  const [slots, setSlots] = useState<PickupSlot[]>([]);
+  const [operatingHours, setOperatingHours] = useState<OperatingHours | null>(null);
   const [holidays, setHolidays] = useState<BranchHoliday[]>([]);
+  const [serverNow, setServerNow] = useState<string | undefined>(undefined);
   const [areaLabel, setAreaLabel] = useState('');
   const [dispatchNote, setDispatchNote] = useState('');
   const [shopOptions, setShopOptions] = useState<ShopOption[]>([]);
@@ -581,27 +581,27 @@ export default function BookScreen() {
         const branchParam = branchId ? `&branchId=${encodeURIComponent(branchId)}` : '';
         const avail = await apiFetch<{
           areaLabel: string;
-          slots: PickupSlot[];
+          operatingHours: OperatingHours;
           holidays?: BranchHoliday[];
+          serverNow?: string;
           dispatchNote?: string;
         }>(`/booking/availability?addressId=${encodeURIComponent(addressId)}${branchParam}`);
         setAreaLabel(avail.areaLabel);
-        setSlots(avail.slots);
+        setOperatingHours(avail.operatingHours);
         setHolidays(avail.holidays ?? []);
+        setServerNow(avail.serverNow);
         setDispatchNote(avail.dispatchNote ?? '');
         setForm((f) => {
-          const stillValid = avail.slots.some(
-            (s) => s.startAt === f.scheduledPickupAt && isPickupSlotBookable(s),
-          );
-          if (stillValid) return f;
-          const first = avail.slots.find((s) => isPickupSlotBookable(s));
-          return { ...f, scheduledPickupAt: first?.startAt ?? '' };
+          const stillValid =
+            f.scheduledPickupAt &&
+            validatePickupTime(f.scheduledPickupAt, avail.operatingHours, avail.holidays ?? []).valid;
+          return stillValid ? f : { ...f, scheduledPickupAt: '' };
         });
       } catch (e) {
         setAvailabilityError(
-          e instanceof Error ? e.message : 'Could not load pickup slots',
+          e instanceof Error ? e.message : 'Could not load pickup schedule',
         );
-        setSlots([]);
+        setOperatingHours(null);
         setAreaLabel('');
       } finally {
         setAvailabilityLoading(false);
@@ -732,7 +732,7 @@ export default function BookScreen() {
     step === 'schedule' &&
     Boolean(form.addressId) &&
     !availabilityLoading &&
-    (Boolean(availabilityError) || slots.length === 0);
+    (Boolean(availabilityError) || !operatingHours);
 
   async function goNext() {
     setError('');
@@ -756,7 +756,7 @@ export default function BookScreen() {
       return;
     }
     if (step === 'schedule' && !form.scheduledPickupAt) {
-      setError('Select a pickup slot');
+      setError('Select a pickup time');
       return;
     }
     if (step === 'weight') {
@@ -1370,21 +1370,22 @@ export default function BookScreen() {
                 </View>
               ) : null}
               {areaLabel ? <Text style={styles.sub}>Serving: {areaLabel}</Text> : null}
-              {slots.length === 0 && !availabilityError ? (
-                <Text style={styles.sub}>No pickup slots available for this address.</Text>
+              {!operatingHours && !availabilityError ? (
+                <Text style={styles.sub}>No pickup schedule available for this address.</Text>
               ) : null}
-              {slots.length > 0 ? (
+              {operatingHours ? (
                 <PickupSchedulePicker
-                  slots={slots}
+                  operatingHours={operatingHours}
+                  holidays={holidays}
+                  serverNow={serverNow}
                   selectedStartAt={form.scheduledPickupAt}
                   onSelectStartAt={(startAt) => setForm((f) => ({ ...f, scheduledPickupAt: startAt }))}
-                  holidays={holidays}
                 />
               ) : null}
               {showScheduleSupport ? (
                 <ScheduleSupportPrompt
                   address={selectedAddress}
-                  reason={availabilityError || 'No pickup slots are available for this address yet.'}
+                  reason={availabilityError || 'No pickup schedule is available for this address yet.'}
                 />
               ) : null}
             </View>
@@ -1898,7 +1899,16 @@ export default function BookScreen() {
                 </Text>
                 <Text style={styles.summaryLine}>
                   <Text style={styles.summaryMuted}>Pickup: </Text>
-                  {slots.find((s) => s.startAt === form.scheduledPickupAt)?.label ?? 'Selected slot'}
+                  {form.scheduledPickupAt
+                    ? new Intl.DateTimeFormat('en-PH', {
+                        timeZone: 'Asia/Manila',
+                        weekday: 'short',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                      }).format(new Date(form.scheduledPickupAt))
+                    : 'Selected pickup time'}
                 </Text>
                 <Text style={styles.summaryLine}>
                   <Text style={styles.summaryMuted}>

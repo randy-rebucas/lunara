@@ -715,6 +715,10 @@ export default function PartnerSettingsPage() {
               >
                 {hoursDraft ? (
                   <div className="divide-y divide-border/60 px-6 py-2 sm:px-8">
+                    <div className="flex items-center gap-1.5 pb-3 pt-2 text-xs font-medium text-muted">
+                      <span aria-hidden="true">🕒</span>
+                      All times are Philippine Time (Asia/Manila, UTC+8)
+                    </div>
                     {WEEKDAY_ROWS.map(({ dayIndex, label }) => {
                       const day = hoursDraft[dayIndex];
                       return (

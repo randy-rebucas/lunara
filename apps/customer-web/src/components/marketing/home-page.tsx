@@ -40,7 +40,6 @@ import {
   ScreenTracking,
 } from './phone-mockup';
 import {
-  CUSTOMER_REVIEWS,
   EXPANDING_AREAS,
   FEATURES,
   HOME_FAQS,
@@ -51,7 +50,9 @@ import {
   STATS,
   TRUST_CHIPS,
   fetchActiveServiceAreas,
+  fetchFeaturedReviews,
   groupServiceAreasByPartner,
+  type CustomerReview,
   type ServiceArea,
 } from './home-page-data';
 
@@ -198,6 +199,7 @@ export function HomePage() {
   const { isAuthenticated, isLoading, api } = useAuthContext();
   const router = useRouter();
   const [serviceAreas, setServiceAreas] = useState<ServiceArea[]>([...SERVICE_AREAS]);
+  const [customerReviews, setCustomerReviews] = useState<CustomerReview[]>([]);
 
   const bubblesRef = useRef<HTMLDivElement>(null);
   const phoneLeftRef = useRef<HTMLDivElement>(null);
@@ -218,6 +220,7 @@ export function HomePage() {
   useEffect(() => {
     const apiBase = resolveApiV1BaseUrl(process.env.NEXT_PUBLIC_API_URL);
     fetchActiveServiceAreas(apiBase).then(setServiceAreas);
+    fetchFeaturedReviews(apiBase).then(setCustomerReviews);
   }, []);
 
   // Render marketing content during the auth check so crawlers and first paint
@@ -563,36 +566,38 @@ export function HomePage() {
           description={`What customers say about booking with ${appConfig.name}.`}
         />
 
-        <Reveal as="div" className="mt-12">
-          <Carousel
-            items={CUSTOMER_REVIEWS}
-            getKey={(review) => review.name}
-            renderItem={(review) => (
-              <blockquote className="card h-full">
-                <div className="card-body flex h-full flex-col">
-                  <StarRating count={review.rating} />
+        {customerReviews.length > 0 && (
+          <Reveal as="div" className="mt-12">
+            <Carousel
+              items={customerReviews}
+              getKey={(review) => review.id}
+              renderItem={(review) => (
+                <blockquote className="card h-full">
+                  <div className="card-body flex h-full flex-col">
+                    <StarRating count={review.rating} />
 
-                  <p className="mt-4 flex-1 text-sm leading-relaxed text-slate-700">
-                    &ldquo;{review.quote}&rdquo;
-                  </p>
+                    <p className="mt-4 flex-1 text-sm leading-relaxed text-slate-700">
+                      &ldquo;{review.quote}&rdquo;
+                    </p>
 
-                  <footer className="mt-4 flex items-center gap-3 border-t border-border/40 pt-4">
-                    <span
-                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold ${avatarBg[review.avatarColor]}`}
-                      aria-hidden
-                    >
-                      {review.initials}
-                    </span>
-                    <div>
-                      <p className="font-semibold text-slate-900">{review.name}</p>
-                      <p className="text-xs text-muted">{review.location} · Verified customer</p>
-                    </div>
-                  </footer>
-                </div>
-              </blockquote>
-            )}
-          />
-        </Reveal>
+                    <footer className="mt-4 flex items-center gap-3 border-t border-border/40 pt-4">
+                      <span
+                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold ${avatarBg[review.avatarColor]}`}
+                        aria-hidden
+                      >
+                        {review.initials}
+                      </span>
+                      <div>
+                        <p className="font-semibold text-slate-900">{review.name}</p>
+                        <p className="text-xs text-muted">Verified customer</p>
+                      </div>
+                    </footer>
+                  </div>
+                </blockquote>
+              )}
+            />
+          </Reveal>
+        )}
 
         <dl className="mt-12 grid grid-cols-2 gap-6 lg:grid-cols-4">
           {STATS.map((stat, index) => (

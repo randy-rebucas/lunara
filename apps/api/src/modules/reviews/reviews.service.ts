@@ -158,6 +158,41 @@ export class ReviewsService {
     return { success: true, data: { ok: true } };
   }
 
+  /** Real, published reviews for the public marketing site — no auth, so only rating/comment/first
+   * name + last initial are exposed (never email/phone/full name). */
+  async listFeatured(limit = 12) {
+    const rows = await this.reviewModel.aggregate<{
+      _id: Types.ObjectId;
+      rating: number;
+      comment: string;
+      customer?: { firstName: string; lastName: string };
+    }>([
+      { $match: { rating: { $gte: 4 }, comment: { $exists: true, $nin: [null, ''] } } },
+      { $sort: { publishedAt: -1 } },
+      { $limit: limit },
+      {
+        $lookup: {
+          from: 'customers',
+          localField: 'customerId',
+          foreignField: 'userId',
+          as: 'customer',
+        },
+      },
+      { $unwind: '$customer' },
+    ]);
+
+    return {
+      success: true,
+      data: rows.map((r) => ({
+        id: r._id.toString(),
+        name: `${r.customer!.firstName} ${r.customer!.lastName?.charAt(0) ?? ''}.`.trim(),
+        initials: `${r.customer!.firstName.charAt(0)}${r.customer!.lastName?.charAt(0) ?? ''}`.toUpperCase(),
+        rating: r.rating,
+        quote: r.comment,
+      })),
+    };
+  }
+
   private serializeReview(review: ReviewDocument) {
     return {
       _id: review._id.toString(),

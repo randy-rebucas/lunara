@@ -16,11 +16,10 @@ import {
   distanceKm,
   EXPRESS_RETURN_ADDON_ID,
   getBagSize,
-  generatePickupSlots,
   isExpressReturnAllowed,
   isGarmentPricedBookingType,
-  isPickupSlotBookable,
   PICKUP_SCHEDULE_DAY_COUNT,
+  PICKUP_SLOT_MIN_LEAD_MS,
   isServiceAvailableInArea,
   type QuoteBreakdown,
   resolveCoordinates,
@@ -122,24 +121,9 @@ export class BookingService {
     return { address, area };
   }
 
-  /** Once a shop is chosen (customer-picked or Lunara-dispatched), pickup slots must reflect
-   * that shop's own hours and holidays (stricter and authoritative); otherwise fall back to the
-   * union of every active branch's hours, with no holiday filtering (white-labeled / not-yet-chosen
-   * flow — no single shop's holiday calendar applies yet). Shared by getAvailability (schedule step)
-   * and prepareOrderPayload (submission) so both agree on what's bookable. */
-  private async resolveSchedule(branchId?: string) {
-    if (!branchId) {
-      return { operatingHours: await this.branchesService.getUnionOperatingHours(), holidays: [] };
-    }
-    const branch = await this.branchesService.getActivePartnerShop(branchId);
-    const holidays = await this.branchesService.resolveBranchHolidays(branch);
-    return { operatingHours: branch.operatingHours, holidays };
-  }
-
   async getAvailability(userId: string, addressId: string, branchId?: string) {
     const { area } = await this.validateAddressForUser(userId, addressId);
-    const { operatingHours, holidays } = await this.resolveSchedule(branchId);
-    const slots = generatePickupSlots(new Date(), PICKUP_SCHEDULE_DAY_COUNT, operatingHours, holidays);
+    const { operatingHours, holidays } = await this.branchesService.resolvePickupSchedule(branchId);
     const partnerCoverage =
       (await this.branchesService.evaluatePartnerCoverageForAddressId(addressId)) ?? {
         hasPartnerNearby: false,
@@ -153,8 +137,11 @@ export class BookingService {
         areaId: area.areaId,
         areaLabel: area.areaLabel,
         availableServices: area.availableServices,
-        slots,
+        operatingHours,
         holidays,
+        minLeadMs: PICKUP_SLOT_MIN_LEAD_MS,
+        dayCount: PICKUP_SCHEDULE_DAY_COUNT,
+        serverNow: new Date().toISOString(),
         partnerCoverage,
         dispatchNote: 'Next, choose which laundry shop you\'d like to book with.',
       },
@@ -478,15 +465,12 @@ export class BookingService {
   ) {
     const { address, area } = await this.validateAddressForUser(userId, dto.pickupAddressId);
     const quote = await this.buildQuote(dto, area.availableServices, userId, address, partnerContextId);
-    const { operatingHours, holidays } = await this.resolveSchedule(quote.resolvedBranchId);
-    const slot = generatePickupSlots(
-      new Date(),
-      PICKUP_SCHEDULE_DAY_COUNT,
-      operatingHours,
-      holidays,
-    ).find((s) => s.startAt === dto.scheduledPickupAt);
-    if (!slot || !isPickupSlotBookable(slot)) {
-      throw new BadRequestException('Selected pickup slot is no longer available');
+    const pickupCheck = await this.branchesService.validatePickupTimeForBranch(
+      quote.resolvedBranchId,
+      dto.scheduledPickupAt,
+    );
+    if (!pickupCheck.valid) {
+      throw new BadRequestException(pickupCheck.message ?? 'Selected pickup time is not available');
     }
 
     const serviceNoteFor = (serviceQuote: (typeof quote.services)[number]) =>

@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { RealtimeModule } from '../realtime/realtime.module';
-import { ReviewsController } from './reviews.controller';
+import { PublicReviewsController, ReviewsController } from './reviews.controller';
 import { ReviewsService } from './reviews.service';
 import { Notification, NotificationSchema } from './schemas/notification.schema';
 import { Review, ReviewSchema } from './schemas/review.schema';
@@ -16,7 +16,7 @@ import { Review, ReviewSchema } from './schemas/review.schema';
     ]),
     RealtimeModule,
   ],
-  controllers: [ReviewsController],
+  controllers: [ReviewsController, PublicReviewsController],
   providers: [ReviewsService],
   exports: [ReviewsService],
 })

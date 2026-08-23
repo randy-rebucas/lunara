@@ -1,0 +1,44 @@
+---
+description: Generate partner-mobile store release notes when publishing or preparing an EAS/App Store/Play release
+globs: apps/partner-mobile/**
+alwaysApply: false
+---
+
+# Partner Mobile — Release Notes
+
+## Trigger
+
+Run this workflow when the user mentions any of:
+
+- publish / release / ship **partner-mobile**
+- App Store, Google Play, TestFlight, or EAS submit for **partner-mobile**
+- "release notes" or "release details" for **partner-mobile**
+- bumping `apps/partner-mobile/app.json` version for store submission
+- **`we're publishing partner-mobile X.X.X`** (see `apps/partner-mobile/NOTE.md`)
+
+Do **not** skip release notes because the change "seems small" — every store publish gets a versioned file.
+
+## Workflow
+
+1. **Read version** from `apps/partner-mobile/app.json` (`expo.version`).
+2. **Find the previous release** — latest file in `apps/partner-mobile/release/` (by semver) or git history.
+3. **Gather changes** — `git log` and diff for `apps/partner-mobile/` (and shared packages/API if they affect partner-shop behavior) since the previous release.
+4. **Write** `apps/partner-mobile/release/<version>.md` using `release/1.0.0.md` as the template:
+   - Title: `# Version X.Y.Z`
+   - Store copy: What's New (short), App Store minimal, Google Play bullets
+   - Full changelog grouped by area (orders pipeline, scanning, receiving, staff/profile, etc.)
+   - API/backend dependencies, build/submit commands, pre-release checklist, known limitations
+5. **Align version** — if publishing, ensure `app.json` version matches the new release file; bump `package.json` version to match when appropriate.
+
+## File locations
+
+| File | Purpose |
+|------|---------|
+| `apps/partner-mobile/NOTE.md` | Trigger phrase for agents |
+| `apps/partner-mobile/release/<version>.md` | Canonical per-release doc (store copy + checklist) |
+
+## Store copy rules
+
+- Workforce/B2B app — state clearly this is for Lunara partner shop staff, not customers.
+- Mention camera permission (QR/tag scanning, profile photo) explicitly (store reviewers care).
+- Keep App Store minimal copy under 170 characters.

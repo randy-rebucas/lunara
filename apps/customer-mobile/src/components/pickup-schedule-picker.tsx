@@ -1,61 +1,128 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
+  buildPickupDayOptions,
+  manilaDateAndTimeToIso,
   PICKUP_SCHEDULE_DAY_COUNT,
-  buildPickupScheduleDays,
-  formatPickupSlotTimeWindow,
-  isPickupSlotBookable,
-  pickupSlotDayKey,
+  validatePickupTime,
   type BranchHoliday,
-  type PickupSlot,
 } from '@lunara/utils';
+import type { OperatingHours } from '@lunara/types';
 import { colors, radius, spacing } from '../theme';
 
 interface PickupSchedulePickerProps {
-  slots: PickupSlot[];
+  operatingHours: OperatingHours;
+  holidays?: BranchHoliday[];
+  dayCount?: number;
+  serverNow?: string;
   selectedStartAt: string;
   onSelectStartAt: (startAt: string) => void;
-  dayCount?: number;
-  holidays?: BranchHoliday[];
+}
+
+const TIME_STEP_MINUTES = 15;
+
+function isoToManilaTime(iso: string): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Manila',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(iso));
+}
+
+function isoToManilaDateKey(iso: string): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date(iso));
+}
+
+function timeToMinutes(time: string): number {
+  const [h, m] = time.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function minutesToTime(minutes: number): string {
+  const clamped = ((minutes % 1440) + 1440) % 1440;
+  const h = Math.floor(clamped / 60);
+  const m = clamped % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function formatTimeLabel(time: string): string {
+  const [h, m] = time.split(':').map(Number);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const displayHour = h % 12 === 0 ? 12 : h % 12;
+  return `${displayHour}:${String(m).padStart(2, '0')} ${period}`;
 }
 
 export function PickupSchedulePicker({
-  slots,
+  operatingHours,
+  holidays = [],
+  dayCount = PICKUP_SCHEDULE_DAY_COUNT,
+  serverNow,
   selectedStartAt,
   onSelectStartAt,
-  dayCount = PICKUP_SCHEDULE_DAY_COUNT,
-  holidays = [],
 }: PickupSchedulePickerProps) {
-  const scheduleDays = useMemo(
-    () => buildPickupScheduleDays(slots, new Date(), dayCount, holidays),
-    [slots, dayCount, holidays],
+  const now = useMemo(() => (serverNow ? new Date(serverNow) : new Date()), [serverNow]);
+  const dayOptions = useMemo(
+    () => buildPickupDayOptions(operatingHours, holidays, dayCount, now),
+    [operatingHours, holidays, dayCount, now],
   );
 
   const [selectedDayKey, setSelectedDayKey] = useState('');
+  const [timeValue, setTimeValue] = useState('');
 
   useEffect(() => {
-    if (selectedStartAt) {
-      setSelectedDayKey(pickupSlotDayKey(selectedStartAt));
-      return;
-    }
-    const firstWithSlots = scheduleDays.find((d) => d.hasAvailable);
-    const firstAny = scheduleDays.find((d) => d.slots.length > 0);
-    setSelectedDayKey((firstWithSlots ?? firstAny)?.key ?? scheduleDays[0]?.key ?? '');
-  }, [selectedStartAt, scheduleDays]);
+    if (selectedDayKey) return;
+    if (dayOptions.length === 0) return;
 
-  const selectedDay = scheduleDays.find((d) => d.key === selectedDayKey) ?? scheduleDays[0];
-  const timeSlots = selectedDay?.slots ?? [];
+    if (selectedStartAt) {
+      const key = isoToManilaDateKey(selectedStartAt);
+      if (dayOptions.some((d) => d.key === key)) {
+        setSelectedDayKey(key);
+        setTimeValue(isoToManilaTime(selectedStartAt));
+        return;
+      }
+    }
+
+    const firstOpen = dayOptions.find((d) => !d.isClosed && d.earliestBookableTime);
+    if (!firstOpen) return;
+    setSelectedDayKey(firstOpen.key);
+    setTimeValue(firstOpen.earliestBookableTime!);
+    onSelectStartAt(manilaDateAndTimeToIso(firstOpen.key, firstOpen.earliestBookableTime!));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dayOptions]);
+
+  const selectedDay = dayOptions.find((d) => d.key === selectedDayKey) ?? dayOptions[0];
 
   function selectDay(key: string) {
-    const day = scheduleDays.find((d) => d.key === key);
-    if (!day || day.slots.length === 0) return;
-
+    const day = dayOptions.find((d) => d.key === key);
+    if (!day || day.isClosed) return;
     setSelectedDayKey(key);
-    if (selectedStartAt && pickupSlotDayKey(selectedStartAt) === key) return;
-
-    const firstAvailable = day.slots.find((s) => isPickupSlotBookable(s));
-    onSelectStartAt(firstAvailable?.startAt ?? '');
+    const time = day.earliestBookableTime ?? day.openTime ?? '08:00';
+    setTimeValue(time);
+    onSelectStartAt(manilaDateAndTimeToIso(key, time));
   }
+
+  function applyTime(time: string) {
+    setTimeValue(time);
+    if (!selectedDay) {
+      onSelectStartAt('');
+      return;
+    }
+    const candidate = manilaDateAndTimeToIso(selectedDay.key, time);
+    const result = validatePickupTime(candidate, operatingHours, holidays, now);
+    onSelectStartAt(result.valid ? candidate : '');
+  }
+
+  function step(deltaMinutes: number) {
+    if (!timeValue) return;
+    applyTime(minutesToTime(timeToMinutes(timeValue) + deltaMinutes));
+  }
+
+  const validation = useMemo(() => {
+    if (!selectedDay || !timeValue) return undefined;
+    const candidate = manilaDateAndTimeToIso(selectedDay.key, timeValue);
+    return validatePickupTime(candidate, operatingHours, holidays, now);
+  }, [selectedDay, timeValue, operatingHours, holidays, now]);
 
   return (
     <View>
@@ -65,41 +132,29 @@ export function PickupSchedulePicker({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.dayRow}
       >
-        {scheduleDays.map((day) => {
+        {dayOptions.map((day) => {
           const selected = day.key === selectedDayKey;
-          const disabled = day.slots.length === 0;
-          const limited = !disabled && !day.hasAvailable;
           return (
             <Pressable
               key={day.key}
-              disabled={disabled}
+              disabled={day.isClosed}
               onPress={() => selectDay(day.key)}
               style={[
                 styles.dayChip,
-                disabled
-                  ? styles.dayChipDisabled
-                  : selected
-                    ? styles.dayChipSelected
-                    : limited
-                      ? styles.dayChipLimited
-                      : null,
+                day.isClosed ? styles.dayChipDisabled : selected ? styles.dayChipSelected : null,
               ]}
             >
-              <Text style={[styles.dayWeekday, disabled && styles.dayTextDisabled]}>
+              <Text style={[styles.dayWeekday, day.isClosed && styles.dayTextDisabled]}>
                 {day.weekday}
               </Text>
-              <Text style={[styles.dayNumber, disabled && styles.dayTextDisabled]}>
+              <Text style={[styles.dayNumber, day.isClosed && styles.dayTextDisabled]}>
                 {day.dayLabel}
               </Text>
-              <Text style={[styles.dayMonth, disabled && styles.dayTextDisabled]}>
+              <Text style={[styles.dayMonth, day.isClosed && styles.dayTextDisabled]}>
                 {day.monthLabel}
               </Text>
               {day.isToday ? <Text style={styles.dayToday}>Today</Text> : null}
-              {day.holidayLabel ? (
-                <Text style={styles.dayFull}>Holiday</Text>
-              ) : limited && !selected ? (
-                <Text style={styles.dayFull}>Full</Text>
-              ) : null}
+              {day.isClosed ? <Text style={styles.dayFull}>{day.holidayLabel ?? 'Closed'}</Text> : null}
             </Pressable>
           );
         })}
@@ -110,32 +165,38 @@ export function PickupSchedulePicker({
           ? `Pickup time · ${selectedDay.weekday}, ${selectedDay.monthLabel} ${selectedDay.dayLabel}`
           : 'Pickup time'}
       </Text>
-      {selectedDay?.holidayLabel ? (
-        <Text style={styles.emptyText}>{selectedDay.holidayLabel}. Choose another day.</Text>
-      ) : timeSlots.length === 0 ? (
-        <Text style={styles.emptyText}>No pickup windows on this day. Choose another day.</Text>
+      {!selectedDay || selectedDay.isClosed ? (
+        <Text style={styles.emptyText}>
+          {selectedDay?.holidayLabel ?? 'Closed'}. Choose another day.
+        </Text>
       ) : (
-        timeSlots.map((slot) => {
-          const selected = selectedStartAt === slot.startAt;
-          const bookable = isPickupSlotBookable(slot);
-          return (
+        <View>
+          <View style={styles.stepperRow}>
             <Pressable
-              key={slot.id}
-              disabled={!bookable}
-              onPress={() => onSelectStartAt(slot.startAt)}
-              style={[
-                styles.slotRow,
-                selected && styles.slotRowSelected,
-                !bookable && styles.slotRowDisabled,
-              ]}
+              style={styles.stepperButton}
+              onPress={() => step(-TIME_STEP_MINUTES)}
+              disabled={!timeValue}
             >
-              <Text style={[styles.slotText, !bookable && styles.dayTextDisabled]}>
-                {formatPickupSlotTimeWindow(slot)}
-              </Text>
-              {!bookable ? <Text style={styles.slotUnavailable}>Unavailable</Text> : null}
+              <Text style={styles.stepperButtonText}>−15m</Text>
             </Pressable>
-          );
-        })
+            <View style={styles.stepperDisplay}>
+              <Text style={styles.stepperTime}>{timeValue ? formatTimeLabel(timeValue) : '--:--'}</Text>
+            </View>
+            <Pressable
+              style={styles.stepperButton}
+              onPress={() => step(TIME_STEP_MINUTES)}
+              disabled={!timeValue}
+            >
+              <Text style={styles.stepperButtonText}>+15m</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.hoursText}>
+            Open {formatTimeLabel(selectedDay.openTime!)}–{formatTimeLabel(selectedDay.closeTime!)}
+          </Text>
+          {validation && !validation.valid ? (
+            <Text style={styles.slotUnavailable}>{validation.message}</Text>
+          ) : null}
+        </View>
       )}
     </View>
   );
@@ -155,7 +216,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
   },
   dayChipSelected: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
-  dayChipLimited: { borderColor: colors.warningBorder, backgroundColor: colors.warningBg },
   dayChipDisabled: { opacity: 0.4 },
   dayWeekday: {
     fontSize: 10,
@@ -170,17 +230,31 @@ const styles = StyleSheet.create({
   dayFull: { fontSize: 10, fontWeight: '600', color: colors.warning, marginTop: spacing.xs },
   dayTextDisabled: { color: colors.mutedForeground },
   emptyText: { fontSize: 13, color: colors.muted, marginBottom: spacing.md },
-  slotRow: {
+  stepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  stepperButton: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.surface,
+  },
+  stepperButtonText: { fontSize: 14, fontWeight: '600', color: colors.foreground },
+  stepperDisplay: {
+    flex: 1,
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.lg,
     paddingVertical: spacing.md - 2,
-    paddingHorizontal: spacing.lg - 2,
-    marginBottom: spacing.sm,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.primaryLight,
   },
-  slotRowSelected: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
-  slotRowDisabled: { opacity: 0.4 },
-  slotText: { fontSize: 15, fontWeight: '500', color: colors.foreground },
-  slotUnavailable: { fontSize: 12, color: colors.mutedForeground, marginTop: 2 },
+  stepperTime: { fontSize: 20, fontWeight: '700', color: colors.foreground },
+  hoursText: { fontSize: 12, color: colors.muted, marginBottom: spacing.sm },
+  slotUnavailable: { fontSize: 12, fontWeight: '600', color: colors.warning },
 });

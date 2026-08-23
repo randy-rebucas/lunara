@@ -282,116 +282,39 @@ export const EXPANDING_AREAS = [
   'Parañaque & Las Piñas',
 ] as const;
 
-export const CUSTOMER_REVIEWS = [
-  {
-    name: 'Maria C.',
-    initials: 'MC',
-    location: 'Makati',
-    rating: 5,
-    quote:
-      'Booking took less than five minutes. The rider was on time and I tracked everything until delivery.',
-    avatarColor: 'primary' as const,
-  },
-  {
-    name: 'James R.',
-    initials: 'JR',
-    location: 'BGC',
-    rating: 5,
-    quote:
-      'Finally laundry that fits my schedule. Pricing was clear upfront and the clothes came back perfectly folded.',
-    avatarColor: 'secondary' as const,
-  },
-  {
-    name: 'Angela T.',
-    initials: 'AT',
-    location: 'Quezon City',
-    rating: 5,
-    quote:
-      'Used the mobile app and web — both work great. Wallet top-up and GCash checkout made paying easy.',
-    avatarColor: 'accent' as const,
-  },
-  {
-    name: 'Paolo D.',
-    initials: 'PD',
-    location: 'Salcedo Village',
-    rating: 5,
-    quote:
-      'I work night shifts, so the flexible pickup windows are a lifesaver. Dropped off my laundry bag and it was back the next day.',
-    avatarColor: 'primary' as const,
-  },
-  {
-    name: 'Kristine V.',
-    initials: 'KV',
-    location: 'Kamuning',
-    rating: 4,
-    quote:
-      'Great service overall. One pickup got rescheduled, but support messaged me right away and the rider arrived in the new window.',
-    avatarColor: 'secondary' as const,
-  },
-  {
-    name: 'Miguel S.',
-    initials: 'MS',
-    location: 'McKinley Hill',
-    rating: 5,
-    quote:
-      'The live map tracking is my favorite part. I always know exactly when the rider is arriving — no more waiting around.',
-    avatarColor: 'accent' as const,
-  },
-  {
-    name: 'Denise L.',
-    initials: 'DL',
-    location: 'Legazpi Village',
-    rating: 5,
-    quote:
-      'Sent in office uniforms and delicate blouses. Everything came back pressed, bagged, and smelling fresh. Very professional.',
-    avatarColor: 'primary' as const,
-  },
-  {
-    name: 'Carlo M.',
-    initials: 'CM',
-    location: 'Timog',
-    rating: 5,
-    quote:
-      'Express wash saved me before a business trip — picked up in the morning, delivered clean by mid-afternoon.',
-    avatarColor: 'secondary' as const,
-  },
-  {
-    name: 'Bianca F.',
-    initials: 'BF',
-    location: 'Bonifacio Global City',
-    rating: 5,
-    quote:
-      'As a mom of three, laundry used to eat my whole weekend. Now it is two taps on my phone. Worth every peso.',
-    avatarColor: 'accent' as const,
-  },
-  {
-    name: 'Rafael G.',
-    initials: 'RG',
-    location: 'South Triangle',
-    rating: 4,
-    quote:
-      'Solid and consistent. Prices are fair and the app shows the breakdown before you confirm, so there are no surprises.',
-    avatarColor: 'primary' as const,
-  },
-  {
-    name: 'Joyce A.',
-    initials: 'JA',
-    location: 'Makati CBD',
-    rating: 5,
-    quote:
-      'The refer-a-friend credits stack up fast. I have paid for two full loads with rewards alone.',
-    avatarColor: 'secondary' as const,
-  },
-  {
-    name: 'Nathan P.',
-    initials: 'NP',
-    location: 'Taguig',
-    rating: 5,
-    quote:
-      'Comforters and bedsheets used to be a hassle at the laundromat. Lunara picks them up, and they come back like new.',
-    avatarColor: 'accent' as const,
-  },
-] as const;
+export interface CustomerReview {
+  id: string;
+  name: string;
+  initials: string;
+  rating: number;
+  quote: string;
+  avatarColor: 'primary' | 'secondary' | 'accent';
+}
+
+const AVATAR_COLORS = ['primary', 'secondary', 'accent'] as const;
+
+/** Fetches real, published customer reviews from the public API. Returns an empty list (rather
+ * than fabricated testimonials) if the request fails or there aren't any published yet — the
+ * reviews section is skipped in that case. */
+export async function fetchFeaturedReviews(apiBase: string): Promise<CustomerReview[]> {
+  try {
+    const res = await fetch(`${apiBase}/public/reviews/featured`, { next: { revalidate: 60 } });
+    if (!res.ok) return [];
+    const body = await res.json();
+    const data = body?.data;
+    if (!Array.isArray(data)) return [];
+    return data.map((review, i) => ({
+      id: review.id,
+      name: review.name,
+      initials: review.initials,
+      rating: review.rating,
+      quote: review.quote,
+      avatarColor: AVATAR_COLORS[i % AVATAR_COLORS.length],
+    }));
+  } catch {
+    return [];
+  }
+}
 
 export const PRICING_TIERS = [
   {

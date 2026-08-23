@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@lunara/ui';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
-import type { BranchHoliday, PickupSlot } from '@lunara/utils';
+import type { BranchHoliday } from '@lunara/utils';
+import type { OperatingHours } from '@lunara/types';
 import { PickupSchedulePicker } from '../booking/pickup-schedule-picker';
 
 interface RescheduleOrderModalProps {
@@ -23,8 +24,9 @@ export function RescheduleOrderModal({
 }: RescheduleOrderModalProps) {
   const { api } = useAuthContext();
   const [loading, setLoading] = useState(true);
-  const [slots, setSlots] = useState<PickupSlot[]>([]);
+  const [operatingHours, setOperatingHours] = useState<OperatingHours | null>(null);
   const [holidays, setHolidays] = useState<BranchHoliday[]>([]);
+  const [serverNow, setServerNow] = useState<string | undefined>(undefined);
   const [selectedStartAt, setSelectedStartAt] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -32,22 +34,23 @@ export function RescheduleOrderModal({
   useEffect(() => {
     if (!pickupAddressId) {
       setLoading(false);
-      setError('Could not load pickup slots for this order.');
+      setError('Could not load pickup schedule for this order.');
       return;
     }
     setLoading(true);
     const branchParam = branchId ? `&branchId=${encodeURIComponent(branchId)}` : '';
     api
-      .get<{ slots: PickupSlot[]; holidays?: BranchHoliday[] }>(
+      .get<{ operatingHours: OperatingHours; holidays?: BranchHoliday[]; serverNow?: string }>(
         `/booking/availability?addressId=${encodeURIComponent(pickupAddressId)}${branchParam}`,
       )
       .then((res) => {
-        setSlots(res.data.slots);
+        setOperatingHours(res.data.operatingHours);
         setHolidays(res.data.holidays ?? []);
+        setServerNow(res.data.serverNow);
       })
       .catch((e) => {
-        setError(e instanceof Error ? e.message : 'Could not load pickup slots');
-        setSlots([]);
+        setError(e instanceof Error ? e.message : 'Could not load pickup schedule');
+        setOperatingHours(null);
       })
       .finally(() => setLoading(false));
   }, [pickupAddressId, branchId, api]);
@@ -74,18 +77,19 @@ export function RescheduleOrderModal({
           <h2 className="text-lg font-semibold text-slate-900">Reschedule pickup</h2>
 
           {loading ? (
-            <p className="mt-4 text-sm text-muted">Loading available pickup slots…</p>
-          ) : slots.length > 0 ? (
+            <p className="mt-4 text-sm text-muted">Loading available pickup schedule…</p>
+          ) : operatingHours ? (
             <div className="mt-4">
               <PickupSchedulePicker
-                slots={slots}
+                operatingHours={operatingHours}
+                holidays={holidays}
+                serverNow={serverNow}
                 selectedStartAt={selectedStartAt}
                 onSelectStartAt={setSelectedStartAt}
-                holidays={holidays}
               />
             </div>
           ) : !error ? (
-            <p className="mt-4 text-sm text-muted">No pickup slots available for this address.</p>
+            <p className="mt-4 text-sm text-muted">No pickup schedule available for this address.</p>
           ) : null}
 
           {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
