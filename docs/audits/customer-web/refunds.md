@@ -49,10 +49,20 @@ None on either page — refund *submission* is a mutation but lives entirely on 
 Every endpoint this module touches is `@Roles(UserRole.CUSTOMER)`-gated and scoped to the caller server-side (see Backend trace). No `[authz]` issues.
 
 ## Findings
-No issues found. The eligible-orders picker's client-side exclusion of orders with an already-open refund request is a good defensive UX detail layered on top of (not instead of) server-side enforcement.
+
+1. **[sensitive-data] `adminNote` was leaked to the customer on both the list and detail endpoints.** `RefundsService.serializeRefund` (`refunds.service.ts`) is a single shared serializer used by both the admin-facing (`listAdminRefunds`/`getAdminRefund`) and customer-facing (`listCustomerRefunds`/`getCustomerRefund`) methods, and it included `adminNote` unconditionally — internal reviewer commentary (e.g. "Auto-approved by automation settings", or an admin's private note while reviewing) was returned in every `GET /refunds` and `GET /refunds/:id` response body a customer receives. The customer-web frontend never reads `adminNote` (it's absent from both `RefundRow` and `RefundDetail`), so this was a genuinely unused *and* sensitive field — worse than ordinary dead payload. This is a shared-code issue: `serializeRefund` is also called from `apps/api/src/modules/ai-agents/tools/refunds.tools.ts`'s `get_my_refunds`/`get_my_refund_detail` tools (the "emma" customer persona), so the same leak reached the AI assistant's customer-facing tool responses too.
+   **Fix:** added a `serializeRefundForCustomer` wrapper (`refunds.service.ts`) that strips `adminNote` from `serializeRefund`'s output, and switched `listCustomerRefunds`/`getCustomerRefund` to use it. `listAdminRefunds`/`getAdminRefund` (and the `benjamin`/admin AI-agent tools that call them) are untouched and still get the full `adminNote` — verified by re-reading `refunds.tools.ts`, which routes admin tools through the unchanged `listAdminRefunds`/`getAdminRefund` methods. Typechecked `apps/api` clean after the change.
+
+2. The eligible-orders picker's client-side exclusion of orders with an already-open refund request is a good defensive UX detail layered on top of (not instead of) server-side enforcement — no issue, noted for completeness.
 
 ## Unused/dead fields
 None found — every field on `RefundRow`/`RefundDetail` is rendered.
 
 ## Loading/error/realtime behavior
 Both pages use the shared `useCustomerQuery` hook (benefits from the fix in `docs/audits/customer-web/dashboard.md`, Finding #1); `RefundRequestSection` manages its own separate loading/error state for the orders picker, matching the same lazy-fetch-on-demand pattern already seen in `docs/audits/customer-web/support.md`'s create section. No polling or realtime subscription on either page — a refund's status only updates on manual refresh or navigation.
+
+## UI/UX notes
+- List and detail pages consistently reuse `refundStatusBadgeClass`/`formatRefundStatus` for the status pill — good cross-page consistency, no divergent color/label mapping to keep in sync.
+- The detail page's flow stepper (`REFUND_FLOW` + `refundFlowIndex`) gives clear progress feedback with distinct done/active/pending icon states (`Check`/`ArrowRight`/`Circle`) — a strong pattern, comparable to the lost-item stepper on `/support`.
+- List page's "Refresh" button duplicates what `DataPageStatus`'s automatic loading state already communicates; harmless but slightly redundant UI, not worth changing given it also lets the customer force a manual refetch without navigating away.
+- Refund rows are entirely wrapped in a `<Link>` with no visible affordance (chevron/arrow) hinting the whole card is clickable, unlike the picker's `Request →` rows in `RefundRequestSection` just above it on the same page — minor inconsistency in "is this whole row a link" affordance within one page. Left as a note rather than fixed, since adding an icon is a small design choice better made alongside the rest of a list-card pattern audit than as a one-off change here.

@@ -185,7 +185,7 @@ export class SupportService {
       .find({ riderId: new Types.ObjectId(riderId) })
       .sort({ updatedAt: -1 })
       .limit(50);
-    return { success: true, data: items.map((t) => this.serializeTicket(t)) };
+    return { success: true, data: items.map((t) => this.serializeTicketForRider(t)) };
   }
 
   async getRiderTicket(riderId: string, ticketId: string) {
@@ -194,7 +194,7 @@ export class SupportService {
     if (ticket.riderId?.toString() !== riderId) {
       throw new ForbiddenException('Access denied');
     }
-    return { success: true, data: this.serializeTicket(ticket) };
+    return { success: true, data: this.serializeTicketForRider(ticket) };
   }
 
   async createLostItemComplaint(customerId: string, dto: CreateLostItemDto) {
@@ -312,7 +312,7 @@ export class SupportService {
       .limit(50);
     return {
       success: true,
-      data: items.map((t) => this.serializeTicket(t)),
+      data: items.map((t) => this.serializeTicketForCustomer(t)),
     };
   }
 
@@ -328,7 +328,7 @@ export class SupportService {
         : null;
     return {
       success: true,
-      data: { ticket: this.serializeTicket(ticket), investigation },
+      data: { ticket: this.serializeTicketForCustomer(ticket), investigation },
     };
   }
 
@@ -626,6 +626,63 @@ export class SupportService {
       deliveryReceipt: order.delivery?.receiptCode,
       processingStepsTotal: LAUNDRY_PROCESSING_STEPS.length,
       processingStepsCompleted: order.laundryProcessing?.completedSteps?.length ?? 0,
+    };
+  }
+
+  /**
+   * Customer-facing serialization. Omits internal-only fields (staff adminNote,
+   * riderId, photo/log review timestamps) and strips the `note` text from
+   * timeline entries that were authored by staff during investigation
+   * (investigation/photos_reviewed/logs_reviewed/outcome/compensation/closed),
+   * since those notes are free-text meant for internal review, not customers.
+   * Customer-authored stages (submitted/complaint/area_request) keep their note.
+   */
+  private static readonly CUSTOMER_VISIBLE_NOTE_STAGES = new Set([
+    'submitted',
+    'complaint',
+    'area_request',
+  ]);
+
+  serializeTicketForCustomer(t: SupportTicketDocument) {
+    const { customerId, riderId, adminNote, photosReviewedAt, logsReviewedAt, timeline, ...rest } =
+      this.serializeTicket(t);
+    void customerId;
+    void riderId;
+    void adminNote;
+    void photosReviewedAt;
+    void logsReviewedAt;
+    return {
+      ...rest,
+      timeline: timeline.map((entry) =>
+        SupportService.CUSTOMER_VISIBLE_NOTE_STAGES.has(entry.stage)
+          ? entry
+          : { ...entry, note: undefined },
+      ),
+    };
+  }
+
+  /**
+   * Rider-facing serialization. Omits internal-only fields (staff adminNote,
+   * customerId, photo/log review timestamps) and strips the `note` text from
+   * timeline entries authored by staff during lost-item investigation, mirroring
+   * serializeTicketForCustomer above. Rider-authored stages keep their note.
+   */
+  private static readonly RIDER_VISIBLE_NOTE_STAGES = new Set(['submitted']);
+
+  serializeTicketForRider(t: SupportTicketDocument) {
+    const { customerId, adminNote, photosReviewedAt, logsReviewedAt, timeline, ...rest } =
+      this.serializeTicket(t);
+    void customerId;
+    void adminNote;
+    void photosReviewedAt;
+    void logsReviewedAt;
+    return {
+      ...rest,
+      timeline: timeline.map((entry) =>
+        SupportService.RIDER_VISIBLE_NOTE_STAGES.has(entry.stage)
+          ? entry
+          : { ...entry, note: undefined },
+      ),
     };
   }
 

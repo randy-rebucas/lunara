@@ -1047,7 +1047,7 @@ export class AdminService {
     const [partners, riders] = await Promise.all([
       this.userModel
         .find({ _id: { $in: flaggedShops.map((s) => s._id) } })
-        .select('email businessName ownerName'),
+        .select('email businessName'),
       this.userModel.find({ _id: { $in: flaggedRiders.map((r) => r._id) } }).select('email'),
     ]);
     const partnerById = new Map(partners.map((p) => [p._id.toString(), p]));

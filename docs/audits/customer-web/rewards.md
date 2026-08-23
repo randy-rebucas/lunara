@@ -45,3 +45,9 @@ None found — every field in `RewardsData`/`RewardsCatalogItem`/`RewardsTransac
 
 ## Loading/error/realtime behavior
 Uses the shared `useCustomerQuery` hook — benefits from the "preserve data on fetch error" fix already made in `docs/audits/customer-web/dashboard.md`, Finding #1 (no separate fix needed here, same hook instance). `DataPageStatus` plus a manual "Try again" retry button handle the loading/error display, matching the pattern used on `/wallet`. No polling or realtime subscription.
+
+## UI/UX notes
+- The loyalty summary card's progress bar (`page.tsx:150-155`) has no `role="progressbar"`/`aria-valuenow` etc. — a purely visual `<div>` width, so a screen reader gets no indication of tier progress beyond the surrounding text (which does convey the same info in words, so this is a minor a11y gap rather than a missing information issue).
+- Catalog redeem buttons use three different label states (`Redeeming…` / `Redeem` / `N to go`) on the same button — clear and information-dense, a good pattern other "spend a resource" actions in the app could reuse.
+- Success/error banners after redeem (`redeemMessage`/`redeemError`) appear below `ShareInviteCard`, i.e. not immediately next to the catalog section that triggered them — on a long page a customer may need to scroll to notice the confirmation. Left as a note; not fixed inline since moving the banner risks disrupting the card order other tests/screenshots may depend on, and it's still visible without scrolling on typical viewport heights.
+- Referral code fetch failure is silently swallowed (`.catch(() => {})`, `page.tsx:71`) — if `/rewards/me/referral-code` fails, the card just falls back to the generic "Invite friends..." copy with no error shown, which is a reasonable degrade (not a broken UI) but means a persistent failure is invisible to both the customer and anyone debugging from a screenshot/report.

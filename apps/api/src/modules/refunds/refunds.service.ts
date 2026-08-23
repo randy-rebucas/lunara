@@ -187,7 +187,7 @@ export class RefundsService {
       .find({ customerId: new Types.ObjectId(customerId) })
       .sort({ updatedAt: -1 })
       .limit(50);
-    return { success: true, data: items.map((r) => this.serializeRefund(r)) };
+    return { success: true, data: items.map((r) => this.serializeRefundForCustomer(r)) };
   }
 
   async getCustomerRefund(customerId: string, refundId: string) {
@@ -199,7 +199,7 @@ export class RefundsService {
     return {
       success: true,
       data: {
-        refund: this.serializeRefund(refund),
+        refund: this.serializeRefundForCustomer(refund),
         flow: REFUND_FLOW,
       },
     };
@@ -709,5 +709,13 @@ export class RefundsService {
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
     };
+  }
+
+  /** Customer-facing view of a refund — strips adminNote, which is internal reviewer
+   *  commentary never meant for the customer to read. Everything else in
+   *  serializeRefund is either the customer's own data or non-sensitive. */
+  private serializeRefundForCustomer(r: RefundRequestDocument) {
+    const { adminNote: _adminNote, ...rest } = this.serializeRefund(r);
+    return rest;
   }
 }

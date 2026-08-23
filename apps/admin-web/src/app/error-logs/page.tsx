@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { PageHeader } from '../../components/ui/page-header';
 import { adminFetch } from '../../lib/admin-api';
 
@@ -51,27 +51,39 @@ function sourceBadgeClass(source: string) {
 export default function ErrorLogsPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [source, setSource] = useState('');
   const [data, setData] = useState<ErrorLogPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const requestId = useRef(0);
+
+  // Debounce free-text search so typing doesn't fire a request per keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const load = useCallback(async () => {
+    const id = ++requestId.current;
     setLoading(true);
     setError('');
     try {
       const params = new URLSearchParams({ page: String(page), limit: '25' });
-      if (search.trim()) params.set('search', search.trim());
+      if (debouncedSearch) params.set('search', debouncedSearch);
       if (source) params.set('source', source);
       const res = await adminFetch<ErrorLogPage>(`/admin/error-logs?${params.toString()}`);
+      // Ignore stale responses from a superseded request (e.g. fast typing/paging).
+      if (id !== requestId.current) return;
       setData(res);
     } catch (e) {
+      if (id !== requestId.current) return;
       setError(e instanceof Error ? e.message : 'Failed to load error logs');
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
-  }, [page, search, source]);
+  }, [page, debouncedSearch, source]);
 
   useEffect(() => {
     void load();
@@ -79,7 +91,7 @@ export default function ErrorLogsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, source]);
+  }, [debouncedSearch, source]);
 
   return (
     <div>
@@ -208,10 +220,21 @@ export default function ErrorLogsPage() {
                                     <span className="capitalize">{entry.userRole}</span>
                                   </p>
                                 )}
+                                {entry.userId && (
+                                  <p className="text-muted">
+                                    <span className="font-medium text-slate-900">Actor ID:</span>{' '}
+                                    <span className="text-code">{entry.userId}</span>
+                                  </p>
+                                )}
                                 <p className="text-muted">
                                   <span className="font-medium text-slate-900">Timestamp:</span>{' '}
                                   {formatDate(entry.createdAt)}
                                 </p>
+                                {entry.context && Object.keys(entry.context).length > 0 && (
+                                  <pre className="mt-2 overflow-x-auto rounded-lg bg-slate-900 p-3 text-slate-100">
+                                    {JSON.stringify(entry.context, null, 2)}
+                                  </pre>
+                                )}
                                 {entry.stack && (
                                   <pre className="mt-2 overflow-x-auto rounded-lg bg-slate-900 p-3 text-slate-100">
                                     {entry.stack}

@@ -144,11 +144,61 @@ export class OrdersService {
     return loadLatestOrderPaymentsByOrderId(this.paymentModel, orderIds);
   }
 
+  /**
+   * Whitelisted, customer-safe projection of an order. `order.toObject()` includes many
+   * internal-only fields (rider/staff ObjectIds, settlement/payout/commission data, ops
+   * notes) that must never reach the customer app — see docs/audits/customer-web/orders.md
+   * finding [sensitive-data]. Only fields the customer-web frontend actually declares/needs
+   * are included here.
+   */
   private enrichOrderWithPayment(
     order: OrderDocument,
     payment: PaymentDocument | undefined,
   ) {
-    return { ...order.toObject(), ...buildOrderPaymentSummary(payment) };
+    const o = order.toObject();
+    const customerSafe = {
+      _id: o._id,
+      status: o.status,
+      total: o.total,
+      bookingType: o.bookingType,
+      estimatedWeightKg: o.estimatedWeightKg,
+      bagSizeLabel: o.bagSizeLabel,
+      pricingMode: o.pricingMode,
+      finalTotal: o.finalTotal,
+      finalServiceSubtotal: o.finalServiceSubtotal,
+      estimatedTotal: o.estimatedTotal,
+      scheduledPickupAt: o.scheduledPickupAt,
+      pickupAddressId: o.pickupAddressId,
+      branchId: o.branchId,
+      bagSizeId: o.bagSizeId,
+      addons: o.addons,
+      garmentSelections: o.garmentSelections,
+      createdAt: o.createdAt,
+      pickup: o.pickup
+        ? {
+            receiptCode: o.pickup.receiptCode,
+            acceptedAt: o.pickup.acceptedAt,
+            arrivedAt: o.pickup.arrivedAt,
+          }
+        : undefined,
+      delivery: o.delivery
+        ? {
+            receiptCode: o.delivery.receiptCode,
+            signatureName: o.delivery.signatureName,
+            acceptedAt: o.delivery.acceptedAt,
+            arrivedAt: o.delivery.arrivedAt,
+          }
+        : undefined,
+      statusHistory: (o.statusHistory ?? []).map((h: { status: string; timestamp: Date; note?: string }) => ({
+        status: h.status,
+        timestamp: h.timestamp,
+        note: h.note,
+      })),
+      branchName: o.branchName,
+      branchCode: o.branchCode,
+    };
+    const { cashCollectedBy: _cashCollectedBy, ...paymentSummary } = buildOrderPaymentSummary(payment);
+    return { ...customerSafe, ...paymentSummary };
   }
 
   private async enrichCustomerOrders(orders: OrderDocument[]) {

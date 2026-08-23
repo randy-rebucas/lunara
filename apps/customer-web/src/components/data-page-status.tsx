@@ -1,3 +1,5 @@
+import Image from 'next/image';
+
 export function DataPageStatus({
   loading,
   error,
@@ -17,7 +19,7 @@ export function DataPageStatus({
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted">
-        <img src="/images/washing-machine-preloader.svg" alt="" className="h-6 w-6" />
+        <Image src="/images/washing-machine-preloader.svg" alt="" width={24} height={24} className="h-6 w-6" />
         {loadingMessage}
       </div>
     );

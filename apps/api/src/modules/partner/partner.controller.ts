@@ -468,7 +468,7 @@ export class PartnerController {
   }
 
   @Post('orders/:orderId/accept')
-  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
   acceptOrder(
     @Param('orderId') orderId: string,
     @Req() req: { user: { sub: string; role: UserRole } },

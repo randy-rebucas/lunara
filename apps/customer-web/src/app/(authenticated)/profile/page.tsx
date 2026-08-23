@@ -85,6 +85,8 @@ export default function ProfilePage() {
     try {
       await api.delete(`/favorites/${branchId}`);
       await reload();
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : 'Could not remove favorite');
     } finally {
       setActioningFavoriteId(null);
     }
@@ -96,6 +98,8 @@ export default function ProfilePage() {
     try {
       await api.patch('/customers/me', { isBusiness: !profile.isBusiness });
       await reload();
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : 'Could not update business account');
     } finally {
       setBusinessSaving(false);
     }

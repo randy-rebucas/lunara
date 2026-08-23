@@ -59,12 +59,16 @@ export default function RegisterPage() {
         <div className="grid grid-cols-2 gap-4">
           <Input
             placeholder="First name"
+            aria-label="First name"
+            autoComplete="given-name"
             value={form.firstName}
             onChange={(e) => setForm({ ...form, firstName: e.target.value })}
             required
           />
           <Input
             placeholder="Last name"
+            aria-label="Last name"
+            autoComplete="family-name"
             value={form.lastName}
             onChange={(e) => setForm({ ...form, lastName: e.target.value })}
             required
@@ -73,17 +77,23 @@ export default function RegisterPage() {
         <Input
           placeholder="Email"
           type="email"
+          aria-label="Email"
+          autoComplete="email"
           value={form.email}
           onChange={(e) => setForm({ ...form, email: e.target.value })}
         />
         <Input
           placeholder="Phone"
+          aria-label="Phone"
+          autoComplete="tel"
           value={form.phone}
           onChange={(e) => setForm({ ...form, phone: e.target.value })}
         />
         <Input
           placeholder="Password"
           type="password"
+          aria-label="Password"
+          autoComplete="new-password"
           value={form.password}
           onChange={(e) => setForm({ ...form, password: e.target.value })}
           required

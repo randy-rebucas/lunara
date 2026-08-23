@@ -879,7 +879,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
     } catch {
       return null;
     }
-  }, [serviceQuotes, addonOptions, form.addonIds, selectedShop, config]);
+  }, [serviceQuotes, addonOptions, form.addonIds, config]);
 
   const loadAvailability = useCallback(
     async (addressId: string) => {

@@ -1,6 +1,6 @@
 # Audit: Customer-web — Dashboard
 
-Date: 2026-07-23
+Date: 2026-08-23 (re-audited; see Findings #2 and UI/UX notes appended below)
 
 ## Entry point
 - Page: `apps/customer-web/src/app/(authenticated)/dashboard/page.tsx` -> `dashboard-client.tsx` (`'use client'`)
@@ -87,3 +87,10 @@ Page itself requires an authenticated customer with completed onboarding (`usePr
 
 ## Loading/error/realtime behavior
 Uses the shared `useCustomerQuery` hook (see Finding #1 for the fix applied here). Initial loading is gated by `useProtectedPage`'s `isLoading`/`ready` (shows `AuthLoading` until auth+onboarding checks resolve), then `DataPageStatus` handles the fetch's own loading/error display. Empty state ("No orders yet") only renders once `!loading && !error && displayOrders.length === 0`, correctly avoiding a false empty-state flash during loading or after a failed fetch. No polling or realtime subscription on this page itself.
+
+## UI/UX notes
+- Visual hierarchy reads well: greeting -> wallet balance chip -> primary CTA card ("Book now") -> quick actions -> orders — most-actionable content is front-loaded, consistent with the other authenticated pages' `PageShell` + header pattern.
+- Icons throughout (`Wallet`, `ChevronRight`, quick-action icons) are correctly marked `aria-hidden`, with their meaning carried by adjacent visible text — no accessibility gap here.
+- This is the one authenticated page that skips the shared `PageHeader` component (used by `orders/page.tsx`, `notifications/page.tsx`, etc.) in favor of a bespoke `<header>` block (`dashboard-client.tsx:85-99`) to fit the wallet-balance chip next to the title. Reasonable given the extra chip, but it means the title styling (`text-2xl font-bold`) isn't guaranteed to stay in sync with `PageHeader`'s if that component's styles change later — worth a mental note, not worth forcing into `PageHeader` just for consistency.
+- The quick-actions row (`nav[aria-label="Quick actions"]`) horizontally scrolls on mobile with no visual affordance (no fade edge or scroll indicator) hinting there are 5 items when only ~4 fit in view — a minor discoverability gap, low-risk to leave as a finding rather than fix speculatively without a design pass.
+- Order progress bar and "View all" link give quick scannability; status label duplicates info already conveyed by the progress bar + `currentStepLabel`, which is intentional redundancy for accessibility (colorblind/no-visual users still get the text status), not a defect.

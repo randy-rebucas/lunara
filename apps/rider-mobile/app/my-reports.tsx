@@ -12,8 +12,12 @@ const RESOLVED_STATUSES = new Set(['resolved', 'closed']);
 interface RiderTicket {
   _id: string;
   subject: string;
+  description: string;
   status: string;
+  priority: string;
   type: string;
+  orderId?: string;
+  createdAt?: string;
   updatedAt?: string;
 }
 

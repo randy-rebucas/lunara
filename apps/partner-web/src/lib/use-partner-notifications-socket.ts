@@ -5,7 +5,7 @@ import { io, Socket } from 'socket.io-client';
 import { resolveApiOrigin } from '@lunara/utils';
 import { getPartnerToken } from './partner-api';
 
-export function usePartnerNotificationsSocket(handlers: { onNotification?: () => void }) {
+export function usePartnerNotificationsSocket(handlers: { onNotification?: () => void; enabled?: boolean }) {
   const [connected, setConnected] = useState(false);
   const handlersRef = useRef(handlers);
 
@@ -14,6 +14,8 @@ export function usePartnerNotificationsSocket(handlers: { onNotification?: () =>
   });
 
   useEffect(() => {
+    if (handlers.enabled === false) return;
+
     const token = getPartnerToken();
     if (!token) return;
 
@@ -36,7 +38,7 @@ export function usePartnerNotificationsSocket(handlers: { onNotification?: () =>
       socket.disconnect();
       setConnected(false);
     };
-  }, []);
+  }, [handlers.enabled]);
 
   return { connected };
 }

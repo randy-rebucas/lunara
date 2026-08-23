@@ -58,7 +58,7 @@ export function QualityAlertsBoard() {
             ) : (
               <div className="list-stack mt-4">
                 {data.shops.map((s) => (
-                  <Link key={s.partnerId} href={`/partners`}>
+                  <Link key={s.partnerId} href={`/partners/${s.partnerId}/command-center`}>
                     <Card className="transition-shadow hover:shadow-[var(--shadow-elevated)]">
                       <CardBody className="flex items-center justify-between gap-3">
                         <div>

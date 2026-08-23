@@ -54,12 +54,23 @@ export function useNotifications(limit = 20) {
       );
       try {
         await api.patch(`/notifications/${notificationId}/read`, {});
+        window.dispatchEvent(new CustomEvent('lunara-notifications-bump'));
       } catch {
         await load();
       }
     },
     [api, load],
   );
+
+  const markAllRead = useCallback(async () => {
+    setItems((prev) => prev.map((item) => ({ ...item, read: true })));
+    try {
+      await api.patch('/notifications/read-all', {});
+      window.dispatchEvent(new CustomEvent('lunara-notifications-bump'));
+    } catch {
+      await load();
+    }
+  }, [api, load]);
 
   const unreadCount = useMemo(() => items.filter((item) => !item.read).length, [items]);
 
@@ -72,5 +83,6 @@ export function useNotifications(limit = 20) {
     load,
     refresh,
     markRead,
+    markAllRead,
   };
 }

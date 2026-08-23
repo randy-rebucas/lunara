@@ -58,7 +58,7 @@ export function DashboardClient() {
     const [profileRes, walletRes, ordersRes] = await Promise.all([
       api.get<CustomerProfile>('/customers/me'),
       api.get<{ balance: number }>('/wallets/me'),
-      api.get<{ items: OrderSummary[] }>('/orders'),
+      api.get<{ items: OrderSummary[] }>('/orders?limit=10'),
     ]);
     return {
       profile: profileRes.data,

@@ -358,14 +358,28 @@ export class PaymentsService {
       status: PaymentStatus.PENDING,
     });
 
-    const payment = await this.paymentModel.create({
-      userId: new Types.ObjectId(userId),
-      purpose: 'wallet_topup',
-      method,
-      amount,
-      status: PaymentStatus.PENDING,
-      returnOrigin: webOrigin,
-    });
+    // Same race as createIntent (see comment there): the deleteMany above isn't atomic with this
+    // create, so two concurrent top-up requests could both create a pending row. The unique partial
+    // index on {userId, purpose:'wallet_topup', status:'pending'} (payment.schema.ts) makes the
+    // loser's create() throw E11000 instead of both proceeding to PayMongo checkout.
+    let payment: PaymentDocument;
+    try {
+      payment = await this.paymentModel.create({
+        userId: new Types.ObjectId(userId),
+        purpose: 'wallet_topup',
+        method,
+        amount,
+        status: PaymentStatus.PENDING,
+        returnOrigin: webOrigin,
+      });
+    } catch (err) {
+      if (this.isDuplicateKeyError(err)) {
+        throw new BadRequestException(
+          'A top-up is already being processed — please wait a moment and try again.',
+        );
+      }
+      throw err;
+    }
 
     payment.receiptCode = generatePaymentReceiptCode(userId, payment._id.toString());
 
@@ -792,10 +806,9 @@ export class PaymentsService {
       cashTiming: payment.cashTiming,
       paidAt: payment.paidAt,
       checkoutUrl: payment.checkoutUrl,
-      externalId: payment.externalId,
-      paymongoSessionId: payment.paymongoSessionId,
-      returnOrigin: payment.returnOrigin,
       createdAt: payment.createdAt,
+      // externalId and paymongoSessionId are PayMongo-internal identifiers with no use to the
+      // customer-facing frontend — not secrets, but no reason to send them across the wire.
     };
   }
 

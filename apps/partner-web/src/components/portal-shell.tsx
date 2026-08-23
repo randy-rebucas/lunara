@@ -166,9 +166,9 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
     setPartner(isPartnerRole());
   }, [pathname]);
 
-  const { connected } = usePartnerNotificationsSocket({});
+  const { connected } = usePartnerNotificationsSocket({ enabled: pathname !== '/login' && pathname !== '/offline' });
 
-  if (pathname === '/login') return <>{children}</>;
+  if (pathname === '/login' || pathname === '/offline') return <>{children}</>;
 
   async function logout() {
     await staffLogout();

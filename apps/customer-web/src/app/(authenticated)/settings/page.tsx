@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AuthLoading } from '../../../components/auth-loading';
 import { PageShell } from '../../../components/page-shell';
 import { Card, CardBody } from '../../../components/ui/card';
@@ -49,6 +49,7 @@ export default function CustomerSettingsPage() {
   const { isLoading, ready } = useProtectedPage({ requireOnboarding: true });
   const [settings, setSettings] = useState<CustomerAppSettings | null>(null);
   const [saved, setSaved] = useState(false);
+  const savedTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     setSettings(loadCustomerSettings());
@@ -58,14 +59,25 @@ export default function CustomerSettingsPage() {
     }
 
     window.addEventListener('lunara-customer-settings', onSettingsChange);
-    return () => window.removeEventListener('lunara-customer-settings', onSettingsChange);
+    return () => {
+      window.removeEventListener('lunara-customer-settings', onSettingsChange);
+      if (savedTimeoutRef.current !== null) {
+        window.clearTimeout(savedTimeoutRef.current);
+      }
+    };
   }, []);
 
   function update(patch: Partial<CustomerAppSettings>) {
     const next = saveCustomerSettings(patch);
     setSettings(next);
     setSaved(true);
-    window.setTimeout(() => setSaved(false), 2000);
+    if (savedTimeoutRef.current !== null) {
+      window.clearTimeout(savedTimeoutRef.current);
+    }
+    savedTimeoutRef.current = window.setTimeout(() => {
+      savedTimeoutRef.current = null;
+      setSaved(false);
+    }, 2000);
   }
 
   if (isLoading || !ready) {

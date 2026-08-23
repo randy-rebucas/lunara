@@ -79,6 +79,11 @@ export function BannersBoard() {
       if (linkUrl.trim()) formData.append('linkUrl', linkUrl.trim());
       if (startsAt) formData.append('startsAt', new Date(startsAt).toISOString());
       if (endsAt) formData.append('endsAt', new Date(endsAt).toISOString());
+      // New banners default to sortOrder 0 on the backend if omitted, which would
+      // place them at the top of the manual order (mixed in with any other banner
+      // still sitting at 0) instead of at the end. Append it explicitly.
+      const nextSortOrder = (data ?? []).reduce((max, b) => Math.max(max, b.sortOrder), -1) + 1;
+      formData.append('sortOrder', String(nextSortOrder));
 
       await adminUpload('/admin/banners', formData);
       setTitle('');
@@ -97,12 +102,15 @@ export function BannersBoard() {
 
   async function toggleActive(b: Banner) {
     setActioningId(b._id);
+    setActionError('');
     try {
       await adminFetch(`/admin/banners/${b._id}`, {
         method: 'PATCH',
         body: JSON.stringify({ isActive: !b.isActive }),
       });
       await reload();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to update banner');
     } finally {
       setActioningId(null);
     }
@@ -143,6 +151,7 @@ export function BannersBoard() {
     // swap of two equal values is a no-op. Re-normalize the whole list to
     // sequential positions instead so every move produces a visible change.
     setActioningId(b._id);
+    setActionError('');
     try {
       const patches = ordered
         .map((item, i) => ({ item, i }))
@@ -156,6 +165,8 @@ export function BannersBoard() {
         ),
       );
       await reload();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to reorder banners');
     } finally {
       setActioningId(null);
     }
@@ -164,9 +175,12 @@ export function BannersBoard() {
   async function remove(b: Banner) {
     if (!window.confirm(`Delete banner "${b.title}"?`)) return;
     setActioningId(b._id);
+    setActionError('');
     try {
       await adminFetch(`/admin/banners/${b._id}`, { method: 'DELETE' });
       await reload();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to delete banner');
     } finally {
       setActioningId(null);
     }
@@ -272,6 +286,12 @@ export function BannersBoard() {
             </form>
           </CardBody>
         </Card>
+      )}
+
+      {actionError && !showCreate && (
+        <div className="alert-error mb-4" role="alert">
+          {actionError}
+        </div>
       )}
 
       {loading && <p className="text-sm text-muted">Loading…</p>}

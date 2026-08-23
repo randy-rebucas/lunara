@@ -86,6 +86,7 @@ export default function SignUpPage() {
             <form onSubmit={handleSendOtp} className="mt-6 space-y-4">
               <Input
                 placeholder="Mobile number (+639...)"
+                aria-label="Mobile number"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 required
@@ -105,6 +106,7 @@ export default function SignUpPage() {
               </p>
               <Input
                 placeholder="6-digit OTP"
+                aria-label="6-digit OTP"
                 value={otp}
                 onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
                 inputMode="numeric"

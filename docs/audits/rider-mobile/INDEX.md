@@ -14,5 +14,6 @@
 | History (redirect shim) | [history.md](history.md) | 2026-07-24 | 0 open / 0 fixed |
 | Auth (Login + Forgot Password) | [auth.md](auth.md) | 2026-07-24 | 1 open / 1 fixed |
 | Scan (QR/tag handoff verification) | [scan.md](scan.md) | 2026-07-24 | 0 open / 0 fixed |
+| Report issue (submit + my reports list) | [report-issue.md](report-issue.md) | 2026-08-23 | 2 open / 2 fixed |
 
 All screens under `apps/rider-mobile/app` have now been audited.

@@ -119,10 +119,20 @@ export default function LoginPage() {
 
       {mode === 'password' ? (
         <form onSubmit={handlePasswordSubmit} className="mt-6 space-y-4">
-          <Input placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <Input
+            placeholder="Email"
+            type="email"
+            aria-label="Email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
           <Input
             placeholder="Password"
             type="password"
+            aria-label="Password"
+            autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
@@ -136,6 +146,7 @@ export default function LoginPage() {
         <form onSubmit={handleSendOtp} className="mt-6 space-y-4">
           <Input
             placeholder="Mobile number (+639...)"
+            aria-label="Mobile number"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             autoComplete="tel"
@@ -154,6 +165,7 @@ export default function LoginPage() {
           </p>
           <Input
             placeholder="6-digit OTP"
+            aria-label="6-digit OTP"
             value={otp}
             onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
             inputMode="numeric"

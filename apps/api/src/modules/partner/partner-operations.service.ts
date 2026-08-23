@@ -37,7 +37,7 @@ import {
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { AssignStaffBranchDto } from './dto/assign-staff-branch.dto';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
-import { applyStaffBranchFilter, resolvePortalBranchId } from './partner-access';
+import { applyStaffBranchFilter, assertOrderPortalAccess, resolvePortalBranchId } from './partner-access';
 import { PartnerOrderNotificationService } from '../push/partner-order-notification.service';
 import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
 import {
@@ -393,9 +393,8 @@ export class PartnerOperationsService {
     if (!order.branchId) {
       throw new BadRequestException('Order has not been assigned to a shop yet');
     }
-    if (role === UserRole.PARTNER && order.partnerId?.toString() !== partnerUserId) {
-      throw new BadRequestException('This order is assigned to another partner');
-    }
+    const branchId = await resolvePortalBranchId(this.userModel, partnerUserId, role);
+    assertOrderPortalAccess(order, partnerUserId, role, branchId);
     if (order.partnerAcceptedAt) {
       throw new BadRequestException('Order already accepted by the shop');
     }
@@ -462,9 +461,8 @@ export class PartnerOperationsService {
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
 
-    if (role === UserRole.PARTNER && order.partnerId?.toString() !== partnerUserId) {
-      throw new BadRequestException('Not your order');
-    }
+    const branchId = await resolvePortalBranchId(this.userModel, partnerUserId, role);
+    assertOrderPortalAccess(order, partnerUserId, role, branchId);
     if (order.status !== OrderStatus.READY_FOR_DELIVERY) {
       throw new BadRequestException('Order must be ready for delivery');
     }

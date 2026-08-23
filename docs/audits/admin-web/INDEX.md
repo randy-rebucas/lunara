@@ -10,10 +10,12 @@ One row per module audited with the `audit-module` skill. Findings counts are
 | Applications | [applications.md](applications.md) | 2026-07-22 | 0 / 3 |
 | Audit log | [audit-log.md](audit-log.md) | 2026-07-23 | 1 / 1 |
 | Automation settings | [automation-settings.md](automation-settings.md) | 2026-07-23 | 0 / 0 |
+| Banners | [banners.md](banners.md) | 2026-08-23 | 0 / 2 |
 | Branches | [branches.md](branches.md) | 2026-07-23 (re-audited) | 0 / 6 |
 | Categories | [categories.md](categories.md) | 2026-07-22 | 0 / 2 |
 | Control tower | [control-tower.md](control-tower.md) | 2026-07-22 | 0 / 1 |
 | Dispatch | [dispatch.md](dispatch.md) | 2026-07-22 | 0 / 1 |
+| Error logs | [error-logs.md](error-logs.md) | 2026-08-23 | 2 / 2 |
 | Laundry tags | [laundry-tags.md](laundry-tags.md) | 2026-07-23 | 0 / 3 |
 | Live tracking | [live-tracking.md](live-tracking.md) | 2026-07-22 | 0 / 1 |
 | Login | [login.md](login.md) | 2026-07-23 | 2 / 1 |
@@ -28,6 +30,7 @@ One row per module audited with the `audit-module` skill. Findings counts are
 | Partner settlements | [partner-settlements.md](partner-settlements.md) | 2026-07-23 | 0 / 1 |
 | Profile | [profile.md](profile.md) | 2026-07-23 | 2 / 0 |
 | Promotions | [promotions.md](promotions.md) | 2026-07-23 | 0 / 2 |
+| Quality alerts | [quality-alerts.md](quality-alerts.md) | 2026-08-23 | 1 / 2 |
 | Reconciliation | [reconciliation.md](reconciliation.md) | 2026-07-23 | 0 / 1 |
 | Refunds | [refunds.md](refunds.md) | 2026-07-23 | 1 / 3 |
 | Reports | [reports.md](reports.md) | 2026-07-23 | 0 / 2 |

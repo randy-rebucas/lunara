@@ -22,3 +22,4 @@ One row per module audited with the `audit-module` skill. Findings counts are
 | Scan laundry tag | [scan-tag.md](scan-tag.md) | 2026-07-24 | 0 / 0 |
 | Book (booking wizard) | [book.md](book.md) | 2026-07-24 | 0 / 1 |
 | Splash (root marketing/entry screen) | [splash.md](splash.md) | 2026-07-24 | 0 / 1 |
+| Subscriptions | [subscriptions.md](subscriptions.md) | 2026-08-23 | 1 / 2 |

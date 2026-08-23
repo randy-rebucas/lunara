@@ -10,7 +10,8 @@ import { useProtectedPage } from '../../../hooks/use-protected-page';
 
 export default function NotificationsPage() {
   const { isLoading, ready } = useProtectedPage({ requireOnboarding: true });
-  const { items, loading, refreshing, error, refresh, markRead, load } = useNotifications(50);
+  const { items, loading, refreshing, error, refresh, markRead, markAllRead, unreadCount, load } =
+    useNotifications(50);
 
   if (isLoading || !ready) {
     return <AuthLoading message="Loading…" />;
@@ -18,10 +19,21 @@ export default function NotificationsPage() {
 
   return (
     <PageShell>
-      <PageHeader
-        title="Notifications"
-        description="Order updates, review requests, and refund alerts"
-      />
+      <div className="flex items-start justify-between gap-3">
+        <PageHeader
+          title="Notifications"
+          description="Order updates, review requests, and refund alerts"
+        />
+        {unreadCount > 0 && (
+          <button
+            type="button"
+            onClick={markAllRead}
+            className="-mx-2 mt-1 inline-flex min-h-11 shrink-0 items-center rounded px-2 text-sm link-primary"
+          >
+            Mark all as read
+          </button>
+        )}
+      </div>
 
       <DataPageStatus loading={loading && items.length === 0} error={error} loadingMessage="Loading notifications…" />
 

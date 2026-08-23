@@ -8,10 +8,10 @@ import { getPartnerToken } from '../lib/partner-api';
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [ready, setReady] = useState(pathname === '/login');
+  const [ready, setReady] = useState(pathname === '/login' || pathname === '/offline');
 
   useEffect(() => {
-    if (pathname === '/login') {
+    if (pathname === '/login' || pathname === '/offline') {
       setReady(true);
       return;
     }

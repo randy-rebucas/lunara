@@ -61,9 +61,13 @@ function approvalBadge(promo: OwnPromotion) {
 }
 
 export default function PromotionsPage() {
-  const { ready } = useProtectedPage({
+  const { ready, user } = useProtectedPage({
     roles: [UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN],
   });
+  // Only the PARTNER role owns promotions (backend scopes /promotions/mine, POST, and the
+  // active-toggle to @Roles(PARTNER) only) — STAFF/ADMIN would get a 403 on all three, so they
+  // only ever see the platform-wide list below.
+  const canManageOwn = user?.role === UserRole.PARTNER;
 
   const loadPlatform = useCallback(async () => {
     return partnerFetch<PartnerPromotion[]>('/partner/promotions');
@@ -71,9 +75,10 @@ export default function PromotionsPage() {
   const { data: platformPromotions, loading: platformLoading, error: platformError } = usePartnerQuery(loadPlatform, []);
 
   const loadOwn = useCallback(async () => {
+    if (!canManageOwn) return [];
     return partnerFetch<OwnPromotion[]>('/partner/promotions/mine');
-  }, []);
-  const { data: ownPromotions, loading: ownLoading, error: ownError, reload: reloadOwn } = usePartnerQuery(loadOwn, []);
+  }, [canManageOwn]);
+  const { data: ownPromotions, loading: ownLoading, error: ownError, reload: reloadOwn } = usePartnerQuery(loadOwn, [canManageOwn]);
 
   const [showForm, setShowForm] = useState(false);
   const [code, setCode] = useState('');
@@ -88,6 +93,7 @@ export default function PromotionsPage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [toggleError, setToggleError] = useState('');
 
   const discountCap = discountType === 'percent' ? MAX_PERCENT_DISCOUNT : MAX_FIXED_DISCOUNT;
 
@@ -130,12 +136,15 @@ export default function PromotionsPage() {
 
   async function toggleActive(promo: OwnPromotion) {
     setTogglingId(promo._id);
+    setToggleError('');
     try {
       await partnerFetch(`/partner/promotions/${promo._id}/active`, {
         method: 'PATCH',
         body: JSON.stringify({ isActive: !promo.isActive }),
       });
       await reloadOwn();
+    } catch (err) {
+      setToggleError(err instanceof Error ? err.message : 'Failed to update promo code');
     } finally {
       setTogglingId(null);
     }
@@ -152,6 +161,7 @@ export default function PromotionsPage() {
     <div className="mx-auto max-w-2xl">
       <PageHeader title="Promotions" description="Create your own promo codes for customers booking at your shop, and see what Lunara is running platform-wide." />
 
+      {canManageOwn && (
       <section className="mt-6">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-sm font-semibold text-slate-900">Your promo codes</h2>
@@ -163,6 +173,8 @@ export default function PromotionsPage() {
           The discount comes out of your own payout, not Lunara&apos;s — it applies only to orders assigned to
           your shop, and needs a quick admin review before it goes live.
         </p>
+
+        {toggleError && <div className="alert-error mt-3" role="alert">{toggleError}</div>}
 
         {showForm && (
           <form onSubmit={createPromotion} className="card mt-3 space-y-3 p-4">
@@ -267,6 +279,7 @@ export default function PromotionsPage() {
           ))}
         </div>
       </section>
+      )}
 
       <section className="mt-8">
         <h2 className="text-sm font-semibold text-slate-900">Platform-wide promotions</h2>

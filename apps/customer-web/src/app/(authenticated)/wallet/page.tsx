@@ -28,6 +28,9 @@ interface WalletData {
   transactions: WalletTransaction[];
 }
 
+// No server-side config for this yet — see docs/audits/customer-web/wallet.md finding #1.
+const LOW_BALANCE_THRESHOLD = 500;
+
 function formatTransactionDate(iso: string) {
   return new Date(iso).toLocaleString('en-PH', {
     month: 'short',
@@ -106,7 +109,7 @@ export default function WalletPage() {
 
   const balance = data?.balance ?? 0;
   const transactions = data?.transactions ?? [];
-  const lowBalance = balance > 0 && balance < 500;
+  const lowBalance = balance > 0 && balance < LOW_BALANCE_THRESHOLD;
 
   return (
     <PageShell>
@@ -159,7 +162,11 @@ export default function WalletPage() {
           </Card>
 
           {topUpSuccess && (
-            <div className="mt-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+            <div
+              role="status"
+              aria-live="polite"
+              className="mt-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800"
+            >
               {topUpSuccess}
             </div>
           )}

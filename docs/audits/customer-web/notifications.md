@@ -48,3 +48,10 @@ None found — every field on `AppNotification` is used (either rendered directl
 
 ## Loading/error/realtime behavior
 No polling or socket subscription — notifications only refresh on mount, manual refresh, or a `window.dispatchEvent(new CustomEvent('lunara-notifications-bump'))` triggered elsewhere in the app (the hook listens for this event and reloads). `DataPageStatus` handles the loading/error display for the initial load; **[FIXED]** a failed *refresh* no longer discards already-shown notifications (see Finding #1).
+
+## UI/UX notes
+- Page follows the same `PageShell` + `PageHeader` + `DataPageStatus` skeleton as `orders/page.tsx`, so it's visually consistent with the rest of the authenticated app.
+- Unread items get a filled dot + subtle background highlight — a reasonable, low-noise way to signal unread state without relying on color alone (dot presence + background both carry the signal, not just a color change, which helps for colorblind users).
+- "Try again" and "Refresh" are both plain text links styled `text-sm link-primary` rather than the `Button`/`ButtonLink` components used for primary actions elsewhere (e.g. "Book now" on the dashboard, "Book again" on the orders list) — consistent with how `wallet`/`support` pages also use text-link-style secondary actions, so this matches the app's existing convention for low-emphasis actions rather than being an inconsistency.
+- A failed mark-as-read silently resyncs via `load()` with no visible error toast (noted in Findings/Mutations) — from a pure UX read, a transient "couldn't mark as read" toast would give clearer feedback than a silent re-fetch that may visually flicker the list; left as a finding rather than fixed here since it needs a decision on toast infrastructure/copy, not a trivial change.
+- No visual distinction between notification types (order update vs review request vs refund alert) beyond the title/body text — an icon or color tag per `data.type` could improve scannability in a long list, but this is a polish suggestion, not a defect.

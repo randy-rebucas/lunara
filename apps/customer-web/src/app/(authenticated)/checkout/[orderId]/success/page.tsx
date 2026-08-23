@@ -25,7 +25,11 @@ export default function PaymentSuccessPage() {
   const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
-    if (!ready || !paymentId) return;
+    if (!ready) return;
+    if (!paymentId) {
+      setLoadError('Missing payment reference');
+      return;
+    }
     api
       .post(`/payments/${paymentId}/sync`, {})
       .catch(() => undefined)

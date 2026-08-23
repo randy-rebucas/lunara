@@ -75,5 +75,16 @@ PaymentSchema.index(
   { orderId: 1, purpose: 1, status: 1 },
   { unique: true, partialFilterExpression: { status: 'pending', orderId: { $exists: true } } },
 );
+// Same protection for wallet top-ups, which have no orderId to key off — two concurrent
+// createWalletTopupIntent calls for the same user could otherwise both create a pending row
+// (see docs/audits/customer-web/checkout.md, Finding #2). Scoped to purpose:'wallet_topup' so it
+// never collides with the order-payment index above.
+PaymentSchema.index(
+  { userId: 1, purpose: 1, status: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { status: 'pending', purpose: 'wallet_topup' },
+  },
+);
 // Backs date-range queries used by admin reports/reconciliation.
 PaymentSchema.index({ createdAt: -1 });

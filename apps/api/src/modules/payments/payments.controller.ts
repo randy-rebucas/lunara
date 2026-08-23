@@ -12,8 +12,10 @@ import {
 } from '@nestjs/common';
 import type { RawBodyRequest } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { PaymentMethod } from '@lunara/types';
+import { PaymentMethod, UserRole } from '@lunara/types';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { PaymentWebhookGuard } from '../../common/guards/payment-webhook.guard';
 import {
   ConfirmPaymentDto,
@@ -33,7 +35,8 @@ export class PaymentsController {
   }
 
   @Post('intent')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CUSTOMER)
   createIntent(@Req() req: { user: { sub: string } }, @Body() dto: CreatePaymentIntentDto) {
     return this.paymentsService.createIntent(
       req.user.sub,
@@ -45,7 +48,8 @@ export class PaymentsController {
   }
 
   @Post('wallet-topup/intent')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CUSTOMER)
   createWalletTopupIntent(
     @Req() req: { user: { sub: string } },
     @Body() dto: CreateWalletTopupIntentDto,
@@ -59,7 +63,8 @@ export class PaymentsController {
   }
 
   @Get('orders/:orderId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CUSTOMER)
   getForOrder(@Req() req: { user: { sub: string } }, @Param('orderId') orderId: string) {
     return this.paymentsService.getForOrder(req.user.sub, orderId);
   }
@@ -153,13 +158,15 @@ export class PaymentsController {
   }
 
   @Post(':id/sync')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CUSTOMER)
   syncPayment(@Req() req: { user: { sub: string } }, @Param('id') id: string) {
     return this.paymentsService.syncPayment(req.user.sub, id);
   }
 
   @Get(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CUSTOMER)
   getById(@Req() req: { user: { sub: string } }, @Param('id') id: string) {
     return this.paymentsService.getById(req.user.sub, id);
   }

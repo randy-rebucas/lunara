@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { Alert, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { Button } from '../../src/components/ui/button';
 import { Card } from '../../src/components/ui/card';
 import { DataLoadState } from '../../src/components/data-load-state';
@@ -60,19 +60,36 @@ export default function SubscriptionsListScreen() {
         body: JSON.stringify({ active: !item.active }),
       });
       await load();
+    } catch (e) {
+      Alert.alert('Could not update', e instanceof Error ? e.message : 'Try again');
     } finally {
       setActioningId(null);
     }
   }
 
-  async function cancelSubscription(item: SubscriptionRow) {
-    setActioningId(item._id);
-    try {
-      await apiFetch(`/subscriptions/${item._id}`, { method: 'DELETE' });
-      setItems((prev) => prev.filter((s) => s._id !== item._id));
-    } finally {
-      setActioningId(null);
-    }
+  function confirmCancelSubscription(item: SubscriptionRow) {
+    Alert.alert(
+      'Cancel recurring pickup',
+      `Stop repeating this ${item.bookingType.replace(/_/g, ' ')} pickup? This can't be undone.`,
+      [
+        { text: 'Keep it', style: 'cancel' },
+        {
+          text: 'Cancel pickup',
+          style: 'destructive',
+          onPress: async () => {
+            setActioningId(item._id);
+            try {
+              await apiFetch(`/subscriptions/${item._id}`, { method: 'DELETE' });
+              setItems((prev) => prev.filter((s) => s._id !== item._id));
+            } catch (e) {
+              Alert.alert('Could not cancel', e instanceof Error ? e.message : 'Try again');
+            } finally {
+              setActioningId(null);
+            }
+          },
+        },
+      ],
+    );
   }
 
   return (
@@ -134,7 +151,7 @@ export default function SubscriptionsListScreen() {
                     label="Cancel"
                     variant="outline"
                     disabled={actioningId === item._id}
-                    onPress={() => cancelSubscription(item)}
+                    onPress={() => confirmCancelSubscription(item)}
                     style={styles.rowBtn}
                   />
                 </View>

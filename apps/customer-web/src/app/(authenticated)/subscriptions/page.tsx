@@ -26,6 +26,7 @@ export default function SubscriptionsPage() {
   const { api } = useAuthContext();
   const { isLoading, ready } = useProtectedPage({ requireOnboarding: true });
   const [actioningId, setActioningId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState('');
 
   const load = useCallback(async () => {
     const res = await api.get<SubscriptionRow[]>('/subscriptions');
@@ -42,19 +43,32 @@ export default function SubscriptionsPage() {
 
   async function toggleActive(item: SubscriptionRow) {
     setActioningId(item._id);
+    setActionError('');
     try {
       await api.patch(`/subscriptions/${item._id}`, { active: !item.active });
       await reload();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Could not update this pickup');
     } finally {
       setActioningId(null);
     }
   }
 
   async function cancelSubscription(item: SubscriptionRow) {
+    if (
+      !window.confirm(
+        'Cancel this recurring pickup? This cannot be undone — you can always set up a new one from a future order.',
+      )
+    ) {
+      return;
+    }
     setActioningId(item._id);
+    setActionError('');
     try {
       await api.delete(`/subscriptions/${item._id}`);
       await reload();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Could not cancel this pickup');
     } finally {
       setActioningId(null);
     }
@@ -65,6 +79,8 @@ export default function SubscriptionsPage() {
       <PageHeader title="Recurring pickups" description="Manage your subscribed pickup schedules" />
 
       <DataPageStatus loading={loading} error={error} loadingMessage="Loading subscriptions…" />
+
+      {actionError && <p className="mt-3 text-sm text-red-600">{actionError}</p>}
 
       <div className="mt-6 list-stack">
         {!loading && !error && list.length === 0 ? (
