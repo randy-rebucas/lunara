@@ -19,10 +19,7 @@ module.exports = {
     ...appJson.extra,
     eas: {
       ...appJson.extra?.eas,
-      // TODO: replace with a real EAS project id (run `eas init` from this directory).
-      // Left as a placeholder so it can never collide with rider-mobile's or
-      // customer-mobile's real project ids.
-      projectId: 'TODO-create-eas-project-for-partner-mobile',
+      projectId: '0aacce5a-08d9-4668-8cdb-f6eb00022569',
     },
   },
   icon,

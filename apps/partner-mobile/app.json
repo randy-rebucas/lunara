@@ -1,32 +1,32 @@
 {
   "expo": {
-    "name": "Lunara Partner",
-    "slug": "lunara-partner",
-    "version": "0.1.0",
-    "scheme": "lunara-partner",
+    "name": "Lunara Staff",
+    "slug": "lunara-staff",
+    "version": "1.0.1",
+    "scheme": "lunara-staff",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "bundleIdentifier": "com.lunara.partner",
+      "bundleIdentifier": "com.lunara.staff",
       "supportsTablet": false
     },
     "android": {
-      "package": "com.lunara.partner"
+      "package": "com.lunara.staff"
     },
     "plugins": [
       "expo-router",
       [
         "expo-camera",
         {
-          "cameraPermission": "Lunara Partner uses your camera to scan order and laundry-tag QR codes."
+          "cameraPermission": "Lunara Staff uses your camera to scan order and laundry-tag QR codes."
         }
       ],
       [
         "expo-image-picker",
         {
-          "cameraPermission": "Lunara Partner uses your camera to take a profile photo.",
-          "photosPermission": "Lunara Partner can access photos when you choose a profile picture."
+          "cameraPermission": "Lunara Staff uses your camera to take a profile photo.",
+          "photosPermission": "Lunara Staff can access photos when you choose a profile picture."
         }
       ]
     ],
