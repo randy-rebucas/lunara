@@ -204,10 +204,12 @@ export function HomePage() {
   const bubblesRef = useRef<HTMLDivElement>(null);
   const phoneLeftRef = useRef<HTMLDivElement>(null);
   const phoneRightRef = useRef<HTMLDivElement>(null);
+  const featuresBgRef = useRef<HTMLDivElement>(null);
   useHeroParallax([
     { ref: bubblesRef, speed: -0.06 },
     { ref: phoneLeftRef, speed: 0.05 },
     { ref: phoneRightRef, speed: 0.09 },
+    { ref: featuresBgRef, speed: 0.15 },
   ]);
 
   useEffect(() => {
@@ -335,7 +337,22 @@ export function HomePage() {
       </section>
 
       {/* ── Features ── */}
-      <MarketingSection id="features">
+      <MarketingSection id="features" className="relative overflow-hidden">
+        <div
+          ref={featuresBgRef}
+          className="parallax-layer pointer-events-none absolute inset-x-0 -top-24 -z-10 h-[calc(100%+12rem)]"
+          aria-hidden
+        >
+          <Image
+            src="/images/background.png"
+            alt=""
+            fill
+            className="object-cover"
+            sizes="100vw"
+          />
+          <div className="absolute inset-0 bg-white/85" />
+        </div>
+
         <MarketingSectionHeader
           title="Everything laundry, handled"
           description="Built for busy households and professionals who want laundry off their to-do list."

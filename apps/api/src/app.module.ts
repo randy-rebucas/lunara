@@ -16,6 +16,7 @@ import { FavoritesModule } from './modules/favorites/favorites.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { IncentiveCampaignsModule } from './modules/incentive-campaigns/incentive-campaigns.module';
 import { BannersModule } from './modules/banners/banners.module';
+import { BlogModule } from './modules/blog/blog.module';
 import { BookingModule } from './modules/booking/booking.module';
 import { PartnerModule } from './modules/partner/partner.module';
 import { PartnersModule } from './modules/partners/partners.module';
@@ -79,6 +80,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
     SubscriptionsModule,
     IncentiveCampaignsModule,
     BannersModule,
+    BlogModule,
     BookingModule,
     PartnerModule,
     PartnersModule,

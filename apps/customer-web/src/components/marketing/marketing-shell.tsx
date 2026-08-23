@@ -2,19 +2,61 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { Menu, X } from 'lucide-react';
+import { ChevronDown, Menu, X } from 'lucide-react';
 import { appConfig } from '@lunara/config';
 import { BrandMark } from '@lunara/ui';
 import { ButtonLink } from '../ui/button-link';
 
+// Primary nav — core conversion paths, kept short and always visible.
 const NAV_LINKS = [
   { href: '/#how-it-works', label: 'How it works' },
-  { href: '/#features', label: 'Features' },
   { href: '/#pricing', label: 'Pricing' },
   { href: '/#service-areas', label: 'Service areas' },
+  { href: '/blog', label: 'Blog' },
+] as const;
+
+// Secondary nav — grouped under a "Company" dropdown on desktop, flattened on mobile.
+const COMPANY_LINKS = [
+  { href: '/about', label: 'About' },
   { href: '/faq', label: 'FAQ' },
   { href: '/partners', label: 'Partners' },
+  { href: '/riders', label: 'Riders' },
 ] as const;
+
+function CompanyMenu() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="relative" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      <button
+        type="button"
+        className="flex items-center gap-1 transition-colors hover:text-primary"
+        aria-haspopup="true"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        Company
+        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
+      </button>
+      {open && (
+        <div className="absolute left-1/2 top-full z-40 w-44 -translate-x-1/2 pt-2">
+          <div className="rounded-xl border border-border/40 bg-white p-1.5 shadow-lg">
+            {COMPANY_LINKS.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="block rounded-lg px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-100 hover:text-primary"
+                onClick={() => setOpen(false)}
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function MarketingShell({ children }: { children: React.ReactNode }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -45,6 +87,7 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
                   {link.label}
                 </Link>
               ))}
+              <CompanyMenu />
             </nav>
 
             <div className="flex shrink-0 items-center gap-2 sm:gap-3">
@@ -83,6 +126,21 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
                   {link.label}
                 </Link>
               ))}
+              <div className="mt-2 border-t border-border/40 pt-2">
+                <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                  Company
+                </p>
+                {COMPANY_LINKS.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className="block rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-primary"
+                    onClick={close}
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </div>
               <div className="mt-3 flex flex-col gap-2 border-t border-border/40 pt-4">
                 <Link
                   href="/login"
@@ -137,7 +195,6 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
                   { href: '/#how-it-works', label: 'How it works' },
                   { href: '/#pricing', label: 'Pricing' },
                   { href: '/locations', label: 'Locations' },
-                  { href: '/faq', label: 'FAQ' },
                   { href: '/login', label: 'Sign in' },
                 ].map((l) => (
                   <li key={l.href}>
@@ -149,15 +206,16 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
               </ul>
             </div>
 
-            {/* Business links */}
+            {/* Company + Business links */}
             <div>
-              <h3 className="text-xs font-semibold uppercase tracking-widest text-white/60">Business</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-white/60">Company</h3>
               <ul className="mt-4 space-y-2.5 text-sm">
                 {[
+                  { href: '/about', label: 'About' },
+                  { href: '/blog', label: 'Blog' },
+                  { href: '/faq', label: 'FAQ' },
                   { href: '/partners', label: 'Become a partner' },
-                  { href: '/partners/apply', label: 'Partner application' },
                   { href: '/riders', label: 'Become a rider' },
-                  { href: '/riders/apply', label: 'Rider application' },
                 ].map((l) => (
                   <li key={l.href}>
                     <Link href={l.href} className="text-white/80 transition-colors hover:text-white">
