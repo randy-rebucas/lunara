@@ -58,7 +58,7 @@ export interface BookingOrderPayload {
   garmentSelections?: { garmentId: string; quantity: number }[];
   bagSizeId?: string;
   bagSizeLabel?: string;
-  addons: { id: string; label: string; price: number }[];
+  addons: { id: string; label: string; price: number; quantity?: number }[];
   subtotal: number;
   deliveryFee: number;
   discount: number;

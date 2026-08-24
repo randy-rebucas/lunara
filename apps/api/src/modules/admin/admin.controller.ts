@@ -451,7 +451,7 @@ export class AdminController {
 
   @Patch('branches/:id/pricing')
   updateBranchPricing(@Param('id') id: string, @Body() dto: UpdateBranchPricingDto) {
-    return this.branchesService.updateServicePricing(id, dto.servicePricing);
+    return this.branchesService.updateServicePricing(id, dto.servicePricing, dto.kgPerLoad);
   }
 
   @Patch('branches/:id/addon-pricing')

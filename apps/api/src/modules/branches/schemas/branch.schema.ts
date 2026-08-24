@@ -282,6 +282,12 @@ export class Branch {
   @Prop({ default: BranchPricingMode.FLAT_BAG, enum: BranchPricingMode })
   pricingMode!: BranchPricingMode;
 
+  /** kg per machine load for this shop's PER_LOAD pricing/estimation. Undefined = "use the platform
+   * default" (BOOKING_MACHINE_LOAD_MIN_KG) — resolved in the service layer, never a schema default, so
+   * every pre-existing branch needs zero migration and "not set" stays distinguishable from "set to 8". */
+  @Prop({ min: 1 })
+  kgPerLoad?: number;
+
   /** This shop's own price per kg/load per service; falls back to the global catalog price when a type is missing. */
   @Prop({ type: [BranchServicePrice], default: [] })
   servicePricing!: BranchServicePrice[];

@@ -4,6 +4,7 @@ import { Model, Types } from 'mongoose';
 import { BookingType, OrderStatus, UserRole, type DayOperatingHours, type OperatingHours } from '@lunara/types';
 import {
   applyShopMarkup,
+  BOOKING_MACHINE_LOAD_MIN_KG,
   BranchPricingMode,
   DEFAULT_OPERATING_HOURS,
   distanceKm,
@@ -244,6 +245,8 @@ export class BranchesService {
       description: custom.description,
       price: custom.price,
       applicableServiceTypes: custom.applicableServiceTypes as BookingType[] | undefined,
+      allowsQuantity: custom.allowsQuantity,
+      maxQuantity: custom.maxQuantity,
     }));
   }
 
@@ -423,6 +426,8 @@ export class BranchesService {
       isCustom: true,
       customAddonId: custom._id.toString(),
       applicableServiceTypes: custom.applicableServiceTypes,
+      allowsQuantity: custom.allowsQuantity,
+      maxQuantity: custom.maxQuantity,
     }));
 
     return [...globalItems, ...customItems];
@@ -606,6 +611,8 @@ export class BranchesService {
         price: dto.price,
         imageUrl: dto.imageUrl ?? null,
         applicableServiceTypes: dto.applicableServiceTypes ?? [],
+        allowsQuantity: dto.allowsQuantity ?? false,
+        maxQuantity: dto.maxQuantity ?? 5,
       });
       return { success: true, data: { _id: created._id.toString() } };
     } catch (err) {
@@ -857,6 +864,7 @@ export class BranchesService {
             activeOrders < branch.maxActiveOrders && todaysOrders < branch.dailyQuotaOrders,
           logoUrl: branch.logoUrl,
           pricingMode: branch.pricingMode ?? BranchPricingMode.FLAT_BAG,
+          kgPerLoad: branch.kgPerLoad ?? BOOKING_MACHINE_LOAD_MIN_KG,
           operatingHours,
           holidays,
           todaySchedule: getTodayScheduleSummary(operatingHours, holidays),
@@ -935,6 +943,7 @@ export class BranchesService {
       success: true,
       data: {
         pricingMode: branch.pricingMode,
+        kgPerLoad: branch.kgPerLoad ?? BOOKING_MACHINE_LOAD_MIN_KG,
         services: await this.serializeShopPricing(branch, includeHidden),
         addons: await this.serializeShopAddonPricing(branch, includeHidden),
         garmentCatalog: this.serializeShopGarmentCatalog(branch, includeHidden),
@@ -957,6 +966,7 @@ export class BranchesService {
       fixedPrice?: number;
       pricingUnit?: BranchPricingMode;
     }[],
+    kgPerLoad?: number,
   ) {
     const rateKeyByUnit: Partial<Record<BranchPricingMode, RateKey>> = {
       [BranchPricingMode.PER_KG]: 'basePricePerKg',
@@ -979,7 +989,7 @@ export class BranchesService {
     // Mongoose's version key when two of those land on the same document at once.
     const branch = await this.branchModel.findByIdAndUpdate(
       branchId,
-      { $set: { servicePricing: pricing } },
+      { $set: { servicePricing: pricing, ...(kgPerLoad !== undefined ? { kgPerLoad } : {}) } },
       { new: true },
     );
     if (!branch) throw new NotFoundException('Branch not found');

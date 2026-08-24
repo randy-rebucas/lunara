@@ -9,7 +9,6 @@ import { Button } from '@lunara/ui';
 import { ButtonLink } from '../ui/button-link';
 import { buttonResponsiveClass } from '../ui/button-layout';
 import {
-  BOOKING_MACHINE_LOAD_INFO,
   BOOKING_MACHINE_LOAD_MIN_KG,
   BOOKING_MIN_ORDER_AMOUNT,
   BOOKING_MIN_WEIGHT_KG,
@@ -17,6 +16,7 @@ import {
   BranchPricingMode,
   estimateMachineLoads,
   formatMachineLoadLabel,
+  machineLoadInfo,
   calculateQuote,
   combineServiceQuotes,
   formatCurrency,
@@ -67,7 +67,7 @@ interface ReorderSourceOrder {
   branchId?: string;
   bookingType: BookingType;
   bagSizeId?: string;
-  addons?: { id: string }[];
+  addons?: { id: string; quantity?: number }[];
   pickupAddressId?: string;
   customerNotes?: string;
 }
@@ -122,6 +122,8 @@ interface ShopAddonOption {
   isCustom?: boolean;
   customAddonId?: string;
   applicableServiceTypes?: string[];
+  allowsQuantity?: boolean;
+  maxQuantity?: number;
 }
 
 interface ShopOption {
@@ -134,6 +136,7 @@ interface ShopOption {
   withinRadius: boolean;
   capacityAvailable: boolean;
   pricingMode: BranchPricingMode;
+  kgPerLoad?: number;
   operatingHours: { isClosed: boolean; openTime: string; closeTime: string }[];
   holidays: BranchHoliday[];
   services: ShopServiceOption[];
@@ -749,6 +752,9 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
             },
           ],
           addonIds: order.addons?.map((a) => a.id) ?? [],
+          addonQuantities: Object.fromEntries(
+            (order.addons ?? []).map((a) => [a.id, a.quantity ?? 1]),
+          ),
           addressId: addressStillValid && order.pickupAddressId ? order.pickupAddressId : f.addressId,
           branchId: order.branchId ?? '',
           autoDispatch: false,
@@ -784,6 +790,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
   }, [shopOptions, shopsLoading]);
 
   const selectedShop = shopOptions.find((s) => s.branchId === form.branchId);
+  const shopKgPerLoad = selectedShop?.kgPerLoad ?? BOOKING_MACHINE_LOAD_MIN_KG;
 
   // Shop-specific addon prices/units when a shop is chosen — falls back to the flat global
   // catalog before a shop is picked, matching the `addons` render list below.
@@ -795,6 +802,8 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
         price: a.customerPrice,
         pricingUnit: a.pricingUnit ?? BranchPricingMode.FLAT_BAG,
         isPercentOfService: a.isPercentOfService,
+        allowsQuantity: a.allowsQuantity,
+        maxQuantity: a.maxQuantity,
       }))
     : config?.addons;
 
@@ -860,6 +869,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
             enteredLoadCount,
             enteredPieceCount,
             garmentSelections,
+            kgPerLoad: shopKgPerLoad,
           },
           svc,
           addonOptions,
@@ -868,7 +878,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
         return null;
       }
     });
-  }, [form.services, config, selectedShop, addonOptions]);
+  }, [form.services, config, selectedShop, addonOptions, shopKgPerLoad]);
 
   const localQuote = useMemo<MultiServiceQuoteBreakdown | null>(() => {
     if (serviceQuotes.length === 0 || serviceQuotes.some((q) => q == null)) return null;
@@ -878,11 +888,13 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
         addonOptions ?? [],
         form.addonIds,
         config?.deliveryFee ?? 0,
+        shopKgPerLoad,
+        form.addonQuantities,
       );
     } catch {
       return null;
     }
-  }, [serviceQuotes, addonOptions, form.addonIds, config]);
+  }, [serviceQuotes, addonOptions, form.addonIds, config, shopKgPerLoad, form.addonQuantities]);
 
   const loadAvailability = useCallback(
     async (addressId: string) => {
@@ -978,6 +990,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
         services: form.services.map(serviceSelectionToRequestBody),
         ...(form.branchId ? { branchId: form.branchId } : {}),
         addonIds: form.addonIds,
+        addonQuantities: form.addonQuantities,
         ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}),
       },
     );
@@ -1074,6 +1087,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
         services: form.services.map(serviceSelectionToRequestBody),
         ...(form.branchId ? { branchId: form.branchId } : {}),
         addonIds: form.addonIds,
+        addonQuantities: form.addonQuantities,
         pickupAddressId: form.addressId,
         scheduledPickupAt: form.scheduledPickupAt,
         ...(form.couponCode.trim() ? { couponCode: form.couponCode.trim() } : {}),
@@ -1123,16 +1137,10 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
   }, [config, selectedShop]);
 
   const addons = useMemo(() => {
-    const selectedBookingTypes = form.services.map((s) => s.bookingType);
-    // Percent-of-service add-ons (Express/Same-Day) are order-level, not scoped to any specific
-    // service — always shown regardless of applicableServiceTypes.
-    const appliesToSelection = (applicableServiceTypes?: string[], isPercentOfService?: boolean) =>
-      isPercentOfService ||
-      selectedBookingTypes.length === 0 ||
-      !!applicableServiceTypes?.some((t) => selectedBookingTypes.includes(t as BookingType));
+    // All of a shop's add-ons are shown regardless of which service(s) they're linked to —
+    // customers are free to add whatever add-ons they want.
     if (selectedShop) {
       return selectedShop.addons
-        .filter((a) => appliesToSelection(a.applicableServiceTypes, a.isPercentOfService))
         .map((a) => {
           const catalogMatch = config?.addons.find((ca) => ca.id === a.slug);
           return {
@@ -1144,6 +1152,9 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
             isPercentOfService: a.isPercentOfService,
             imageUrl: catalogMatch?.imageUrl,
             isCustom: a.isCustom ?? false,
+            allowsQuantity: a.allowsQuantity ?? catalogMatch?.allowsQuantity,
+            maxQuantity: a.maxQuantity ?? catalogMatch?.maxQuantity,
+            applicableServiceTypes: a.applicableServiceTypes,
           };
         });
     }
@@ -1152,7 +1163,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
       pricingUnit: BranchPricingMode.FLAT_BAG,
       isCustom: false,
     }));
-  }, [config, selectedShop, form.services]);
+  }, [config, selectedShop]);
 
   useEffect(() => {
     setForm((f) => {
@@ -1162,19 +1173,27 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
     });
   }, [addons]);
 
-  // Add-ons a partner connected to the selected service are pre-checked for the customer (still
-  // removable) the first time they appear — tracked in a ref so a manual uncheck sticks afterward.
+  // Add-ons the partner linked to a currently selected service are pre-checked as a "bundle" the
+  // first time they appear — still freely removable, and every other add-on stays available too.
+  // Tracked in a ref so a manual uncheck sticks afterward instead of re-checking on re-render.
   const autoAddedAddonIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    const connectedIds = addons.filter((a) => !a.isPercentOfService).map((a) => a.id);
-    const newlyConnected = connectedIds.filter((id) => !autoAddedAddonIdsRef.current.has(id));
-    if (newlyConnected.length === 0) return;
-    newlyConnected.forEach((id) => autoAddedAddonIdsRef.current.add(id));
+    const selectedBookingTypes = form.services.map((s) => s.bookingType);
+    const linkedIds = addons
+      .filter(
+        (a) =>
+          !a.isPercentOfService &&
+          a.applicableServiceTypes?.some((t) => selectedBookingTypes.includes(t as BookingType)),
+      )
+      .map((a) => a.id);
+    const newlyLinked = linkedIds.filter((id) => !autoAddedAddonIdsRef.current.has(id));
+    if (newlyLinked.length === 0) return;
+    newlyLinked.forEach((id) => autoAddedAddonIdsRef.current.add(id));
     setForm((f) => {
-      const toAdd = newlyConnected.filter((id) => !f.addonIds.includes(id));
+      const toAdd = newlyLinked.filter((id) => !f.addonIds.includes(id));
       return toAdd.length === 0 ? f : { ...f, addonIds: [...f.addonIds, ...toAdd] };
     });
-  }, [addons]);
+  }, [addons, form.services]);
 
   const activeQuote = quote ?? localQuote;
   const selectedAddress = addresses.find((a) => a._id === form.addressId);
@@ -1670,7 +1689,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                 <>
                   <StepHeader
                     title="Estimate your weight"
-                    description={`This shop charges per kilo, for loads up to ${BOOKING_PER_KG_MAX_KG} kg (minimum ${BOOKING_MIN_WEIGHT_KG} kg). Heavier loads are billed per machine load instead — ${BOOKING_MACHINE_LOAD_INFO}`}
+                    description={`This shop charges per kilo, for loads up to ${BOOKING_PER_KG_MAX_KG} kg (minimum ${BOOKING_MIN_WEIGHT_KG} kg). Heavier loads are billed per machine load instead — ${machineLoadInfo(shopKgPerLoad)}`}
                   />
                   <div className="panel">
                     <label className="form-label" htmlFor={`entered-weight-${idx}`}>
@@ -1705,7 +1724,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                 <>
                   <StepHeader
                     title="Estimate your load count"
-                    description={`This shop charges per machine load — minimum 1 load, up to ${BOOKING_MACHINE_LOAD_MIN_KG} kg. Enter your estimated weight (or load count directly) — we'll confirm the actual load count and final price at pickup. ${BOOKING_MACHINE_LOAD_INFO}`}
+                    description={`This shop charges per machine load — minimum 1 load, up to ${shopKgPerLoad} kg. Enter your estimated weight (or load count directly) — we'll confirm the actual load count and final price at pickup. ${machineLoadInfo(shopKgPerLoad)}`}
                   />
                   <div className="panel">
                     <label className="form-label" htmlFor={`entered-weight-load-${idx}`}>
@@ -1717,7 +1736,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                       onChange={(v) =>
                         updateService({
                           enteredWeightKg: v,
-                          enteredLoadCount: v ? String(estimateMachineLoads(Number(v) || 0)) : '',
+                          enteredLoadCount: v ? String(estimateMachineLoads(Number(v) || 0, shopKgPerLoad)) : '',
                         })
                       }
                     />
@@ -1844,6 +1863,88 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                           : a.pricingUnit === BranchPricingMode.PER_ITEM
                             ? ' / item'
                             : '';
+                const quantity = form.addonQuantities[a.id] ?? 1;
+                const maxQuantity = a.maxQuantity ?? 5;
+
+                const body = (
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <AddonImage imageUrl={a.imageUrl} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex justify-between gap-4">
+                        <span className="font-medium text-slate-900">
+                          {a.label}
+                          {a.isCustom && (
+                            <span className="badge-accent ml-2 text-xs">Shop special</span>
+                          )}
+                        </span>
+                        <span className="shrink-0 font-medium text-primary">
+                          {a.isPercentOfService ? `+${a.price}%` : `+${formatCurrency(a.price)}${unitSuffix}`}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-sm text-muted">{a.description}</p>
+                    </div>
+                  </div>
+                );
+
+                if (a.allowsQuantity && selected) {
+                  return (
+                    <div
+                      key={a.id}
+                      className="w-full rounded-lg bg-primary/5 p-4 text-left ring-2 ring-primary/30"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">{body}</div>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-11 w-11 px-0"
+                            aria-label={`Decrease ${a.label} quantity`}
+                            onClick={() =>
+                              setForm((f) => {
+                                const next = quantity - 1;
+                                if (next <= 0) {
+                                  return {
+                                    ...f,
+                                    addonIds: f.addonIds.filter((id) => id !== a.id),
+                                  };
+                                }
+                                return {
+                                  ...f,
+                                  addonQuantities: { ...f.addonQuantities, [a.id]: next },
+                                };
+                              })
+                            }
+                          >
+                            <Minus className="h-4 w-4" aria-hidden />
+                          </Button>
+                          <span className="w-8 text-center text-sm font-medium">{quantity}</span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-11 w-11 px-0"
+                            aria-label={`Increase ${a.label} quantity`}
+                            disabled={quantity >= maxQuantity}
+                            onClick={() =>
+                              setForm((f) => ({
+                                ...f,
+                                addonQuantities: {
+                                  ...f.addonQuantities,
+                                  [a.id]: Math.min(quantity + 1, maxQuantity),
+                                },
+                              }))
+                            }
+                          >
+                            <Plus className="h-4 w-4" aria-hidden />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
                 return (
                   <SelectableOption
                     key={a.id}
@@ -1854,31 +1955,14 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                         addonIds: selected
                           ? f.addonIds.filter((id) => id !== a.id)
                           : [...f.addonIds, a.id],
+                        addonQuantities:
+                          a.allowsQuantity && !selected
+                            ? { ...f.addonQuantities, [a.id]: 1 }
+                            : f.addonQuantities,
                       }))
                     }
                   >
-                    <div className="flex min-w-0 flex-1 items-center gap-3">
-                      <AddonImage imageUrl={a.imageUrl} />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex justify-between gap-4">
-                          <span className="font-medium text-slate-900">
-                            {a.label}
-                            {a.isCustom && (
-                              <span className="badge-accent ml-2 text-xs">Shop special</span>
-                            )}
-                            {!a.isPercentOfService && (
-                              <span className="badge-secondary ml-2 text-xs">
-                                Included with your service
-                              </span>
-                            )}
-                          </span>
-                          <span className="shrink-0 font-medium text-primary">
-                            {a.isPercentOfService ? `+${a.price}%` : `+${formatCurrency(a.price)}${unitSuffix}`}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-sm text-muted">{a.description}</p>
-                      </div>
-                    </div>
+                    {body}
                   </SelectableOption>
                 );
               })}

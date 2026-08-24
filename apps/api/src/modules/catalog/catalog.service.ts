@@ -81,6 +81,26 @@ export class CatalogService {
 
     }
 
+    for (const addon of DEFAULT_LAUNDRY_ADDONS) {
+
+      await this.laundryAddonModel.updateOne(
+
+        { slug: addon.slug },
+
+        {
+
+          $set: { ...addon, updatedAt: now },
+
+          $setOnInsert: { createdAt: now, imageUrl: defaultAddonImageUrl(addon.slug) },
+
+        },
+
+        { upsert: true },
+
+      );
+
+    }
+
   }
 
 
@@ -124,6 +144,10 @@ export class CatalogService {
       isPercentOfService: doc.isPercentOfService,
 
       imageUrl: doc.imageUrl,
+
+      allowsQuantity: doc.allowsQuantity,
+
+      maxQuantity: doc.maxQuantity,
 
     };
 

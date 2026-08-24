@@ -41,6 +41,9 @@ export interface BookingFormState {
    * GARMENT_PRICED_BOOKING_TYPES, currently just Dry Cleaning). Keyed by garment id. */
   garmentQuantities: Record<string, string>;
   addonIds: string[];
+  /** Customer-chosen quantity per add-on id — only meaningful for add-ons flagged allowsQuantity;
+   * defaults to 1 when unset. */
+  addonQuantities: Record<string, number>;
   couponCode: string;
 }
 
@@ -57,6 +60,7 @@ export const initialBookingForm: BookingFormState = {
   enteredPieceCount: '',
   garmentQuantities: {},
   addonIds: [],
+  addonQuantities: {},
   couponCode: '',
 };
 

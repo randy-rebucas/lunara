@@ -36,6 +36,15 @@ export class LaundryAddon {
   @Prop({ default: 0 })
   sortOrder!: number;
 
+  /** When true, customers pick a quantity (1..maxQuantity) via a stepper instead of a plain on/off
+   * toggle. Only meaningful for flat/fixed-price add-ons — ignored for percent-of-service add-ons. */
+  @Prop({ default: false })
+  allowsQuantity!: boolean;
+
+  /** Upper bound for the stepper when allowsQuantity is true. Defaults to 5 if unset. */
+  @Prop({ default: 5 })
+  maxQuantity!: number;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

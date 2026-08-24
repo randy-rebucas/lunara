@@ -15,7 +15,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BookingType, PaymentMethod, type OperatingHours } from '@lunara/types';
 import {
-  BOOKING_MACHINE_LOAD_INFO,
   BOOKING_MACHINE_LOAD_MIN_KG,
   BOOKING_MIN_ORDER_AMOUNT,
   BOOKING_MIN_WEIGHT_KG,
@@ -24,6 +23,7 @@ import {
   estimateMachineLoads,
   EXPRESS_RETURN_ADDON_ID,
   formatMachineLoadLabel,
+  machineLoadInfo,
   calculateQuote,
   formatCurrency,
   formatAddressTypeLabel,
@@ -67,7 +67,7 @@ interface ReorderSourceOrder {
   branchId?: string;
   bookingType: BookingType;
   bagSizeId?: string;
-  addons?: { id: string }[];
+  addons?: { id: string; quantity?: number }[];
   pickupAddressId?: string;
 }
 
@@ -138,6 +138,8 @@ interface ShopAddonOption {
   isCustom?: boolean;
   customAddonId?: string;
   applicableServiceTypes?: string[];
+  allowsQuantity?: boolean;
+  maxQuantity?: number;
 }
 
 /** Every other branch in the same partner's group carries the same full shape as the group's
@@ -161,6 +163,7 @@ interface ShopOption {
   capacityAvailable: boolean;
   logoUrl?: string;
   pricingMode: BranchPricingMode;
+  kgPerLoad?: number;
   operatingHours: { isClosed: boolean; openTime: string; closeTime: string }[];
   holidays: BranchHoliday[];
   services: ShopServiceOption[];
@@ -344,6 +347,9 @@ export default function BookScreen() {
           bookingType: order.bookingType,
           bagSizeId: (order.bagSizeId as BagSizeId | undefined) ?? f.bagSizeId,
           addonIds: order.addons?.map((a) => a.id) ?? [],
+          addonQuantities: Object.fromEntries(
+            (order.addons ?? []).map((a) => [a.id, a.quantity ?? 1]),
+          ),
           addressId: addressStillValid && order.pickupAddressId ? order.pickupAddressId : f.addressId,
           branchId: order.branchId ?? '',
           autoDispatch: false,
@@ -383,6 +389,7 @@ export default function BookScreen() {
   const selectedShop = shopOptions.find(
     (s) => s.branchId === form.branchId || s.branches.some((b) => b.branchId === form.branchId),
   );
+  const shopKgPerLoad = selectedShop?.kgPerLoad ?? BOOKING_MACHINE_LOAD_MIN_KG;
 
   const services = useMemo(() => {
     if (selectedShop) {
@@ -439,6 +446,8 @@ export default function BookScreen() {
             isPercentOfService: a.isPercentOfService,
             imageUrl: catalogMatch?.imageUrl,
             isCustom: a.isCustom ?? false,
+            allowsQuantity: a.allowsQuantity ?? catalogMatch?.allowsQuantity,
+            maxQuantity: a.maxQuantity ?? catalogMatch?.maxQuantity,
           };
         });
     }
@@ -526,6 +535,8 @@ export default function BookScreen() {
           price: a.customerPrice,
           pricingUnit: a.pricingUnit ?? BranchPricingMode.FLAT_BAG,
           isPercentOfService: a.isPercentOfService,
+          allowsQuantity: a.allowsQuantity,
+          maxQuantity: a.maxQuantity,
         }))
       : config?.addons;
 
@@ -550,6 +561,8 @@ export default function BookScreen() {
           enteredLoadCount,
           enteredPieceCount,
           garmentSelections,
+          kgPerLoad: shopKgPerLoad,
+          addonQuantities: form.addonQuantities,
         },
         service,
         addonOptions,
@@ -566,10 +579,12 @@ export default function BookScreen() {
     form.enteredPieceCount,
     form.garmentQuantities,
     form.addonIds,
+    form.addonQuantities,
     config?.services,
     config?.addons,
     selectedShop,
     selectedShopService,
+    shopKgPerLoad,
     shopPricingMode,
   ]);
 
@@ -692,6 +707,7 @@ export default function BookScreen() {
           ],
           ...(form.branchId ? { branchId: form.branchId } : {}),
           addonIds: form.addonIds,
+          addonQuantities: form.addonQuantities,
           ...(form.scheduledPickupAt ? { scheduledPickupAt: form.scheduledPickupAt } : {}),
           ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}),
         }),
@@ -878,6 +894,7 @@ export default function BookScreen() {
           ],
           ...(form.branchId ? { branchId: form.branchId } : {}),
           addonIds: form.addonIds,
+          addonQuantities: form.addonQuantities,
           pickupAddressId: form.addressId,
           scheduledPickupAt: form.scheduledPickupAt,
           ...(form.couponCode.trim() ? { couponCode: form.couponCode.trim() } : {}),
@@ -1505,7 +1522,7 @@ export default function BookScreen() {
               <Text style={styles.sub}>
                 This shop charges per kilo, for loads up to {BOOKING_PER_KG_MAX_KG} kg (minimum{' '}
                 {BOOKING_MIN_WEIGHT_KG} kg). Heavier loads are billed per machine load instead —{' '}
-                {BOOKING_MACHINE_LOAD_INFO}
+                {machineLoadInfo(shopKgPerLoad)}
               </Text>
               <TextInput
                 style={styles.weightInput}
@@ -1546,9 +1563,9 @@ export default function BookScreen() {
             <View>
               <StepHeading step="weight" title="Estimate your load count" />
               <Text style={styles.sub}>
-                This shop charges per machine load — minimum 1 load, up to {BOOKING_MACHINE_LOAD_MIN_KG}{' '}
+                This shop charges per machine load — minimum 1 load, up to {shopKgPerLoad}{' '}
                 kg. Enter your estimated weight (or load count directly) — we&apos;ll confirm the actual
-                load count and final price at pickup. {BOOKING_MACHINE_LOAD_INFO}
+                load count and final price at pickup. {machineLoadInfo(shopKgPerLoad)}
               </Text>
               <TextInput
                 style={styles.weightInput}
@@ -1559,7 +1576,7 @@ export default function BookScreen() {
                   setForm((f) => ({
                     ...f,
                     enteredWeightKg: v,
-                    enteredLoadCount: v ? String(estimateMachineLoads(Number(v) || 0)) : '',
+                    enteredLoadCount: v ? String(estimateMachineLoads(Number(v) || 0, shopKgPerLoad)) : '',
                   }))
                 }
               />
@@ -1674,6 +1691,83 @@ export default function BookScreen() {
                             : a.pricingUnit === BranchPricingMode.PER_ITEM
                               ? ' / item'
                               : '';
+                  const quantity = form.addonQuantities[a.id] ?? 1;
+                  const maxQuantity = a.maxQuantity ?? 5;
+
+                  const cardBody = (
+                    <View style={styles.addonCardRow}>
+                      <View style={styles.addonImagePlaceholder}>
+                        <Ionicons
+                          name={ADDON_ICONS[a.id] ?? ADDON_ICON_FALLBACK}
+                          size={22}
+                          color={colors.primary}
+                        />
+                      </View>
+                      <View style={styles.addonCardBody}>
+                        <View style={styles.addonRow}>
+                          <Text style={styles.optionTitle}>{a.label}</Text>
+                          <View style={styles.addonRight}>
+                            <Text style={styles.addonPrice}>
+                              {a.isPercentOfService ? `+${a.price}%` : `+${formatCurrency(a.price)}${unitSuffix}`}
+                            </Text>
+                            {selected && !a.allowsQuantity ? (
+                              <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
+                            ) : null}
+                          </View>
+                        </View>
+                        <Text style={styles.optionSub}>{a.description}</Text>
+                        {!a.isPercentOfService && (
+                          <Text style={styles.addonIncludedBadge}>Included with your service</Text>
+                        )}
+                        {disabled ? (
+                          <Text style={styles.optionGpsMissing}>
+                            Not available for pickups at 3:00 PM or later
+                          </Text>
+                        ) : null}
+                      </View>
+                    </View>
+                  );
+
+                  if (a.allowsQuantity && selected) {
+                    return (
+                      <View key={a.id} style={[styles.option, styles.optionSelected]}>
+                        {cardBody}
+                        <View style={[styles.garmentQtyRow, { justifyContent: 'flex-end', marginTop: spacing.sm }]}>
+                          <Pressable
+                            style={styles.garmentQtyBtn}
+                            onPress={() =>
+                              setForm((f) => {
+                                const next = quantity - 1;
+                                if (next <= 0) {
+                                  return { ...f, addonIds: f.addonIds.filter((id) => id !== a.id) };
+                                }
+                                return { ...f, addonQuantities: { ...f.addonQuantities, [a.id]: next } };
+                              })
+                            }
+                          >
+                            <Ionicons name="remove" size={16} color={colors.foreground} />
+                          </Pressable>
+                          <Text style={styles.garmentQtyValue}>{quantity}</Text>
+                          <Pressable
+                            style={styles.garmentQtyBtn}
+                            disabled={quantity >= maxQuantity}
+                            onPress={() =>
+                              setForm((f) => ({
+                                ...f,
+                                addonQuantities: {
+                                  ...f.addonQuantities,
+                                  [a.id]: Math.min(quantity + 1, maxQuantity),
+                                },
+                              }))
+                            }
+                          >
+                            <Ionicons name="add" size={16} color={colors.foreground} />
+                          </Pressable>
+                        </View>
+                      </View>
+                    );
+                  }
+
                   return (
                     <Pressable
                       key={a.id}
@@ -1690,42 +1784,16 @@ export default function BookScreen() {
                           addonIds: selected
                             ? f.addonIds.filter((id) => id !== a.id)
                             : [...f.addonIds, a.id],
+                          addonQuantities:
+                            a.allowsQuantity && !selected
+                              ? { ...f.addonQuantities, [a.id]: 1 }
+                              : f.addonQuantities,
                         }))
                       }
                       accessibilityRole="checkbox"
                       accessibilityState={{ checked: selected, disabled }}
                     >
-                      <View style={styles.addonCardRow}>
-                        <View style={styles.addonImagePlaceholder}>
-                          <Ionicons
-                            name={ADDON_ICONS[a.id] ?? ADDON_ICON_FALLBACK}
-                            size={22}
-                            color={colors.primary}
-                          />
-                        </View>
-                        <View style={styles.addonCardBody}>
-                          <View style={styles.addonRow}>
-                            <Text style={styles.optionTitle}>{a.label}</Text>
-                            <View style={styles.addonRight}>
-                              <Text style={styles.addonPrice}>
-                                {a.isPercentOfService ? `+${a.price}%` : `+${formatCurrency(a.price)}${unitSuffix}`}
-                              </Text>
-                              {selected ? (
-                                <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
-                              ) : null}
-                            </View>
-                          </View>
-                          <Text style={styles.optionSub}>{a.description}</Text>
-                          {!a.isPercentOfService && (
-                            <Text style={styles.addonIncludedBadge}>Included with your service</Text>
-                          )}
-                          {disabled ? (
-                            <Text style={styles.optionGpsMissing}>
-                              Not available for pickups at 3:00 PM or later
-                            </Text>
-                          ) : null}
-                        </View>
-                      </View>
+                      {cardBody}
                     </Pressable>
                   );
                 })

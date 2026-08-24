@@ -159,7 +159,7 @@ export class PartnerController {
     if (req.user.role !== UserRole.ADMIN) {
       await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
     }
-    return this.branchesService.updateServicePricing(id, dto.servicePricing);
+    return this.branchesService.updateServicePricing(id, dto.servicePricing, dto.kgPerLoad);
   }
 
   @Patch('branches/:id/pricing-mode')

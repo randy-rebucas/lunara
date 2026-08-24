@@ -37,6 +37,15 @@ export class BranchCustomAddon {
   @Prop({ type: [String], default: [] })
   applicableServiceTypes?: string[];
 
+  /** When true, customers pick a quantity (1..maxQuantity) via a stepper instead of a plain
+   * on/off toggle. */
+  @Prop({ default: false })
+  allowsQuantity?: boolean;
+
+  /** Upper bound for the stepper when allowsQuantity is true. */
+  @Prop({ default: 5 })
+  maxQuantity?: number;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

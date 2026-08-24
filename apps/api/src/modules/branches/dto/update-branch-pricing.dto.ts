@@ -47,6 +47,11 @@ export class UpdateBranchPricingDto {
   @ValidateNested({ each: true })
   @Type(() => BranchServicePriceDto)
   servicePricing!: BranchServicePriceDto[];
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  kgPerLoad?: number;
 }
 
 export class UpdateBranchPricingModeDto {

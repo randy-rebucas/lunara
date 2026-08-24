@@ -24,6 +24,11 @@ class OrderAddon {
 
   @Prop({ required: true })
   price!: number;
+
+  /** Customer-chosen "buy N of this add-on" count (e.g. 3x liquid detergent). Undefined on legacy
+   * orders — treat as 1. */
+  @Prop()
+  quantity?: number;
 }
 
 @Schema({ _id: false })

@@ -58,7 +58,7 @@ interface OrderDetail {
   pickupAddressId?: string;
   branchId?: string;
   bagSizeId?: string;
-  addons?: { id: string }[];
+  addons?: { id: string; quantity?: number }[];
   /** Garment-priced orders only (see GARMENT_PRICED_BOOKING_TYPES) — must be forwarded when
    * setting up a recurring pickup for one of these, or the subscription quote is rejected. */
   garmentSelections?: { garmentId: string; quantity: number }[];
@@ -306,6 +306,9 @@ export default function OrderTrackPage() {
         ],
         ...(order.branchId ? { branchId: order.branchId } : {}),
         addonIds: order.addons?.map((a) => a.id) ?? [],
+        addonQuantities: Object.fromEntries(
+          (order.addons ?? []).map((a) => [a.id, a.quantity ?? 1]),
+        ),
         pickupAddressId: order.pickupAddressId,
         scheduledPickupAt: nextRunAt.toISOString(),
         frequencyDays: subscribeFrequencyDays,

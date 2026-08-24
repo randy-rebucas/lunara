@@ -8,6 +8,7 @@ import {
   IsEnum,
   IsIn,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   MaxLength,
@@ -90,6 +91,12 @@ export class BookingQuoteDto {
   @IsArray()
   @IsString({ each: true })
   addonIds?: string[];
+
+  /** Customer-chosen quantity per add-on id (e.g. { liquid_detergent: 3 }) — only meaningful for
+   * add-ons flagged allowsQuantity in the catalog; validated against that catalog in buildQuote. */
+  @IsOptional()
+  @IsObject()
+  addonQuantities?: Record<string, number>;
 
   @IsOptional()
   @IsString()

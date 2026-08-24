@@ -54,6 +54,8 @@ interface ShopAddonPrice {
   isCustom?: boolean;
   customAddonId?: string;
   applicableServiceTypes?: string[];
+  allowsQuantity?: boolean;
+  maxQuantity?: number;
 }
 
 interface ShopGarmentItem {
@@ -65,6 +67,7 @@ interface ShopGarmentItem {
 
 interface ShopPricing {
   pricingMode: PricingMode;
+  kgPerLoad: number;
   services: ShopServicePrice[];
   addons: ShopAddonPrice[];
   garmentCatalog: ShopGarmentItem[];
@@ -227,6 +230,7 @@ export default function ServicesPage() {
   // basePricePerItem, fixedPrice) -> serviceType -> string value. flat_bag has no editable rate.
   const [serviceRates, setServiceRates] = useState<Record<string, Record<string, string>>>({});
   const [serviceUnits, setServiceUnits] = useState<Record<string, PricingMode>>({});
+  const [kgPerLoad, setKgPerLoad] = useState('8');
   const [addonPrices, setAddonPrices] = useState<Record<string, string>>({});
   const [addonRates, setAddonRates] = useState<Record<string, Record<string, string>>>({});
   const [addonUnits, setAddonUnits] = useState<Record<string, PricingMode>>({});
@@ -256,6 +260,8 @@ export default function ServicesPage() {
     description: '',
     price: '',
     applicableServiceTypes: [] as string[],
+    allowsQuantity: false,
+    maxQuantity: '5',
   });
   const [addingAddon, setAddingAddon] = useState(false);
   const [showAddonForm, setShowAddonForm] = useState(false);
@@ -295,6 +301,7 @@ export default function ServicesPage() {
     setAddonServiceTypes(
       Object.fromEntries(pricing.addons.map((a) => [a.slug, a.applicableServiceTypes ?? []])),
     );
+    setKgPerLoad(String(pricing.kgPerLoad));
     setHiddenServiceTypes(pricing.hiddenServiceTypes);
     setHiddenAddonSlugs(pricing.hiddenAddonSlugs);
     const catalog = pricing.garmentCatalog ?? GARMENT_CATALOG;
@@ -330,6 +337,7 @@ export default function ServicesPage() {
                   pricingUnit: serviceUnits[s.type] ?? 'flat_bag',
                 };
               }),
+            kgPerLoad: kgPerLoad !== '' ? Number(kgPerLoad) : undefined,
           }),
         }),
         partnerFetch(`/partner/branches/${selectedBranchId}/addon-pricing`, {
@@ -474,9 +482,19 @@ export default function ServicesPage() {
           description: newAddon.description.trim(),
           price: Number(newAddon.price),
           applicableServiceTypes: newAddon.applicableServiceTypes,
+          allowsQuantity: newAddon.allowsQuantity,
+          maxQuantity: newAddon.allowsQuantity ? Number(newAddon.maxQuantity) || 5 : undefined,
         }),
       });
-      setNewAddon({ slug: '', label: '', description: '', price: '', applicableServiceTypes: [] });
+      setNewAddon({
+        slug: '',
+        label: '',
+        description: '',
+        price: '',
+        applicableServiceTypes: [],
+        allowsQuantity: false,
+        maxQuantity: '5',
+      });
       setShowAddonForm(false);
       await reloadPricing();
     } catch (e) {
@@ -580,6 +598,26 @@ export default function ServicesPage() {
 
       {pricing && (
         <>
+          <div className="section-panel mt-6 overflow-hidden">
+            <div className="border-b border-border px-4 py-3">
+              <h2 className="text-sm font-semibold text-slate-900">Machine load capacity</h2>
+              <p className="mt-0.5 text-xs text-muted">
+                Used to estimate machine loads for per-load pricing (e.g. 7 or 8 kg per load).
+              </p>
+              <label className="mt-3 block max-w-[10rem]">
+                <span className="text-xs font-medium text-slate-700">Kg per machine load</span>
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  className="input-field mt-1 w-full"
+                  value={kgPerLoad}
+                  onChange={(e) => setKgPerLoad(e.target.value)}
+                />
+              </label>
+            </div>
+          </div>
+
           <div className="section-panel mt-6 overflow-hidden">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <h2 className="text-sm font-semibold text-slate-900">Services</h2>
@@ -942,6 +980,33 @@ export default function ServicesPage() {
                         );
                       })}
                     </div>
+                  </div>
+                  <div className="sm:col-span-2 flex items-center gap-3">
+                    <label className="flex items-center gap-1.5 text-xs text-muted">
+                      <input
+                        type="checkbox"
+                        checked={newAddon.allowsQuantity}
+                        onChange={(e) =>
+                          setNewAddon((a) => ({ ...a, allowsQuantity: e.target.checked }))
+                        }
+                      />
+                      Let customers pick a quantity
+                    </label>
+                    {newAddon.allowsQuantity && (
+                      <label className="flex items-center gap-1.5 text-xs text-muted">
+                        Max
+                        <input
+                          type="number"
+                          min={1}
+                          step={1}
+                          className="input-field w-16"
+                          value={newAddon.maxQuantity}
+                          onChange={(e) =>
+                            setNewAddon((a) => ({ ...a, maxQuantity: e.target.value }))
+                          }
+                        />
+                      </label>
+                    )}
                   </div>
                 </div>
                 <div className="mt-3">

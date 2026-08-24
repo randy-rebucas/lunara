@@ -1,4 +1,13 @@
-import { IsArray, IsEnum, IsNumber, IsOptional, IsString, Matches, Min } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Matches,
+  Min,
+} from 'class-validator';
 import { BookingType } from '@lunara/types';
 
 export class CreateBranchCustomAddonDto {
@@ -25,4 +34,13 @@ export class CreateBranchCustomAddonDto {
   @IsArray()
   @IsEnum(BookingType, { each: true })
   applicableServiceTypes?: BookingType[];
+
+  @IsOptional()
+  @IsBoolean()
+  allowsQuantity?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  maxQuantity?: number;
 }

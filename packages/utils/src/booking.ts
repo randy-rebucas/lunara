@@ -28,8 +28,12 @@ export const SHOP_PRICE_MARKUP_MULTIPLIER = 1.3;
 /** Minimum capacity per washing machine load (kg). */
 export const BOOKING_MACHINE_LOAD_MIN_KG = 8;
 
-export const BOOKING_MACHINE_LOAD_INFO =
-  'Each machine holds up to 8 kg per load — every additional 8 kg (or part of it) counts as another load.';
+export function machineLoadInfo(kgPerLoad: number = BOOKING_MACHINE_LOAD_MIN_KG): string {
+  return `Each machine holds up to ${kgPerLoad} kg per load — every additional ${kgPerLoad} kg (or part of it) counts as another load.`;
+}
+
+/** @deprecated use machineLoadInfo(kgPerLoad) so the copy reflects the shop's own machine capacity. */
+export const BOOKING_MACHINE_LOAD_INFO = machineLoadInfo(BOOKING_MACHINE_LOAD_MIN_KG);
 
 /** Overall minimum weight for a weight-based booking (FLAT_BAG/PER_KG/PER_LOAD) — does not apply to PER_PIECE. */
 export const BOOKING_MIN_WEIGHT_KG = 5;
@@ -44,13 +48,19 @@ export const BOOKING_PER_KG_MAX_LOAD_COUNT = 2;
  * dispatch/display capacity estimates and — for PER_LOAD pricing — as the billed load count when
  * the customer/partner enters a weight instead of an explicit load count, so it must scale with
  * weight rather than cap out (a capped estimate would systematically underbill heavy orders). */
-export function estimateMachineLoads(weightKg: number): number {
+export function estimateMachineLoads(
+  weightKg: number,
+  kgPerLoad: number = BOOKING_MACHINE_LOAD_MIN_KG,
+): number {
   if (weightKg <= 0) return 1;
-  return Math.max(1, Math.ceil(weightKg / BOOKING_MACHINE_LOAD_MIN_KG));
+  return Math.max(1, Math.ceil(weightKg / kgPerLoad));
 }
 
-export function formatMachineLoadLabel(weightKg: number): string {
-  const loads = estimateMachineLoads(weightKg);
+export function formatMachineLoadLabel(
+  weightKg: number,
+  kgPerLoad: number = BOOKING_MACHINE_LOAD_MIN_KG,
+): string {
+  const loads = estimateMachineLoads(weightKg, kgPerLoad);
   return `${loads} machine load${loads === 1 ? '' : 's'}`;
 }
 
@@ -116,6 +126,13 @@ export interface BookingAddonOption {
   imageUrl?: string;
   /** Booking types this add-on may be attached to (empty/unset = applies to any service). */
   applicableServiceTypes?: BookingType[];
+  /** Global-catalog-only. When true, customers pick a quantity (1..maxQuantity) via a stepper
+   * instead of a plain on/off toggle. Only meaningful for FLAT_BAG/FIXED, non-percent add-ons —
+   * ignored for PER_KG/PER_LOAD/PER_PIECE/PER_PAIR/PER_ITEM and isPercentOfService add-ons, which
+   * already scale off the order's own weight/piece count; combining both would double-scale. */
+  allowsQuantity?: boolean;
+  /** Upper bound for the stepper when allowsQuantity is true. Defaults to 5 if unset. */
+  maxQuantity?: number;
 }
 
 export interface ServiceAreaRule {
@@ -216,6 +233,12 @@ export interface QuoteInput {
   /** Required (non-empty) when bookingType is garment-priced (see GARMENT_PRICED_BOOKING_TYPES) — the
    * service subtotal is computed as sum(garment price × quantity) instead of any BranchPricingMode. */
   garmentSelections?: GarmentSelection[];
+  /** kg capacity per machine load for this shop's PER_LOAD pricing/estimation. Defaults to
+   * BOOKING_MACHINE_LOAD_MIN_KG when the shop hasn't configured its own value. */
+  kgPerLoad?: number;
+  /** Customer-chosen quantity per add-on id (e.g. { liquid_detergent: 3 }) — only honored for
+   * FLAT_BAG/FIXED add-ons whose catalog entry has allowsQuantity; ignored otherwise. */
+  addonQuantities?: Record<string, number>;
 }
 
 /** Computes the base laundry service subtotal for a given pricing mode. Shared between booking-time
@@ -224,6 +247,7 @@ export function computeServiceSubtotal(
   mode: BranchPricingMode,
   rates: PricingModeRates | undefined,
   qty: { bag?: BagSizeOption; weightKg?: number; loadCount?: number; pieceCount?: number },
+  kgPerLoad: number = BOOKING_MACHINE_LOAD_MIN_KG,
 ): number {
   switch (mode) {
     case BranchPricingMode.PER_KG: {
@@ -236,7 +260,8 @@ export function computeServiceSubtotal(
     case BranchPricingMode.PER_LOAD: {
       const perLoad = rates?.basePricePerLoad;
       if (perLoad == null) throw new Error('Missing basePricePerLoad for PER_LOAD pricing mode');
-      const loadCount = qty.loadCount ?? (qty.weightKg != null ? estimateMachineLoads(qty.weightKg) : 0);
+      const loadCount =
+        qty.loadCount ?? (qty.weightKg != null ? estimateMachineLoads(qty.weightKg, kgPerLoad) : 0);
       return Math.round(loadCount * perLoad * 100) / 100;
     }
     case BranchPricingMode.PER_PIECE: {
@@ -287,6 +312,10 @@ export interface QuoteBreakdown {
     price: number;
     unit?: BranchPricingMode;
     quantity?: number;
+    /** Customer-chosen "buy N of this add-on" count (e.g. 3x liquid detergent) — distinct from
+     * `quantity` above, which is the order's own derived weight/load/piece count for PER_KG/
+     * PER_LOAD/etc. add-ons. Only meaningful when the add-on's catalog entry has allowsQuantity. */
+    addonQuantity?: number;
     percent?: number;
   }[];
   addonsSubtotal: number;
@@ -338,6 +367,8 @@ export function combineServiceQuotes(
   addonOptions: BookingAddonOption[],
   addonIds: string[],
   deliveryFee: number,
+  kgPerLoad: number = BOOKING_MACHINE_LOAD_MIN_KG,
+  addonQuantities: Record<string, number> = {},
 ): MultiServiceQuoteBreakdown {
   if (!serviceQuotes.length) throw new Error('At least one service is required');
 
@@ -358,17 +389,21 @@ export function combineServiceQuotes(
         unit === BranchPricingMode.PER_KG
           ? combinedWeightKg
           : unit === BranchPricingMode.PER_LOAD
-            ? estimateMachineLoads(combinedWeightKg)
+            ? estimateMachineLoads(combinedWeightKg, kgPerLoad)
             : unit === BranchPricingMode.PER_PIECE ||
                 unit === BranchPricingMode.PER_PAIR ||
                 unit === BranchPricingMode.PER_ITEM
               ? combinedPieceCount
               : undefined;
+      const addonQuantity =
+        (unit === BranchPricingMode.FLAT_BAG || unit === BranchPricingMode.FIXED) && a.allowsQuantity
+          ? Math.max(1, Math.min(addonQuantities[a.id] ?? 1, a.maxQuantity ?? 5))
+          : 1;
       const price =
         unit === BranchPricingMode.FLAT_BAG || unit === BranchPricingMode.FIXED
-          ? a.price
+          ? Math.round(a.price * addonQuantity * 100) / 100
           : Math.round(a.price * (quantity ?? 0) * 100) / 100;
-      return { id: a.id, label: a.label, price, unit, quantity };
+      return { id: a.id, label: a.label, price, unit, quantity, addonQuantity };
     });
   const addonsSubtotal = addons.reduce((sum, a) => sum + a.price, 0);
   const subtotal = serviceSubtotal + addonsSubtotal;
@@ -422,6 +457,16 @@ export const BOOKING_ADDONS: BookingAddonOption[] = [
     label: 'Fabric softener',
     description: 'Extra soft finish',
     price: 25,
+    allowsQuantity: true,
+    maxQuantity: 5,
+  },
+  {
+    id: 'liquid_detergent',
+    label: 'Liquid detergent',
+    description: 'Extra detergent for heavier or extra-dirty loads',
+    price: 25,
+    allowsQuantity: true,
+    maxQuantity: 5,
   },
   {
     id: 'stain_treatment',
@@ -783,19 +828,25 @@ export function calculateQuote(
     : pricingMode === BranchPricingMode.FLAT_BAG
       ? (bag?.capacityKg ?? 0)
       : (input.enteredWeightKg ?? 0);
+  const kgPerLoad = input.kgPerLoad ?? BOOKING_MACHINE_LOAD_MIN_KG;
   // Always resolved regardless of the service's own mode — an add-on can bill per-load or
   // per-piece independently of how the base service itself is priced.
-  const loadCount = input.enteredLoadCount ?? estimateMachineLoads(weightKg);
+  const loadCount = input.enteredLoadCount ?? estimateMachineLoads(weightKg, kgPerLoad);
   const pieceCount = input.enteredPieceCount;
 
   const serviceSubtotal = garmentPriced
     ? computeGarmentSubtotal(input.garmentSelections ?? [], garmentCatalog ?? GARMENT_CATALOG)
-    : computeServiceSubtotal(pricingMode, input.rates, {
-        bag,
-        weightKg,
-        loadCount: pricingMode === BranchPricingMode.PER_LOAD ? loadCount : undefined,
-        pieceCount: pricingMode === BranchPricingMode.PER_PIECE ? pieceCount : undefined,
-      });
+    : computeServiceSubtotal(
+        pricingMode,
+        input.rates,
+        {
+          bag,
+          weightKg,
+          loadCount: pricingMode === BranchPricingMode.PER_LOAD ? loadCount : undefined,
+          pieceCount: pricingMode === BranchPricingMode.PER_PIECE ? pieceCount : undefined,
+        },
+        kgPerLoad,
+      );
   const catalog = addonOptions ?? BOOKING_ADDONS;
   const addons = input.addonIds
     .map((id) => catalog.find((a) => a.id === id))
@@ -816,11 +867,15 @@ export function calculateQuote(
                 unit === BranchPricingMode.PER_ITEM
               ? (pieceCount ?? 0)
               : undefined;
+      const addonQuantity =
+        (unit === BranchPricingMode.FLAT_BAG || unit === BranchPricingMode.FIXED) && a.allowsQuantity
+          ? Math.max(1, Math.min(input.addonQuantities?.[a.id] ?? 1, a.maxQuantity ?? 5))
+          : 1;
       const price =
         unit === BranchPricingMode.FLAT_BAG || unit === BranchPricingMode.FIXED
-          ? a.price
+          ? Math.round(a.price * addonQuantity * 100) / 100
           : Math.round(a.price * (quantity ?? 0) * 100) / 100;
-      return { id: a.id, label: a.label, price, unit, quantity };
+      return { id: a.id, label: a.label, price, unit, quantity, addonQuantity };
     });
   const addonsSubtotal = addons.reduce((sum, a) => sum + a.price, 0);
   const subtotal = serviceSubtotal + addonsSubtotal;

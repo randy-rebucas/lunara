@@ -4,6 +4,7 @@ import { BookingType } from '@lunara/types';
 import {
   applyShopMarkup,
   BAG_SIZES,
+  BOOKING_MACHINE_LOAD_MIN_KG,
   BOOKING_MIN_ORDER_AMOUNT,
   BOOKING_MIN_WEIGHT_KG,
   BOOKING_PER_KG_MAX_KG,
@@ -308,6 +309,7 @@ export class BookingService {
         enteredLoadCount: service.enteredLoadCount,
         enteredPieceCount: service.enteredPieceCount,
         garmentSelections: service.garmentSelections as GarmentSelection[] | undefined,
+        kgPerLoad: branch.kgPerLoad ?? BOOKING_MACHINE_LOAD_MIN_KG,
       },
       priceableService,
       [],
@@ -424,8 +426,29 @@ export class BookingService {
       );
     }
 
+    const addonQuantities = dto.addonQuantities ?? {};
+    for (const [addonId, qty] of Object.entries(addonQuantities)) {
+      if (!addonIds.includes(addonId)) {
+        throw new BadRequestException('addonQuantities can only be set for selected add-ons');
+      }
+      const addon = priceableAddons.find((a) => a.id === addonId);
+      if (!addon?.allowsQuantity) {
+        throw new BadRequestException(`Add-on "${addonId}" does not support a quantity`);
+      }
+      if (!Number.isInteger(qty) || qty < 1 || qty > (addon.maxQuantity ?? 5)) {
+        throw new BadRequestException(`Invalid quantity for add-on "${addonId}"`);
+      }
+    }
+
     const deliveryFee = await this.settingsService.getDeliveryFeeForAddress(address, dist);
-    const quote = combineServiceQuotes(serviceQuotes, priceableAddons, addonIds, deliveryFee);
+    const quote = combineServiceQuotes(
+      serviceQuotes,
+      priceableAddons,
+      addonIds,
+      deliveryFee,
+      branch.kgPerLoad ?? BOOKING_MACHINE_LOAD_MIN_KG,
+      addonQuantities,
+    );
 
     if (!quote.meetsMinimum) {
       throw new BadRequestException(
@@ -517,7 +540,9 @@ export class BookingService {
                         ? 'items'
                         : 'pieces'
               })`
-            : `Add-on: ${a.label}`,
+            : a.addonQuantity && a.addonQuantity > 1
+              ? `Add-on: ${a.label} (×${a.addonQuantity})`
+              : `Add-on: ${a.label}`,
       })),
     ];
 
@@ -584,7 +609,12 @@ export class BookingService {
         garmentSelections: primaryQuote.garmentSelections,
         bagSizeId: primaryQuote.bagSizeId,
         bagSizeLabel: primaryQuote.bagLabel,
-        addons: quote.addons,
+        addons: quote.addons.map((a) => ({
+          id: a.id,
+          label: a.label,
+          price: a.price,
+          quantity: a.addonQuantity,
+        })),
         subtotal: quote.subtotal,
         deliveryFee: quote.deliveryFee,
         discount: quote.discount,

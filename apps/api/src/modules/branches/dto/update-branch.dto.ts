@@ -109,4 +109,9 @@ export class UpdateBranchDto {
   @ValidateNested({ each: true })
   @Type(() => BranchMachineDto)
   machines?: BranchMachineDto[];
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  kgPerLoad?: number;
 }

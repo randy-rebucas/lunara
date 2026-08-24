@@ -80,4 +80,9 @@ export class CreateBranchDto {
   @Min(0)
   @Max(1)
   commissionRate?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  kgPerLoad?: number;
 }

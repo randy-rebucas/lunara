@@ -46,6 +46,9 @@ export interface BookingFormState {
   autoDispatch: boolean;
   scheduledPickupAt: string;
   addonIds: string[];
+  /** Customer-chosen quantity per add-on id — only meaningful for add-ons flagged allowsQuantity;
+   * defaults to 1 when unset. */
+  addonQuantities: Record<string, number>;
   couponCode: string;
   orderId: string;
   /** Free-text note for the rider/shop — gate code, "leave with guard", detergent preference, etc. */
@@ -59,6 +62,7 @@ export const initialBookingForm: BookingFormState = {
   autoDispatch: false,
   scheduledPickupAt: '',
   addonIds: [],
+  addonQuantities: {},
   couponCode: '',
   orderId: '',
   customerNotes: '',

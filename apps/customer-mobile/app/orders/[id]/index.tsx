@@ -68,7 +68,7 @@ interface OrderDetail {
   branchCode?: string;
   branchLogoUrl?: string;
   bagSizeId?: string;
-  addons?: { id: string }[];
+  addons?: { id: string; quantity?: number }[];
   pickup?: { receiptCode?: string };
   delivery?: { receiptCode?: string; signatureName?: string };
   statusHistory: { status: string; timestamp: string; note?: string }[];
@@ -372,6 +372,9 @@ export default function OrderTrackScreen() {
           ...(order.branchId ? { branchId: order.branchId } : {}),
           ...(order.bagSizeId ? { bagSizeId: order.bagSizeId } : {}),
           addonIds: order.addons?.map((a) => a.id) ?? [],
+          addonQuantities: Object.fromEntries(
+            (order.addons ?? []).map((a) => [a.id, a.quantity ?? 1]),
+          ),
           pickupAddressId: order.pickupAddressId,
           scheduledPickupAt: nextRunAt.toISOString(),
           frequencyDays: subscribeFrequencyDays,

@@ -32,4 +32,13 @@ export class UpdateBranchCustomAddonDto {
   @IsArray()
   @IsEnum(BookingType, { each: true })
   applicableServiceTypes?: BookingType[];
+
+  @IsOptional()
+  @IsBoolean()
+  allowsQuantity?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  maxQuantity?: number;
 }
