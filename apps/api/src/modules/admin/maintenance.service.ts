@@ -6,6 +6,7 @@ import { spawn } from 'child_process';
 import * as path from 'path';
 import { reseedLaundryAddons, reseedLaundryServices } from '../catalog/catalog.seed';
 import { reseedPromotions } from '../promotions/promotions.seed';
+import { reseedBlogPosts } from '../blog/blog.seed';
 
 const ALLOWED_SCRIPTS = [
   'seed',
@@ -53,7 +54,7 @@ export class MaintenanceService {
     return stats.sort((a, b) => a.collection.localeCompare(b.collection));
   }
 
-  async runSeed(target: 'users' | 'services' | 'addons' | 'promotions' | 'all') {
+  async runSeed(target: 'users' | 'services' | 'addons' | 'promotions' | 'blog' | 'all') {
     const db = this.connection.db!;
     const log: string[] = [];
 
@@ -68,6 +69,10 @@ export class MaintenanceService {
     if (target === 'promotions' || target === 'all') {
       await reseedPromotions(db.collection('promotions'));
       log.push('Seeded promotions');
+    }
+    if (target === 'blog' || target === 'all') {
+      await reseedBlogPosts(db.collection('blog_posts'));
+      log.push('Seeded blog posts');
     }
     if (target === 'users' || target === 'all') {
       const passwordHash = await bcrypt.hash('password123', 12);

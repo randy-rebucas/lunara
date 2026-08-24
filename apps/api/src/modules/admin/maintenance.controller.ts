@@ -31,11 +31,13 @@ export class MaintenanceController {
 
   @Post('seed')
   async runSeed(@Body('target') target: string) {
-    const allowed = ['users', 'services', 'addons', 'promotions', 'all'];
+    const allowed = ['users', 'services', 'addons', 'promotions', 'blog', 'all'];
     if (!allowed.includes(target)) {
       throw new BadRequestException(`Unknown seed target: ${target}. Allowed: ${allowed.join(', ')}`);
     }
-    const data = await this.maintenanceService.runSeed(target as 'users' | 'services' | 'addons' | 'promotions' | 'all');
+    const data = await this.maintenanceService.runSeed(
+      target as 'users' | 'services' | 'addons' | 'promotions' | 'blog' | 'all',
+    );
     return { success: true, data };
   }
 

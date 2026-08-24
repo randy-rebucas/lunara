@@ -21,6 +21,7 @@ const SEED_TARGETS = [
   { id: 'services',    label: 'Services',          description: 'Upsert default laundry service catalog' },
   { id: 'addons',      label: 'Add-ons',           description: 'Upsert default laundry add-on catalog' },
   { id: 'promotions',  label: 'Promotions',        description: 'Upsert WELCOME10, SIGNUP15, FREEDEL50, FLASH50' },
+  { id: 'blog',        label: 'Blog posts',        description: 'Upsert helpful published blog posts for the site' },
   { id: 'all',         label: 'Seed everything',   description: 'Run all seed targets above in sequence' },
 ] as const;
 
