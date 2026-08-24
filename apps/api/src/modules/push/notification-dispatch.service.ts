@@ -14,6 +14,9 @@ export interface DispatchNotificationInput {
   body: string;
   data?: Record<string, unknown>;
   channelId?: string;
+  /** Set false to skip the push send while still recording the in-app notification —
+   * used to respect a customer's "push notifications" preference. Defaults to true. */
+  sendPush?: boolean;
 }
 
 @Injectable()
@@ -34,13 +37,15 @@ export class NotificationDispatchService {
       data: input.data,
     });
 
-    const pushPayload: PushPayload = {
-      title: input.title,
-      body: input.body,
-      data: input.data,
-      channelId: input.channelId,
-    };
-    void this.pushNotificationService.sendToUser(input.userId, pushPayload);
+    if (input.sendPush !== false) {
+      const pushPayload: PushPayload = {
+        title: input.title,
+        body: input.body,
+        data: input.data,
+        channelId: input.channelId,
+      };
+      void this.pushNotificationService.sendToUser(input.userId, pushPayload);
+    }
 
     return notification;
   }

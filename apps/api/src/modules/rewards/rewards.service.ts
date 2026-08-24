@@ -105,6 +105,27 @@ export class RewardsService {
     await this.creditReferralBonus(referrer.userId.toString(), referredCustomerId);
   }
 
+  async getReferralStats(userId: string) {
+    const customer = await this.customerModel.findOne({ userId: new Types.ObjectId(userId) });
+    if (!customer) throw new NotFoundException('Customer profile not found');
+
+    const [referredCount, pointsEarned] = await Promise.all([
+      this.customerModel.countDocuments({ referredBy: customer._id }),
+      this.pointsTransactionModel.aggregate<{ total: number }>([
+        { $match: { userId: customer.userId, sourceType: 'referral' } },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]),
+    ]);
+
+    return {
+      success: true,
+      data: {
+        referredCount,
+        pointsEarned: pointsEarned[0]?.total ?? 0,
+      },
+    };
+  }
+
   async getBalanceAndHistory(userId: string) {
     const customer = await this.customerModel.findOne({ userId: new Types.ObjectId(userId) });
     if (!customer) throw new NotFoundException('Customer profile not found');

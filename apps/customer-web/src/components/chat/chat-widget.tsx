@@ -153,7 +153,7 @@ export function ChatWidget() {
         onClick={() => setOpen((v) => !v)}
         aria-label={open ? 'Close chat' : 'Chat with us'}
         aria-expanded={open}
-        className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-white shadow-[0_16px_32px_-8px_rgb(37_99_235/0.5)] transition hover:bg-primary/90 hover:shadow-[0_20px_36px_-8px_rgb(37_99_235/0.55)] active:scale-95 sm:bottom-6 sm:right-6"
+        className="fixed bottom-[8%] right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-white shadow-[0_16px_32px_-8px_rgb(37_99_235/0.5)] transition hover:bg-primary/90 hover:shadow-[0_20px_36px_-8px_rgb(37_99_235/0.55)] active:scale-95 sm:right-6"
       >
         {open ? <X className="h-6 w-6" aria-hidden /> : <MessageCircle className="h-6 w-6" aria-hidden />}
       </button>
@@ -162,7 +162,7 @@ export function ChatWidget() {
         <div
           role="dialog"
           aria-label="Chat with Emma"
-          className="reveal reveal-visible fixed bottom-[calc(5rem+1.25rem)] right-5 z-40 flex h-[min(70vh,34rem)] w-[min(92vw,23rem)] flex-col overflow-hidden rounded-2xl bg-surface shadow-[0_24px_48px_-16px_rgb(15_23_42/0.35)] ring-1 ring-border/60 sm:bottom-[calc(3.5rem+1.5rem)] sm:right-6"
+          className="reveal reveal-visible fixed bottom-[calc(8%+3.75rem)] right-5 z-40 flex h-[min(70vh,34rem)] w-[min(92vw,23rem)] flex-col overflow-hidden rounded-2xl bg-surface shadow-[0_24px_48px_-16px_rgb(15_23_42/0.35)] ring-1 ring-border/60 sm:right-6"
         >
           {/* Header */}
           <div className="flex items-center gap-3 border-b border-border/50 bg-surface-muted px-4 py-3">

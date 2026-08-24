@@ -264,6 +264,11 @@ export class Order {
   @Prop({ type: Types.ObjectId, required: true, index: true })
   customerId!: Types.ObjectId;
 
+  /** Free-text note from the customer for the rider/shop — gate code, "leave with guard",
+   * detergent preference, etc. */
+  @Prop()
+  customerNotes?: string;
+
   @Prop({ type: Types.ObjectId })
   partnerId?: Types.ObjectId;
 

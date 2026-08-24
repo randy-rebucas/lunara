@@ -4,6 +4,7 @@ import { Model } from 'mongoose';
 import { orderEventTitle, resolveOrderEventMessage } from '@lunara/utils';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
 import { NotificationDispatchService } from './notification-dispatch.service';
 import { EmailService } from '../../common/email/email.service';
 
@@ -20,9 +21,21 @@ export class CustomerOrderNotificationService {
   constructor(
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+    @InjectModel(Customer.name) private readonly customerModel: Model<CustomerDocument>,
     private readonly notificationDispatch: NotificationDispatchService,
     private readonly emailService: EmailService,
   ) {}
+
+  private async getPreferences(userId: string) {
+    const customer = await this.customerModel
+      .findOne({ userId })
+      .select('notificationPreferences')
+      .lean();
+    return {
+      push: customer?.notificationPreferences?.push ?? true,
+      email: customer?.notificationPreferences?.email ?? true,
+    };
+  }
 
   async notifyOrderEvent(
     orderId: string,
@@ -44,12 +57,15 @@ export class CustomerOrderNotificationService {
     const customerId = await this.resolveCustomerId(orderId);
     if (!customerId) return;
 
+    const preferences = await this.getPreferences(customerId);
+
     try {
       await this.notificationDispatch.dispatch({
         userId: customerId,
         title: orderEventTitle(event),
         body,
         channelId: 'orders',
+        sendPush: preferences.push,
         data: {
           type: 'order_update',
           orderId,
@@ -61,7 +77,7 @@ export class CustomerOrderNotificationService {
       this.logger.warn(`Customer notification failed for ${orderId}/${event}: ${err}`);
     }
 
-    if (EMAIL_EVENTS.has(event)) {
+    if (EMAIL_EVENTS.has(event) && preferences.email) {
       void this.sendOrderEmail(customerId, orderId, event);
     }
   }
@@ -85,6 +101,7 @@ export class CustomerOrderNotificationService {
     const customerId = await this.resolveCustomerId(orderId);
     if (!customerId) return;
 
+    const preferences = await this.getPreferences(customerId);
     const label = status.replace(/_/g, ' ');
     try {
       await this.notificationDispatch.dispatch({
@@ -92,6 +109,7 @@ export class CustomerOrderNotificationService {
         title: 'Order status updated',
         body: `Your order is now ${label}.`,
         channelId: 'orders',
+        sendPush: preferences.push,
         data: { type: 'order_update', orderId, status },
       });
     } catch (err) {

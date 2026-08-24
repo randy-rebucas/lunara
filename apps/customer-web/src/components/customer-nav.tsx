@@ -2,22 +2,23 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
-import { Home, ShoppingBag, Receipt, Wallet, MoreHorizontal, X } from 'lucide-react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import {
+  Home,
+  ShoppingBag,
+  Receipt,
+  Wallet,
+  Gift,
+  LifeBuoy,
+  Undo2,
+  MoreHorizontal,
+  ChevronDown,
+  X,
+} from 'lucide-react';
 import { appConfig } from '@lunara/config';
 import { BrandMark } from '@lunara/ui';
 import { CustomerHeaderMenu } from './customer-header-menu';
 import { NotificationBell } from './notification-bell';
-
-const navLinks = [
-  { href: '/dashboard', label: 'Home' },
-  { href: '/book', label: 'Book' },
-  { href: '/orders', label: 'Orders' },
-  { href: '/wallet', label: 'Wallet' },
-  { href: '/rewards', label: 'Rewards' },
-  { href: '/support', label: 'Support' },
-  { href: '/refunds', label: 'Refunds' },
-];
 
 const tabLinks = [
   { href: '/dashboard', label: 'Home', icon: Home },
@@ -27,13 +28,87 @@ const tabLinks = [
 ];
 
 const moreLinks = [
-  { href: '/rewards', label: 'Rewards' },
-  { href: '/support', label: 'Support' },
-  { href: '/refunds', label: 'Refunds' },
+  { href: '/rewards', label: 'Rewards', icon: Gift },
+  { href: '/support', label: 'Support', icon: LifeBuoy },
+  { href: '/refunds', label: 'Refunds', icon: Undo2 },
 ];
 
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function DesktopMoreMenu({ pathname }: { pathname: string }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const menuId = useId();
+  const close = useCallback(() => setOpen(false), []);
+  const active = moreLinks.some((link) => isActive(pathname, link.href));
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: MouseEvent) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) close();
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') close();
+    }
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open, close]);
+
+  useEffect(() => {
+    close();
+  }, [pathname, close]);
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-controls={menuId}
+        onClick={() => setOpen((v) => !v)}
+        className={`flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+          active || open
+            ? 'bg-primary/10 text-primary'
+            : 'text-muted hover:bg-slate-100 hover:text-slate-900'
+        }`}
+      >
+        More
+        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
+      </button>
+
+      {open && (
+        <div
+          id={menuId}
+          role="menu"
+          className="absolute left-0 z-50 mt-2 w-48 origin-top-left rounded-xl border border-border/80 bg-surface py-1 shadow-[var(--shadow-elevated)]"
+        >
+          {moreLinks.map((link) => {
+            const linkActive = isActive(pathname, link.href);
+            const Icon = link.icon;
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                role="menuitem"
+                className={`flex items-center gap-2.5 px-3 py-2.5 text-sm transition-colors hover:bg-slate-50 ${
+                  linkActive ? 'font-medium text-primary' : 'text-slate-800'
+                }`}
+              >
+                <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                {link.label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function CustomerNav() {
@@ -52,19 +127,23 @@ export function CustomerNav() {
           </Link>
 
           <nav className="hidden items-center gap-0.5 md:flex">
-            {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  isActive(pathname, link.href)
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-muted hover:bg-slate-100 hover:text-slate-900'
-                }`}
-              >
-                {link.label}
-              </Link>
-            ))}
+            {tabLinks.map((link) => {
+              const Icon = link.icon;
+              const active = isActive(pathname, link.href);
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                    active ? 'bg-primary/10 text-primary' : 'text-muted hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                >
+                  <Icon className="h-4 w-4" aria-hidden />
+                  {link.label}
+                </Link>
+              );
+            })}
+            <DesktopMoreMenu pathname={pathname} />
           </nav>
 
           <div className="flex items-center gap-1 sm:gap-2">
@@ -151,16 +230,18 @@ export function CustomerNav() {
             <div className="flex flex-col gap-1 px-2">
               {moreLinks.map((link) => {
                 const active = isActive(pathname, link.href);
+                const Icon = link.icon;
                 return (
                   <Link
                     key={link.href}
                     href={link.href}
                     onClick={() => setMoreOpen(false)}
                     aria-current={active ? 'page' : undefined}
-                    className={`min-h-11 rounded-lg px-3 py-3 text-sm font-medium transition-colors ${
+                    className={`flex min-h-11 items-center gap-2.5 rounded-lg px-3 py-3 text-sm font-medium transition-colors ${
                       active ? 'bg-primary/10 text-primary' : 'text-slate-800 active:bg-slate-100'
                     }`}
                   >
+                    <Icon className="h-4 w-4 shrink-0" aria-hidden />
                     {link.label}
                   </Link>
                 );

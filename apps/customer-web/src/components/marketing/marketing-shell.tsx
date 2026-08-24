@@ -9,8 +9,8 @@ import { ButtonLink } from '../ui/button-link';
 
 // Primary nav — core conversion paths, kept short and always visible.
 const NAV_LINKS = [
-  { href: '/#how-it-works', label: 'How it works' },
-  { href: '/#pricing', label: 'Pricing' },
+  { href: '/how-it-works', label: 'How it works' },
+  { href: '/how-it-works#pricing', label: 'Pricing' },
   { href: '/#service-areas', label: 'Service areas' },
   { href: '/blog', label: 'Blog' },
 ] as const;
@@ -192,8 +192,8 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
               <h3 className="text-xs font-semibold uppercase tracking-widest text-white/60">Customer</h3>
               <ul className="mt-4 space-y-2.5 text-sm">
                 {[
-                  { href: '/#how-it-works', label: 'How it works' },
-                  { href: '/#pricing', label: 'Pricing' },
+                  { href: '/how-it-works', label: 'How it works' },
+                  { href: '/how-it-works#pricing', label: 'Pricing' },
                   { href: '/locations', label: 'Locations' },
                   { href: '/login', label: 'Sign in' },
                 ].map((l) => (

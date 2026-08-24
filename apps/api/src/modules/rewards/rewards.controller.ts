@@ -38,4 +38,9 @@ export class RewardsController {
   getReferralCode(@Req() req: { user: { sub: string } }) {
     return this.rewardsService.getOrCreateReferralCode(req.user.sub);
   }
+
+  @Get('me/referral-stats')
+  getReferralStats(@Req() req: { user: { sub: string } }) {
+    return this.rewardsService.getReferralStats(req.user.sub);
+  }
 }

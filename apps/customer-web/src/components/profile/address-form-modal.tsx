@@ -204,6 +204,20 @@ export function AddressFormModal({
               />
             </div>
 
+            <div>
+              <FormLabel>Default delivery instructions (optional)</FormLabel>
+              <textarea
+                className="input-field min-h-20 resize-y"
+                maxLength={300}
+                placeholder="e.g. Leave with the guard at Tower B lobby"
+                value={form.deliveryInstructions}
+                onChange={(e) => setForm({ ...form, deliveryInstructions: e.target.value })}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Prefills the note for every order booked to this address — you can still edit it per order.
+              </p>
+            </div>
+
             {form.latitude != null && form.longitude != null && (
               <p className="text-xs font-medium text-accent">
                 GPS pinned ({form.latitude.toFixed(4)}, {form.longitude.toFixed(4)})

@@ -69,6 +69,7 @@ interface ReorderSourceOrder {
   bagSizeId?: string;
   addons?: { id: string }[];
   pickupAddressId?: string;
+  customerNotes?: string;
 }
 
 interface AddressOption {
@@ -78,6 +79,7 @@ interface AddressOption {
   city: string;
   province: string;
   postalCode: string;
+  deliveryInstructions?: string;
 }
 
 interface BookingConfig {
@@ -750,6 +752,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
           addressId: addressStillValid && order.pickupAddressId ? order.pickupAddressId : f.addressId,
           branchId: order.branchId ?? '',
           autoDispatch: false,
+          customerNotes: order.customerNotes ?? f.customerNotes,
         }));
         if (order.branchId) pendingRebookBranchRef.current = order.branchId;
         if (!addressStillValid) {
@@ -1074,6 +1077,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
         pickupAddressId: form.addressId,
         scheduledPickupAt: form.scheduledPickupAt,
         ...(form.couponCode.trim() ? { couponCode: form.couponCode.trim() } : {}),
+        ...(form.customerNotes.trim() ? { customerNotes: form.customerNotes.trim() } : {}),
       });
       router.push(`/checkout/${res.data._id}`);
     } catch (err) {
@@ -1234,6 +1238,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                       branchId: '',
                       autoDispatch: false,
                       scheduledPickupAt: '',
+                      customerNotes: f.customerNotes || a.deliveryInstructions || '',
                     }));
                   }}
                 >
@@ -1996,6 +2001,26 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
               ? ' Final amount may adjust once the shop confirms the actual weight/load/piece count.'
               : ''}
           </p>
+
+          <div className="panel mt-6">
+            <label htmlFor="customer-notes" className="font-medium text-slate-900">
+              Special instructions <span className="font-normal text-muted">(optional)</span>
+            </label>
+            <p className="mt-1 text-sm text-muted">
+              Gate code, where to leave your laundry, detergent preference, etc. Shared with your rider and shop.
+            </p>
+            <textarea
+              id="customer-notes"
+              className="input-field mt-3 min-h-24 resize-y"
+              maxLength={300}
+              placeholder="e.g. Leave with the guard at Tower B lobby"
+              value={form.customerNotes}
+              onChange={(e) => setForm((f) => ({ ...f, customerNotes: e.target.value }))}
+            />
+            <p className="mt-1 text-right text-xs text-muted-foreground">
+              {form.customerNotes.length}/300
+            </p>
+          </div>
         </section>
       )}
 

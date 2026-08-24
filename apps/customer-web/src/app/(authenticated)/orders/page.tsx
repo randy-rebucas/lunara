@@ -42,6 +42,14 @@ interface OrdersPageData {
 
 const PAGE_SIZE = 15;
 
+type StatusFilter = 'all' | 'active' | 'past';
+
+const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'active', label: 'Active' },
+  { value: 'past', label: 'Past' },
+];
+
 export default function OrdersPage() {
   const { api } = useAuthContext();
   const { isLoading, ready } = useProtectedPage({ requireOnboarding: true });
@@ -52,6 +60,7 @@ export default function OrdersPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const loadingMoreRef = useRef(false);
   const [emphasizeUpdates, setEmphasizeUpdates] = useState(
     () => loadCustomerSettings().emphasizeOrderUpdates,
@@ -79,8 +88,9 @@ export default function OrdersPage() {
       setError('');
 
       try {
+        const statusParam = statusFilter === 'all' ? '' : `&status=${statusFilter}`;
         const res = await api.get<OrdersPageData>(
-          `/orders?page=${pageNum}&limit=${PAGE_SIZE}`,
+          `/orders?page=${pageNum}&limit=${PAGE_SIZE}${statusParam}`,
         );
         const { items, totalPages: nextTotalPages, page: currentPage } = res.data;
         setOrders((prev) => (append ? [...prev, ...items] : items));
@@ -98,7 +108,7 @@ export default function OrdersPage() {
         }
       }
     },
-    [ready, api],
+    [ready, api, statusFilter],
   );
 
   useEffect(() => {
@@ -107,7 +117,7 @@ export default function OrdersPage() {
     setPage(0);
     setTotalPages(0);
     fetchPage(1, false);
-  }, [ready, api, fetchPage]);
+  }, [ready, api, statusFilter, fetchPage]);
 
   const loadMore = useCallback(() => {
     if (!hasMore || loading || loadingMore) return;
@@ -168,16 +178,39 @@ export default function OrdersPage() {
         description="Select an order to view the full timeline and live status updates"
       />
 
+      <div className="mt-4 flex gap-2">
+        {STATUS_FILTERS.map((f) => (
+          <button
+            key={f.value}
+            type="button"
+            onClick={() => setStatusFilter(f.value)}
+            className={`min-h-11 rounded-full px-4 text-sm font-medium ring-1 transition-colors ${
+              statusFilter === f.value
+                ? 'bg-primary text-white ring-primary'
+                : 'bg-surface text-muted ring-border hover:ring-border/80'
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
       <DataPageStatus loading={loading} error={error} loadingMessage="Loading orders…" />
 
       <div className="mt-6 list-stack">
         {!loading && !error && orders.length === 0 ? (
           <Card>
             <CardBody className="text-center text-muted">
-              No orders yet.{' '}
-              <Link href="/book" className="link-primary">
-                Book laundry
-              </Link>
+              {statusFilter === 'all' ? (
+                <>
+                  No orders yet.{' '}
+                  <Link href="/book" className="link-primary">
+                    Book laundry
+                  </Link>
+                </>
+              ) : (
+                `No ${statusFilter} orders.`
+              )}
             </CardBody>
           </Card>
         ) : (

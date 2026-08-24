@@ -1,4 +1,15 @@
-import { IsBoolean, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, MaxLength, MinLength, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class NotificationPreferencesDto {
+  @IsOptional()
+  @IsBoolean()
+  push?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  email?: boolean;
+}
 
 export class UpdateCustomerDto {
   @IsOptional()
@@ -16,4 +27,9 @@ export class UpdateCustomerDto {
   @IsOptional()
   @IsBoolean()
   isBusiness?: boolean;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => NotificationPreferencesDto)
+  notificationPreferences?: NotificationPreferencesDto;
 }

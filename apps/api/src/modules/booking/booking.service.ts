@@ -574,6 +574,7 @@ export class BookingService {
         items,
         pickupAddressId: dto.pickupAddressId,
         deliveryAddressId: dto.deliveryAddressId ?? dto.pickupAddressId,
+        customerNotes: dto.customerNotes,
         scheduledPickupAt: dto.scheduledPickupAt,
         scheduledDeliveryAt: undefined,
         couponCode: quote.couponCode,

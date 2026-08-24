@@ -35,6 +35,11 @@ export class Address {
   @Prop()
   longitude?: number;
 
+  /** Default note for the rider/shop at this address — gate code, "leave with guard", etc.
+   * Prefills the per-order instructions field at booking time. */
+  @Prop()
+  deliveryInstructions?: string;
+
   @Prop({ default: false })
   isDefault!: boolean;
 

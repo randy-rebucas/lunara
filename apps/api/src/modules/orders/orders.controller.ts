@@ -41,8 +41,9 @@ export class OrdersController {
     @Req() req: { user: { sub: string; role: UserRole } },
     @Query('page') page = '1',
     @Query('limit') limit = '20',
+    @Query('status') status?: 'active' | 'past',
   ) {
-    return this.ordersService.findAll(req.user, Number(page), Number(limit));
+    return this.ordersService.findAll(req.user, Number(page), Number(limit), status);
   }
 
   @Get(':id/handoff-qr')

@@ -151,6 +151,7 @@ export default function ProfilePage() {
         province: values.province.trim(),
         postalCode: values.postalCode.trim(),
         isDefault: values.isDefault,
+        deliveryInstructions: values.deliveryInstructions.trim() || undefined,
         ...(values.latitude != null && values.longitude != null
           ? { latitude: values.latitude, longitude: values.longitude }
           : {}),

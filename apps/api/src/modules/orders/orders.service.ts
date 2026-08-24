@@ -11,6 +11,7 @@ import {
   BranchPricingMode,
   buildPartnerCoverageNotice,
   canTransitionOrderStatus,
+  isActiveOrderStatus,
   isPaymongoMethod,
   type PartnerCoverageInfo,
   type PricingModeRates,
@@ -31,6 +32,8 @@ import { PromotionsService } from '../promotions/promotions.service';
 import { LaundryTagsService } from '../laundry-tags/laundry-tags.service';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { assertOrderPortalAccess, resolvePortalBranchId } from '../partner/partner-access';
+import { Address, AddressDocument } from '../addresses/schemas/address.schema';
+import { Rider, RiderDocument } from '../riders/schemas/rider.schema';
 import { Order, OrderDocument } from './schemas/order.schema';
 
 export interface BookingOrderItem {
@@ -45,6 +48,7 @@ export interface BookingOrderPayload {
   items: BookingOrderItem[];
   pickupAddressId: string;
   deliveryAddressId: string;
+  customerNotes?: string;
   scheduledPickupAt: string;
   scheduledDeliveryAt?: string;
   couponCode?: string;
@@ -79,6 +83,8 @@ export class OrdersService {
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Address.name) private addressModel: Model<AddressDocument>,
+    @InjectModel(Rider.name) private riderModel: Model<RiderDocument>,
     private trackingGateway: TrackingGateway,
     private riderAssignmentService: RiderAssignmentService,
     private walletsService: WalletsService,
@@ -257,6 +263,7 @@ export class OrdersService {
       bagSizeId: payload.bagSizeId,
       bagSizeLabel: payload.bagSizeLabel,
       addons: payload.addons,
+      customerNotes: payload.customerNotes,
       status: OrderStatus.PENDING,
       subtotal: payload.subtotal,
       deliveryFee: payload.deliveryFee,
@@ -305,14 +312,24 @@ export class OrdersService {
     return { success: true, data: { items, counts: grouped } };
   }
 
-  async findAll(user: { sub: string; role: UserRole }, page: number, limit: number) {
+  async findAll(
+    user: { sub: string; role: UserRole },
+    page: number,
+    limit: number,
+    statusGroup?: 'active' | 'past',
+  ) {
     const userId = new Types.ObjectId(user.sub);
-    const filter =
+    const filter: Record<string, unknown> =
       user.role === UserRole.CUSTOMER
         ? { customerId: userId }
         : user.role === UserRole.RIDER
           ? { $or: [{ pickupRiderId: userId }, { deliveryRiderId: userId }] }
           : {};
+
+    if (statusGroup === 'active' || statusGroup === 'past') {
+      const inactiveStatuses = Object.values(OrderStatus).filter((s) => !isActiveOrderStatus(s));
+      filter.status = statusGroup === 'past' ? { $in: inactiveStatuses } : { $nin: inactiveStatuses };
+    }
 
     const skip = (page - 1) * limit;
     const [rawItems, total] = await Promise.all([
@@ -348,12 +365,46 @@ export class OrdersService {
       assertOrderPortalAccess(order, user.sub, user.role, staffBranchId);
     }
 
-    const data =
-      user.role === UserRole.CUSTOMER
-        ? (await this.enrichCustomerOrders([order]))[0]
-        : order;
+    if (user.role !== UserRole.CUSTOMER) {
+      return { success: true, data: order };
+    }
 
-    return { success: true, data };
+    const enriched = (await this.enrichCustomerOrders([order]))[0];
+    const isDeliveryPhase =
+      order.status === OrderStatus.OUT_FOR_DELIVERY ||
+      order.status === OrderStatus.RIDER_ASSIGNED_DELIVERY;
+    const destinationAddressId = isDeliveryPhase ? order.deliveryAddressId : order.pickupAddressId;
+    const destination = destinationAddressId
+      ? await this.addressModel.findById(destinationAddressId).select('latitude longitude')
+      : null;
+
+    const activeRiderId = isDeliveryPhase ? order.deliveryRiderId : order.pickupRiderId;
+    const showRiderContact =
+      order.status === OrderStatus.RIDER_ASSIGNED_PICKUP ||
+      order.status === OrderStatus.RIDER_ASSIGNED ||
+      order.status === OrderStatus.RIDER_ASSIGNED_DELIVERY ||
+      order.status === OrderStatus.OUT_FOR_DELIVERY;
+    const rider =
+      showRiderContact && activeRiderId
+        ? await this.riderModel.findOne({ userId: activeRiderId }).select('firstName lastName')
+        : null;
+    const riderUser = rider ? await this.userModel.findById(activeRiderId).select('phone') : null;
+
+    return {
+      success: true,
+      data: {
+        ...enriched,
+        ...(destination?.latitude != null && destination?.longitude != null
+          ? { destinationLat: destination.latitude, destinationLng: destination.longitude }
+          : {}),
+        ...(rider
+          ? {
+              riderName: [rider.firstName, rider.lastName].filter(Boolean).join(' ') || 'Your rider',
+              riderPhone: riderUser?.phone,
+            }
+          : {}),
+      },
+    };
   }
 
   async assignRider(

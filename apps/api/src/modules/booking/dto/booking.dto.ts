@@ -10,6 +10,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -97,6 +98,13 @@ export class BookingQuoteDto {
   @IsOptional()
   @IsDateString()
   scheduledPickupAt?: string;
+
+  /** Free-text note from the customer for the rider/shop — gate code, "leave with guard",
+   * detergent preference, etc. Shown alongside pickup/delivery details in the ops-facing apps. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  customerNotes?: string;
 }
 
 export class BookingAvailabilityQueryDto {

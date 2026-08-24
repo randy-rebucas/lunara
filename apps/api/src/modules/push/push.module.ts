@@ -4,6 +4,7 @@ import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { Notification, NotificationSchema } from '../reviews/schemas/notification.schema';
 import { Rider, RiderSchema } from '../riders/schemas/rider.schema';
+import { Customer, CustomerSchema } from '../customers/schemas/customer.schema';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { CustomerOrderNotificationService } from './customer-order-notification.service';
 import { PartnerOrderNotificationService } from './partner-order-notification.service';
@@ -28,6 +29,7 @@ import {
       { name: Rider.name, schema: RiderSchema },
       { name: Order.name, schema: OrderSchema },
       { name: User.name, schema: UserSchema },
+      { name: Customer.name, schema: CustomerSchema },
     ]),
     forwardRef(() => RealtimeModule),
   ],

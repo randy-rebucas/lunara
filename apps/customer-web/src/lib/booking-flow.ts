@@ -48,6 +48,8 @@ export interface BookingFormState {
   addonIds: string[];
   couponCode: string;
   orderId: string;
+  /** Free-text note for the rider/shop — gate code, "leave with guard", detergent preference, etc. */
+  customerNotes: string;
 }
 
 export const initialBookingForm: BookingFormState = {
@@ -59,6 +61,7 @@ export const initialBookingForm: BookingFormState = {
   addonIds: [],
   couponCode: '',
   orderId: '',
+  customerNotes: '',
 };
 
 export function newServiceSelection(

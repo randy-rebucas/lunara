@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { LogOut, Settings, User } from 'lucide-react';
+import { resolveMediaUrl } from '@lunara/utils';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 
 function accountLabel(email?: string, phone?: string) {
@@ -18,12 +20,20 @@ function accountInitial(email?: string, phone?: string) {
 
 export function CustomerHeaderMenu() {
   const pathname = usePathname();
-  const { logout, user } = useAuthContext();
+  const { logout, user, api } = useAuthContext();
   const [open, setOpen] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
 
   const close = useCallback(() => setOpen(false), []);
+
+  useEffect(() => {
+    api
+      .get<{ avatarUrl?: string }>('/customers/me')
+      .then((res) => setAvatarUrl(res.data.avatarUrl ?? null))
+      .catch(() => {});
+  }, [api]);
 
   useEffect(() => {
     if (!open) return;
@@ -48,25 +58,29 @@ export function CustomerHeaderMenu() {
   }, [pathname, close]);
 
   const label = accountLabel(user?.email, user?.phone);
+  const resolvedAvatarUrl = resolveMediaUrl(avatarUrl, process.env.NEXT_PUBLIC_API_URL);
 
   return (
     <div ref={rootRef} className="relative">
       <button
         type="button"
-        className="inline-flex items-center gap-2 rounded-lg border border-border/70 bg-surface px-2 py-1.5 text-sm font-medium text-slate-800 shadow-sm transition-colors hover:bg-slate-50"
+        className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-surface p-1 shadow-sm transition-colors hover:bg-slate-50"
         aria-expanded={open}
         aria-haspopup="menu"
         aria-controls={menuId}
+        aria-label={`Account menu for ${label}`}
         onClick={() => setOpen((v) => !v)}
       >
-        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-          {accountInitial(user?.email, user?.phone)}
-        </span>
-        <span className="hidden max-w-[10rem] truncate text-left text-xs text-muted-foreground sm:inline">
-          {label}
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-xs font-semibold text-primary">
+          {resolvedAvatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={resolvedAvatarUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            accountInitial(user?.email, user?.phone)
+          )}
         </span>
         <svg
-          className={`h-4 w-4 text-muted transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`mr-1 h-4 w-4 text-muted transition-transform ${open ? 'rotate-180' : ''}`}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -91,21 +105,23 @@ export function CustomerHeaderMenu() {
           <Link
             href="/profile"
             role="menuitem"
-            className={`block px-3 py-2.5 text-sm transition-colors hover:bg-slate-50 ${
+            className={`flex items-center gap-2.5 px-3 py-2.5 text-sm transition-colors hover:bg-slate-50 ${
               pathname.startsWith('/profile') ? 'bg-primary/5 font-medium text-primary' : 'text-slate-800'
             }`}
             onClick={close}
           >
+            <User className="h-4 w-4 shrink-0" aria-hidden />
             Profile
           </Link>
           <Link
             href="/settings"
             role="menuitem"
-            className={`block px-3 py-2.5 text-sm transition-colors hover:bg-slate-50 ${
+            className={`flex items-center gap-2.5 px-3 py-2.5 text-sm transition-colors hover:bg-slate-50 ${
               pathname.startsWith('/settings') ? 'bg-primary/5 font-medium text-primary' : 'text-slate-800'
             }`}
             onClick={close}
           >
+            <Settings className="h-4 w-4 shrink-0" aria-hidden />
             Settings
           </Link>
 
@@ -114,12 +130,13 @@ export function CustomerHeaderMenu() {
           <button
             type="button"
             role="menuitem"
-            className="block w-full px-3 py-2.5 text-left text-sm text-muted transition-colors hover:bg-slate-50 hover:text-primary"
+            className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-muted transition-colors hover:bg-slate-50 hover:text-primary"
             onClick={() => {
               close();
               logout();
             }}
           >
+            <LogOut className="h-4 w-4 shrink-0" aria-hidden />
             Sign out
           </button>
         </div>

@@ -59,6 +59,12 @@ export class CustomersService {
     if (dto.firstName) customer.firstName = dto.firstName.trim();
     if (dto.lastName) customer.lastName = dto.lastName.trim();
     if (dto.isBusiness !== undefined) customer.isBusiness = dto.isBusiness;
+    if (dto.notificationPreferences) {
+      customer.notificationPreferences = {
+        push: dto.notificationPreferences.push ?? customer.notificationPreferences?.push ?? true,
+        email: dto.notificationPreferences.email ?? customer.notificationPreferences?.email ?? true,
+      };
+    }
     await customer.save();
     return { success: true, data: customer };
   }

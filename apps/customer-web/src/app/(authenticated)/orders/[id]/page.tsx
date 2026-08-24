@@ -1,9 +1,11 @@
 'use client';
 
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { MessageCircle, Phone } from 'lucide-react';
 import { OrderStatus, PaymentMethod, PaymentStatus } from '@lunara/types';
 import { Button } from '@lunara/ui';
 import { ButtonLink } from '../../../../components/ui/button-link';
@@ -26,7 +28,10 @@ import { PageShell } from '../../../../components/page-shell';
 import { DataPageStatus } from '../../../../components/data-page-status';
 import { OrderNotifications, type OrderNotification } from '../../../../components/order-notifications';
 import { OrderTimeline } from '../../../../components/order-timeline';
-import { RiderLocationMap } from '../../../../components/rider-location-map';
+const RiderLocationMap = dynamic(
+  () => import('../../../../components/rider-location-map').then((m) => m.RiderLocationMap),
+  { ssr: false },
+);
 import { AuthLoading } from '../../../../components/auth-loading';
 import { useDebouncedCallback } from '../../../../hooks/use-debounced-callback';
 import { useProtectedPage } from '../../../../hooks/use-protected-page';
@@ -37,7 +42,10 @@ interface OrderDetail {
   total: number;
   bookingType: string;
   estimatedWeightKg?: number;
+  estimatedLoadCount?: number;
+  estimatedPieceCount?: number;
   bagSizeLabel?: string;
+  customerNotes?: string;
   /** How the base service is billed — 'flat_bag' (or unset) orders are final at booking time;
    * other modes are estimated until the shop confirms actual weight/load/piece count. */
   pricingMode?: string;
@@ -77,6 +85,10 @@ interface OrderDetail {
   paymentReceiptCode?: string;
   cashTiming?: 'pickup' | 'delivery';
   paymentPaidAt?: string;
+  destinationLat?: number;
+  destinationLng?: number;
+  riderName?: string;
+  riderPhone?: string;
 }
 
 interface DeliveryUiState {
@@ -121,6 +133,16 @@ const ORDER_EVENT_MESSAGES: Record<string, string> = {
 
 function formatTime() {
   return new Date().toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' });
+}
+
+function ReceiptRow({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
+  return (
+    <div className={`receipt-dotted-row ${bold ? 'font-bold' : ''}`}>
+      <span className="shrink-0">{label}</span>
+      <span className="receipt-fill" aria-hidden />
+      <span className="shrink-0">{value}</span>
+    </div>
+  );
 }
 
 const RESCHEDULABLE_STATUSES: string[] = [
@@ -277,6 +299,9 @@ export default function OrderTrackPage() {
             bookingType: order.bookingType,
             ...(order.bagSizeId ? { bagSizeId: order.bagSizeId } : {}),
             ...(order.garmentSelections?.length ? { garmentSelections: order.garmentSelections } : {}),
+            ...(order.estimatedWeightKg ? { enteredWeightKg: order.estimatedWeightKg } : {}),
+            ...(order.estimatedLoadCount ? { enteredLoadCount: order.estimatedLoadCount } : {}),
+            ...(order.estimatedPieceCount ? { enteredPieceCount: order.estimatedPieceCount } : {}),
           },
         ],
         ...(order.branchId ? { branchId: order.branchId } : {}),
@@ -434,6 +459,13 @@ export default function OrderTrackPage() {
           </div>
         </div>
 
+        {order.customerNotes && (
+          <div className="mt-4 rounded-lg bg-surface p-4 text-sm ring-1 ring-border/50">
+            <p className="font-medium text-slate-700">Your instructions</p>
+            <p className="mt-1 text-slate-600">{order.customerNotes}</p>
+          </div>
+        )}
+
         {order.branchName && (
           <div className="mt-4 rounded-lg bg-primary/5 p-4 text-sm ring-1 ring-primary/15">
             <p className="font-medium text-primary">
@@ -543,7 +575,16 @@ export default function OrderTrackPage() {
 
         {paymentReceipt && (
           <section className="mt-6">
-            <h2 className="text-lg font-semibold">Payment</h2>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold">Payment</h2>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="text-sm font-medium text-primary hover:underline"
+              >
+                Print receipt
+              </button>
+            </div>
             <p className="mt-1 text-sm text-slate-500">
               {formatPaymentMethodLabel(order.paymentMethod!)}
               {order.cashTiming ? ` · ${formatCashTimingLabel(order.cashTiming)}` : ''}
@@ -553,6 +594,64 @@ export default function OrderTrackPage() {
               <PaymentReceipt payment={paymentReceipt} orderTotal={order.total} />
             </div>
           </section>
+        )}
+
+        {paymentReceipt && (
+          <div className="print-area receipt-pos hidden text-xs leading-relaxed text-black print:block">
+            <div className="text-center">
+              <p className="text-base font-bold uppercase">Lunara</p>
+              <p>Laundry Pickup &amp; Delivery</p>
+              <p>*** OFFICIAL RECEIPT ***</p>
+            </div>
+
+            <p className="my-2 border-t border-dashed border-black" />
+
+            <ReceiptRow label="ORDER #" value={order._id.slice(-10).toUpperCase()} />
+            {order.createdAt && (
+              <ReceiptRow
+                label="DATE"
+                value={new Date(order.createdAt).toLocaleString('en-PH', {
+                  dateStyle: 'short',
+                  timeStyle: 'short',
+                })}
+              />
+            )}
+            {order.branchName && <ReceiptRow label="BRANCH" value={order.branchName} />}
+
+            <p className="my-2 border-t border-dashed border-black" />
+
+            <ReceiptRow label="SERVICE" value={order.bookingType.replace(/_/g, ' ').toUpperCase()} />
+            {order.bagSizeLabel && <ReceiptRow label="BAG SIZE" value={order.bagSizeLabel.toUpperCase()} />}
+            {order.estimatedWeightKg && !order.bagSizeLabel && (
+              <ReceiptRow label="WEIGHT" value={`~${order.estimatedWeightKg} KG`} />
+            )}
+
+            <p className="my-2 border-t border-dashed border-black" />
+
+            <ReceiptRow label="TOTAL" value={formatCurrency(displayTotal)} bold />
+            <ReceiptRow label="PAYMENT" value={formatPaymentMethodLabel(order.paymentMethod!).toUpperCase()} />
+            <ReceiptRow
+              label="STATUS"
+              value={formatPaymentStatusLabel(order.paymentStatus ?? PaymentStatus.PENDING).toUpperCase()}
+            />
+            {paymentReceipt.receiptCode && (
+              <ReceiptRow label="RCPT CODE" value={paymentReceipt.receiptCode} />
+            )}
+            {paymentReceipt.paidAt && (
+              <ReceiptRow
+                label="PAID AT"
+                value={new Date(paymentReceipt.paidAt).toLocaleString('en-PH', {
+                  dateStyle: 'short',
+                  timeStyle: 'short',
+                })}
+              />
+            )}
+
+            <p className="my-2 border-t border-dashed border-black" />
+
+            <p className="text-center">Thank you for choosing Lunara!</p>
+            <p className="text-center">www.lunara.app</p>
+          </div>
         )}
 
         <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200">
@@ -574,7 +673,41 @@ export default function OrderTrackPage() {
           </div>
         </section>
 
-        {location && <RiderLocationMap lat={location.lat} lng={location.lng} />}
+        {order.riderName && (
+          <div className="mt-6 flex items-center justify-between gap-4 rounded-xl bg-surface p-4 ring-1 ring-border/50">
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-muted">Your rider</p>
+              <p className="truncate font-medium text-slate-900">{order.riderName}</p>
+            </div>
+            {order.riderPhone && (
+              <div className="flex shrink-0 gap-2">
+                <a
+                  href={`tel:${order.riderPhone}`}
+                  className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary transition-colors hover:bg-primary/15"
+                  aria-label="Call rider"
+                >
+                  <Phone className="h-[18px] w-[18px]" aria-hidden />
+                </a>
+                <a
+                  href={`sms:${order.riderPhone}`}
+                  className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary transition-colors hover:bg-primary/15"
+                  aria-label="Message rider"
+                >
+                  <MessageCircle className="h-[18px] w-[18px]" aria-hidden />
+                </a>
+              </div>
+            )}
+          </div>
+        )}
+
+        {location && (
+          <RiderLocationMap
+            lat={location.lat}
+            lng={location.lng}
+            destinationLat={order.destinationLat}
+            destinationLng={order.destinationLng}
+          />
+        )}
 
         {showPickupQr && id ? <HandoffQrCard orderId={id} context="pickup" /> : null}
         {showDeliveryQr && id ? <HandoffQrCard orderId={id} context="delivery" /> : null}
@@ -656,6 +789,9 @@ export default function OrderTrackPage() {
               </Link>
             )}
             <div className="mt-4 list-stack-sm">
+              <ButtonLink href={`/book?reorder=${id}`} className="w-full">
+                Book again
+              </ButtonLink>
               <ButtonLink href={`/orders/${id}/lost-item`} variant="outline" className="w-full">
                 Report missing item
               </ButtonLink>
@@ -665,6 +801,14 @@ export default function OrderTrackPage() {
                 </ButtonLink>
               )}
             </div>
+          </div>
+        )}
+
+        {order.status === OrderStatus.DELIVERED && (
+          <div className="mt-6 list-stack-sm">
+            <ButtonLink href={`/book?reorder=${id}`} className="w-full">
+              Book again
+            </ButtonLink>
           </div>
         )}
 

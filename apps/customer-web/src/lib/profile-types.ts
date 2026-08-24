@@ -12,6 +12,7 @@ export interface CustomerAddress {
   latitude?: number;
   longitude?: number;
   isDefault: boolean;
+  deliveryInstructions?: string;
 }
 
 export interface FavoriteBranch {
@@ -41,6 +42,11 @@ export interface ImpactSummary {
   estimatedCo2SavedKg: number;
 }
 
+export interface NotificationPreferences {
+  push: boolean;
+  email: boolean;
+}
+
 export interface CustomerProfile {
   _id?: string;
   firstName: string;
@@ -48,6 +54,7 @@ export interface CustomerProfile {
   avatarUrl?: string;
   loyaltyPoints?: number;
   isBusiness?: boolean;
+  notificationPreferences?: NotificationPreferences;
 }
 
 export interface AddressFormValues {
@@ -61,6 +68,7 @@ export interface AddressFormValues {
   latitude?: number;
   longitude?: number;
   isDefault: boolean;
+  deliveryInstructions: string;
 }
 
 export const emptyAddressForm = (): AddressFormValues => ({
@@ -72,6 +80,7 @@ export const emptyAddressForm = (): AddressFormValues => ({
   province: 'Metro Manila',
   postalCode: '',
   isDefault: false,
+  deliveryInstructions: '',
 });
 
 export function addressToForm(address: CustomerAddress): AddressFormValues {
@@ -86,5 +95,6 @@ export function addressToForm(address: CustomerAddress): AddressFormValues {
     latitude: address.latitude,
     longitude: address.longitude,
     isDefault: address.isDefault,
+    deliveryInstructions: address.deliveryInstructions ?? '',
   };
 }

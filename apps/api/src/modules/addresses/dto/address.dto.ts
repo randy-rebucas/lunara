@@ -41,6 +41,11 @@ export class CreateAddressDto {
   @IsOptional()
   @IsBoolean()
   isDefault?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  deliveryInstructions?: string;
 }
 
 export class UpdateAddressDto {
@@ -83,4 +88,9 @@ export class UpdateAddressDto {
   @IsOptional()
   @IsNumber()
   longitude?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  deliveryInstructions?: string;
 }

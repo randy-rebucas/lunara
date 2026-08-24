@@ -335,3 +335,48 @@
 .parallax-layer {
   will-change: transform;
 }
+
+/* Isolates a single element (e.g. an order receipt) as the entire printed page, hiding app chrome. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+  }
+
+  /* POS/dot-matrix receipt look: narrow thermal-strip width, centered on the page. */
+  .receipt-pos {
+    width: 76mm;
+    margin: 0 auto;
+  }
+
+  @page {
+    size: auto;
+    margin: 6mm;
+  }
+}
+
+.receipt-pos {
+  font-family: 'Courier New', Courier, monospace;
+  letter-spacing: 0.02em;
+}
+
+.receipt-dotted-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.25rem;
+}
+
+.receipt-dotted-row .receipt-fill {
+  flex: 1;
+  border-bottom: 1px dotted currentColor;
+  margin-bottom: 0.2rem;
+  opacity: 0.6;
+}

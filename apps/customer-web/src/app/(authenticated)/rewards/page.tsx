@@ -59,6 +59,9 @@ export default function RewardsPage() {
   const [redeemMessage, setRedeemMessage] = useState('');
   const [redeemError, setRedeemError] = useState('');
   const [referralCode, setReferralCode] = useState<string | null>(null);
+  const [referralStats, setReferralStats] = useState<{ referredCount: number; pointsEarned: number } | null>(
+    null,
+  );
 
   useEffect(() => {
     if (!ready) return;
@@ -67,6 +70,12 @@ export default function RewardsPage() {
       .get<{ referralCode: string }>('/rewards/me/referral-code')
       .then((res) => {
         if (!cancelled) setReferralCode(res.data.referralCode);
+      })
+      .catch(() => {});
+    api
+      .get<{ referredCount: number; pointsEarned: number }>('/rewards/me/referral-stats')
+      .then((res) => {
+        if (!cancelled) setReferralStats(res.data);
       })
       .catch(() => {});
     return () => {
@@ -165,6 +174,25 @@ export default function RewardsPage() {
             }
             referralCode={referralCode}
           />
+
+          {referralStats && (referralStats.referredCount > 0 || referralStats.pointsEarned > 0) && (
+            <div className="mt-3 flex gap-3">
+              <Card className="flex-1">
+                <CardBody className="py-3 text-center">
+                  <p className="text-2xl font-bold text-primary">{referralStats.referredCount}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {referralStats.referredCount === 1 ? 'friend joined' : 'friends joined'}
+                  </p>
+                </CardBody>
+              </Card>
+              <Card className="flex-1">
+                <CardBody className="py-3 text-center">
+                  <p className="text-2xl font-bold text-primary">{referralStats.pointsEarned}</p>
+                  <p className="text-xs text-muted-foreground">pts from referrals</p>
+                </CardBody>
+              </Card>
+            </div>
+          )}
 
           {redeemMessage && (
             <div className="mt-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">

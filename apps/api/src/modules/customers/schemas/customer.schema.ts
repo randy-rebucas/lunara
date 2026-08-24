@@ -3,6 +3,15 @@ import { HydratedDocument, Types } from 'mongoose';
 
 export type CustomerDocument = HydratedDocument<Customer>;
 
+@Schema({ _id: false })
+class NotificationPreferences {
+  @Prop({ default: true })
+  push!: boolean;
+
+  @Prop({ default: true })
+  email!: boolean;
+}
+
 @Schema({ timestamps: true, collection: 'customers' })
 export class Customer {
   @Prop({ type: Types.ObjectId, required: true, unique: true, index: true })
@@ -30,6 +39,9 @@ export class Customer {
    * monthly order/spend summary. Not a verified/billing entity, just a UI flag for now. */
   @Prop({ default: false })
   isBusiness!: boolean;
+
+  @Prop({ type: NotificationPreferences, default: () => ({}) })
+  notificationPreferences!: NotificationPreferences;
 
   createdAt!: Date;
   updatedAt!: Date;
