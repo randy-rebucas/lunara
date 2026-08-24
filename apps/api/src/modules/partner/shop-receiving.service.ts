@@ -13,6 +13,7 @@ import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { BranchesService } from '../branches/branches.service';
+import { PartnerOperationsService } from './partner-operations.service';
 import {
   ConfirmShopItemsDto,
   ReceiveLaundryDto,
@@ -32,6 +33,7 @@ export class ShopReceivingService {
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     private trackingGateway: TrackingGateway,
     private branchesService: BranchesService,
+    private partnerOperationsService: PartnerOperationsService,
   ) {}
 
   async getReceiving(orderId: string, partnerUserId: string, role: UserRole) {
@@ -196,6 +198,13 @@ export class ShopReceivingService {
     }
     order.laundryProcessing.currentStepId = 'received';
     await order.save();
+
+    if (order.branchId) {
+      // Best-effort: an inventory hiccup shouldn't block the order itself from moving forward.
+      await this.partnerOperationsService
+        .deductInventoryForOrder(order.branchId, order.shopReceiving.verifiedWeightKg ?? 0)
+        .catch(() => {});
+    }
 
     this.trackingGateway.emitOrderStatus(orderId, OrderStatus.RECEIVED_AT_SHOP);
     this.trackingGateway.emitOrderEvent(orderId, 'receivedAtShop', {

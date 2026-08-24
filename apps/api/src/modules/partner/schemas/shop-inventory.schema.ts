@@ -32,6 +32,15 @@ export class ShopInventoryItem {
   @Prop({ required: true, default: 10 })
   lowStockThreshold!: number;
 
+  /** Units auto-deducted from stock once per completed order (e.g. 1 bag, 1 tag). 0 = not auto-tracked. */
+  @Prop({ required: true, default: 0 })
+  usagePerOrder!: number;
+
+  /** Units auto-deducted from stock per kg of verified laundry weight on a completed order
+   * (e.g. detergent/softener dosage). 0 = not auto-tracked. */
+  @Prop({ required: true, default: 0 })
+  usagePerKg!: number;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

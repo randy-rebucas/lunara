@@ -32,6 +32,8 @@ export default function InventoryPage() {
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [draftQty, setDraftQty] = useState<Record<string, string>>({});
   const [draftThreshold, setDraftThreshold] = useState<Record<string, string>>({});
+  const [draftUsagePerOrder, setDraftUsagePerOrder] = useState<Record<string, string>>({});
+  const [draftUsagePerKg, setDraftUsagePerKg] = useState<Record<string, string>>({});
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const loadSettings = useCallback(async () => {
@@ -76,7 +78,7 @@ export default function InventoryPage() {
 
   async function patchItem(
     id: string,
-    patch: { quantity?: number; lowStockThreshold?: number },
+    patch: { quantity?: number; lowStockThreshold?: number; usagePerOrder?: number; usagePerKg?: number },
     closeEdit = false,
   ) {
     setSaving(id);
@@ -95,6 +97,16 @@ export default function InventoryPage() {
           return next;
         });
         setDraftThreshold((d) => {
+          const next = { ...d };
+          delete next[id];
+          return next;
+        });
+        setDraftUsagePerOrder((d) => {
+          const next = { ...d };
+          delete next[id];
+          return next;
+        });
+        setDraftUsagePerKg((d) => {
           const next = { ...d };
           delete next[id];
           return next;
@@ -144,6 +156,26 @@ export default function InventoryPage() {
       return;
     }
     void patchItem(item._id, { lowStockThreshold: threshold }, true);
+  }
+
+  function applyDraftUsagePerOrder(item: PartnerInventoryItem) {
+    const raw = draftUsagePerOrder[item._id] ?? String(item.usagePerOrder);
+    const usagePerOrder = Number.parseFloat(raw);
+    if (Number.isNaN(usagePerOrder) || usagePerOrder < 0) {
+      setActionError('Enter a valid per-order auto-deduct amount (0 or higher).');
+      return;
+    }
+    void patchItem(item._id, { usagePerOrder });
+  }
+
+  function applyDraftUsagePerKg(item: PartnerInventoryItem) {
+    const raw = draftUsagePerKg[item._id] ?? String(item.usagePerKg);
+    const usagePerKg = Number.parseFloat(raw);
+    if (Number.isNaN(usagePerKg) || usagePerKg < 0) {
+      setActionError('Enter a valid per-kg auto-deduct amount (0 or higher).');
+      return;
+    }
+    void patchItem(item._id, { usagePerKg });
   }
 
   if (!ready) return <AuthLoading message="Loading inventory…" />;
@@ -239,7 +271,7 @@ export default function InventoryPage() {
                 return (
                   <div
                     key={item._id}
-                    className={`list-row flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4 ${
+                    className={`list-row flex-wrap flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4 ${
                       level === 'out'
                         ? 'ring-red-200/80 bg-red-50/50'
                         : level === 'low'
@@ -256,6 +288,13 @@ export default function InventoryPage() {
                       </div>
                       <p className="text-xs text-muted">
                         {item.sku} · alert when ≤ {item.lowStockThreshold} {item.unit}
+                        {(item.usagePerOrder > 0 || item.usagePerKg > 0) && (
+                          <>
+                            {' '}
+                            · auto-deducts{item.usagePerOrder > 0 ? ` ${item.usagePerOrder}/order` : ''}
+                            {item.usagePerKg > 0 ? ` ${item.usagePerKg}/kg` : ''}
+                          </>
+                        )}
                       </p>
                       <div className="mt-2 h-1.5 max-w-xs overflow-hidden rounded-full bg-slate-200">
                         <div
@@ -315,6 +354,11 @@ export default function InventoryPage() {
                             ...d,
                             [item._id]: String(item.lowStockThreshold),
                           }));
+                          setDraftUsagePerOrder((d) => ({
+                            ...d,
+                            [item._id]: String(item.usagePerOrder),
+                          }));
+                          setDraftUsagePerKg((d) => ({ ...d, [item._id]: String(item.usagePerKg) }));
                         }}
                       >
                         {isEditing ? 'Close' : 'Adjust'}
@@ -368,7 +412,62 @@ export default function InventoryPage() {
                               </button>
                             </div>
                           </div>
+                          <div>
+                            <label className="text-xs font-medium text-slate-600">
+                              Auto-deduct per order
+                            </label>
+                            <div className="mt-1 flex gap-2">
+                              <input
+                                type="number"
+                                min={0}
+                                step="any"
+                                className="w-24 rounded-lg border px-3 py-2 text-sm"
+                                value={draftUsagePerOrder[item._id] ?? String(item.usagePerOrder)}
+                                onChange={(e) =>
+                                  setDraftUsagePerOrder((d) => ({ ...d, [item._id]: e.target.value }))
+                                }
+                              />
+                              <button
+                                type="button"
+                                className="btn-secondary btn-sm"
+                                disabled={busy}
+                                onClick={() => applyDraftUsagePerOrder(item)}
+                              >
+                                Save
+                              </button>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-slate-600">
+                              Auto-deduct per kg
+                            </label>
+                            <div className="mt-1 flex gap-2">
+                              <input
+                                type="number"
+                                min={0}
+                                step="any"
+                                className="w-24 rounded-lg border px-3 py-2 text-sm"
+                                value={draftUsagePerKg[item._id] ?? String(item.usagePerKg)}
+                                onChange={(e) =>
+                                  setDraftUsagePerKg((d) => ({ ...d, [item._id]: e.target.value }))
+                                }
+                              />
+                              <button
+                                type="button"
+                                className="btn-secondary btn-sm"
+                                disabled={busy}
+                                onClick={() => applyDraftUsagePerKg(item)}
+                              >
+                                Save
+                              </button>
+                            </div>
+                          </div>
                         </div>
+                        <p className="mt-2 text-xs text-muted">
+                          When set, this item is deducted automatically every time an order is confirmed
+                          received at your shop — per-order amount, plus per-kg amount × the order's
+                          verified weight.
+                        </p>
                       </div>
                     )}
                   </div>

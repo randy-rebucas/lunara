@@ -7,7 +7,7 @@ One row per module audited with the `audit-module` skill. Findings counts are
 |---|---|---|---|
 | Customers | [customers.md](customers.md) | 2026-07-23 | 2 / 4 |
 | Dashboard (root) | [dashboard.md](dashboard.md) | 2026-07-23 | 0 / 1 |
-| Inventory | [inventory.md](inventory.md) | 2026-07-23 (re-audited) | 0 / 3 |
+| Inventory | [inventory.md](inventory.md) | 2026-08-25 (re-audited) | 0 / 2 |
 | Login | [login.md](login.md) | 2026-07-23 | 1 / 1 |
 | Messages | [messages.md](messages.md) | 2026-07-23 | 3 / 2 |
 | Notifications | [notifications.md](notifications.md) | 2026-07-23 | 1 / 1 |

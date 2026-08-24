@@ -83,9 +83,9 @@ const DASHBOARD_IN_PROCESSING_STATUSES = LAUNDRY_PROCESSING_STATUSES.filter(
 );
 
 const DEFAULT_INVENTORY = [
-  { sku: 'DET-001', name: 'Liquid detergent', category: 'detergent', quantity: 48, unit: 'L', lowStockThreshold: 10 },
-  { sku: 'DET-002', name: 'Fabric softener', category: 'detergent', quantity: 32, unit: 'L', lowStockThreshold: 8 },
-  { sku: 'BAG-001', name: 'Customer laundry bags', category: 'supplies', quantity: 200, unit: 'pcs', lowStockThreshold: 50 },
+  { sku: 'DET-001', name: 'Liquid detergent', category: 'detergent', quantity: 48, unit: 'L', lowStockThreshold: 10, usagePerKg: 0.03 },
+  { sku: 'DET-002', name: 'Fabric softener', category: 'detergent', quantity: 32, unit: 'L', lowStockThreshold: 8, usagePerKg: 0.02 },
+  { sku: 'BAG-001', name: 'Customer laundry bags', category: 'supplies', quantity: 200, unit: 'pcs', lowStockThreshold: 50, usagePerOrder: 1 },
   { sku: 'TAG-001', name: 'Order tag rolls', category: 'supplies', quantity: 15, unit: 'rolls', lowStockThreshold: 3 },
   { sku: 'HGR-001', name: 'Hangers', category: 'supplies', quantity: 120, unit: 'pcs', lowStockThreshold: 30 },
   { sku: 'FIL-001', name: 'Lint filters', category: 'maintenance', quantity: 24, unit: 'pcs', lowStockThreshold: 6 },
@@ -930,6 +930,8 @@ export class PartnerOperationsService {
       unit: item.unit,
       lowStockThreshold: item.lowStockThreshold,
       isLowStock: item.quantity <= item.lowStockThreshold,
+      usagePerOrder: item.usagePerOrder,
+      usagePerKg: item.usagePerKg,
     };
   }
 
@@ -953,8 +955,27 @@ export class PartnerOperationsService {
     }
     if (dto.quantity != null) item.quantity = dto.quantity;
     if (dto.lowStockThreshold != null) item.lowStockThreshold = dto.lowStockThreshold;
+    if (dto.usagePerOrder != null) item.usagePerOrder = dto.usagePerOrder;
+    if (dto.usagePerKg != null) item.usagePerKg = dto.usagePerKg;
     await item.save();
     return { success: true, data: this.formatInventoryItem(item) };
+  }
+
+  /** Auto-deducts consumable stock (detergent/bags/etc.) for one completed order — called once
+   * from ShopReceivingService.confirmItems, which already guards against being run twice for the
+   * same order. Items with usagePerOrder/usagePerKg both 0 (the default) are left untouched. */
+  async deductInventoryForOrder(branchId: Types.ObjectId, verifiedWeightKg: number) {
+    const items = await this.inventoryModel.find({
+      branchId,
+      $or: [{ usagePerOrder: { $gt: 0 } }, { usagePerKg: { $gt: 0 } }],
+    });
+    await Promise.all(
+      items.map((item) => {
+        const used = item.usagePerOrder + item.usagePerKg * verifiedWeightKg;
+        item.quantity = Math.max(0, item.quantity - used);
+        return item.save();
+      }),
+    );
   }
 
   async getReports(userId: string, role: UserRole, days = 7) {

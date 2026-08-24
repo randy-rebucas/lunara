@@ -201,6 +201,10 @@ export interface PartnerInventoryItem {
   unit: string;
   lowStockThreshold: number;
   isLowStock?: boolean;
+  /** Units auto-deducted from stock once per completed order. 0 = not auto-tracked. */
+  usagePerOrder: number;
+  /** Units auto-deducted from stock per kg of verified laundry weight on a completed order. 0 = not auto-tracked. */
+  usagePerKg: number;
 }
 
 export interface PartnerReportBranchBreakdown {
