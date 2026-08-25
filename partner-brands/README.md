@@ -32,3 +32,5 @@ Unset fields fall back to the default Lunara app's values — only override what
 brand actually changes. `partnerId` should match the `partnerId` returned by
 `GET /api/v1/public/branding` for this partner's customer-web domain, since both clients tag
 bookings with the same `x-lunara-partner-id` header for auto-dispatch.
+
+LUNARA_PARTNER_SLUG=3d-laundry-hub npx eas env:create --scope project --name EXPO_PUBLIC_API_URL --value https://lunara-17o7.onrender.com --environment production --visibility plaintext

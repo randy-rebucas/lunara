@@ -62,6 +62,8 @@ eas build --platform android --profile production-jelave
 
 LUNARA_PARTNER_SLUG=3d-laundry-hub npm run dev --workspace=@lunara/customer-mobile
 eas build --platform android --profile production-3d-laundry-hub
+
+LUNARA_PARTNER_SLUG=3d-laundry-hub npx eas env:create --scope project --name EXPO_PUBLIC_API_URL --value https://lunara-17o7.onrender.com --environment production --visibility plaintext
 ```
 
 ## Mobile Apps
