@@ -10,6 +10,7 @@ import {
   Laptop,
   Shield,
   ShieldCheck,
+  ShieldAlert,
   Truck,
   Upload,
   UserCog,
@@ -234,6 +235,8 @@ export function UsersBoard() {
   const [departmentDraft, setDepartmentDraft] = useState('');
   const [savingDepartment, setSavingDepartment] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
+  const [cleaningSpam, setCleaningSpam] = useState(false);
+  const [spamCleanupResult, setSpamCleanupResult] = useState('');
   const importInputRef = useRef<HTMLInputElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
@@ -437,6 +440,26 @@ export function UsersBoard() {
     }
   }
 
+  async function cleanupSpam() {
+    if (!window.confirm('Delete all accounts with "APPSBUILDERSPH" in their email? This cannot be undone.')) {
+      return;
+    }
+    setCleaningSpam(true);
+    setActionError('');
+    setSpamCleanupResult('');
+    try {
+      const result = await adminFetch<{ deletedCount: number }>('/users/cleanup-spam', {
+        method: 'POST',
+      });
+      setSpamCleanupResult(`Deleted ${result.deletedCount} spam account${result.deletedCount === 1 ? '' : 's'}.`);
+      await reload();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Spam cleanup failed');
+    } finally {
+      setCleaningSpam(false);
+    }
+  }
+
   async function saveDepartment() {
     if (!selected) return;
     setSavingDepartment(true);
@@ -538,6 +561,15 @@ export function UsersBoard() {
               <Upload className="h-3.5 w-3.5" aria-hidden />
               {importing ? 'Importing…' : 'Import users'}
             </button>
+            <button
+              type="button"
+              className="btn-outline btn-sm gap-1.5 !text-red-600"
+              onClick={() => void cleanupSpam()}
+              disabled={cleaningSpam}
+            >
+              <ShieldAlert className="h-3.5 w-3.5" aria-hidden />
+              {cleaningSpam ? 'Cleaning…' : 'Clean up spam'}
+            </button>
             <Link href="/riders" className="btn-outline btn-sm">
               Riders
             </Link>
@@ -551,6 +583,7 @@ export function UsersBoard() {
       {error && <div className="alert-error mb-4" role="alert">{error}</div>}
       {actionError && <div className="alert-error mb-4" role="alert">{actionError}</div>}
       {importSummary && <div className="alert-info mb-4" role="status">{importSummary}</div>}
+      {spamCleanupResult && <div className="alert-info mb-4" role="status">{spamCleanupResult}</div>}
 
       {loading && !data ? (
         <div className="flex items-center gap-3 py-8 text-sm text-muted">

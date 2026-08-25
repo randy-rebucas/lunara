@@ -5,6 +5,10 @@ import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
 import { UserRole } from '@lunara/types';
 import { User, UserDocument } from './schemas/user.schema';
+import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
+
+/** Case-insensitive marker seen in a wave of spam signups; matched against the user's email. */
+export const SPAM_EMAIL_PATTERN = /APPSBUILDERSPH/i;
 
 export interface UserImportRow {
   email: string;
@@ -21,7 +25,21 @@ export interface UserImportResult {
 
 @Injectable()
 export class UsersService {
-  constructor(@InjectModel(User.name) private userModel: Model<UserDocument>) {}
+  constructor(
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
+  ) {}
+
+  /** Deletes users (and their customer profiles) with emails matching the spam marker. */
+  async cleanupSpamUsers() {
+    const spamUsers = await this.userModel.find({ email: { $regex: SPAM_EMAIL_PATTERN } }).select('_id');
+    if (spamUsers.length === 0) return { success: true, data: { deletedCount: 0 } };
+
+    const userIds = spamUsers.map((u) => u._id);
+    await this.customerModel.deleteMany({ userId: { $in: userIds } });
+    const result = await this.userModel.deleteMany({ _id: { $in: userIds } });
+    return { success: true, data: { deletedCount: result.deletedCount } };
+  }
 
   async getProfile(userId: string) {
     const user = await this.userModel.findById(userId).select('-passwordHash');

@@ -80,4 +80,10 @@ export class UsersController {
   bulkImport(@Body('rows') rows: UserImportRow[]) {
     return this.usersService.bulkImport(rows ?? []);
   }
+
+  @Post('cleanup-spam')
+  @Roles(UserRole.ADMIN)
+  cleanupSpam() {
+    return this.usersService.cleanupSpamUsers();
+  }
 }
