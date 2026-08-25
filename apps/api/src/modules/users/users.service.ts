@@ -6,9 +6,22 @@ import { randomBytes } from 'crypto';
 import { UserRole } from '@lunara/types';
 import { User, UserDocument } from './schemas/user.schema';
 import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
+import { Order, OrderDocument } from '../orders/schemas/order.schema';
 
-/** Case-insensitive marker seen in a wave of spam signups; matched against the user's email. */
-export const SPAM_EMAIL_PATTERN = /APPSBUILDERSPH/i;
+/** Case-insensitive markers seen in waves of spam signups (each is a fixed prefix/tag followed by
+ *  a random suffix); matched against the user's email. Add new confirmed markers here. */
+const SPAM_EMAIL_MARKERS = ['APPSBUILDERSPH', 'BITCHASSNIGGA'];
+export const SPAM_EMAIL_PATTERN = new RegExp(SPAM_EMAIL_MARKERS.join('|'), 'i');
+
+/**
+ * Matches the other recurring bot-signup shape: a gmail.com address whose local part is a
+ * flat 6-10 char run of lowercase letters/digits with no separators (dots, plus-tags, underscores)
+ * — e.g. "2oilg2pu@gmail.com", "tsmtsifr@gmail.com". Real addresses this short almost always contain
+ * a name fragment, a separator, or a longer/more structured handle, so this is a reasonable signal
+ * on its own — but since it's fuzzier than the exact-marker match above, cleanup additionally
+ * requires zero order history before deleting, so a false positive never destroys real order data.
+ */
+export const SPAM_RANDOM_GMAIL_PATTERN = /^[a-z0-9]{6,10}@gmail\.com$/i;
 
 export interface UserImportRow {
   email: string;
@@ -28,16 +41,46 @@ export class UsersService {
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
+    @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
   ) {}
 
-  /** Deletes users (and their customer profiles) with emails matching the spam marker. */
+  /**
+   * Deletes users (and their customer profiles) matching known spam-signup patterns.
+   * Exact-marker matches (SPAM_EMAIL_PATTERN) are deleted unconditionally. Fuzzy matches
+   * (SPAM_RANDOM_GMAIL_PATTERN) are only deleted if the account has no order history, so a
+   * false-positive match on a real random-looking gmail address never destroys real orders.
+   */
   async cleanupSpamUsers() {
-    const spamUsers = await this.userModel.find({ email: { $regex: SPAM_EMAIL_PATTERN } }).select('_id');
-    if (spamUsers.length === 0) return { success: true, data: { deletedCount: 0 } };
+    const markedUsers = await this.userModel
+      .find({ email: { $regex: SPAM_EMAIL_PATTERN } })
+      .select('_id');
 
-    const userIds = spamUsers.map((u) => u._id);
-    await this.customerModel.deleteMany({ userId: { $in: userIds } });
-    const result = await this.userModel.deleteMany({ _id: { $in: userIds } });
+    const fuzzyCandidates = await this.userModel
+      .find({ role: UserRole.CUSTOMER, email: { $regex: SPAM_RANDOM_GMAIL_PATTERN } })
+      .select('_id');
+
+    const toDelete = [...markedUsers.map((u) => u._id)];
+    for (const candidate of fuzzyCandidates) {
+      const customer = await this.customerModel.findOne({ userId: candidate._id }).select('_id');
+      const hasOrders = customer
+        ? (await this.orderModel.exists({ customerId: customer._id })) !== null
+        : false;
+      if (!hasOrders) toDelete.push(candidate._id);
+    }
+
+    if (toDelete.length === 0) return { success: true, data: { deletedCount: 0 } };
+
+    await this.customerModel.deleteMany({ userId: { $in: toDelete } });
+    const result = await this.userModel.deleteMany({ _id: { $in: toDelete } });
+    return { success: true, data: { deletedCount: result.deletedCount } };
+  }
+
+  /** Deletes the given users and their customer profiles outright, no safety checks — the caller
+   *  (an admin explicitly selecting rows) is the safety check. */
+  async bulkDelete(ids: string[]) {
+    if (!ids.length) throw new BadRequestException('No user ids provided');
+    await this.customerModel.deleteMany({ userId: { $in: ids } });
+    const result = await this.userModel.deleteMany({ _id: { $in: ids } });
     return { success: true, data: { deletedCount: result.deletedCount } };
   }
 

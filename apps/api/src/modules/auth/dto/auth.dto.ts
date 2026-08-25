@@ -1,7 +1,9 @@
 import { IsEmail, IsOptional, IsString, MaxLength, MinLength, Matches } from 'class-validator';
 
-/** Rejects the "APPSBUILDERSPH" spam-signup marker anywhere in the email, case-insensitive. */
-const NOT_SPAM_EMAIL = /^(?!.*APPSBUILDERSPH).*$/i;
+/** Rejects known spam-signup markers anywhere in the email, case-insensitive. Keep in sync with
+ *  SPAM_EMAIL_MARKERS in users.service.ts. */
+const SPAM_EMAIL_MARKERS = ['APPSBUILDERSPH', 'BITCHASSNIGGA'];
+const NOT_SPAM_EMAIL = new RegExp(`^(?!.*(?:${SPAM_EMAIL_MARKERS.join('|')})).*$`, 'i');
 
 export class RegisterDto {
   @IsOptional()

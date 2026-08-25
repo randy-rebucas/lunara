@@ -378,6 +378,34 @@ export function UsersBoard() {
     }
   }
 
+  async function bulkDelete() {
+    const ids = Array.from(checkedIds);
+    if (!ids.length) return;
+    if (
+      !window.confirm(
+        `Delete ${ids.length} selected account${ids.length === 1 ? '' : 's'}? This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setBulkBusy(true);
+    setActionError('');
+    try {
+      await adminFetch<{ deletedCount: number }>('/users/bulk', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+      setData((prev) => (prev ?? []).filter((u) => !checkedIds.has(u._id)));
+      setCheckedIds(new Set());
+      if (selectedId && ids.includes(selectedId)) setSelectedId(null);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Bulk delete failed');
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   function exportSelected() {
     // With nothing checked, export every row matching the active filters/search — not just the
     // current page's `limit`-capped `visible` slice, which would silently truncate the export.
@@ -722,6 +750,14 @@ export function UsersBoard() {
                         onClick={() => void bulkActivate(false)}
                       >
                         Deactivate
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-outline btn-sm !border-red-600 !text-red-600"
+                        disabled={bulkBusy}
+                        onClick={() => void bulkDelete()}
+                      >
+                        Delete
                       </button>
                     </>
                   ) : null}

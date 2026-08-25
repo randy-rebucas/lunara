@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -85,5 +86,11 @@ export class UsersController {
   @Roles(UserRole.ADMIN)
   cleanupSpam() {
     return this.usersService.cleanupSpamUsers();
+  }
+
+  @Delete('bulk')
+  @Roles(UserRole.ADMIN)
+  bulkDelete(@Body('ids') ids: string[]) {
+    return this.usersService.bulkDelete(ids ?? []);
   }
 }
