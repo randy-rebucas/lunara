@@ -11,7 +11,7 @@ import { PortalHeaderActions } from './portal-header-actions';
 // ── Icons ──────────────────────────────────────────────────────────────────
 function Icon({ d, d2 }: { d: string; d2?: string }) {
   return (
-    <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+    <svg className="h-[18px] w-[18px] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
       <path strokeLinecap="round" strokeLinejoin="round" d={d} />
       {d2 && <path strokeLinecap="round" strokeLinejoin="round" d={d2} />}
     </svg>
@@ -129,25 +129,20 @@ function SidebarNav({
   const pathname = usePathname();
 
   return (
-    <nav className="space-y-4">
+    <nav className="space-y-1">
       {groups.map((group) => (
         <div key={group.label}>
-          <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-            {group.label}
-          </p>
-          <div className="space-y-0.5">
-            {group.items.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={onNavigate}
-                className={`flex items-center gap-2.5 ${isActive(pathname, item.href) ? 'nav-link-active' : 'nav-link'}`}
-              >
-                {item.icon}
-                {item.label}
-              </Link>
-            ))}
-          </div>
+          {group.items.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={onNavigate}
+              className={`flex items-center gap-3 ${isActive(pathname, item.href) ? 'nav-link-active' : 'nav-link'}`}
+            >
+              {item.icon}
+              {item.label}
+            </Link>
+          ))}
         </div>
       ))}
     </nav>
@@ -195,8 +190,8 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
           sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
-        <div className="flex h-full flex-col p-4">
-          <div className="mb-6 px-1">
+        <div className="flex h-full flex-col p-5">
+          <div className="mb-7 px-1">
             <BrandMark partner={partner} />
           </div>
 
@@ -208,25 +203,8 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
             <SidebarNav groups={groups} onNavigate={() => setSidebarOpen(false)} />
           </div>
 
-          {/* Bottom: Profile, Settings, Sign out */}
-          <div className="mt-4 space-y-0.5 border-t border-border/60 pt-3">
-            <Link
-              href="/profile"
-              onClick={() => setSidebarOpen(false)}
-              className={`flex items-center gap-2.5 ${isActive(pathname, '/profile') ? 'nav-link-active' : 'nav-link'}`}
-            >
-              {Icons.profile}
-              Profile
-            </Link>
-            <Link
-              href="/settings"
-              onClick={() => setSidebarOpen(false)}
-              className={`flex items-center gap-2.5 ${isActive(pathname, '/settings') ? 'nav-link-active' : 'nav-link'}`}
-            >
-              {Icons.settings}
-              Settings
-            </Link>
-            <button type="button" onClick={logout} className="nav-link flex w-full items-center gap-2.5 text-left">
+          <div className="mt-4 border-t border-border/60 pt-3">
+            <button type="button" onClick={logout} className="nav-link flex w-full items-center gap-3 text-left">
               {Icons.signout}
               Sign out
             </button>
@@ -242,7 +220,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-border/60 bg-surface/95 px-4 backdrop-blur-sm sm:px-6 lg:px-8">
+        <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-border/60 bg-surface/95 px-4 backdrop-blur-sm sm:px-6 lg:px-8">
           <button
             type="button"
             className="inline-flex rounded-lg p-2 text-muted hover:bg-slate-100 lg:hidden"

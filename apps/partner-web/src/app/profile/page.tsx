@@ -78,6 +78,7 @@ export default function PortalProfilePage() {
     try {
       await updateOwnProfile(trimmed);
       await reloadProfile();
+      window.dispatchEvent(new Event('lunara:profile-updated'));
       toast.success('Name updated');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not update name');
@@ -94,6 +95,7 @@ export default function PortalProfilePage() {
     try {
       await uploadOwnAvatar(file);
       await reloadProfile();
+      window.dispatchEvent(new Event('lunara:profile-updated'));
       toast.success('Photo updated');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not upload photo');
@@ -107,6 +109,7 @@ export default function PortalProfilePage() {
     try {
       await removeOwnAvatar();
       await reloadProfile();
+      window.dispatchEvent(new Event('lunara:profile-updated'));
       toast.success('Photo removed');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not remove photo');

@@ -365,6 +365,23 @@ export class ProcessingService {
     return { success: true, data: await this.buildProcessingView(order) };
   }
 
+  async clearShelfSlot(orderId: string, userId: string, role: UserRole) {
+    const order = await this.orderModel.findById(orderId);
+    if (!order) throw new NotFoundException('Order not found');
+
+    const branchId = await resolvePortalBranchId(this.userModel, userId, role);
+    assertOrderPortalAccess(order, userId, role, branchId);
+
+    if (order.laundryProcessing) {
+      order.laundryProcessing.shelfSlot = undefined;
+      order.laundryProcessing.shelfAssignedAt = undefined;
+      order.laundryProcessing.shelfAssignedBy = undefined;
+      await order.save();
+    }
+
+    return { success: true, data: await this.buildProcessingView(order) };
+  }
+
   async findOnShelf(query: string, userId: string, role: UserRole) {
     const trimmed = query.trim();
     if (!trimmed) throw new BadRequestException('Search query is required');

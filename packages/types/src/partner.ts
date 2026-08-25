@@ -109,8 +109,28 @@ export interface PartnerDashboardData {
     staffMembers: number;
     lowStockItems: number;
   };
-  revenue: { today: number; week: number; todayOrders: number; weekOrders: number; todayPayout: number; weekPayout: number };
+  revenue: {
+    today: number;
+    week: number;
+    todayOrders: number;
+    weekOrders: number;
+    todayPayout: number;
+    weekPayout: number;
+    series: { date: string; revenue: number }[];
+  };
+  services: { key: string; label: string; count: number }[];
+  trends: {
+    ordersToday: PartnerDashboardTrend;
+    completedToday: PartnerDashboardTrend;
+    revenueToday: PartnerDashboardTrend;
+    staffMembers: PartnerDashboardTrend;
+  };
   recentOrders: PartnerOrderSummary[];
+}
+
+export interface PartnerDashboardTrend {
+  value: number;
+  deltaPct: number | null;
 }
 
 export interface PartnerOrderSummary {

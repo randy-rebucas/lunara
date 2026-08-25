@@ -308,7 +308,7 @@ export default function SettlementsPage() {
                                 )}
                                 {!isLoadingThis && orders && orders.length > 0 && (
                                   <div className="overflow-x-auto">
-                                  <table className="w-full text-sm" style={{ minWidth: '480px' }}>
+                                  <table className="w-full text-sm" style={{ minWidth: 'unset' }}>
                                     <thead>
                                       <tr className="text-left text-xs text-muted">
                                         <th className="pb-2 pr-4 font-medium">Completed</th>

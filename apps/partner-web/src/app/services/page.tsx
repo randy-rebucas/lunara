@@ -195,6 +195,8 @@ function addonCategoryLabel(category?: string) {
   return ADDON_CATEGORY_LABELS[category] ?? category;
 }
 
+type PricingTab = 'services' | 'addons' | 'garments' | 'machine';
+
 export default function ServicesPage() {
   const { ready } = useRequirePartner();
 
@@ -268,6 +270,13 @@ export default function ServicesPage() {
 
   const [rowError, setRowError] = useState('');
   const [expandedAddonsFor, setExpandedAddonsFor] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<PricingTab>('services');
+
+  useEffect(() => {
+    if (activeTab === 'garments' && hiddenServiceTypes.includes(BookingType.DRY_CLEANING)) {
+      setActiveTab('services');
+    }
+  }, [activeTab, hiddenServiceTypes]);
 
   useEffect(() => {
     if (!pricing) return;
@@ -598,7 +607,34 @@ export default function ServicesPage() {
 
       {pricing && (
         <>
-          <div className="section-panel mt-6 overflow-hidden">
+          <div className="mt-6 flex gap-1 overflow-x-auto rounded-xl border border-border bg-slate-50 p-1">
+            {(
+              [
+                { id: 'services', label: 'Services' },
+                { id: 'addons', label: 'Add-ons' },
+                ...(!hiddenServiceTypes.includes(BookingType.DRY_CLEANING)
+                  ? [{ id: 'garments' as const, label: 'Dry cleaning garments' }]
+                  : []),
+                { id: 'machine', label: 'Machine load' },
+              ] satisfies { id: PricingTab; label: string }[]
+            ).map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition-colors sm:flex-1 ${
+                  activeTab === tab.id
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-muted hover:text-slate-700'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {activeTab === 'machine' && (
+          <div className="section-panel mt-4 overflow-hidden">
             <div className="border-b border-border px-4 py-3">
               <h2 className="text-sm font-semibold text-slate-900">Machine load capacity</h2>
               <p className="mt-0.5 text-xs text-muted">
@@ -617,8 +653,10 @@ export default function ServicesPage() {
               </label>
             </div>
           </div>
+          )}
 
-          <div className="section-panel mt-6 overflow-hidden">
+          {activeTab === 'services' && (
+          <div className="section-panel mt-4 overflow-hidden">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <h2 className="text-sm font-semibold text-slate-900">Services</h2>
               <button
@@ -896,8 +934,10 @@ export default function ServicesPage() {
               </table>
             </div>
           </div>
+          )}
 
-          <div className="section-panel mt-6 overflow-hidden">
+          {activeTab === 'addons' && (
+          <div className="section-panel mt-4 overflow-hidden">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <h2 className="text-sm font-semibold text-slate-900">Add-ons</h2>
               <button
@@ -1168,9 +1208,10 @@ export default function ServicesPage() {
               </table>
             </div>
           </div>
+          )}
 
-          {!hiddenServiceTypes.includes(BookingType.DRY_CLEANING) && (
-            <div className="section-panel mt-6 overflow-hidden">
+          {activeTab === 'garments' && !hiddenServiceTypes.includes(BookingType.DRY_CLEANING) && (
+            <div className="section-panel mt-4 overflow-hidden">
               <div className="border-b border-border px-4 py-3">
                 <h2 className="text-sm font-semibold text-slate-900">Dry cleaning garments</h2>
                 <p className="mt-1 text-xs text-muted">

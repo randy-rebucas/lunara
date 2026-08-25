@@ -287,6 +287,8 @@ export class PartnerOperationsService {
 
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
+    const startOfYesterday = new Date(startOfDay);
+    startOfYesterday.setDate(startOfYesterday.getDate() - 1);
     const weekStart = new Date(startOfDay);
     weekStart.setDate(weekStart.getDate() - 6);
 
@@ -308,6 +310,10 @@ export class PartnerOperationsService {
       staffCount,
       lowStock,
       recent,
+      todayCreated,
+      incomingYesterday,
+      completedYesterday,
+      staffCountYesterday,
     ] = await Promise.all([
       this.orderModel.countDocuments(incomingBase),
       this.orderModel.countDocuments({
@@ -332,6 +338,23 @@ export class PartnerOperationsService {
         ...(staffBranchIds ? { branchId: { $in: staffBranchIds } } : {}),
       }),
       this.orderModel.find(incomingBase).sort({ updatedAt: -1 }).limit(8),
+      this.orderModel.countDocuments({
+        ...scopeFilter,
+        createdAt: { $gte: startOfDay },
+      }),
+      this.orderModel.countDocuments({
+        ...scopeFilter,
+        createdAt: { $gte: startOfYesterday, $lt: startOfDay },
+      }),
+      this.orderModel.find({ ...revenueFilter, updatedAt: { $gte: startOfYesterday, $lt: startOfDay } }),
+      staffBranchIds
+        ? this.userModel.countDocuments({
+            role: UserRole.STAFF,
+            isActive: true,
+            branchId: { $in: staffBranchIds },
+            createdAt: { $lt: startOfDay },
+          })
+        : this.userModel.countDocuments({ role: UserRole.STAFF, isActive: true, createdAt: { $lt: startOfDay } }),
     ]);
 
     const commissionRateByBranchId =
@@ -356,6 +379,45 @@ export class PartnerOperationsService {
 
     const todayBreakdown = periodPayout(completedToday);
     const weekBreakdown = periodPayout(weekOrders);
+    const yesterdayBreakdown = periodPayout(completedYesterday);
+
+    const deltaPct = (todayValue: number, yesterdayValue: number): number | null =>
+      yesterdayValue > 0 ? Math.round(((todayValue - yesterdayValue) / yesterdayValue) * 100) : null;
+
+    const revenueSeries: { date: string; revenue: number }[] = [];
+    for (let i = 6; i >= 0; i -= 1) {
+      const day = new Date(startOfDay);
+      day.setDate(day.getDate() - i);
+      const nextDay = new Date(day);
+      nextDay.setDate(nextDay.getDate() + 1);
+      const dayRevenue = weekOrders
+        .filter((o) => o.updatedAt >= day && o.updatedAt < nextDay)
+        .reduce((s, o) => s + o.total, 0);
+      revenueSeries.push({ date: day.toISOString().slice(0, 10), revenue: dayRevenue });
+    }
+
+    const SERVICE_LABELS: Record<string, string> = {
+      wash_fold: 'Wash & Fold',
+      wash_dry: 'Wash & Dry',
+      wash_dry_fold: 'Wash, Dry & Fold',
+      wash_dry_fold_iron: 'Wash, Dry, Fold & Iron',
+      dry_cleaning: 'Dry Cleaning',
+      ironing: 'Ironing',
+    };
+    const serviceCounts = new Map<string, number>();
+    for (const o of weekOrders) {
+      const key = o.bookingType ?? 'other';
+      serviceCounts.set(key, (serviceCounts.get(key) ?? 0) + 1);
+    }
+    const sortedServices = [...serviceCounts.entries()].sort((a, b) => b[1] - a[1]);
+    const topServices = sortedServices.slice(0, 4);
+    const otherCount = sortedServices.slice(4).reduce((s, [, count]) => s + count, 0);
+    const services = topServices.map(([key, count]) => ({
+      key,
+      label: SERVICE_LABELS[key] ?? key.replace(/_/g, ' '),
+      count,
+    }));
+    if (otherCount > 0) services.push({ key: 'other', label: 'Other', count: otherCount });
 
     return {
       success: true,
@@ -370,11 +432,22 @@ export class PartnerOperationsService {
           staffMembers: staffCount,
           lowStockItems: lowStock,
         },
+        trends: {
+          ordersToday: { value: todayCreated, deltaPct: deltaPct(todayCreated, incomingYesterday) },
+          completedToday: {
+            value: completedToday.length,
+            deltaPct: deltaPct(completedToday.length, completedYesterday.length),
+          },
+          revenueToday: { value: todayBreakdown.gross, deltaPct: deltaPct(todayBreakdown.gross, yesterdayBreakdown.gross) },
+          staffMembers: { value: staffCount, deltaPct: deltaPct(staffCount, staffCountYesterday) },
+        },
+        services,
         revenue: {
           today: todayBreakdown.gross,
           week: weekBreakdown.gross,
           todayOrders: completedToday.length,
           weekOrders: weekOrders.length,
+          series: revenueSeries,
           todayPayout: todayBreakdown.payout,
           weekPayout: weekBreakdown.payout,
         },

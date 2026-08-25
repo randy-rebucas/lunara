@@ -202,8 +202,8 @@ export default function MessagesPage() {
   if (!ready) return <AuthLoading message="Loading messages…" />;
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col">
-      <div className="shrink-0 px-4 pt-4 sm:px-6">
+    <div className="-m-4 flex h-[calc(100vh-4rem)] flex-col sm:-m-6 lg:-m-8">
+      <div className="shrink-0 px-4 pt-4 sm:px-6 lg:px-8">
         <PageHeader
           title="Messages"
           description="Direct support channel with Lunara"
@@ -212,7 +212,7 @@ export default function MessagesPage() {
       </div>
 
       {/* Message list */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 lg:px-8">
         {!conversation && !error && (
           <p className="text-sm text-muted">Loading conversation…</p>
         )}
@@ -230,7 +230,7 @@ export default function MessagesPage() {
       </div>
 
       {/* Compose bar */}
-      <div className="shrink-0 border-t border-border/60 bg-surface px-4 py-3 sm:px-6">
+      <div className="shrink-0 border-t border-border/60 bg-surface px-4 py-3 sm:px-6 lg:px-8">
         {/* Attachment preview */}
         {pendingPreview && (
           <div className="mb-2 flex items-center gap-2">

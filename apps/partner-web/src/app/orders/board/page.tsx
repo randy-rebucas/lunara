@@ -32,12 +32,12 @@ function stageOf(order: PartnerOrderSummary): Stage {
 function OrderCard({
   order,
   stage,
-  busy,
+  busyKey,
   onAction,
 }: {
   order: PartnerOrderSummary;
   stage: Stage;
-  busy: boolean;
+  busyKey: string | null;
   onAction: (orderId: string, path: string) => void;
 }) {
   const portalUser = getPortalUser();
@@ -46,17 +46,19 @@ function OrderCard({
     portalUser?.role !== UserRole.STAFF ||
     !order.assignedStaffEmail ||
     order.assignedStaffEmail === portalUser.email;
+  const busy = busyKey !== null;
+
+  const acceptPath = `/partner/orders/${order._id}/accept`;
+  const jobAcceptPath = `/partner/orders/${order._id}/processing/accept`;
+  const advancePath = `/partner/orders/${order._id}/processing/advance`;
+  const deliveryPath = `/partner/orders/${order._id}/request-delivery`;
 
   return (
     <div className="card p-3">
       <Link href={`/orders/${order._id}`} className="block hover:text-primary">
         <div className="flex items-center gap-2">
           <p className="font-medium capitalize text-slate-900">{order.bookingType.replace(/_/g, ' ')}</p>
-          {order.subscriptionId && (
-            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
-              Recurring
-            </span>
-          )}
+          {order.subscriptionId && <span className="badge-primary text-[10px]">Recurring</span>}
         </div>
         <p className="mt-1 text-sm font-semibold text-primary">{formatPeso(order.total)}</p>
         {order.currentStepLabel && (
@@ -74,9 +76,9 @@ function OrderCard({
             type="button"
             disabled={busy}
             className="btn-primary btn-sm flex-1"
-            onClick={() => onAction(order._id, `/partner/orders/${order._id}/accept`)}
+            onClick={() => onAction(order._id, acceptPath)}
           >
-            Accept order
+            {busyKey === order._id + acceptPath ? 'Accepting…' : 'Accept order'}
           </button>
         )}
 
@@ -91,9 +93,9 @@ function OrderCard({
             type="button"
             disabled={busy}
             className="btn-accent btn-sm flex-1"
-            onClick={() => onAction(order._id, `/partner/orders/${order._id}/processing/accept`)}
+            onClick={() => onAction(order._id, jobAcceptPath)}
           >
-            Accept job
+            {busyKey === order._id + jobAcceptPath ? 'Accepting…' : 'Accept job'}
           </button>
         )}
         {stage === 'process' && jobAccepted && (
@@ -102,9 +104,9 @@ function OrderCard({
             disabled={busy || !jobIsMine}
             title={jobIsMine ? undefined : `Assigned to ${order.assignedStaffEmail ?? 'another staff member'}`}
             className="btn-primary btn-sm flex-1"
-            onClick={() => onAction(order._id, `/partner/orders/${order._id}/processing/advance`)}
+            onClick={() => onAction(order._id, advancePath)}
           >
-            Advance stage
+            {busyKey === order._id + advancePath ? 'Advancing…' : 'Advance stage'}
           </button>
         )}
 
@@ -113,9 +115,9 @@ function OrderCard({
             type="button"
             disabled={busy}
             className="btn-outline btn-sm flex-1"
-            onClick={() => onAction(order._id, `/partner/orders/${order._id}/request-delivery`)}
+            onClick={() => onAction(order._id, deliveryPath)}
           >
-            Request delivery
+            {busyKey === order._id + deliveryPath ? 'Requesting…' : 'Request delivery'}
           </button>
         )}
 
@@ -195,11 +197,11 @@ export default function StaffBoardPage() {
 
       {error && <div className="alert-error mt-4">{error}</div>}
 
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:overflow-x-auto sm:overscroll-x-contain sm:pb-2 pb-safe">
+      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {columns.map((col) => (
           <div
             key={col.stage}
-            className="flex flex-col rounded-lg border border-border/60 bg-surface-muted sm:w-72 sm:shrink-0"
+            className="flex flex-col rounded-lg border border-border/60 bg-surface-muted"
           >
             <div className="border-b border-border/60 px-3 py-2">
               <p className="text-sm font-semibold text-slate-900">{col.title}</p>
@@ -217,7 +219,7 @@ export default function StaffBoardPage() {
                     key={o._id}
                     order={o}
                     stage={col.stage}
-                    busy={busyKey !== null}
+                    busyKey={busyKey}
                     onAction={action}
                   />
                 ))

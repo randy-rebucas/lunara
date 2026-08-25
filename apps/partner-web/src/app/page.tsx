@@ -5,14 +5,23 @@ import { useCallback, useMemo } from 'react';
 import type { PartnerDashboardData, PartnerOrderSummary } from '@lunara/types';
 import { AuthLoading } from '../components/auth-loading';
 import { DataPageStatus } from '../components/data-page-status';
-import { Card, CardBody, LiveBadge, StatCard } from '../components/ui/card';
+import { LiveBadge, StatCard, StatusPill } from '../components/ui/card';
 import { PageHeader } from '../components/ui/page-header';
+import { Icon, ICONS } from '../components/ui/icon';
+import { DonutChart, DonutLegend, RevenueLineChart, withDonutColors } from '../components/dash-charts';
 import { useRequirePartner } from '../hooks/use-protected-page';
 import { formatPeso } from '../lib/format-peso';
 import { partnerOrderHref } from '../lib/partner-order-links';
 import { getPortalUser, partnerFetch } from '../lib/partner-api';
 import { usePartnerQuery } from '../lib/use-partner-query';
 import { usePartnerPipelineSocket } from '../lib/use-partner-pipeline-socket';
+
+const QUICK_ACTIONS = [
+  { href: '/orders/incoming', label: 'Incoming orders', icon: ICONS.receipt },
+  { href: '/orders', label: 'Processing queue', icon: ICONS.list },
+  { href: '/staff', label: 'Staff team', icon: ICONS.users },
+  { href: '/inventory', label: 'Inventory', icon: ICONS.shelf },
+] as const;
 
 function orderActionHint(order: PartnerOrderSummary): string | null {
   if (order.canAccept) return 'Awaiting acceptance';
@@ -115,139 +124,136 @@ export default function PartnerDashboardPage() {
             </div>
           )}
 
-          <div className="mt-6 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-            <Link href="/orders/incoming" className="btn-primary btn-sm text-center">
-              Incoming orders
-            </Link>
-            <Link href="/orders" className="btn-outline btn-sm text-center">
-              Processing queue
-            </Link>
-            <Link href="/staff" className="btn-outline btn-sm text-center">
-              Staff team
-            </Link>
-            <Link href="/inventory" className="btn-outline btn-sm text-center">
-              Inventory
-            </Link>
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {QUICK_ACTIONS.map((a) => (
+              <Link key={a.href} href={a.href} className="quick-action-tile">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <Icon d={a.icon} />
+                </span>
+                <span className="text-sm font-medium text-slate-700">{a.label}</span>
+              </Link>
+            ))}
           </div>
 
-          <div className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-3">
+          <div className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
             <StatCard
-              label="Incoming pipeline"
-              value={data.counts.incoming}
+              label="Today's orders"
+              value={data.trends.ordersToday.value}
               href="/orders/incoming"
-              warning={data.counts.awaitingAccept > 0}
+              trend={{ deltaPct: data.trends.ordersToday.deltaPct }}
             />
             <StatCard
-              label="In processing"
-              value={data.counts.inProcessing}
-              href="/orders"
-            />
-            <StatCard
-              label="Ready for delivery"
-              value={data.counts.readyForDelivery}
-              href="/orders/progress"
-              accent="secondary"
-            />
-            <StatCard
-              label="Completed today"
-              value={data.counts.completedToday}
-              href="/revenue"
+              label="Completed orders"
+              value={data.trends.completedToday.value}
+              href="/orders/history"
               accent="accent"
+              trend={{ deltaPct: data.trends.completedToday.deltaPct }}
+            />
+            <StatCard
+              label="Revenue"
+              value={formatPeso(data.trends.revenueToday.value, true)}
+              href="/revenue"
+              accent="secondary"
+              trend={{ deltaPct: data.trends.revenueToday.deltaPct }}
             />
             <StatCard
               label="Staff members"
-              value={data.counts.staffMembers}
+              value={data.trends.staffMembers.value}
               href="/staff"
-            />
-            <StatCard
-              label="Low stock alerts"
-              value={data.counts.lowStockItems}
-              href="/inventory"
-              warning={data.counts.lowStockItems > 0}
+              trend={{ deltaPct: data.trends.staffMembers.deltaPct }}
             />
           </div>
 
-          <div className="mt-8 grid gap-4 sm:grid-cols-2">
-            <Card className="!border-accent/25 !bg-accent/5">
-              <CardBody>
-                <p className="text-sm font-medium text-muted">Revenue today</p>
-                <p className="mt-1 text-3xl font-semibold tracking-tight text-accent">
-                  {formatPeso(data.revenue.todayPayout ?? data.revenue.today)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {data.revenue.todayOrders} completed order
-                  {data.revenue.todayOrders === 1 ? '' : 's'}
-                </p>
-                <Link href="/revenue" className="link-primary mt-3 inline-block text-sm">
-                  Revenue details →
+          <div className="mt-8 grid gap-4 lg:grid-cols-3">
+            <section className="section-panel lg:col-span-2">
+              <div className="section-panel-header flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900">Recent orders</h3>
+                  <p className="mt-0.5 text-sm text-muted">
+                    Pickup, intake, and orders moving through your shop
+                  </p>
+                </div>
+                <Link href="/orders/incoming" className="link-primary text-sm">
+                  View all →
                 </Link>
-              </CardBody>
-            </Card>
-            <Card>
-              <CardBody>
-                <p className="text-sm font-medium text-muted">Revenue (7 days)</p>
-                <p className="mt-1 text-3xl font-semibold tracking-tight text-primary">
-                  {formatPeso(data.revenue.weekPayout ?? data.revenue.week)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {data.revenue.weekOrders} completed order
-                  {data.revenue.weekOrders === 1 ? '' : 's'}
-                </p>
-                <Link href="/reports" className="link-primary mt-3 inline-block text-sm">
-                  Operational reports →
-                </Link>
-              </CardBody>
-            </Card>
-          </div>
-
-          <section className="section-panel mt-10">
-            <div className="section-panel-header flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900">Recent pipeline activity</h3>
-                <p className="mt-0.5 text-sm text-muted">
-                  Pickup, intake, and orders moving through your shop
-                </p>
               </div>
-              <Link href="/orders/incoming" className="link-primary text-sm">
-                View all →
-              </Link>
-            </div>
-            <div className="divide-y divide-border/60">
-              {data.recentOrders.length === 0 && (
-                <p className="px-6 py-8 text-sm text-muted sm:px-8">
-                  No active pipeline orders right now. New assignments appear here when Lunara dispatches
-                  to your shop.
-                </p>
-              )}
-              {data.recentOrders.map((o) => {
-                const hint = orderActionHint(o);
-                return (
-                  <Link
-                    key={o._id}
-                    href={partnerOrderHref(o)}
-                    className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 transition-colors hover:bg-slate-50/80 sm:px-8"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-medium capitalize text-slate-900">
-                        {o.bookingType.replace(/_/g, ' ')}
-                      </p>
-                      <p className="text-sm capitalize text-muted">
-                        {o.status.replace(/_/g, ' ')}
-                        {o.branchName ? ` · ${o.branchName}` : ''}
-                      </p>
-                      {hint && (
-                        <p className="mt-1 text-xs font-medium text-amber-700">{hint}</p>
-                      )}
-                      {o.slaLabel && (
-                        <p className="mt-0.5 text-xs text-muted-foreground">{o.slaLabel}</p>
-                      )}
-                    </div>
-                    <p className="w-full font-semibold text-slate-900 sm:w-auto sm:text-right">{formatPeso(o.total)}</p>
+              <div className="divide-y divide-border/60">
+                {data.recentOrders.length === 0 && (
+                  <p className="px-6 py-8 text-sm text-muted sm:px-8">
+                    No active pipeline orders right now. New assignments appear here when Lunara dispatches
+                    to your shop.
+                  </p>
+                )}
+                {data.recentOrders.map((o) => {
+                  const hint = orderActionHint(o);
+                  return (
+                    <Link
+                      key={o._id}
+                      href={partnerOrderHref(o)}
+                      className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 transition-colors hover:bg-slate-50/80 sm:px-8"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium capitalize text-slate-900">
+                          {o.bookingType.replace(/_/g, ' ')}
+                        </p>
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                          <StatusPill status={o.status} />
+                          {o.branchName && <span className="text-sm text-muted">{o.branchName}</span>}
+                        </div>
+                        {hint && (
+                          <p className="mt-1 text-xs font-medium text-amber-700">{hint}</p>
+                        )}
+                        {o.slaLabel && (
+                          <p className="mt-0.5 text-xs text-muted-foreground">{o.slaLabel}</p>
+                        )}
+                      </div>
+                      <p className="w-full font-semibold text-slate-900 sm:w-auto sm:text-right">{formatPeso(o.total)}</p>
+                    </Link>
+                  );
+                })}
+              </div>
+            </section>
+
+            <div className="flex flex-col gap-4">
+              <section className="section-panel">
+                <div className="section-panel-header flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-900">Revenue overview</h3>
+                    <p className="mt-0.5 text-xs text-muted">Last 7 days</p>
+                  </div>
+                  <Link href="/revenue" className="link-primary text-xs">
+                    Details →
                   </Link>
-                );
-              })}
+                </div>
+                <div className="card-body pt-4">
+                  <RevenueLineChart data={data.revenue.series} />
+                </div>
+              </section>
+
+              <section className="section-panel">
+                <div className="section-panel-header">
+                  <h3 className="text-base font-semibold text-slate-900">Top services</h3>
+                  <p className="mt-0.5 text-xs text-muted">Last 7 days, by order count</p>
+                </div>
+                <div className="card-body pt-4">
+                  {data.services.length === 0 ? (
+                    <p className="py-6 text-center text-sm text-muted">No completed orders this week yet.</p>
+                  ) : (
+                    <>
+                      <DonutChart
+                        segments={withDonutColors(data.services)}
+                        centerLabel="Orders"
+                        centerValue={String(data.services.reduce((s, x) => s + x.count, 0))}
+                      />
+                      <div className="mt-4">
+                        <DonutLegend segments={withDonutColors(data.services)} />
+                      </div>
+                    </>
+                  )}
+                </div>
+              </section>
             </div>
-          </section>
+          </div>
         </>
       )}
     </div>

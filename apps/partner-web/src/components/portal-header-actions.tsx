@@ -1,76 +1,127 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { cn } from '@lunara/ui';
-import { getPortalUser } from '../lib/partner-api';
+import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+import type { PartnerOwnProfile } from '@lunara/types';
+import { getOwnProfile, getPortalUser, staffLogout } from '../lib/partner-api';
 import { PortalNotificationsBell } from './portal-notifications-bell';
 
-function HeaderIconLink({
-  href,
-  label,
-  active,
-  children,
-}: {
-  href: string;
-  label: string;
-  active: boolean;
-  children: React.ReactNode;
-}) {
+function ProfileAvatar({ avatarUrl, name, email }: { avatarUrl?: string; name?: string; email?: string }) {
+  if (avatarUrl) {
+    return (
+      <span className="h-8 w-8 shrink-0 overflow-hidden rounded-full">
+        <img src={avatarUrl} alt={name ?? email ?? 'Profile'} className="h-full w-full object-cover" />
+      </span>
+    );
+  }
+  const initial = (name?.trim()[0] ?? email?.trim()[0] ?? 'P').toUpperCase();
   return (
-    <Link
-      href={href}
-      className={cn(
-        'inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted transition-colors hover:bg-slate-100 hover:text-primary',
-        active && 'bg-primary/10 text-primary',
-      )}
-      aria-label={label}
-      aria-current={active ? 'page' : undefined}
-      title={label}
-    >
-      {children}
-    </Link>
-  );
-}
-
-function ProfileAvatar({ email }: { email?: string }) {
-  const initial = (email?.trim()[0] ?? 'P').toUpperCase();
-  return (
-    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
       {initial}
     </span>
   );
 }
 
+function ChevronDown() {
+  return (
+    <svg className="h-4 w-4 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+    </svg>
+  );
+}
+
 export function PortalHeaderActions() {
-  const pathname = usePathname();
+  const router = useRouter();
   const user = getPortalUser();
+  const [open, setOpen] = useState(false);
+  const [profile, setProfile] = useState<PartnerOwnProfile | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function loadProfile() {
+      getOwnProfile()
+        .then(setProfile)
+        .catch(() => {
+          /* header falls back to email/initial when profile fetch fails */
+        });
+    }
+    loadProfile();
+    window.addEventListener('lunara:profile-updated', loadProfile);
+    return () => window.removeEventListener('lunara:profile-updated', loadProfile);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function onPointerDown(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function onEscape(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onEscape);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onEscape);
+    };
+  }, [open]);
+
+  async function logout() {
+    setOpen(false);
+    await staffLogout();
+    router.replace('/login');
+  }
 
   return (
-    <div className="ml-auto flex items-center gap-1 sm:gap-2">
+    <div className="ml-auto flex items-center gap-2 sm:gap-3">
       <PortalNotificationsBell />
 
-      <HeaderIconLink href="/profile" label="Profile" active={pathname.startsWith('/profile')}>
-        <ProfileAvatar email={user?.email} />
-      </HeaderIconLink>
-
-      <HeaderIconLink href="/settings" label="Shop settings" active={pathname.startsWith('/settings')}>
-        <svg
-          className="h-5 w-5"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-          aria-hidden
+      <div className="relative" ref={menuRef}>
+        <button
+          type="button"
+          className="flex items-center gap-2 rounded-full py-1 pl-1 pr-2.5 text-left transition-colors hover:bg-slate-100 sm:pr-3"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
         >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-          />
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
-      </HeaderIconLink>
+          <ProfileAvatar avatarUrl={profile?.avatarUrl} name={profile?.displayName} email={user?.email} />
+          <span className="hidden max-w-[9rem] truncate text-sm font-medium text-slate-900 sm:inline">
+            {profile?.displayName || user?.email || 'Partner Portal'}
+          </span>
+          <ChevronDown />
+        </button>
+
+        {open ? (
+          <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-xl bg-surface py-1.5 shadow-[var(--shadow-elevated)] ring-1 ring-border/60">
+            <Link
+              href="/profile"
+              className="block px-4 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50"
+              onClick={() => setOpen(false)}
+            >
+              Profile
+            </Link>
+            <Link
+              href="/settings"
+              className="block px-4 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50"
+              onClick={() => setOpen(false)}
+            >
+              Shop settings
+            </Link>
+            <div className="my-1 border-t border-border/60" />
+            <button
+              type="button"
+              onClick={logout}
+              className="block w-full px-4 py-2 text-left text-sm text-red-600 transition-colors hover:bg-red-50"
+            >
+              Sign out
+            </button>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

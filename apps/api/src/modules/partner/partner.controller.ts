@@ -746,6 +746,15 @@ export class PartnerController {
     return this.processingService.setShelfSlot(orderId, req.user.sub, req.user.role, dto);
   }
 
+  @Delete('orders/:orderId/processing/shelf')
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
+  clearShelfSlot(
+    @Param('orderId') orderId: string,
+    @Req() req: { user: { sub: string; role: UserRole } },
+  ) {
+    return this.processingService.clearShelfSlot(orderId, req.user.sub, req.user.role);
+  }
+
   @Get('orders/shelf-lookup')
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
   findOnShelf(

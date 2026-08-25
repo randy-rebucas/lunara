@@ -32,6 +32,12 @@ Assigns/updates the shelf slot for one order.
 - `processing.service.ts:336` — loads the order, verifies portal access,
   lazily initializes `laundryProcessing` if absent, stamps slot/time/user.
 
+### `DELETE /api/v1/partner/orders/:orderId/processing/shelf`
+Clears the shelf slot for one order (unsets `shelfSlot`/`shelfAssignedAt`/
+`shelfAssignedBy`) — `processing.service.ts` `clearShelfSlot`. Same access
+scoping as the PATCH route. No-ops (still returns the current view) if the
+order has no `laundryProcessing` yet.
+
 ### `GET /api/v1/partner/orders/shelf-lookup?query=<text>`
 Finds the most recently updated order matching `query` as either the shelf
 slot or a completed step's tag code (case-sensitive exact match, not a
@@ -49,7 +55,9 @@ prefix/fuzzy search).
   on the order detail page, calls the `PATCH .../processing/shelf` route.
 - `apps/partner-web/src/app/shelf-lookup/page.tsx` — dedicated search page,
   calls `GET .../orders/shelf-lookup`, nav entry in `portal-shell.tsx`
-  ("Find on shelf", visible to partner/staff/admin).
+  ("Find on shelf", visible to partner/staff/admin). Once a result is found,
+  the same page also assigns/reassigns (PATCH) or clears (DELETE) the slot
+  inline, without navigating to the order detail page.
 
 ## Audit findings (2026-07-02)
 
