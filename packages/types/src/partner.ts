@@ -20,9 +20,14 @@ export interface DayOperatingHours {
 export type OperatingHours = DayOperatingHours[];
 
 export interface BranchHoliday {
-  /** ISO date (YYYY-MM-DD), no time component. */
+  /** ISO date (YYYY-MM-DD) for a one-off holiday, or "MM-DD" when `recurring` is true. */
   date: string;
   label?: string;
+  /** When true, `date` is "MM-DD" and recurs every year (e.g. a partner's own yearly closure). */
+  recurring?: boolean;
+  /** 'closed' (default) marks the date as a holiday. 'open' overrides a recurring/built-in
+   * regular holiday to force the shop open on that specific date. */
+  type?: 'closed' | 'open';
 }
 
 /** Mirrors packages/utils/src/booking.ts's BranchPricingMode — duplicated here (not imported)

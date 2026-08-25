@@ -791,6 +791,11 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
 
   const selectedShop = shopOptions.find((s) => s.branchId === form.branchId);
   const shopKgPerLoad = selectedShop?.kgPerLoad ?? BOOKING_MACHINE_LOAD_MIN_KG;
+  // Once a shop is chosen (customer-picked or Lunara-dispatched), its own hours/holidays are
+  // stricter and authoritative — mirrors BranchesService.resolvePickupSchedule. Before that, the
+  // union `operatingHours`/`holidays` from loadAvailability has no holiday filtering.
+  const effectiveOperatingHours = selectedShop?.operatingHours ?? operatingHours;
+  const effectiveHolidays = selectedShop?.holidays ?? holidays;
 
   // Shop-specific addon prices/units when a shop is chosen — falls back to the flat global
   // catalog before a shop is picked, matching the `addons` render list below.
@@ -1026,7 +1031,15 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
 
   async function goNext() {
     setError('');
-    if (!canProceedStep(step, form, localQuote, addresses, operatingHours ? { operatingHours, holidays } : null)) {
+    if (
+      !canProceedStep(
+        step,
+        form,
+        localQuote,
+        addresses,
+        effectiveOperatingHours ? { operatingHours: effectiveOperatingHours, holidays: effectiveHolidays } : null,
+      )
+    ) {
       if (step === 'service') setError('Select a service');
       else if (step === 'address') setError('Select a pickup address');
       else if (step === 'schedule') setError('Select a pickup time');
@@ -1197,7 +1210,9 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
 
   const activeQuote = quote ?? localQuote;
   const selectedAddress = addresses.find((a) => a._id === form.addressId);
-  const scheduleForValidation = operatingHours ? { operatingHours, holidays } : null;
+  const scheduleForValidation = effectiveOperatingHours
+    ? { operatingHours: effectiveOperatingHours, holidays: effectiveHolidays }
+    : null;
   const pickupLabel = form.scheduledPickupAt
     ? new Intl.DateTimeFormat('en-PH', {
         timeZone: 'Asia/Manila',
@@ -1481,7 +1496,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
               areaLabel ? `Serving ${areaLabel}. Pick a convenient pickup window.` : undefined
             }
           />
-          {!operatingHours ? (
+          {!effectiveOperatingHours ? (
             <>
               <div className="panel text-sm text-muted">
                 No pickup schedule available. Try another day or address.
@@ -1493,8 +1508,8 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
             </>
           ) : (
             <PickupSchedulePicker
-              operatingHours={operatingHours}
-              holidays={holidays}
+              operatingHours={effectiveOperatingHours}
+              holidays={effectiveHolidays}
               serverNow={serverNow}
               selectedStartAt={form.scheduledPickupAt}
               onSelectStartAt={(startAt) =>

@@ -98,6 +98,11 @@ export function PickupSchedulePicker({
 
   const selectedDay = dayOptions.find((d) => d.key === selectedDayKey) ?? dayOptions[0];
 
+  const upcomingHolidays = useMemo(
+    () => dayOptions.filter((d) => d.holidayLabel),
+    [dayOptions],
+  );
+
   const timeOptions = useMemo(() => {
     if (!selectedDay || selectedDay.isClosed || !selectedDay.openTime || !selectedDay.closeTime) {
       return [];
@@ -141,6 +146,14 @@ export function PickupSchedulePicker({
 
   return (
     <div className="space-y-6">
+      {upcomingHolidays.length > 0 && (
+        <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-amber-200">
+          <span className="font-medium">Holiday closures ahead: </span>
+          {upcomingHolidays
+            .map((d) => `${d.weekday} ${d.monthLabel} ${d.dayLabel} — ${d.holidayLabel}`)
+            .join(', ')}
+        </div>
+      )}
       <div>
         <p className="mb-3 text-sm font-medium text-slate-900">Select a day</p>
         <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">

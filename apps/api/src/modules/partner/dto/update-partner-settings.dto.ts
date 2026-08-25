@@ -4,6 +4,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsBoolean,
+  IsIn,
   IsOptional,
   IsString,
   Matches,
@@ -25,16 +26,27 @@ export class DayOperatingHoursDto {
   closeTime!: string;
 }
 
-const DATE_YYYY_MM_DD = /^\d{4}-\d{2}-\d{2}$/;
+/** Either "YYYY-MM-DD" (one-off holiday) or "MM-DD" (recurring holiday). */
+const DATE_YYYY_MM_DD_OR_MM_DD = /^(\d{4}-)?\d{2}-\d{2}$/;
 
 export class BranchHolidayDto {
   @IsString()
-  @Matches(DATE_YYYY_MM_DD, { message: 'date must be in "YYYY-MM-DD" format' })
+  @Matches(DATE_YYYY_MM_DD_OR_MM_DD, {
+    message: 'date must be "YYYY-MM-DD", or "MM-DD" when recurring is true',
+  })
   date!: string;
 
   @IsOptional()
   @IsString()
   label?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  recurring?: boolean;
+
+  @IsOptional()
+  @IsIn(['closed', 'open'])
+  type?: 'closed' | 'open';
 }
 
 export class UpdatePartnerSettingsDto {

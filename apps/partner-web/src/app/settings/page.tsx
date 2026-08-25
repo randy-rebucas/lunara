@@ -1,6 +1,7 @@
 'use client';
 
 import { UserRole } from '@lunara/types';
+import { PH_REGULAR_HOLIDAYS } from '@lunara/utils';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { AuthLoading } from '../../components/auth-loading';
@@ -427,6 +428,7 @@ export default function PartnerSettingsPage() {
   const [holidaysDraft, setHolidaysDraft] = useState<BranchHoliday[] | null>(null);
   const [newHolidayDate, setNewHolidayDate] = useState('');
   const [newHolidayLabel, setNewHolidayLabel] = useState('');
+  const [newHolidayRecurring, setNewHolidayRecurring] = useState(false);
   const [payoutDraft, setPayoutDraft] = useState<{
     method: PayoutMethod | '';
     gcashNumber: string;
@@ -532,19 +534,35 @@ export default function PartnerSettingsPage() {
 
   function addHoliday() {
     if (!newHolidayDate || !holidaysDraft) return;
-    if (holidaysDraft.some((h) => h.date === newHolidayDate)) return;
-    const next = [...holidaysDraft, { date: newHolidayDate, label: newHolidayLabel.trim() || undefined }].sort(
-      (a, b) => a.date.localeCompare(b.date),
-    );
+    // Recurring holidays are stored as "MM-DD"; the date input still supplies a full YYYY-MM-DD.
+    const date = newHolidayRecurring ? newHolidayDate.slice(5) : newHolidayDate;
+    if (holidaysDraft.some((h) => h.date === date && Boolean(h.recurring) === newHolidayRecurring)) return;
+    const next = [
+      ...holidaysDraft,
+      { date, label: newHolidayLabel.trim() || undefined, recurring: newHolidayRecurring || undefined },
+    ].sort((a, b) => a.date.localeCompare(b.date));
     setHolidaysDraft(next);
     setNewHolidayDate('');
     setNewHolidayLabel('');
+    setNewHolidayRecurring(false);
     void saveHolidays(next);
   }
 
-  function removeHoliday(date: string) {
+  function removeHoliday(date: string, recurring?: boolean) {
     if (!holidaysDraft) return;
-    const next = holidaysDraft.filter((h) => h.date !== date);
+    const next = holidaysDraft.filter((h) => !(h.date === date && Boolean(h.recurring) === Boolean(recurring)));
+    setHolidaysDraft(next);
+    void saveHolidays(next);
+  }
+
+  /** Forces the branch open on a specific occurrence of a built-in national holiday, overriding it. */
+  function addOpenOverride(monthDay: string, label: string, year: number) {
+    if (!holidaysDraft) return;
+    const date = `${year}-${monthDay}`;
+    if (holidaysDraft.some((h) => h.date === date && h.type === 'open')) return;
+    const next = [...holidaysDraft, { date, label, type: 'open' as const }].sort((a, b) =>
+      a.date.localeCompare(b.date),
+    );
     setHolidaysDraft(next);
     void saveHolidays(next);
   }
@@ -791,17 +809,27 @@ export default function PartnerSettingsPage() {
                   {holidaysDraft && holidaysDraft.length > 0 ? (
                     <ul className="divide-y divide-border/60">
                       {holidaysDraft.map((h) => (
-                        <li key={h.date} className="flex items-center justify-between py-2">
+                        <li key={`${h.date}-${h.recurring ? 'r' : 'o'}-${h.type ?? 'closed'}`} className="flex items-center justify-between py-2">
                           <span className="text-sm text-slate-900">
                             {h.date}
                             {h.label ? <span className="ml-2 text-muted">— {h.label}</span> : null}
+                            {h.recurring ? (
+                              <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                                Repeats yearly
+                              </span>
+                            ) : null}
+                            {h.type === 'open' ? (
+                              <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">
+                                Open (override)
+                              </span>
+                            ) : null}
                           </span>
                           {canEdit ? (
                             <button
                               type="button"
                               className="btn-outline btn-sm"
                               disabled={saving}
-                              onClick={() => removeHoliday(h.date)}
+                              onClick={() => removeHoliday(h.date, h.recurring)}
                             >
                               Remove
                             </button>
@@ -836,6 +864,15 @@ export default function PartnerSettingsPage() {
                           onChange={(e) => setNewHolidayLabel(e.target.value)}
                         />
                       </div>
+                      <label className="flex items-center gap-2 pb-1.5 text-sm text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={newHolidayRecurring}
+                          disabled={saving}
+                          onChange={(e) => setNewHolidayRecurring(e.target.checked)}
+                        />
+                        Repeats every year
+                      </label>
                       <button
                         type="button"
                         className="btn-primary btn-sm"
@@ -846,6 +883,44 @@ export default function PartnerSettingsPage() {
                       </button>
                     </div>
                   ) : null}
+
+                  <div className="mt-6 border-t border-border/60 pt-4">
+                    <p className="text-sm font-medium text-slate-900">Philippine regular holidays</p>
+                    <p className="mt-1 text-xs text-muted">
+                      Built in and closed by default every year. Override one open for this branch if you'll be
+                      operating on that date.
+                    </p>
+                    <ul className="mt-2 divide-y divide-border/60">
+                      {PH_REGULAR_HOLIDAYS.map((h) => {
+                        const year = new Date().getFullYear();
+                        const overridden = holidaysDraft?.some(
+                          (d) => d.date === `${year}-${h.date}` && d.type === 'open',
+                        );
+                        return (
+                          <li key={h.date} className="flex items-center justify-between py-2">
+                            <span className="text-sm text-slate-900">
+                              {h.date} — {h.label}
+                              {overridden ? (
+                                <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">
+                                  Open this year
+                                </span>
+                              ) : null}
+                            </span>
+                            {canEdit && !overridden ? (
+                              <button
+                                type="button"
+                                className="btn-outline btn-sm"
+                                disabled={saving}
+                                onClick={() => addOpenOverride(h.date, h.label ?? '', year)}
+                              >
+                                Stay open this year
+                              </button>
+                            ) : null}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
                 </div>
               </SectionPanel>
             )}

@@ -85,12 +85,21 @@ export class DayOperatingHours {
 
 @Schema({ _id: false })
 export class BranchHoliday {
-  /** ISO date (YYYY-MM-DD), no time component — shop is fully closed this calendar day. */
+  /** ISO date (YYYY-MM-DD) for a one-off holiday, or "MM-DD" when `recurring` is true. */
   @Prop({ required: true })
   date!: string;
 
   @Prop()
   label?: string;
+
+  /** When true, `date` is "MM-DD" and recurs every year (e.g. a partner's own yearly closure). */
+  @Prop({ default: false })
+  recurring?: boolean;
+
+  /** 'closed' (default) marks the date as a holiday. 'open' overrides a recurring/built-in
+   * regular holiday to force the shop open on that specific date. */
+  @Prop({ default: 'closed' })
+  type?: 'closed' | 'open';
 }
 
 @Schema({ _id: false })

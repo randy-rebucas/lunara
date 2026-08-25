@@ -963,18 +963,48 @@ function resolveDayHours(operatingHours: OperatingHours, dayOfWeek: number): Day
 }
 
 export interface BranchHoliday {
-  /** ISO date (YYYY-MM-DD), no time component. */
+  /** ISO date (YYYY-MM-DD) for a one-off holiday, or "MM-DD" when `recurring` is true. */
   date: string;
   label?: string;
+  /** When true, `date` is "MM-DD" and recurs every year (e.g. a partner's own yearly closure). */
+  recurring?: boolean;
+  /** 'closed' (default) marks the date as a holiday. 'open' overrides a recurring/built-in
+   * holiday to force the shop open on that specific date. */
+  type?: 'closed' | 'open';
+}
+
+/** Built-in Philippine regular holidays with a fixed date, recurring every year. Movable holidays
+ * (Holy Week, Lunar New Year, Eid, etc.) aren't included since their dates vary and would need a
+ * yearly data source. Partners can force-open any of these for their branch by adding a
+ * `{ date: 'MM-DD', recurring: true, type: 'open' }` entry to their own holidays list. */
+export const PH_REGULAR_HOLIDAYS: BranchHoliday[] = [
+  { date: '01-01', label: "New Year's Day", recurring: true },
+  { date: '04-09', label: 'Araw ng Kagitingan', recurring: true },
+  { date: '05-01', label: 'Labor Day', recurring: true },
+  { date: '06-12', label: 'Independence Day', recurring: true },
+  { date: '08-21', label: 'Ninoy Aquino Day', recurring: true },
+  { date: '11-30', label: 'Bonifacio Day', recurring: true },
+  { date: '12-25', label: 'Christmas Day', recurring: true },
+  { date: '12-30', label: 'Rizal Day', recurring: true },
+];
+
+function monthDayKey(d: ManilaDate): string {
+  return `${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')}`;
 }
 
 function findHolidayForManilaDate(
   holidays: BranchHoliday[] | undefined,
   d: ManilaDate,
 ): BranchHoliday | undefined {
-  if (!holidays?.length) return undefined;
   const key = manilaDateKey(d);
-  return holidays.find((h) => h.date === key);
+  const mdKey = monthDayKey(d);
+  const matches = (h: BranchHoliday) => (h.recurring ? h.date === mdKey : h.date === key);
+  const combined = [...PH_REGULAR_HOLIDAYS, ...(holidays ?? [])];
+
+  // A partner's 'open' override cancels out any closed match (built-in or their own) for the date.
+  if (combined.some((h) => h.type === 'open' && matches(h))) return undefined;
+
+  return combined.find((h) => (h.type ?? 'closed') === 'closed' && matches(h));
 }
 
 export interface TodayScheduleSummary {
