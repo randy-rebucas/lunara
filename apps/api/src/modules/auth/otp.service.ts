@@ -4,6 +4,8 @@ import { RedisService } from '../../common/redis/redis.service';
 import { TwilioVerifyService } from './twilio-verify.service';
 
 const REFRESH_PREFIX = 'refresh:';
+const EMAIL_VERIFY_PREFIX = 'emailverify:';
+const EMAIL_VERIFY_TTL_SECONDS = 24 * 60 * 60;
 
 @Injectable()
 export class OtpService {
@@ -33,6 +35,17 @@ export class OtpService {
 
   async revokeRefreshToken(userId: string) {
     await this.redis.del(`${REFRESH_PREFIX}${userId}`);
+  }
+
+  async storeEmailVerificationToken(token: string, userId: string) {
+    await this.redis.set(`${EMAIL_VERIFY_PREFIX}${token}`, userId, EMAIL_VERIFY_TTL_SECONDS);
+  }
+
+  async consumeEmailVerificationToken(token: string): Promise<string | null> {
+    const key = `${EMAIL_VERIFY_PREFIX}${token}`;
+    const userId = await this.redis.get(key);
+    if (userId) await this.redis.del(key);
+    return userId;
   }
 
   private assertConfigured() {

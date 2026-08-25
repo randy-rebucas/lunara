@@ -30,6 +30,10 @@ export class RegisterDto {
   @IsOptional()
   @IsString()
   referralCode?: string;
+
+  @IsOptional()
+  @IsString()
+  recaptchaToken?: string;
 }
 
 export class LoginDto {
@@ -53,6 +57,10 @@ export class LoginDto {
 export class OtpRequestDto {
   @IsString()
   phone!: string;
+
+  @IsOptional()
+  @IsString()
+  recaptchaToken?: string;
 }
 
 export class RefreshTokenDto {
@@ -75,4 +83,14 @@ export class ResetPasswordDto {
   @IsString()
   @MinLength(8)
   password!: string;
+}
+
+export class VerifyEmailDto {
+  @IsString()
+  token!: string;
+}
+
+export class ResendVerificationDto {
+  @IsEmail()
+  email!: string;
 }

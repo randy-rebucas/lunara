@@ -84,6 +84,15 @@ export class EmailService {
     });
   }
 
+  async sendEmailVerification(to: string, link: string): Promise<void> {
+    await this.send({
+      to,
+      subject: 'Verify your email — Lunara',
+      text: `Welcome to Lunara! Confirm your email address to activate your account:\n\n${link}\n\nThis link expires in 24 hours. If you didn't create a Lunara account, you can ignore this email.`,
+      html: `<p>Welcome to Lunara! Confirm your email address to activate your account:</p><p><a href="${link}">${link}</a></p><p>This link expires in 24 hours. If you didn't create a Lunara account, you can ignore this email.</p>`,
+    });
+  }
+
   async sendRiderInvite(to: string, password: string): Promise<void> {
     await this.send({
       to,

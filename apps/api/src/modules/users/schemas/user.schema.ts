@@ -24,6 +24,16 @@ export class User {
   @Prop({ default: true })
   isActive!: boolean;
 
+  /** Set once the user clicks the link in their verification email. Defaults true — only the
+   * self-serve /auth/register flow explicitly sets this false while the link is unconfirmed;
+   * every other creation path (admin invites, partner/rider onboarding, phone OTP signup) is
+   * exempt from the verification gate since those accounts aren't self-registered by email. */
+  @Prop({ default: true })
+  isEmailVerified!: boolean;
+
+  @Prop()
+  emailVerifiedAt?: Date;
+
   @Prop()
   lastLoginAt?: Date;
 

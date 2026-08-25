@@ -8,7 +8,9 @@ import {
   OtpRequestDto,
   RegisterDto,
   RefreshTokenDto,
+  ResendVerificationDto,
   ResetPasswordDto,
+  VerifyEmailDto,
 } from './dto/auth.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
@@ -50,10 +52,36 @@ export class AuthController {
     return result;
   }
 
+  @Post('verify-email')
+  @Throttle(AUTH_THROTTLE)
+  async verifyEmail(
+    @Body() dto: VerifyEmailDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.verifyEmail(dto.token);
+    const token = (result as { data?: { tokens?: { accessToken?: string } } })?.data?.tokens?.accessToken;
+    if (token) {
+      res.cookie(COOKIE_NAME, token, {
+        httpOnly: true,
+        sameSite: 'strict',
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: COOKIE_MAX_AGE,
+        path: '/',
+      });
+    }
+    return result;
+  }
+
+  @Post('resend-verification')
+  @Throttle(OTP_THROTTLE)
+  resendVerification(@Body() dto: ResendVerificationDto) {
+    return this.authService.resendVerification(dto.email);
+  }
+
   @Post('otp/request')
   @Throttle(OTP_THROTTLE)
   requestOtp(@Body() dto: OtpRequestDto) {
-    return this.authService.requestOtp(dto.phone);
+    return this.authService.requestOtp(dto.phone, dto.recaptchaToken);
   }
 
   @Post('forgot-password')

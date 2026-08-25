@@ -10,6 +10,7 @@ import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { AuthShell } from '../../../components/auth-shell';
 import { FormError } from '../../../components/marketing/marketing-design';
 import { Input } from '../../../components/ui/input';
+import { getRecaptchaToken } from '../../../lib/recaptcha';
 
 type OtpStep = 'phone' | 'code';
 
@@ -57,7 +58,8 @@ export default function LoginPage() {
     }
     setSubmitting(true);
     try {
-      const result = await requestOtp(phone);
+      const recaptchaToken = await getRecaptchaToken('otp_request');
+      const result = await requestOtp(phone, recaptchaToken);
       setVerifiedPhone(result.phone);
       setOtp('');
       setOtpStep('code');
@@ -137,7 +139,19 @@ export default function LoginPage() {
             onChange={(e) => setPassword(e.target.value)}
             required
           />
-          {error && <FormError>{error}</FormError>}
+          {error && (
+            <FormError>
+              {error}
+              {error.toLowerCase().includes('verify your email') && (
+                <>
+                  {' '}
+                  <Link href={`/verify-email?resend=1`} className="link-primary">
+                    Resend verification email
+                  </Link>
+                </>
+              )}
+            </FormError>
+          )}
           <Button type="submit" className="w-full" size="lg" disabled={submitting}>
             {submitting ? 'Signing in…' : 'Sign in'}
           </Button>

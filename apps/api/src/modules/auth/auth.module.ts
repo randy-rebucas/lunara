@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { MongooseModule } from '@nestjs/mongoose';
+import { EmailModule } from '../../common/email/email.module';
+import { RecaptchaModule } from '../../common/recaptcha/recaptcha.module';
 import { CustomersModule } from '../customers/customers.module';
 import { PromotionsModule } from '../promotions/promotions.module';
 import { RewardsModule } from '../rewards/rewards.module';
@@ -19,6 +21,8 @@ import { User, UserSchema } from '../users/schemas/user.schema';
   imports: [
     UsersModule,
     CustomersModule,
+    EmailModule,
+    RecaptchaModule,
     PromotionsModule,
     RewardsModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),

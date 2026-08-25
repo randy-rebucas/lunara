@@ -11,6 +11,7 @@ import { AuthShellWide } from '../../../components/auth-shell';
 import { FormError } from '../../../components/marketing/marketing-design';
 import { OnboardingProgress } from '../../../components/onboarding-progress';
 import { Input } from '../../../components/ui/input';
+import { getRecaptchaToken } from '../../../lib/recaptcha';
 
 type Step = 'phone' | 'otp';
 
@@ -40,7 +41,8 @@ export default function SignUpPage() {
     }
     setSubmitting(true);
     try {
-      const result = await requestOtp(phone);
+      const recaptchaToken = await getRecaptchaToken('otp_request');
+      const result = await requestOtp(phone, recaptchaToken);
       setVerifiedPhone(result.phone);
       setOtp('');
       setStep('otp');

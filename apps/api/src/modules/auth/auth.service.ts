@@ -2,6 +2,8 @@ import {
 
   ConflictException,
 
+  ForbiddenException,
+
   Injectable,
 
   UnauthorizedException,
@@ -13,6 +15,8 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
 
 import * as bcrypt from 'bcrypt';
+
+import { randomBytes } from 'crypto';
 
 import { Model } from 'mongoose';
 
@@ -26,6 +30,10 @@ import {
 } from '../customers/customers.constants';
 
 import { getJwtRefreshSecret } from '../../common/config/jwt-config';
+
+import { EmailService } from '../../common/email/email.service';
+
+import { RecaptchaService } from '../../common/recaptcha/recaptcha.service';
 
 import { CustomersService } from '../customers/customers.service';
 import { PromotionsService } from '../promotions/promotions.service';
@@ -58,12 +66,16 @@ export class AuthService {
     private customersService: CustomersService,
     private promotionsService: PromotionsService,
     private rewardsService: RewardsService,
+    private emailService: EmailService,
+    private recaptchaService: RecaptchaService,
 
   ) {}
 
 
 
   async register(dto: RegisterDto) {
+
+    await this.recaptchaService.assertHuman(dto.recaptchaToken, 'register');
 
     const orConditions = [{ email: dto.email }, { phone: dto.phone }].filter((q) =>
 
@@ -97,6 +109,8 @@ export class AuthService {
 
       isActive: true,
 
+      isEmailVerified: dto.email ? false : true,
+
     });
 
 
@@ -117,6 +131,18 @@ export class AuthService {
     }
 
 
+
+    if (dto.email) {
+      await this.sendVerificationEmail(user);
+      return {
+        success: true,
+        data: {
+          requiresEmailVerification: true,
+          message: `We've sent a verification link to ${dto.email}. Verify your email to sign in.`,
+          email: dto.email,
+        },
+      };
+    }
 
     return this.buildAuthResponse(user);
 
@@ -177,7 +203,9 @@ export class AuthService {
 
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
-
+    if (user.email && !user.isEmailVerified) {
+      throw new ForbiddenException('Please verify your email before signing in.');
+    }
 
     user.lastLoginAt = new Date();
 
@@ -189,7 +217,8 @@ export class AuthService {
 
 
 
-  async requestOtp(phone: string) {
+  async requestOtp(phone: string, recaptchaToken?: string) {
+    await this.recaptchaService.assertHuman(recaptchaToken, 'otp_request');
     const normalized = formatPhone(phone);
     await this.smsService.sendOtp(normalized);
 
@@ -235,6 +264,45 @@ export class AuthService {
   }
 
 
+
+  async verifyEmail(token: string) {
+    const userId = await this.otpService.consumeEmailVerificationToken(token);
+    if (!userId) throw new UnauthorizedException('Invalid or expired verification link');
+
+    const user = await this.userModel.findById(userId);
+    if (!user) throw new UnauthorizedException('Invalid or expired verification link');
+
+    if (!user.isEmailVerified) {
+      user.isEmailVerified = true;
+      user.emailVerifiedAt = new Date();
+      user.lastLoginAt = new Date();
+      await user.save();
+    }
+
+    return this.buildAuthResponse(user);
+  }
+
+  async resendVerification(email: string) {
+    const user = await this.userModel.findOne({ email });
+    if (user && !user.isEmailVerified) {
+      await this.sendVerificationEmail(user);
+    }
+    return {
+      success: true,
+      data: {
+        message: 'If an account with that email exists and is unverified, a new link was sent.',
+      },
+    };
+  }
+
+  private async sendVerificationEmail(user: UserDocument) {
+    if (!user.email) return;
+    const token = randomBytes(32).toString('hex');
+    await this.otpService.storeEmailVerificationToken(token, user._id.toString());
+    const baseUrl = process.env.CUSTOMER_WEB_URL ?? 'http://localhost:3000';
+    const link = `${baseUrl}/verify-email?token=${token}`;
+    await this.emailService.sendEmailVerification(user.email, link);
+  }
 
   async refreshTokens(refreshToken: string) {
 

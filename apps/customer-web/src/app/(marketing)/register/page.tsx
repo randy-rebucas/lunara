@@ -9,6 +9,7 @@ import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { AuthShell } from '../../../components/auth-shell';
 import { FormError } from '../../../components/marketing/marketing-design';
 import { Input } from '../../../components/ui/input';
+import { getRecaptchaToken } from '../../../lib/recaptcha';
 
 export default function RegisterPage() {
   const { register, api, isAuthenticated } = useAuthContext();
@@ -24,6 +25,7 @@ export default function RegisterPage() {
   });
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [pendingVerificationEmail, setPendingVerificationEmail] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -41,7 +43,12 @@ export default function RegisterPage() {
     }
     setSubmitting(true);
     try {
-      await register({ ...form, referralCode });
+      const recaptchaToken = await getRecaptchaToken('register');
+      const result = await register({ ...form, referralCode, recaptchaToken });
+      if (result.requiresEmailVerification) {
+        setPendingVerificationEmail(result.email ?? form.email);
+        return;
+      }
       const status = await fetchOnboardingStatus(api);
       router.push(getOnboardingPath(status));
     } catch (err) {
@@ -49,6 +56,24 @@ export default function RegisterPage() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (pendingVerificationEmail) {
+    return (
+      <AuthShell>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Check your email</h1>
+        <p className="mt-3 text-sm text-muted">
+          We&apos;ve sent a verification link to{' '}
+          <span className="font-medium text-slate-900">{pendingVerificationEmail}</span>. Click it to
+          activate your account and sign in.
+        </p>
+        <p className="mt-6 text-center text-sm text-muted">
+          <Link href="/login" className="link-primary">
+            Back to sign in
+          </Link>
+        </p>
+      </AuthShell>
+    );
   }
 
   return (

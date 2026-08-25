@@ -53,8 +53,11 @@ interface AuthContextValue {
     firstName: string;
     lastName: string;
     referralCode?: string;
-  }) => Promise<void>;
-  requestOtp: (phone: string) => Promise<{ phone: string }>;
+    recaptchaToken?: string;
+  }) => Promise<{ requiresEmailVerification: boolean; email?: string }>;
+  requestOtp: (phone: string, recaptchaToken?: string) => Promise<{ phone: string }>;
+  verifyEmail: (token: string) => Promise<void>;
+  resendVerification: (email: string) => Promise<void>;
   logout: () => Promise<void>;
   api: ReturnType<typeof createApiClient>;
 }
@@ -248,17 +251,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify(data),
       });
       const body = await res.json();
-      if (!body.success) throw new Error(body.error?.message ?? 'Registration failed');
+      if (!body.success) throw new Error(parseAuthError(body, 'Registration failed'));
+      if (body.data.requiresEmailVerification) {
+        return { requiresEmailVerification: true, email: body.data.email as string | undefined };
+      }
+      persist(authDataFromSession(body.data.user, body.data.tokens));
+      return { requiresEmailVerification: false };
+    },
+    [persist],
+  );
+
+  const verifyEmail = useCallback(
+    async (token: string) => {
+      const res = await fetch(`${getApiUrl()}/auth/verify-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
+      const body = await res.json();
+      if (!body.success) throw new Error(parseAuthError(body, 'Verification failed'));
       persist(authDataFromSession(body.data.user, body.data.tokens));
     },
     [persist],
   );
 
-  const requestOtp = useCallback(async (phone: string) => {
+  const resendVerification = useCallback(async (email: string) => {
+    const res = await fetch(`${getApiUrl()}/auth/resend-verification`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    const body = await res.json();
+    if (!body.success) throw new Error(parseAuthError(body, 'Failed to resend verification email'));
+  }, []);
+
+  const requestOtp = useCallback(async (phone: string, recaptchaToken?: string) => {
     const res = await fetch(`${getApiUrl()}/auth/otp/request`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: formatPhone(phone) }),
+      body: JSON.stringify({ phone: formatPhone(phone), recaptchaToken }),
     });
     const body = await res.json();
     if (!body.success) throw new Error(parseAuthError(body, 'Failed to send OTP'));
@@ -290,6 +321,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signupWithOtp,
     register,
     requestOtp,
+    verifyEmail,
+    resendVerification,
     logout,
     api,
   };
