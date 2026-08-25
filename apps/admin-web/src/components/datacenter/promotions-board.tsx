@@ -287,6 +287,33 @@ export function PromotionsBoard() {
     }
   }
 
+  const [resettingId, setResettingId] = useState<string | null>(null);
+  const [resetResult, setResetResult] = useState<{ id: string; message: string } | null>(null);
+  async function resetSpamUsage(p: Promotion) {
+    setActionError('');
+    setResetResult(null);
+    setResettingId(p._id);
+    try {
+      const result = await adminFetch<{
+        removedUsageCounters: number;
+        removedRedemptions: number;
+        removedCustomerPromos: number;
+      }>(`/admin/promotions/${p._id}/reset-usage`, { method: 'POST' });
+      const total = result.removedUsageCounters + result.removedRedemptions + result.removedCustomerPromos;
+      setResetResult({
+        id: p._id,
+        message:
+          total > 0
+            ? `Cleared ${total} orphaned record${total === 1 ? '' : 's'} from deleted accounts.`
+            : 'No orphaned usage found for this promo — nothing to clear.',
+      });
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to reset promo usage');
+    } finally {
+      setResettingId(null);
+    }
+  }
+
   return (
     <div>
       <header className="mb-5">
@@ -684,6 +711,24 @@ export function PromotionsBoard() {
                     <RailRow label="Redemptions" value={selected.redemptions.toLocaleString()} />
                     <RailRow label="Discount given" value={formatPeso(selected.discountGiven)} />
                     <RailRow label="Revenue impact" value={formatPeso(selected.revenueImpact)} />
+                  </RailSection>
+
+                  <RailSection title="Spam cleanup">
+                    <p className="text-xs leading-relaxed text-muted">
+                      Clears usage caps and claim records left behind by spam accounts that have
+                      since been deleted — doesn&apos;t touch real customers&apos; own usage.
+                    </p>
+                    <button
+                      type="button"
+                      className="btn-outline btn-sm mt-2 w-full"
+                      disabled={resettingId === selected._id}
+                      onClick={() => void resetSpamUsage(selected)}
+                    >
+                      {resettingId === selected._id ? 'Resetting…' : 'Reset orphaned usage'}
+                    </button>
+                    {resetResult?.id === selected._id ? (
+                      <p className="mt-2 text-xs text-emerald-600">{resetResult.message}</p>
+                    ) : null}
                   </RailSection>
 
                   <div className="flex flex-wrap gap-2 border-t border-border/60 px-5 py-4">

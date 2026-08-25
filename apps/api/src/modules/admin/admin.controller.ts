@@ -630,6 +630,11 @@ export class AdminController {
     return this.adminService.updatePromotion(id, dto);
   }
 
+  @Post('promotions/:id/reset-usage')
+  resetPromotionUsage(@Param('id') id: string) {
+    return this.adminService.resetPromotionUsage(id);
+  }
+
   @Post('promotions/:id/review')
   reviewPartnerPromotion(
     @Param('id') id: string,

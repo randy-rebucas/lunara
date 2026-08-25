@@ -326,6 +326,59 @@ export class PromotionsService implements OnModuleInit {
     }
   }
 
+  /** Purges usage-tracking rows for this promotion that reference a since-deleted user (e.g. a
+   * spam account removed by the daily cleanup sweep). Deleted accounts leave orphaned
+   * PromotionUsageCounter/PromotionRedemption/CustomerPromo rows behind — those permanently eat
+   * into `maxUsesPerCustomer` caps and pollute redemption records for a code that was actually
+   * abused by bots, not real customers. Only orphaned rows are removed; existing customers' own
+   * usage/caps are left untouched. */
+  async resetOrphanedUsage(promotionId: string) {
+    const promo = await this.promotionModel.findById(promotionId);
+    if (!promo) throw new NotFoundException('Promotion not found');
+
+    const counters = await this.usageCounterModel.find({ promotionId: promo._id }).select('userId');
+    const redemptions = await this.promotionRedemptionModel
+      .find({ promotionId: promo._id })
+      .select('userId');
+    const customerPromos = await this.customerPromoModel
+      .find({ sourcePromotionId: promo._id })
+      .select('userId');
+
+    const referencedIds = new Set(
+      [...counters, ...redemptions, ...customerPromos].map((doc) => doc.userId.toString()),
+    );
+    if (referencedIds.size === 0) {
+      return { success: true, data: { removedUsageCounters: 0, removedRedemptions: 0, removedCustomerPromos: 0 } };
+    }
+
+    const existingUsers = await this.userModel
+      .find({ _id: { $in: [...referencedIds].map((id) => new Types.ObjectId(id)) } })
+      .select('_id');
+    const existingIds = new Set(existingUsers.map((u) => u._id.toString()));
+    const orphanIds = [...referencedIds]
+      .filter((id) => !existingIds.has(id))
+      .map((id) => new Types.ObjectId(id));
+
+    if (orphanIds.length === 0) {
+      return { success: true, data: { removedUsageCounters: 0, removedRedemptions: 0, removedCustomerPromos: 0 } };
+    }
+
+    const [counterResult, redemptionResult, customerPromoResult] = await Promise.all([
+      this.usageCounterModel.deleteMany({ promotionId: promo._id, userId: { $in: orphanIds } }),
+      this.promotionRedemptionModel.deleteMany({ promotionId: promo._id, userId: { $in: orphanIds } }),
+      this.customerPromoModel.deleteMany({ sourcePromotionId: promo._id, userId: { $in: orphanIds } }),
+    ]);
+
+    return {
+      success: true,
+      data: {
+        removedUsageCounters: counterResult.deletedCount ?? 0,
+        removedRedemptions: redemptionResult.deletedCount ?? 0,
+        removedCustomerPromos: customerPromoResult.deletedCount ?? 0,
+      },
+    };
+  }
+
   private isDuplicateKeyError(err: unknown): boolean {
     return typeof err === 'object' && err !== null && (err as { code?: number }).code === 11000;
   }

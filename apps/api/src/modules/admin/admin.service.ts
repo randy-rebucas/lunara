@@ -1674,6 +1674,12 @@ export class AdminService {
     return { success: true, data: this.serializePromotion(promo) };
   }
 
+  /** See PromotionsService.resetOrphanedUsage — clears usage tracking left behind by deleted
+   * (e.g. spam-cleaned) accounts without touching real customers' own usage/caps. */
+  async resetPromotionUsage(id: string) {
+    return this.promotionsService.resetOrphanedUsage(id);
+  }
+
   private async orderStatusCounts() {
     const grouped = await this.orderModel.aggregate([
       { $group: { _id: '$status', count: { $sum: 1 } } },
