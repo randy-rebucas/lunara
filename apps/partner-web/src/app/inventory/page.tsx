@@ -465,7 +465,7 @@ export default function InventoryPage() {
                         </div>
                         <p className="mt-2 text-xs text-muted">
                           When set, this item is deducted automatically every time an order is confirmed
-                          received at your shop — per-order amount, plus per-kg amount × the order's
+                          received at your shop — per-order amount, plus per-kg amount × the order&apos;s
                           verified weight.
                         </p>
                       </div>

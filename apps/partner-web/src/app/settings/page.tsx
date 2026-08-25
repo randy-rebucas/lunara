@@ -887,7 +887,7 @@ export default function PartnerSettingsPage() {
                   <div className="mt-6 border-t border-border/60 pt-4">
                     <p className="text-sm font-medium text-slate-900">Philippine regular holidays</p>
                     <p className="mt-1 text-xs text-muted">
-                      Built in and closed by default every year. Override one open for this branch if you'll be
+                      Built in and closed by default every year. Override one open for this branch if you&apos;ll be
                       operating on that date.
                     </p>
                     <ul className="mt-2 divide-y divide-border/60">

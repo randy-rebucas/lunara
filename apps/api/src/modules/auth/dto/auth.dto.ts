@@ -1,8 +1,13 @@
-import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsOptional, IsString, MaxLength, MinLength, Matches } from 'class-validator';
+
+/** Rejects the "APPSBUILDERSPH" spam-signup marker anywhere in the email, case-insensitive. */
+const NOT_SPAM_EMAIL = /^(?!.*APPSBUILDERSPH).*$/i;
 
 export class RegisterDto {
   @IsOptional()
   @IsEmail()
+  @MaxLength(254)
+  @Matches(NOT_SPAM_EMAIL, { message: 'email is not allowed' })
   email?: string;
 
   @IsOptional()
