@@ -389,6 +389,14 @@ export default function BookScreen() {
   const selectedShop = shopOptions.find(
     (s) => s.branchId === form.branchId || s.branches.some((b) => b.branchId === form.branchId),
   );
+  // The customer may have picked a non-nearest branch variant via BranchPickerSheet — that
+  // variant carries its own name/city, so anything shown to the customer must reflect it rather
+  // than falling back to the parent shop's nearest-branch name.
+  const selectedBranch: ShopOption | ShopBranchVariant | undefined = selectedShop
+    ? selectedShop.branchId === form.branchId
+      ? selectedShop
+      : (selectedShop.branches.find((b) => b.branchId === form.branchId) ?? selectedShop)
+    : undefined;
   const shopKgPerLoad = selectedShop?.kgPerLoad ?? BOOKING_MACHINE_LOAD_MIN_KG;
 
   const services = useMemo(() => {
@@ -1121,7 +1129,17 @@ export default function BookScreen() {
                         (form.branchId === shop.branchId ||
                           shop.branches.some((b) => b.branchId === form.branchId));
                       const startingPriceLabel = startingPriceLabelFor(shop, flatBagFrom);
-                      const schedule = getTodayScheduleSummary(shop.operatingHours, shop.holidays);
+                      const hasMultipleBranches = shop.branches.length > 1;
+                      // Once the customer has picked a specific branch from the sheet, the card
+                      // should reflect that branch (name/city/hours), not always the nearest one.
+                      const activeBranch: ShopOption | ShopBranchVariant =
+                        selected && form.branchId !== shop.branchId
+                          ? (shop.branches.find((b) => b.branchId === form.branchId) ?? shop)
+                          : shop;
+                      const schedule = getTodayScheduleSummary(
+                        activeBranch.operatingHours,
+                        activeBranch.holidays,
+                      );
                       const disabled =
                         !shop.withinRadius || !shop.withinMaxDeliveryRadius || !shop.capacityAvailable;
                       return (
@@ -1136,6 +1154,10 @@ export default function BookScreen() {
                           ]}
                           onPress={() => {
                             setReorderNotice('');
+                            if (hasMultipleBranches) {
+                              setBranchSheetShopId(shop.branchId);
+                              return;
+                            }
                             setForm((f) => ({ ...f, branchId: shop.branchId, autoDispatch: false }));
                           }}
                           accessibilityRole="radio"
@@ -1153,7 +1175,7 @@ export default function BookScreen() {
                                   <Ionicons name="storefront-outline" size={18} color={colors.primary} />
                                 </View>
                               )}
-                              <Text style={styles.optionTitle}>{shop.name}</Text>
+                              <Text style={styles.optionTitle}>{activeBranch.name}</Text>
                             </View>
                             <View style={styles.optionTopRowActions}>
                               <Pressable
@@ -1178,21 +1200,17 @@ export default function BookScreen() {
                             </View>
                           </View>
                           <Text style={styles.optionSub}>
-                            {shop.city} · {shop.distanceLabel}
+                            {activeBranch.city} · {activeBranch.distanceLabel}
                           </Text>
                           <Text style={schedule.isOpenNow ? styles.scheduleOpen : styles.scheduleClosed}>
                             {schedule.label}
                           </Text>
-                          {shop.branches.length > 1 ? (
-                            <Pressable
-                              onPress={() => setBranchSheetShopId(shop.branchId)}
-                              hitSlop={8}
-                              accessibilityRole="button"
-                            >
-                              <Text style={styles.optionBranchLink}>
-                                {shop.branches.length} branches near you — choose one
-                              </Text>
-                            </Pressable>
+                          {hasMultipleBranches ? (
+                            <Text style={styles.optionBranchLink}>
+                              {selected
+                                ? `${shop.branches.length} branches near you — tap to change`
+                                : `${shop.branches.length} branches near you — tap to choose`}
+                            </Text>
                           ) : null}
                           {startingPriceLabel ? (
                             <Text style={styles.optionPrice}>{startingPriceLabel}</Text>
@@ -1931,7 +1949,7 @@ export default function BookScreen() {
                 </Text>
                 <Text style={styles.summaryLine}>
                   <Text style={styles.summaryMuted}>Shop: </Text>
-                  {form.autoDispatch ? `${brandName}'s pick (best available)` : selectedShop?.name ?? 'Selected shop'}
+                  {form.autoDispatch ? `${brandName}'s pick (best available)` : selectedBranch?.name ?? 'Selected shop'}
                 </Text>
                 <Text style={styles.summaryLine}>
                   <Text style={styles.summaryMuted}>
@@ -1993,7 +2011,7 @@ export default function BookScreen() {
               <Text style={styles.confirmNote}>
                 {form.autoDispatch
                   ? `After payment, ${brandName} dispatches your order to the best available shop nearby.`
-                  : `Your order goes straight to ${selectedShop?.name ?? 'your selected shop'} after payment.`}{' '}
+                  : `Your order goes straight to ${selectedBranch?.name ?? 'your selected shop'} after payment.`}{' '}
                 Pickup riders are notified once dispatched. Final amount may adjust after weigh-in.
               </Text>
               <PaymentMethodPicker

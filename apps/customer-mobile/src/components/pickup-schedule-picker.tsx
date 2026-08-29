@@ -97,9 +97,13 @@ export function PickupSchedulePicker({
     const day = dayOptions.find((d) => d.key === key);
     if (!day || day.isClosed) return;
     setSelectedDayKey(key);
-    const time = day.earliestBookableTime ?? day.openTime ?? '08:00';
-    setTimeValue(time);
-    onSelectStartAt(manilaDateAndTimeToIso(key, time));
+    if (!day.earliestBookableTime) {
+      setTimeValue('');
+      onSelectStartAt('');
+      return;
+    }
+    setTimeValue(day.earliestBookableTime);
+    onSelectStartAt(manilaDateAndTimeToIso(key, day.earliestBookableTime));
   }
 
   function applyTime(time: string) {
@@ -113,9 +117,27 @@ export function PickupSchedulePicker({
     onSelectStartAt(result.valid ? candidate : '');
   }
 
+  const dayBounds = useMemo(() => {
+    if (
+      !selectedDay ||
+      selectedDay.isClosed ||
+      !selectedDay.openTime ||
+      !selectedDay.closeTime ||
+      !selectedDay.earliestBookableTime
+    ) {
+      return undefined;
+    }
+    return {
+      min: timeToMinutes(selectedDay.earliestBookableTime),
+      max: timeToMinutes(selectedDay.closeTime),
+    };
+  }, [selectedDay]);
+
   function step(deltaMinutes: number) {
-    if (!timeValue) return;
-    applyTime(minutesToTime(timeToMinutes(timeValue) + deltaMinutes));
+    if (!timeValue || !dayBounds) return;
+    const next = timeToMinutes(timeValue) + deltaMinutes;
+    const clamped = Math.min(Math.max(next, dayBounds.min), dayBounds.max);
+    applyTime(minutesToTime(clamped));
   }
 
   const validation = useMemo(() => {
@@ -123,6 +145,10 @@ export function PickupSchedulePicker({
     const candidate = manilaDateAndTimeToIso(selectedDay.key, timeValue);
     return validatePickupTime(candidate, operatingHours, holidays, now);
   }, [selectedDay, timeValue, operatingHours, holidays, now]);
+
+  const currentMinutes = timeValue ? timeToMinutes(timeValue) : undefined;
+  const canStepBack = !!(dayBounds && currentMinutes !== undefined && currentMinutes > dayBounds.min);
+  const canStepForward = !!(dayBounds && currentMinutes !== undefined && currentMinutes < dayBounds.max);
 
   return (
     <View>
@@ -165,17 +191,20 @@ export function PickupSchedulePicker({
           ? `Pickup time · ${selectedDay.weekday}, ${selectedDay.monthLabel} ${selectedDay.dayLabel}`
           : 'Pickup time'}
       </Text>
-      {!selectedDay || selectedDay.isClosed ? (
+      {!selectedDay || selectedDay.isClosed || !selectedDay.earliestBookableTime ? (
         <Text style={styles.emptyText}>
-          {selectedDay?.holidayLabel ?? 'Closed'}. Choose another day.
+          {selectedDay && !selectedDay.isClosed
+            ? 'No more pickup slots available today.'
+            : (selectedDay?.holidayLabel ?? 'Closed')}
+          {' '}Choose another day.
         </Text>
       ) : (
         <View>
           <View style={styles.stepperRow}>
             <Pressable
-              style={styles.stepperButton}
+              style={[styles.stepperButton, !canStepBack && styles.stepperButtonDisabled]}
               onPress={() => step(-TIME_STEP_MINUTES)}
-              disabled={!timeValue}
+              disabled={!canStepBack}
             >
               <Text style={styles.stepperButtonText}>−15m</Text>
             </Pressable>
@@ -183,9 +212,9 @@ export function PickupSchedulePicker({
               <Text style={styles.stepperTime}>{timeValue ? formatTimeLabel(timeValue) : '--:--'}</Text>
             </View>
             <Pressable
-              style={styles.stepperButton}
+              style={[styles.stepperButton, !canStepForward && styles.stepperButtonDisabled]}
               onPress={() => step(TIME_STEP_MINUTES)}
-              disabled={!timeValue}
+              disabled={!canStepForward}
             >
               <Text style={styles.stepperButtonText}>+15m</Text>
             </Pressable>
@@ -244,6 +273,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     backgroundColor: colors.surface,
   },
+  stepperButtonDisabled: { opacity: 0.4 },
   stepperButtonText: { fontSize: 14, fontWeight: '600', color: colors.foreground },
   stepperDisplay: {
     flex: 1,
