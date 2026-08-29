@@ -73,9 +73,11 @@ export class AuthService {
 
 
 
-  async register(dto: RegisterDto) {
+  async register(dto: RegisterDto, isMobileClient = false) {
 
-    await this.recaptchaService.assertHuman(dto.recaptchaToken, 'register');
+    if (!isMobileClient) {
+      await this.recaptchaService.assertHuman(dto.recaptchaToken, 'register');
+    }
 
     const orConditions = [{ email: dto.email }, { phone: dto.phone }].filter((q) =>
 
@@ -217,8 +219,10 @@ export class AuthService {
 
 
 
-  async requestOtp(phone: string, recaptchaToken?: string) {
-    await this.recaptchaService.assertHuman(recaptchaToken, 'otp_request');
+  async requestOtp(phone: string, recaptchaToken?: string, isMobileClient = false) {
+    if (!isMobileClient) {
+      await this.recaptchaService.assertHuman(recaptchaToken, 'otp_request');
+    }
     const normalized = formatPhone(phone);
     await this.smsService.sendOtp(normalized);
 

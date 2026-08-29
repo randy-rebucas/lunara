@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Headers, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { AuthService } from './auth.service';
@@ -28,8 +28,8 @@ export class AuthController {
 
   @Post('register')
   @Throttle(AUTH_THROTTLE)
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
+  register(@Body() dto: RegisterDto, @Headers('x-lunara-client') client?: string) {
+    return this.authService.register(dto, client === 'mobile');
   }
 
   @Post('login')
@@ -80,8 +80,8 @@ export class AuthController {
 
   @Post('otp/request')
   @Throttle(OTP_THROTTLE)
-  requestOtp(@Body() dto: OtpRequestDto) {
-    return this.authService.requestOtp(dto.phone, dto.recaptchaToken);
+  requestOtp(@Body() dto: OtpRequestDto, @Headers('x-lunara-client') client?: string) {
+    return this.authService.requestOtp(dto.phone, dto.recaptchaToken, client === 'mobile');
   }
 
   @Post('forgot-password')

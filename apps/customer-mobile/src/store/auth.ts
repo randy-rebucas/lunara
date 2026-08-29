@@ -49,6 +49,7 @@ async function authRequest<T>(
         ...init,
         headers: {
           'Content-Type': 'application/json',
+          'x-lunara-client': 'mobile',
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
           ...(partnerId ? { 'x-lunara-partner-id': partnerId } : {}),
           ...(init?.headers ?? {}),

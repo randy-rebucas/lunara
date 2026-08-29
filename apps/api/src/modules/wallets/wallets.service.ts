@@ -40,7 +40,7 @@ export class WalletsService {
    * Production top-ups go through POST /payments/wallet-topup/intent.
    */
   async topUp(userId: string, amount: number) {
-    if (process.env.PAYMONGO_SECRET_KEY?.trim()) {
+    if (process.env.NODE_ENV === 'production' || process.env.PAYMONGO_SECRET_KEY?.trim()) {
       throw new BadRequestException(
         'Use POST /payments/wallet-topup/intent to top up via PayMongo (GCash, Maya, or card).',
       );
