@@ -45,7 +45,7 @@ import {
   validatePickupTime,
 } from '@lunara/utils';
 import { resolveMediaUrl } from '../src/lib/media-url';
-import { brandName, colors, radius, spacing, typography } from '../src/theme';
+import { brandName, colors, radius, shadow, spacing, typography } from '../src/theme';
 import { BookingProgress } from '../src/components/booking-progress';
 import { Button } from '../src/components/ui/button';
 import { ScheduleSupportPrompt } from '../src/components/schedule-support-prompt';
@@ -1083,9 +1083,10 @@ export default function BookScreen() {
               {!shopsLoading && shopOptions.length > 0 && !getPartnerId() ? (
                 <Pressable
                   style={({ pressed }) => [
-                    styles.option,
-                    form.autoDispatch && styles.optionSelected,
-                    pressed && styles.optionPressed,
+                    styles.shopCard,
+                    styles.autoDispatchCard,
+                    form.autoDispatch && styles.shopCardSelected,
+                    pressed && styles.shopCardPressed,
                   ]}
                   onPress={() => {
                     setReorderNotice('');
@@ -1094,20 +1095,24 @@ export default function BookScreen() {
                   accessibilityRole="radio"
                   accessibilityState={{ selected: form.autoDispatch }}
                 >
-                  <View style={styles.optionTopRow}>
-                    <View style={styles.optionTitleRow}>
-                      <View style={styles.shopLogoFallback}>
-                        <Ionicons name="flash-outline" size={18} color={colors.primary} />
+                  <View style={styles.shopHeaderRow}>
+                    <View style={styles.shopTitleGroup}>
+                      <View style={styles.autoDispatchIcon}>
+                        <Ionicons name="flash" size={18} color={colors.primary} />
                       </View>
-                      <Text style={styles.optionTitle}>Let {brandName} pick a shop for you</Text>
+                      <View style={styles.shopTitleTextGroup}>
+                        <Text style={styles.shopName}>Let {brandName} pick for you</Text>
+                        <Text style={styles.shopMetaText}>
+                          Best available shop nearby — handy when your usual spot is full.
+                        </Text>
+                      </View>
                     </View>
                     {form.autoDispatch ? (
-                      <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                      <View style={styles.shopCheckBadge}>
+                        <Ionicons name="checkmark" size={14} color={colors.onPrimary} />
+                      </View>
                     ) : null}
                   </View>
-                  <Text style={styles.optionSub}>
-                    We'll dispatch to the best available shop nearby — useful when your usual shops are full.
-                  </Text>
                 </Pressable>
               ) : null}
               {shopsLoading ? (
@@ -1147,10 +1152,10 @@ export default function BookScreen() {
                           key={shop.branchId}
                           disabled={disabled}
                           style={({ pressed }) => [
-                            styles.option,
-                            selected && styles.optionSelected,
-                            disabled && styles.optionDisabled,
-                            pressed && !disabled && styles.optionPressed,
+                            styles.shopCard,
+                            selected && styles.shopCardSelected,
+                            disabled && styles.shopCardDisabled,
+                            pressed && !disabled && styles.shopCardPressed,
                           ]}
                           onPress={() => {
                             setReorderNotice('');
@@ -1163,8 +1168,8 @@ export default function BookScreen() {
                           accessibilityRole="radio"
                           accessibilityState={{ selected, disabled }}
                         >
-                          <View style={styles.optionTopRow}>
-                            <View style={styles.optionTitleRow}>
+                          <View style={styles.shopHeaderRow}>
+                            <View style={styles.shopTitleGroup}>
                               {shop.logoUrl ? (
                                 <Image
                                   source={{ uri: resolveMediaUrl(shop.logoUrl) }}
@@ -1172,15 +1177,26 @@ export default function BookScreen() {
                                 />
                               ) : (
                                 <View style={styles.shopLogoFallback}>
-                                  <Ionicons name="storefront-outline" size={18} color={colors.primary} />
+                                  <Ionicons name="storefront-outline" size={20} color={colors.primary} />
                                 </View>
                               )}
-                              <Text style={styles.optionTitle}>{activeBranch.name}</Text>
+                              <View style={styles.shopTitleTextGroup}>
+                                <Text style={styles.shopName} numberOfLines={1}>
+                                  {activeBranch.name}
+                                </Text>
+                                <View style={styles.shopMetaRow}>
+                                  <Ionicons name="location-outline" size={12} color={colors.muted} />
+                                  <Text style={styles.shopMetaText}>
+                                    {activeBranch.city} · {activeBranch.distanceLabel}
+                                  </Text>
+                                </View>
+                              </View>
                             </View>
-                            <View style={styles.optionTopRowActions}>
+                            <View style={styles.shopActionsGroup}>
                               <Pressable
                                 onPress={() => toggleFavoriteBranch(shop.branchId)}
                                 hitSlop={8}
+                                style={styles.shopFavBtn}
                                 accessibilityRole="button"
                                 accessibilityLabel={
                                   favoriteBranchIds.has(shop.branchId)
@@ -1190,36 +1206,70 @@ export default function BookScreen() {
                               >
                                 <Ionicons
                                   name={favoriteBranchIds.has(shop.branchId) ? 'heart' : 'heart-outline'}
-                                  size={18}
+                                  size={16}
                                   color={favoriteBranchIds.has(shop.branchId) ? colors.destructive : colors.mutedForeground}
                                 />
                               </Pressable>
                               {selected ? (
-                                <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                                <View style={styles.shopCheckBadge}>
+                                  <Ionicons name="checkmark" size={14} color={colors.onPrimary} />
+                                </View>
                               ) : null}
                             </View>
                           </View>
-                          <Text style={styles.optionSub}>
-                            {activeBranch.city} · {activeBranch.distanceLabel}
-                          </Text>
-                          <Text style={schedule.isOpenNow ? styles.scheduleOpen : styles.scheduleClosed}>
-                            {schedule.label}
-                          </Text>
+
+                          <View style={styles.shopStatusRow}>
+                            <View
+                              style={[
+                                styles.statusPill,
+                                schedule.isOpenNow ? styles.statusPillOpen : styles.statusPillClosed,
+                              ]}
+                            >
+                              <View
+                                style={[
+                                  styles.statusDot,
+                                  schedule.isOpenNow ? styles.statusDotOpen : styles.statusDotClosed,
+                                ]}
+                              />
+                              <Text
+                                style={[
+                                  styles.statusPillText,
+                                  schedule.isOpenNow
+                                    ? styles.statusPillTextOpen
+                                    : styles.statusPillTextClosed,
+                                ]}
+                              >
+                                {schedule.label}
+                              </Text>
+                            </View>
+                            {startingPriceLabel ? (
+                              <Text style={styles.shopPriceTag}>{startingPriceLabel}</Text>
+                            ) : null}
+                          </View>
+
                           {hasMultipleBranches ? (
-                            <Text style={styles.optionBranchLink}>
-                              {selected
-                                ? `${shop.branches.length} branches near you — tap to change`
-                                : `${shop.branches.length} branches near you — tap to choose`}
-                            </Text>
+                            <View style={styles.branchChip}>
+                              <Ionicons name="git-branch-outline" size={13} color={colors.primary} />
+                              <Text style={styles.branchChipText}>
+                                {selected
+                                  ? `${shop.branches.length} branches near you — tap to change`
+                                  : `${shop.branches.length} branches near you — tap to choose`}
+                              </Text>
+                              <Ionicons name="chevron-forward" size={13} color={colors.primary} />
+                            </View>
                           ) : null}
-                          {startingPriceLabel ? (
-                            <Text style={styles.optionPrice}>{startingPriceLabel}</Text>
-                          ) : null}
+
                           {!shop.capacityAvailable ? (
-                            <Text style={styles.optionGpsMissing}>Currently at capacity</Text>
+                            <View style={styles.warnPill}>
+                              <Ionicons name="alert-circle-outline" size={13} color={colors.warning} />
+                              <Text style={styles.warnPillText}>Currently at capacity</Text>
+                            </View>
                           ) : null}
                           {!shop.withinRadius || !shop.withinMaxDeliveryRadius ? (
-                            <Text style={styles.optionGpsMissing}>Outside delivery range</Text>
+                            <View style={styles.warnPill}>
+                              <Ionicons name="alert-circle-outline" size={13} color={colors.warning} />
+                              <Text style={styles.warnPillText}>Outside delivery range</Text>
+                            </View>
                           ) : null}
                         </Pressable>
                       );
@@ -1250,12 +1300,11 @@ export default function BookScreen() {
                         key={branch.branchId}
                         disabled={disabled}
                         style={({ pressed }) => [
-                          styles.option,
-                          selected && styles.optionSelected,
-                          !selected && !far && styles.optionNear,
-                          far && styles.optionFar,
-                          disabled && styles.optionDisabled,
-                          pressed && !disabled && styles.optionPressed,
+                          styles.shopCard,
+                          selected && styles.shopCardSelected,
+                          far && styles.shopCardFar,
+                          disabled && styles.shopCardDisabled,
+                          pressed && !disabled && styles.shopCardPressed,
                         ]}
                         onPress={() => {
                           setReorderNotice('');
@@ -1264,8 +1313,8 @@ export default function BookScreen() {
                         accessibilityRole="radio"
                         accessibilityState={{ selected, disabled }}
                       >
-                        <View style={styles.optionTopRow}>
-                          <View style={styles.optionTitleRow}>
+                        <View style={styles.shopHeaderRow}>
+                          <View style={styles.shopTitleGroup}>
                             {branch.logoUrl ? (
                               <Image
                                 source={{ uri: resolveMediaUrl(branch.logoUrl) }}
@@ -1273,15 +1322,26 @@ export default function BookScreen() {
                               />
                             ) : (
                               <View style={styles.shopLogoFallback}>
-                                <Ionicons name="storefront-outline" size={18} color={colors.primary} />
+                                <Ionicons name="storefront-outline" size={20} color={colors.primary} />
                               </View>
                             )}
-                            <Text style={styles.optionTitle}>{branch.name}</Text>
+                            <View style={styles.shopTitleTextGroup}>
+                              <Text style={styles.shopName} numberOfLines={1}>
+                                {branch.name}
+                              </Text>
+                              <View style={styles.shopMetaRow}>
+                                <Ionicons name="location-outline" size={12} color={colors.muted} />
+                                <Text style={styles.shopMetaText}>
+                                  {branch.city} · {branch.distanceLabel}
+                                </Text>
+                              </View>
+                            </View>
                           </View>
-                          <View style={styles.optionTopRowActions}>
+                          <View style={styles.shopActionsGroup}>
                             <Pressable
                               onPress={() => toggleFavoriteBranch(branch.branchId)}
                               hitSlop={8}
+                              style={styles.shopFavBtn}
                               accessibilityRole="button"
                               accessibilityLabel={
                                 favoriteBranchIds.has(branch.branchId)
@@ -1291,33 +1351,63 @@ export default function BookScreen() {
                             >
                               <Ionicons
                                 name={favoriteBranchIds.has(branch.branchId) ? 'heart' : 'heart-outline'}
-                                size={18}
+                                size={16}
                                 color={favoriteBranchIds.has(branch.branchId) ? colors.destructive : colors.mutedForeground}
                               />
                             </Pressable>
                             {selected ? (
-                              <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                              <View style={styles.shopCheckBadge}>
+                                <Ionicons name="checkmark" size={14} color={colors.onPrimary} />
+                              </View>
                             ) : null}
                           </View>
                         </View>
-                        <Text style={styles.optionSub}>
-                          {branch.city} · {branch.distanceLabel}
-                        </Text>
-                        <Text style={schedule.isOpenNow ? styles.scheduleOpen : styles.scheduleClosed}>
-                          {schedule.label}
-                        </Text>
-                        {startingPriceLabel ? (
-                          <Text style={styles.optionPrice}>{startingPriceLabel}</Text>
-                        ) : null}
+
+                        <View style={styles.shopStatusRow}>
+                          <View
+                            style={[
+                              styles.statusPill,
+                              schedule.isOpenNow ? styles.statusPillOpen : styles.statusPillClosed,
+                            ]}
+                          >
+                            <View
+                              style={[
+                                styles.statusDot,
+                                schedule.isOpenNow ? styles.statusDotOpen : styles.statusDotClosed,
+                              ]}
+                            />
+                            <Text
+                              style={[
+                                styles.statusPillText,
+                                schedule.isOpenNow ? styles.statusPillTextOpen : styles.statusPillTextClosed,
+                              ]}
+                            >
+                              {schedule.label}
+                            </Text>
+                          </View>
+                          {startingPriceLabel ? (
+                            <Text style={styles.shopPriceTag}>{startingPriceLabel}</Text>
+                          ) : null}
+                        </View>
+
                         {!branch.capacityAvailable ? (
-                          <Text style={styles.optionGpsMissing}>Currently at capacity</Text>
+                          <View style={styles.warnPill}>
+                            <Ionicons name="alert-circle-outline" size={13} color={colors.warning} />
+                            <Text style={styles.warnPillText}>Currently at capacity</Text>
+                          </View>
                         ) : null}
                         {!branch.withinMaxDeliveryRadius ? (
-                          <Text style={styles.optionGpsMissing}>Outside delivery range</Text>
+                          <View style={styles.warnPill}>
+                            <Ionicons name="alert-circle-outline" size={13} color={colors.warning} />
+                            <Text style={styles.warnPillText}>Outside delivery range</Text>
+                          </View>
                         ) : far ? (
-                          <Text style={styles.optionGpsMissing}>
-                            Farther than usual — may need extra approval
-                          </Text>
+                          <View style={styles.warnPill}>
+                            <Ionicons name="alert-circle-outline" size={13} color={colors.warning} />
+                            <Text style={styles.warnPillText}>
+                              Farther than usual — may need extra approval
+                            </Text>
+                          </View>
                         ) : null}
                       </Pressable>
                     );
@@ -2089,23 +2179,135 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   optionSelected: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
-  optionNear: { borderColor: colors.accentDark },
-  optionFar: { opacity: 0.5 },
   optionDisabled: { opacity: 0.4 },
   optionPressed: { opacity: 0.9 },
   optionTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   optionTopRowActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   optionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexShrink: 1 },
   optionCheck: { marginLeft: 'auto' },
-  shopLogo: { width: 32, height: 32, borderRadius: radius.sm, backgroundColor: colors.surface },
+  shopLogo: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   shopLogoFallback: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.sm,
+    width: 44,
+    height: 44,
+    borderRadius: radius.lg,
     backgroundColor: colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  shopCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    backgroundColor: colors.surface,
+    ...shadow.card,
+  },
+  shopCardSelected: {
+    borderColor: colors.primary,
+    borderWidth: 1.5,
+    backgroundColor: colors.primaryLight,
+    ...shadow.elevated,
+  },
+  shopCardFar: { opacity: 0.55 },
+  shopCardDisabled: { opacity: 0.45 },
+  shopCardPressed: { opacity: 0.92 },
+  autoDispatchCard: { borderStyle: 'dashed' },
+  autoDispatchIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.lg,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shopHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  shopTitleGroup: { flexDirection: 'row', gap: spacing.md, flexShrink: 1, flex: 1 },
+  shopTitleTextGroup: { flexShrink: 1, gap: 3, paddingTop: 1 },
+  shopActionsGroup: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingLeft: spacing.sm },
+  shopFavBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceMuted,
+  },
+  shopCheckBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: radius.full,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shopName: { fontWeight: '700', fontSize: 16, color: colors.foreground },
+  shopMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  shopMetaText: { fontSize: 12.5, color: colors.muted, flexShrink: 1 },
+  shopStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.md,
+    gap: spacing.sm,
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 5,
+    borderRadius: radius.full,
+  },
+  statusPillOpen: { backgroundColor: colors.accentLight },
+  statusPillClosed: { backgroundColor: colors.surfaceMuted },
+  statusDot: { width: 6, height: 6, borderRadius: radius.full },
+  statusDotOpen: { backgroundColor: colors.accentDark },
+  statusDotClosed: { backgroundColor: colors.mutedForeground },
+  statusPillText: { fontSize: 12, fontWeight: '600' },
+  statusPillTextOpen: { color: colors.accentDark },
+  statusPillTextClosed: { color: colors.mutedForeground },
+  shopPriceTag: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.primaryDark,
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 5,
+    borderRadius: radius.full,
+    overflow: 'hidden',
+  },
+  branchChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    marginTop: spacing.sm + 2,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 6,
+    borderRadius: radius.full,
+    backgroundColor: colors.primaryLight,
+  },
+  branchChipText: { fontSize: 12, fontWeight: '600', color: colors.primary },
+  warnPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 5,
+    borderRadius: radius.full,
+    backgroundColor: colors.warningBg,
+  },
+  warnPillText: { fontSize: 12, fontWeight: '600', color: colors.warning },
   optionTitle: { fontWeight: '600', fontSize: 16, color: colors.foreground },
   optionBadge: { fontWeight: '600', fontSize: 12, color: colors.accentDark },
   optionSub: { marginTop: spacing.xs, fontSize: 13, color: colors.muted },
@@ -2113,15 +2315,6 @@ const styles = StyleSheet.create({
   optionGps: { marginTop: spacing.sm - 2, fontSize: 12, color: colors.accentDark, fontWeight: '500' },
   optionGpsMissing: { marginTop: spacing.sm - 2, fontSize: 12, color: colors.warning, fontWeight: '500' },
   addonIncludedBadge: { marginTop: spacing.xs, fontSize: 12, color: colors.accentDark, fontWeight: '500' },
-  scheduleOpen: { marginTop: spacing.xs, fontSize: 12, color: colors.accentDark, fontWeight: '500' },
-  scheduleClosed: { marginTop: spacing.xs, fontSize: 12, color: colors.mutedForeground, fontWeight: '500' },
-  optionBranchLink: {
-    marginTop: spacing.sm - 2,
-    fontSize: 12,
-    color: colors.primary,
-    fontWeight: '600',
-    textDecorationLine: 'underline',
-  },
   addressLabelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
   defaultBadge: {
     backgroundColor: colors.primaryLight,
