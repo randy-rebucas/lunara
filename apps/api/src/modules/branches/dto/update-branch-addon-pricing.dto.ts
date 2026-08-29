@@ -50,6 +50,12 @@ export class BranchAddonPriceDto {
   @IsArray()
   @IsEnum(BookingType, { each: true })
   applicableServiceTypes?: BookingType[];
+
+  /** Units of this add-on bundled free into the service — only quantity beyond this is billed. */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  includedQuantity?: number;
 }
 
 export class UpdateBranchAddonPricingDto {

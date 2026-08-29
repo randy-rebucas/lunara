@@ -413,7 +413,8 @@ export class BookingService {
         if (addon.isPercentOfService) return addon;
         const unit = this.branchesService.resolveAddonPricingUnit(branch, addon.id);
         const rate = await this.branchesService.resolveAddonRateForUnit(branch, addon.id, unit);
-        return { ...addon, price: applyShopMarkup(rate), pricingUnit: unit };
+        const includedQuantity = this.branchesService.resolveAddonIncludedQuantity(branch, addon.id);
+        return { ...addon, price: applyShopMarkup(rate), pricingUnit: unit, includedQuantity };
       }),
     );
 

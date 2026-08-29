@@ -56,6 +56,8 @@ interface ShopAddonPrice {
   applicableServiceTypes?: string[];
   allowsQuantity?: boolean;
   maxQuantity?: number;
+  /** Units of this add-on bundled free into the service — only quantity beyond this is billed. */
+  includedQuantity?: number;
 }
 
 interface ShopGarmentItem {
@@ -237,6 +239,7 @@ export default function ServicesPage() {
   const [addonRates, setAddonRates] = useState<Record<string, Record<string, string>>>({});
   const [addonUnits, setAddonUnits] = useState<Record<string, PricingMode>>({});
   const [addonServiceTypes, setAddonServiceTypes] = useState<Record<string, string[]>>({});
+  const [addonIncludedQty, setAddonIncludedQty] = useState<Record<string, string>>({});
   const [hiddenServiceTypes, setHiddenServiceTypes] = useState<string[]>([]);
   const [hiddenAddonSlugs, setHiddenAddonSlugs] = useState<string[]>([]);
   const [hiddenGarmentItemIds, setHiddenGarmentItemIds] = useState<string[]>([]);
@@ -310,6 +313,9 @@ export default function ServicesPage() {
     setAddonServiceTypes(
       Object.fromEntries(pricing.addons.map((a) => [a.slug, a.applicableServiceTypes ?? []])),
     );
+    setAddonIncludedQty(
+      Object.fromEntries(pricing.addons.map((a) => [a.slug, String(a.includedQuantity ?? 0)])),
+    );
     setKgPerLoad(String(pricing.kgPerLoad));
     setHiddenServiceTypes(pricing.hiddenServiceTypes);
     setHiddenAddonSlugs(pricing.hiddenAddonSlugs);
@@ -367,6 +373,7 @@ export default function ServicesPage() {
                   ...rates,
                   pricingUnit: addonUnits[a.slug] ?? 'flat_bag',
                   applicableServiceTypes: addonServiceTypes[a.slug] ?? [],
+                  includedQuantity: Number(addonIncludedQty[a.slug] ?? 0),
                 };
               }),
           }),
@@ -774,58 +781,14 @@ export default function ServicesPage() {
                           <button
                             type="button"
                             className="btn-outline btn-sm"
-                            onClick={() => setExpandedAddonsFor((v) => (v === key ? null : key))}
+                            onClick={() => setExpandedAddonsFor(key)}
                           >
-                            {expandedAddonsFor === key ? 'Close' : 'Add-ons'}
+                            Add-ons
                           </button>
                         ) : (
                           <span className="text-xs text-muted">—</span>
                         )}
                       </td>
-                    );
-                    const addonsRow = expandedAddonsFor === key && offerableAddons.length > 0 && (
-                      <tr key={`${key}-addons`}>
-                        <td colSpan={7} className="bg-surface-subtle p-4">
-                          <p className="mb-2 text-xs font-medium text-slate-900">
-                            Add-ons offered with {s.label}
-                          </p>
-                          <p className="mb-2 text-xs text-muted">
-                            Custom add-ons save instantly. Standard add-ons need &quot;Save pricing&quot; below.
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            {offerableAddons.map((a) => {
-                              const key2 = a.customAddonId ?? a.slug;
-                              const offered = a.isCustom
-                                ? !!a.applicableServiceTypes?.includes(s.type)
-                                : !!addonServiceTypes[a.slug]?.includes(s.type);
-                              return (
-                                <label
-                                  key={key2}
-                                  className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs text-muted"
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={offered}
-                                    onChange={(e) =>
-                                      a.isCustom
-                                        ? void toggleAddonForService(a, s.type, e.target.checked)
-                                        : setAddonServiceTypes((prev) => {
-                                            const current = prev[a.slug] ?? [];
-                                            const next = e.target.checked
-                                              ? [...current, s.type]
-                                              : current.filter((t) => t !== s.type);
-                                            return { ...prev, [a.slug]: next };
-                                          })
-                                    }
-                                  />
-                                  {a.label}
-                                  {!a.isCustom && <span className="text-muted">*</span>}
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </td>
-                      </tr>
                     );
                     if (s.isCustom) {
                       const customUnit = s.pricingUnit ?? 'per_kg';
@@ -856,7 +819,6 @@ export default function ServicesPage() {
                               </button>
                             </td>
                           </tr>
-                          {addonsRow}
                         </Fragment>
                       );
                     }
@@ -926,7 +888,6 @@ export default function ServicesPage() {
                           </label>
                         </td>
                         </tr>
-                        {addonsRow}
                       </Fragment>
                     );
                   })}
@@ -935,6 +896,96 @@ export default function ServicesPage() {
             </div>
           </div>
           )}
+
+          {expandedAddonsFor && (() => {
+            const modalService = pricing.services.find(
+              (s) => (s.customServiceId ?? s.type) === expandedAddonsFor,
+            );
+            const offerableAddons = pricing.addons.filter((a) => !a.isPercentOfService);
+            if (!modalService) return null;
+            return (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+                onClick={() => setExpandedAddonsFor(null)}
+              >
+                <div
+                  className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <h3 className="text-lg font-semibold text-slate-900">
+                    Add-ons for {modalService.label}
+                  </h3>
+                  <p className="mt-1 text-xs text-muted">
+                    Custom add-ons save instantly. Standard add-ons need &quot;Save pricing&quot; below.
+                  </p>
+                  <div className="mt-4 flex flex-col gap-2">
+                    {offerableAddons.map((a) => {
+                      const key2 = a.customAddonId ?? a.slug;
+                      const offered = a.isCustom
+                        ? !!a.applicableServiceTypes?.includes(modalService.type)
+                        : !!addonServiceTypes[a.slug]?.includes(modalService.type);
+                      return (
+                        <div
+                          key={key2}
+                          className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2"
+                        >
+                          <label className="flex items-center gap-2 text-sm text-slate-900">
+                            <input
+                              type="checkbox"
+                              checked={offered}
+                              onChange={(e) =>
+                                a.isCustom
+                                  ? void toggleAddonForService(a, modalService.type, e.target.checked)
+                                  : setAddonServiceTypes((prev) => {
+                                      const current = prev[a.slug] ?? [];
+                                      const next = e.target.checked
+                                        ? [...current, modalService.type]
+                                        : current.filter((t) => t !== modalService.type);
+                                      return { ...prev, [a.slug]: next };
+                                    })
+                              }
+                            />
+                            {a.label}
+                            {!a.isCustom && <span className="text-muted">*</span>}
+                          </label>
+                          {!a.isCustom && offered && (addonUnits[a.slug] ?? a.pricingUnit) === 'per_piece' ? (
+                            <label className="flex items-center gap-1.5 text-xs text-muted">
+                              Included qty
+                              <input
+                                type="number"
+                                min={0}
+                                max={a.allowsQuantity ? (a.maxQuantity ?? 5) : 1}
+                                step={1}
+                                className="input-field w-16"
+                                value={addonIncludedQty[a.slug] ?? '0'}
+                                onChange={(e) =>
+                                  setAddonIncludedQty((p) => ({ ...p, [a.slug]: e.target.value }))
+                                }
+                                title="How many units of this add-on come free with the service — customers are only charged beyond this."
+                              />
+                            </label>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {saveError && <p className="mt-3 text-sm text-destructive">{saveError}</p>}
+                  <div className="mt-6 flex items-center justify-end gap-3">
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      disabled={saving}
+                      onClick={() =>
+                        void save().then(() => setExpandedAddonsFor(null))
+                      }
+                    >
+                      {saving ? 'Saving…' : 'Done'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {activeTab === 'addons' && (
           <div className="section-panel mt-4 overflow-hidden">
@@ -1077,6 +1128,7 @@ export default function ServicesPage() {
                     <th>Unit</th>
                     <th>Your price</th>
                     <th>Customer pays</th>
+                    <th>Included in package</th>
                     <th>Offer</th>
                   </tr>
                 </thead>
@@ -1103,6 +1155,7 @@ export default function ServicesPage() {
                           <td className="text-muted">Flat</td>
                           <td className="text-muted">{formatPeso(a.basePrice)}</td>
                           <td className="text-muted">{formatPeso(a.customerPrice)}</td>
+                          <td className="text-muted">—</td>
                           <td>
                             <button
                               type="button"
@@ -1127,6 +1180,7 @@ export default function ServicesPage() {
                             +{a.basePrice}% <span className="text-xs">(not partner-configurable)</span>
                           </td>
                           <td className="text-muted">+{a.customerPrice}%</td>
+                          <td className="text-muted">—</td>
                           <td>
                             <label className="flex items-center gap-2 text-xs text-muted">
                               <input
@@ -1191,6 +1245,24 @@ export default function ServicesPage() {
                           </div>
                         </td>
                         <td className="text-muted">{formatPeso(base * MARKUP_MULTIPLIER)}</td>
+                        <td>
+                          {a.allowsQuantity ? (
+                            <input
+                              type="number"
+                              min={0}
+                              max={a.maxQuantity ?? 5}
+                              step={1}
+                              className="input-field w-20"
+                              value={addonIncludedQty[a.slug] ?? '0'}
+                              onChange={(e) =>
+                                setAddonIncludedQty((p) => ({ ...p, [a.slug]: e.target.value }))
+                              }
+                              title="How many units of this add-on come free with the service — customers are only charged beyond this."
+                            />
+                          ) : (
+                            <span className="text-muted">—</span>
+                          )}
+                        </td>
                         <td>
                           <label className="flex items-center gap-2 text-xs text-muted">
                             <input

@@ -200,6 +200,12 @@ class BranchAddonPrice {
   /** Booking types this add-on may be attached to at this shop (empty/unset = applies to any service). */
   @Prop({ type: [String], default: [] })
   applicableServiceTypes?: string[];
+
+  /** For a quantity-selectable add-on: how many units are already bundled into the service's own
+   * price (e.g. a package that includes 2 pieces of fabric softener free) — only the customer's
+   * quantity beyond this is billed, and the line only appears on the estimate once they exceed it. */
+  @Prop({ min: 0, default: 0 })
+  includedQuantity?: number;
 }
 
 @Schema({ _id: false })

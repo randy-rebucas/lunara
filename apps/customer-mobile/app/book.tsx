@@ -178,6 +178,9 @@ interface ShopAddonOption {
   applicableServiceTypes?: string[];
   allowsQuantity?: boolean;
   maxQuantity?: number;
+  /** Units of this add-on bundled free into the service by the shop — only the customer's
+   * quantity beyond this is billed. */
+  includedQuantity?: number;
 }
 
 /** Every other branch in the same partner's group carries the same full shape as the group's
@@ -494,6 +497,7 @@ export default function BookScreen() {
             isCustom: a.isCustom ?? false,
             allowsQuantity: a.allowsQuantity ?? catalogMatch?.allowsQuantity,
             maxQuantity: a.maxQuantity ?? catalogMatch?.maxQuantity,
+            includedQuantity: a.includedQuantity,
           };
         });
     }
@@ -574,16 +578,20 @@ export default function BookScreen() {
     // Shop-specific addon prices/units when a shop is chosen — falls back to the flat global
     // catalog before a shop is picked, matching the `addons` render list below.
     const addonOptions = selectedShop
-      ? selectedShop.addons.map((a) => ({
-          id: a.slug,
-          label: a.label,
-          description: a.description ?? '',
-          price: a.customerPrice,
-          pricingUnit: a.pricingUnit ?? BranchPricingMode.FLAT_BAG,
-          isPercentOfService: a.isPercentOfService,
-          allowsQuantity: a.allowsQuantity,
-          maxQuantity: a.maxQuantity,
-        }))
+      ? selectedShop.addons.map((a) => {
+          const catalogMatch = config?.addons.find((ca) => ca.id === a.slug);
+          return {
+            id: a.slug,
+            label: a.label,
+            description: a.description ?? '',
+            price: a.customerPrice,
+            pricingUnit: a.pricingUnit ?? BranchPricingMode.FLAT_BAG,
+            isPercentOfService: a.isPercentOfService,
+            allowsQuantity: a.allowsQuantity ?? catalogMatch?.allowsQuantity,
+            maxQuantity: a.maxQuantity ?? catalogMatch?.maxQuantity,
+            includedQuantity: a.includedQuantity,
+          };
+        })
       : config?.addons;
 
     try {
@@ -1993,7 +2001,10 @@ export default function BookScreen() {
                             : a.pricingUnit === BranchPricingMode.PER_ITEM
                               ? ' / item'
                               : '';
-                  const quantity = form.addonQuantities[a.id] ?? 1;
+                  // Default to whatever's already bundled free, so the stepper starts where the
+                  // customer's included units end rather than at a flat 1.
+                  const defaultQuantity = Math.max(1, a.includedQuantity ?? 0);
+                  const quantity = form.addonQuantities[a.id] ?? defaultQuantity;
                   const maxQuantity = a.maxQuantity ?? 5;
 
                   const cardBody = (
@@ -2018,9 +2029,21 @@ export default function BookScreen() {
                           </View>
                         </View>
                         <Text style={styles.optionSub}>{a.description}</Text>
-                        {!a.isPercentOfService && (
+                        {!a.isPercentOfService && !a.allowsQuantity ? (
                           <Text style={styles.addonIncludedBadge}>Included with your service</Text>
-                        )}
+                        ) : null}
+                        {!a.isPercentOfService && a.allowsQuantity && (a.includedQuantity ?? 0) > 0 ? (
+                          <Text style={styles.addonIncludedBadge}>
+                            First {a.includedQuantity} included free — add more for{' '}
+                            {formatCurrency(a.price)}
+                            {unitSuffix} each
+                          </Text>
+                        ) : null}
+                        {!a.isPercentOfService && a.allowsQuantity && !(a.includedQuantity ?? 0) ? (
+                          <Text style={styles.addonIncludedBadge}>
+                            Pre-added by this shop — set the quantity or remove it
+                          </Text>
+                        ) : null}
                         {disabled ? (
                           <Text style={styles.optionGpsMissing}>
                             Not available for pickups at 3:00 PM or later
@@ -2088,7 +2111,7 @@ export default function BookScreen() {
                             : [...f.addonIds, a.id],
                           addonQuantities:
                             a.allowsQuantity && !selected
-                              ? { ...f.addonQuantities, [a.id]: 1 }
+                              ? { ...f.addonQuantities, [a.id]: Math.max(1, a.includedQuantity ?? 0) }
                               : f.addonQuantities,
                         }))
                       }
@@ -2129,7 +2152,10 @@ export default function BookScreen() {
             <View>
               <StepHeading step="review" title="Price estimate" />
               <View style={styles.promoCard}>
-                <Text style={styles.promoTitle}>Promo code</Text>
+                <View style={styles.promoTitleRow}>
+                  <Ionicons name="pricetag-outline" size={15} color={colors.mutedForeground} />
+                  <Text style={styles.promoTitle}>Promo code</Text>
+                </View>
                 {activeQuote.couponCode ? (
                   <View style={styles.promoAppliedRow}>
                     <View style={styles.promoAppliedText}>
@@ -2169,51 +2195,97 @@ export default function BookScreen() {
                 )}
               </View>
               <View style={styles.estimateCard}>
-                <View style={styles.estimateRow}>
-                  <Text style={styles.estimateLabel}>
-                    {activeQuote.pricingMode === BranchPricingMode.FLAT_BAG
-                      ? `${activeQuote.serviceLabel} — ${activeQuote.bagLabel} bag`
-                      : activeQuote.serviceLabel}
-                  </Text>
-                  <Text>{formatCurrency(activeQuote.serviceSubtotal)}</Text>
-                </View>
-                {activeQuote.addons.map((a) => {
+                <View style={styles.estimateBody}>
+                  <View style={styles.estimateRow}>
+                    <View style={styles.estimateLineIconRow}>
+                      <View style={styles.estimateServiceIcon}>
+                        <Ionicons name="shirt-outline" size={14} color={colors.primary} />
+                      </View>
+                      <Text style={styles.estimateLabel}>
+                        {activeQuote.pricingMode === BranchPricingMode.FLAT_BAG
+                          ? `${activeQuote.serviceLabel} — ${activeQuote.bagLabel} bag`
+                          : activeQuote.serviceLabel}
+                      </Text>
+                    </View>
+                    <Text style={styles.estimateAmount}>{formatCurrency(activeQuote.serviceSubtotal)}</Text>
+                  </View>
+                  {activeQuote.addons.map((a) => {
+                  // For an add-on the customer can size (allowsQuantity), the label must reflect
+                  // what's actually billed (a.billedQuantity = addonQuantity minus whatever the
+                  // shop already bundles free) — a.quantity is the order's own weight/load/piece
+                  // count, which only doubles as the billed amount when the add-on always applies
+                  // to the whole order (no customer-chosen quantity, nothing bundled).
+                  const addonOption = addons.find((opt) => opt.id === a.id);
+                  const isPerUnitCounted =
+                    a.unit === BranchPricingMode.PER_PIECE ||
+                    a.unit === BranchPricingMode.PER_PAIR ||
+                    a.unit === BranchPricingMode.PER_ITEM;
+                  // Show the quantity the customer actually picked (addonQuantity), not just what's
+                  // billed — a bundle-covered pick (billedQuantity 0) still reflects their choice
+                  // here, with the $0 price line below making clear it's free. For a per-piece/pair/
+                  // item add-on the shop bundles in without a customer stepper, `quantity` is the
+                  // order's own piece count — 0 for a per-kg/per-load service — so fall back to the
+                  // partner-configured includedQuantity to show what's actually bundled in.
+                  const displayQty =
+                    addonOption?.allowsQuantity && isPerUnitCounted
+                      ? a.addonQuantity
+                      : isPerUnitCounted && !a.quantity && (a.includedQuantity ?? 0) > 0
+                        ? a.includedQuantity
+                        : a.quantity;
                   const detail = a.percent
                     ? `${a.label} (+${a.percent}%)`
                     : a.unit === BranchPricingMode.PER_KG
-                      ? `${a.label} (${a.quantity ?? 0} kg)`
+                      ? `${a.label} (${displayQty ?? 0} kg)`
                       : a.unit === BranchPricingMode.PER_LOAD
-                        ? `${a.label} (×${a.quantity ?? 0} load${a.quantity === 1 ? '' : 's'})`
+                        ? `${a.label} (×${displayQty ?? 0} load${displayQty === 1 ? '' : 's'})`
                         : a.unit === BranchPricingMode.PER_PIECE
-                          ? `${a.label} (×${a.quantity ?? 0} piece${a.quantity === 1 ? '' : 's'})`
+                          ? `${a.label} (×${displayQty ?? 0} piece${displayQty === 1 ? '' : 's'})`
                           : a.unit === BranchPricingMode.PER_PAIR
-                            ? `${a.label} (×${a.quantity ?? 0} pair${a.quantity === 1 ? '' : 's'})`
+                            ? `${a.label} (×${displayQty ?? 0} pair${displayQty === 1 ? '' : 's'})`
                             : a.unit === BranchPricingMode.PER_ITEM
-                              ? `${a.label} (×${a.quantity ?? 0} item${a.quantity === 1 ? '' : 's'})`
-                              : a.label;
+                              ? `${a.label} (×${displayQty ?? 0} item${displayQty === 1 ? '' : 's'})`
+                              : addonOption?.allowsQuantity && (a.addonQuantity ?? 1) > 1
+                                ? `${a.label} (×${a.addonQuantity})`
+                                : a.label;
                   return (
                     <View key={a.id} style={styles.estimateRow}>
-                      <Text style={styles.estimateLabelMuted}>{detail}</Text>
-                      <Text style={styles.estimateLabelMuted}>{formatCurrency(a.price)}</Text>
+                      <View style={styles.estimateLineIconRow}>
+                        <Ionicons
+                          name={ADDON_ICONS[a.id] ?? ADDON_ICON_FALLBACK}
+                          size={13}
+                          color={colors.mutedForeground}
+                        />
+                        <Text style={styles.estimateLabelMuted}>{detail}</Text>
+                      </View>
+                      <Text style={styles.estimateAmountMuted}>
+                        {a.price > 0 ? formatCurrency(a.price) : 'Free'}
+                      </Text>
                     </View>
                   );
                 })}
                 <View style={[styles.estimateRow, styles.estimateDivider]}>
                   <Text style={styles.estimateLabel}>Delivery fee</Text>
-                  <Text>{formatCurrency(activeQuote.deliveryFee)}</Text>
+                  <Text style={styles.estimateAmount}>{formatCurrency(activeQuote.deliveryFee)}</Text>
                 </View>
                 {activeQuote.discount > 0 && (
                   <View style={styles.estimateRow}>
-                    <Text style={styles.estimateLabel}>
+                    <Text style={styles.estimateDiscountLabel}>
                       Discount{activeQuote.promotionTitle ? ` — ${activeQuote.promotionTitle}` : ''}
                     </Text>
-                    <Text>−{formatCurrency(activeQuote.discount)}</Text>
+                    <Text style={styles.estimateDiscountAmount}>
+                      −{formatCurrency(activeQuote.discount)}
+                    </Text>
                   </View>
                 )}
-                <View style={styles.estimateRow}>
+                </View>
+                <View style={styles.estimateFooter}>
                   <Text style={styles.estimateTotalLabel}>Estimated total</Text>
                   <Text style={styles.estimateTotal}>{formatCurrency(activeQuote.total)}</Text>
                 </View>
+              </View>
+              <View style={styles.estimateNoteRow}>
+                <Ionicons name="information-circle-outline" size={14} color={colors.mutedForeground} />
+                <Text style={styles.estimateNote}>Final amount may adjust after weigh-in.</Text>
               </View>
               {!activeQuote.meetsMinimum && (
                 <Text style={styles.error}>
@@ -2577,7 +2649,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     marginBottom: spacing.md,
     gap: spacing.sm,
+    ...shadow.card,
   },
+  promoTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   promoTitle: { fontSize: 14, fontWeight: '600', color: colors.foreground },
   promoInputRow: { flexDirection: 'row', gap: spacing.sm },
   promoInput: {
@@ -2697,21 +2771,51 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.lg,
-    padding: spacing.lg,
     backgroundColor: colors.surface,
+    overflow: 'hidden',
+    ...shadow.card,
   },
-  estimateRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm },
-  estimateLabel: { fontSize: 14, flex: 1, paddingRight: spacing.sm, color: colors.foreground },
-  estimateLabelMuted: { fontSize: 14, color: colors.muted, flex: 1, paddingRight: spacing.sm },
+  estimateBody: { padding: spacing.lg, paddingBottom: spacing.xs },
+  estimateRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
+  estimateLineIconRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1, paddingRight: spacing.sm },
+  estimateServiceIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: radius.full,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  estimateLabel: { fontSize: 14, fontWeight: '600', flex: 1, color: colors.foreground },
+  estimateLabelMuted: { fontSize: 13.5, color: colors.muted, flex: 1 },
+  estimateAmount: { fontSize: 14, fontWeight: '600', color: colors.foreground },
+  estimateAmountMuted: { fontSize: 13.5, color: colors.muted },
+  estimateDiscountLabel: { fontSize: 14, flex: 1, paddingRight: spacing.sm, color: colors.accentDark },
+  estimateDiscountAmount: { fontSize: 14, fontWeight: '600', color: colors.accentDark },
   estimateDivider: {
     borderTopWidth: 1,
     borderTopColor: colors.border,
     paddingTop: spacing.md - 2,
     marginTop: spacing.xs,
-    marginBottom: spacing.md - 2,
   },
-  estimateTotalLabel: { fontSize: 16, fontWeight: '700', color: colors.foreground },
-  estimateTotal: { fontSize: 16, fontWeight: '700', color: colors.primary },
+  estimateFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  estimateTotalLabel: { fontSize: 15, fontWeight: '700', color: colors.foreground },
+  estimateTotal: { fontSize: 18, fontWeight: '700', color: colors.primaryDark },
+  estimateNoteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.xs,
+  },
+  estimateNote: { fontSize: 12, color: colors.mutedForeground, flex: 1 },
   summaryCard: {
     backgroundColor: colors.surfaceMuted,
     borderRadius: radius.lg,

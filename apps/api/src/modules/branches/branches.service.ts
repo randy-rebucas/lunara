@@ -232,6 +232,15 @@ export class BranchesService {
     }
   }
 
+  /** How many units of this add-on the shop bundles free into the service — customer-chosen
+   * quantity beyond this is what actually gets billed. Custom (branch-owned) add-ons don't
+   * support bundling since they have no separate package/service relationship to bundle into. */
+  resolveAddonIncludedQuantity(branch: BranchDocument, addonSlug: string): number {
+    if (addonSlug.startsWith(CUSTOM_ADDON_ID_PREFIX)) return 0;
+    const override = branch.addonPricing?.find((p) => p.addonSlug === addonSlug);
+    return override?.includedQuantity ?? 0;
+  }
+
   /** Branch's own active custom add-ons, shaped like BookingAddonOption for use alongside the
    * global catalog list in the booking quote/order path. */
   async listCustomAddonOptions(branch: BranchDocument) {
@@ -409,6 +418,13 @@ export class BranchesService {
             customerPrice: applyShopMarkup(activeRate),
             isCustom: false,
             applicableServiceTypes: override?.applicableServiceTypes,
+            // Global-catalog quantity settings (e.g. fabric softener: allowsQuantity + maxQuantity
+            // 5) — dropping these here (unlike customItems below) left the customer-facing add-on
+            // list unable to show or drive the quantity stepper for any global add-on, even though
+            // the actual quote/order pricing path (listPriceableAddonOptions) always preserved them.
+            allowsQuantity: addon.allowsQuantity,
+            maxQuantity: addon.maxQuantity,
+            includedQuantity: override?.includedQuantity ?? 0,
           };
         }),
     );
@@ -1040,6 +1056,7 @@ export class BranchesService {
       fixedPrice?: number;
       pricingUnit?: BranchPricingMode;
       applicableServiceTypes?: BookingType[];
+      includedQuantity?: number;
     }[],
   ) {
     const rateKeyByUnit: Partial<Record<BranchPricingMode, RateKey>> = {

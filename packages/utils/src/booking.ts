@@ -143,12 +143,17 @@ export interface BookingAddonOption {
   /** Booking types this add-on may be attached to (empty/unset = applies to any service). */
   applicableServiceTypes?: BookingType[];
   /** Global-catalog-only. When true, customers pick a quantity (1..maxQuantity) via a stepper
-   * instead of a plain on/off toggle. Only meaningful for FLAT_BAG/FIXED, non-percent add-ons —
-   * ignored for PER_KG/PER_LOAD/PER_PIECE/PER_PAIR/PER_ITEM and isPercentOfService add-ons, which
-   * already scale off the order's own weight/piece count; combining both would double-scale. */
+   * instead of a plain on/off toggle. For FLAT_BAG/FIXED that quantity directly multiplies the
+   * flat rate; for PER_PIECE/PER_PAIR/PER_ITEM it replaces the order's own piece count as the
+   * billed amount (see combineServiceQuotes) — ignored for PER_KG/PER_LOAD and isPercentOfService
+   * add-ons, which always scale off the order's own weight/load. */
   allowsQuantity?: boolean;
   /** Upper bound for the stepper when allowsQuantity is true. Defaults to 5 if unset. */
   maxQuantity?: number;
+  /** Units of this add-on already bundled into the service's price by the shop — only the
+   * customer's chosen quantity beyond this is billed (and the line only appears once they exceed
+   * it). Only meaningful alongside allowsQuantity; 0/unset means nothing is pre-bundled. */
+  includedQuantity?: number;
 }
 
 export interface ServiceAreaRule {
@@ -332,6 +337,12 @@ export interface QuoteBreakdown {
      * `quantity` above, which is the order's own derived weight/load/piece count for PER_KG/
      * PER_LOAD/etc. add-ons. Only meaningful when the add-on's catalog entry has allowsQuantity. */
     addonQuantity?: number;
+    /** Units of addonQuantity already bundled free into the service by the shop. */
+    includedQuantity?: number;
+    /** What's actually billed: max(0, addonQuantity - includedQuantity). An add-on fully covered by
+     * the bundle (billedQuantity 0 with includedQuantity > 0) still appears here at price 0 so the
+     * estimate reflects the quantity the customer chose. */
+    billedQuantity?: number;
     percent?: number;
   }[];
   addonsSubtotal: number;
@@ -401,25 +412,47 @@ export function combineServiceQuotes(
         return { id: a.id, label: a.label, price, percent: a.price };
       }
       const unit = a.pricingUnit ?? BranchPricingMode.FLAT_BAG;
+      const isPerUnitCounted =
+        unit === BranchPricingMode.PER_PIECE ||
+        unit === BranchPricingMode.PER_PAIR ||
+        unit === BranchPricingMode.PER_ITEM;
       const quantity =
         unit === BranchPricingMode.PER_KG
           ? combinedWeightKg
           : unit === BranchPricingMode.PER_LOAD
             ? estimateMachineLoads(combinedWeightKg, kgPerLoad)
-            : unit === BranchPricingMode.PER_PIECE ||
-                unit === BranchPricingMode.PER_PAIR ||
-                unit === BranchPricingMode.PER_ITEM
+            : isPerUnitCounted
               ? combinedPieceCount
               : undefined;
-      const addonQuantity =
-        (unit === BranchPricingMode.FLAT_BAG || unit === BranchPricingMode.FIXED) && a.allowsQuantity
-          ? Math.max(1, Math.min(addonQuantities[a.id] ?? 1, a.maxQuantity ?? 5))
-          : 1;
+      // A per-piece/pair/item add-on that allows a customer-chosen quantity is billed for that
+      // quantity (default 1, stepper lets them add more) — not silently applied to every piece in
+      // the order, which is only correct for a flat per-piece fee the shop always charges in full.
+      const usesSelectableQuantity =
+        a.allowsQuantity &&
+        (unit === BranchPricingMode.FLAT_BAG || unit === BranchPricingMode.FIXED || isPerUnitCounted);
+      const addonQuantity = usesSelectableQuantity
+        ? Math.max(1, Math.min(addonQuantities[a.id] ?? 1, a.maxQuantity ?? 5))
+        : 1;
+      // The shop may bundle some units of this add-on free into the service itself — only the
+      // customer's quantity beyond that bundle is actually billed (and worth showing as a line).
+      const includedQuantity = usesSelectableQuantity ? (a.includedQuantity ?? 0) : 0;
+      const billedQuantity = Math.max(0, addonQuantity - includedQuantity);
       const price =
         unit === BranchPricingMode.FLAT_BAG || unit === BranchPricingMode.FIXED
-          ? Math.round(a.price * addonQuantity * 100) / 100
-          : Math.round(a.price * (quantity ?? 0) * 100) / 100;
-      return { id: a.id, label: a.label, price, unit, quantity, addonQuantity };
+          ? Math.round(a.price * billedQuantity * 100) / 100
+          : isPerUnitCounted && a.allowsQuantity
+            ? Math.round(a.price * billedQuantity * 100) / 100
+            : Math.round(a.price * (quantity ?? 0) * 100) / 100;
+      return {
+        id: a.id,
+        label: a.label,
+        price,
+        unit,
+        quantity,
+        addonQuantity,
+        includedQuantity,
+        billedQuantity,
+      };
     });
   const addonsSubtotal = addons.reduce((sum, a) => sum + a.price, 0);
   const subtotal = serviceSubtotal + addonsSubtotal;
@@ -873,25 +906,44 @@ export function calculateQuote(
         return { id: a.id, label: a.label, price, percent: a.price };
       }
       const unit = a.pricingUnit ?? BranchPricingMode.FLAT_BAG;
+      const isPerUnitCounted =
+        unit === BranchPricingMode.PER_PIECE ||
+        unit === BranchPricingMode.PER_PAIR ||
+        unit === BranchPricingMode.PER_ITEM;
       const quantity =
         unit === BranchPricingMode.PER_KG
           ? weightKg
           : unit === BranchPricingMode.PER_LOAD
             ? loadCount
-            : unit === BranchPricingMode.PER_PIECE ||
-                unit === BranchPricingMode.PER_PAIR ||
-                unit === BranchPricingMode.PER_ITEM
+            : isPerUnitCounted
               ? (pieceCount ?? 0)
               : undefined;
-      const addonQuantity =
-        (unit === BranchPricingMode.FLAT_BAG || unit === BranchPricingMode.FIXED) && a.allowsQuantity
-          ? Math.max(1, Math.min(input.addonQuantities?.[a.id] ?? 1, a.maxQuantity ?? 5))
-          : 1;
+      // See combineServiceQuotes for why per-piece/pair/item add-ons that allow a customer-chosen
+      // quantity must bill that quantity (default 1), not the order's full piece count.
+      const usesSelectableQuantity =
+        a.allowsQuantity &&
+        (unit === BranchPricingMode.FLAT_BAG || unit === BranchPricingMode.FIXED || isPerUnitCounted);
+      const addonQuantity = usesSelectableQuantity
+        ? Math.max(1, Math.min(input.addonQuantities?.[a.id] ?? 1, a.maxQuantity ?? 5))
+        : 1;
+      const includedQuantity = usesSelectableQuantity ? (a.includedQuantity ?? 0) : 0;
+      const billedQuantity = Math.max(0, addonQuantity - includedQuantity);
       const price =
         unit === BranchPricingMode.FLAT_BAG || unit === BranchPricingMode.FIXED
-          ? Math.round(a.price * addonQuantity * 100) / 100
-          : Math.round(a.price * (quantity ?? 0) * 100) / 100;
-      return { id: a.id, label: a.label, price, unit, quantity, addonQuantity };
+          ? Math.round(a.price * billedQuantity * 100) / 100
+          : isPerUnitCounted && a.allowsQuantity
+            ? Math.round(a.price * billedQuantity * 100) / 100
+            : Math.round(a.price * (quantity ?? 0) * 100) / 100;
+      return {
+        id: a.id,
+        label: a.label,
+        price,
+        unit,
+        quantity,
+        addonQuantity,
+        includedQuantity,
+        billedQuantity,
+      };
     });
   const addonsSubtotal = addons.reduce((sum, a) => sum + a.price, 0);
   const subtotal = serviceSubtotal + addonsSubtotal;
