@@ -61,15 +61,16 @@ export class SettingsService {
     return settings.maxDeliveryRadiusKm;
   }
 
-  /** Delivery Fee = base fare + (chargeable distance beyond the base allowance x per-km rate).
-   * Pass the pickup-to-shop distance in km; omit it (e.g. for pre-shop-selection previews) to get
-   * the flat base fare only. */
+  /** Customer-facing delivery fee = chargeable distance beyond the base allowance x per-km rate —
+   * the base fare itself is the partner shop's own cost, not billed to the customer. Pass the
+   * pickup-to-shop distance in km; omit it (e.g. for pre-shop-selection previews) to get 0, since
+   * no distance is known yet to bill for. */
   async getDeliveryFeeForAddress(
     _address: { city: string; province: string },
     distanceKm?: number,
   ) {
     const settings = await this.getOrCreateSettings();
-    if (distanceKm === undefined) return settings.deliveryFee;
+    if (distanceKm === undefined) return 0;
     return calculateDeliveryFee(
       distanceKm,
       settings.deliveryFee,

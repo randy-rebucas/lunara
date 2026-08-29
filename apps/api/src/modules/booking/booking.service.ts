@@ -49,10 +49,9 @@ export class BookingService {
   ) {}
 
   async getConfig() {
-    const [services, addons, deliveryFees, serviceAreas] = await Promise.all([
+    const [services, addons, serviceAreas] = await Promise.all([
       this.catalogService.listActiveServices(),
       this.catalogService.listActiveAddons(),
-      this.settingsService.getDeliveryFeeSettings(),
       this.serviceAreasService.listActive(),
     ]);
     return {
@@ -67,7 +66,10 @@ export class BookingService {
         })),
         minOrderAmount: BOOKING_MIN_ORDER_AMOUNT,
         bagSizes: BAG_SIZES,
-        deliveryFee: deliveryFees.data.deliveryFee,
+        // The partner shop absorbs the base fare — customers are only ever charged for distance
+        // beyond it, which isn't known until a shop/address is picked, so 0 is the honest preview
+        // default rather than deliveryFees.data.deliveryFee (that setting is the partner's own cost).
+        deliveryFee: 0,
         garmentCatalog: GARMENT_CATALOG,
       },
     };

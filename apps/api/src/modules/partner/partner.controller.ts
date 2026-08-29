@@ -54,6 +54,8 @@ import { resolvePortalBranchId } from './partner-access';
 import { UpdatePartnerSettingsDto } from './dto/update-partner-settings.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ResetStaffPasswordDto } from './dto/reset-staff-password.dto';
+import { CreateRiderDto } from '../admin/dto/create-rider.dto';
+import { UpdateRiderByPartnerDto } from './dto/update-rider.dto';
 import {
   ConfirmShopItemsDto,
   ReceiveLaundryDto,
@@ -510,6 +512,40 @@ export class PartnerController {
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   listAssignedRiders(@Req() req: { user: { sub: string; role: UserRole } }) {
     return this.operationsService.listAssignedRiders(req.user.sub, req.user.role);
+  }
+
+  @Get('riders/owned')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  listOwnedRiders(@Req() req: { user: { sub: string; role: UserRole } }) {
+    return this.operationsService.listOwnedRiders(req.user.sub, req.user.role);
+  }
+
+  @Post('riders/owned')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  createOwnedRider(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Body() dto: CreateRiderDto,
+  ) {
+    return this.operationsService.createOwnedRider(req.user.sub, req.user.role, dto);
+  }
+
+  @Patch('riders/owned/:riderUserId')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  updateOwnedRider(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('riderUserId') riderUserId: string,
+    @Body() dto: UpdateRiderByPartnerDto,
+  ) {
+    return this.operationsService.updateOwnedRider(req.user.sub, req.user.role, riderUserId, dto);
+  }
+
+  @Delete('riders/owned/:riderUserId')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  removeOwnedRider(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('riderUserId') riderUserId: string,
+  ) {
+    return this.operationsService.removeOwnedRider(req.user.sub, req.user.role, riderUserId);
   }
 
   @Post('staff')

@@ -56,9 +56,6 @@ function RiderMiniCard({ riderId, label }: { riderId: string; label: string }) {
             <span className={`h-1.5 w-1.5 rounded-full ${profile?.isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`} />
             <span className="text-xs text-muted">{profile?.isOnline ? 'Online' : 'Offline'}</span>
           </div>
-          <Link href={`/riders/${riderId}`} className="text-xs font-medium text-primary hover:underline">
-            Profile →
-          </Link>
         </div>
       )}
     </div>

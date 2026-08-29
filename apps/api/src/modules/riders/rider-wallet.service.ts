@@ -343,6 +343,11 @@ export class RiderWalletService {
 
   async requestWithdrawal(userId: string, amount: number) {
     const rider = await this.findOrCreateRider(userId);
+    if (rider.partnerId) {
+      throw new BadRequestException(
+        'This rider is partner-managed — withdrawals go through their partner, not the platform wallet',
+      );
+    }
     if (!rider.payoutMethod) {
       throw new BadRequestException('Configure a payout method before withdrawing');
     }
@@ -597,6 +602,12 @@ export class RiderWalletService {
 
     // Fetched once, up front: needed for the fee lookup below (employees don't earn a per-task fee).
     const rider = await this.findOrCreateRider(riderUserId);
+
+    if (rider.partnerId) {
+      // Partner-owned riders' cash collection is reconciled by their partner, not tracked in the
+      // platform's rider remittance ledger.
+      return { alreadyNetted: false, remittance: null };
+    }
 
     // The fee is a fixed constant (not looked up from a wallet transaction) so this doesn't
     // depend on creditEarning() having already run — collectCash() fires this before the task

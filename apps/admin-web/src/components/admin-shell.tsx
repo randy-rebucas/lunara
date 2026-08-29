@@ -85,7 +85,6 @@ const nav: NavItem[] = [
   // Accounts: everyone → the fleet → inbound applicants
   { section: 'People' },
   { href: '/users',        label: 'Users',        icon: Icons.users },
-  { href: '/riders',       label: 'Riders',       icon: Icons.riders },
   { href: '/applications', label: 'Applications', icon: Icons.applications },
 
   // Physical network → the catalog it sells → shop-floor tooling
@@ -109,7 +108,6 @@ const nav: NavItem[] = [
   { href: '/accounting',         label: 'Accounting',        icon: Icons.accounting },
   { href: '/reconciliation',     label: 'Reconciliation',    icon: Icons.reconciliation },
   { href: '/refunds',            label: 'Refunds',           icon: Icons.refunds },
-  { href: '/riders/withdrawals', label: 'Rider withdrawals', icon: Icons.withdrawals },
 
   { section: 'Marketing' },
   { href: '/promotions',    label: 'Promotions',    icon: Icons.promotions },
@@ -133,7 +131,7 @@ function matchesRoute(pathname: string, href: string) {
   return pathname === href || (href !== '/' && pathname.startsWith(`${href}/`));
 }
 
-/** Longest matching nav href wins so nested routes (e.g. /riders/withdrawals)
+/** Longest matching nav href wins so nested routes (e.g. /partners/settlements)
  * highlight their own entry instead of every prefix ancestor too. */
 function activeHref(pathname: string): string | null {
   let best: string | null = null;

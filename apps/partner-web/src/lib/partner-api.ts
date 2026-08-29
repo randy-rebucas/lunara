@@ -1,4 +1,10 @@
-import type { PartnerBranchRider, PartnerOwnProfile, PortalRole, PortalUser } from '@lunara/types';
+import type {
+  PartnerBranchRider,
+  PartnerOwnedRider,
+  PartnerOwnProfile,
+  PortalRole,
+  PortalUser,
+} from '@lunara/types';
 import { UserRole } from '@lunara/types';
 import { assertApiUrlConfigured, resolveApiOrigin, resolveApiV1BaseUrl } from '@lunara/utils';
 import { parseApiError } from './api-error';
@@ -222,6 +228,51 @@ export async function removeStaff(staffId: string): Promise<void> {
 
 export async function listAssignedRiders(): Promise<PartnerBranchRider[]> {
   return partnerFetch<PartnerBranchRider[]>('/partner/riders');
+}
+
+export async function listOwnedRiders(): Promise<PartnerOwnedRider[]> {
+  return partnerFetch<PartnerOwnedRider[]>('/partner/riders/owned');
+}
+
+export interface CreateOwnedRiderInput {
+  email: string;
+  phone?: string;
+  password: string;
+  firstName?: string;
+  lastName?: string;
+  vehicleType?: string;
+}
+
+export async function createOwnedRider(input: CreateOwnedRiderInput): Promise<PartnerOwnedRider> {
+  return partnerFetch<PartnerOwnedRider>('/partner/riders/owned', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export interface UpdateOwnedRiderInput {
+  firstName?: string;
+  lastName?: string;
+  vehicleType?: string;
+  plateNumber?: string;
+  orCrNumber?: string;
+  employmentType?: 'employee' | 'independent_contractor';
+  fixedWageAmount?: number;
+  wageFrequency?: 'daily' | 'weekly' | 'monthly';
+}
+
+export async function updateOwnedRider(
+  riderUserId: string,
+  input: UpdateOwnedRiderInput,
+): Promise<PartnerOwnedRider> {
+  return partnerFetch<PartnerOwnedRider>(`/partner/riders/owned/${riderUserId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function removeOwnedRider(riderUserId: string): Promise<void> {
+  await partnerFetch(`/partner/riders/owned/${riderUserId}`, { method: 'DELETE' });
 }
 
 export async function uploadStaffAvatar(staffId: string, file: File): Promise<PartnerOwnProfile> {

@@ -37,6 +37,9 @@ import {
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { AssignStaffBranchDto } from './dto/assign-staff-branch.dto';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
+import { CreateRiderDto } from '../admin/dto/create-rider.dto';
+import { UpdateRiderByPartnerDto } from './dto/update-rider.dto';
+import { isRiderCompliant } from '../riders/rider-compliance';
 import { applyStaffBranchFilter, assertOrderPortalAccess, resolvePortalBranchId } from './partner-access';
 import { PartnerOrderNotificationService } from '../push/partner-order-notification.service';
 import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
@@ -659,6 +662,131 @@ export class PartnerOperationsService {
         };
       }),
     };
+  }
+
+  /** The partner account (User with role PARTNER) that owns riders/branches for this request —
+   * riders are scoped to this id, shared across every branch the partner owns. */
+  private async resolvePartnerId(userId: string, role: UserRole): Promise<Types.ObjectId> {
+    if (role === UserRole.PARTNER) return new Types.ObjectId(userId);
+    const branchId = await this.resolvePartnerBranchId(userId, role);
+    const branch = await this.branchModel.findById(branchId).select('partnerUserId');
+    if (!branch) throw new NotFoundException('Partner shop branch not found');
+    return branch.partnerUserId;
+  }
+
+  private formatOwnedRider(
+    rider: RiderDocument,
+    user?: Pick<UserDocument, '_id' | 'email' | 'phone' | 'isActive'> | null,
+  ) {
+    return {
+      _id: rider._id.toString(),
+      userId: rider.userId.toString(),
+      email: user?.email,
+      phone: user?.phone,
+      isActive: user?.isActive ?? true,
+      firstName: rider.firstName,
+      lastName: rider.lastName,
+      vehicleType: rider.vehicleType,
+      plateNumber: rider.plateNumber,
+      orCrNumber: rider.orCrNumber,
+      employmentType: rider.employmentType,
+      fixedWageAmount: rider.fixedWageAmount,
+      wageFrequency: rider.wageFrequency,
+      isOnline: rider.isOnline,
+      shiftStatus: rider.shiftStatus,
+      verificationStatus: isRiderCompliant(rider, user ?? null).verificationStatus,
+    };
+  }
+
+  /** Riders this partner has added themselves (partnerId-scoped) — distinct from
+   * listAssignedRiders(), which shows each branch's single default pickup/delivery rider. */
+  async listOwnedRiders(userId: string, role: UserRole) {
+    const partnerId = await this.resolvePartnerId(userId, role);
+    const riders = await this.riderModel.find({ partnerId }).sort({ createdAt: -1 });
+    const users = await this.userModel
+      .find({ _id: { $in: riders.map((r) => r.userId) } })
+      .select('email phone isActive');
+    const userMap = new Map(users.map((u) => [u._id.toString(), u]));
+
+    return {
+      success: true,
+      data: riders.map((r) => this.formatOwnedRider(r, userMap.get(r.userId.toString()))),
+    };
+  }
+
+  async createOwnedRider(userId: string, role: UserRole, dto: CreateRiderDto) {
+    const partnerId = await this.resolvePartnerId(userId, role);
+    const email = dto.email.trim().toLowerCase();
+    const phone = dto.phone?.trim();
+
+    const duplicateFilter: Record<string, unknown>[] = [{ email }];
+    if (phone) duplicateFilter.push({ phone });
+    const existing = await this.userModel.findOne({ $or: duplicateFilter });
+    if (existing) {
+      throw new ConflictException('A user with this email or phone already exists');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, 12);
+    const user = await this.userModel.create({
+      email,
+      phone,
+      passwordHash,
+      role: UserRole.RIDER,
+      isActive: true,
+    });
+
+    const rider = await this.riderModel.create({
+      userId: user._id,
+      partnerId,
+      firstName: dto.firstName?.trim(),
+      lastName: dto.lastName?.trim(),
+      vehicleType: dto.vehicleType ?? 'motorcycle',
+      documents: [],
+      isOnline: false,
+      shiftStatus: 'offline',
+      currentLocation: { type: 'Point', coordinates: [0, 0] },
+    });
+
+    return { success: true, data: this.formatOwnedRider(rider, user) };
+  }
+
+  async updateOwnedRider(userId: string, role: UserRole, riderUserId: string, dto: UpdateRiderByPartnerDto) {
+    const partnerId = await this.resolvePartnerId(userId, role);
+    const rider = await this.riderModel.findOne({ userId: new Types.ObjectId(riderUserId), partnerId });
+    if (!rider) throw new NotFoundException('Rider not found');
+
+    if (dto.firstName !== undefined) rider.firstName = dto.firstName.trim();
+    if (dto.lastName !== undefined) rider.lastName = dto.lastName.trim();
+    if (dto.vehicleType !== undefined) rider.vehicleType = dto.vehicleType;
+    if (dto.plateNumber !== undefined) rider.plateNumber = dto.plateNumber.trim();
+    if (dto.orCrNumber !== undefined) rider.orCrNumber = dto.orCrNumber.trim();
+    if (dto.employmentType !== undefined) rider.employmentType = dto.employmentType;
+    if (dto.fixedWageAmount !== undefined) rider.fixedWageAmount = dto.fixedWageAmount;
+    if (dto.wageFrequency !== undefined) rider.wageFrequency = dto.wageFrequency;
+    if (dto.homeAddress) {
+      rider.homeAddress = { ...(rider.homeAddress ?? {}), ...dto.homeAddress };
+    }
+    await rider.save();
+
+    const user = await this.userModel.findById(riderUserId).select('email phone isActive');
+    return { success: true, data: this.formatOwnedRider(rider, user) };
+  }
+
+  async removeOwnedRider(userId: string, role: UserRole, riderUserId: string) {
+    const partnerId = await this.resolvePartnerId(userId, role);
+    const rider = await this.riderModel.findOne({ userId: new Types.ObjectId(riderUserId), partnerId });
+    if (!rider) throw new NotFoundException('Rider not found');
+
+    const activeTasks = await this.orderModel.countDocuments({
+      $or: [{ pickupRiderId: rider.userId }, { deliveryRiderId: rider.userId }],
+      status: { $nin: [OrderStatus.COMPLETED, OrderStatus.CANCELLED, OrderStatus.REFUNDED] },
+    });
+    if (activeTasks > 0) {
+      throw new BadRequestException("Reassign this rider's active tasks before removing them");
+    }
+
+    await this.userModel.updateOne({ _id: rider.userId }, { $set: { isActive: false } });
+    return { success: true };
   }
 
   private async resolvePartnerBranchId(userId: string, role: UserRole): Promise<Types.ObjectId> {

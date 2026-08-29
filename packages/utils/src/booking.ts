@@ -3,23 +3,26 @@ import { AddonCategory, BookingType, ServiceCategory, type DayOperatingHours, ty
 export const BOOKING_MIN_ORDER_AMOUNT = 150;
 /** @deprecated use BOOKING_FLAT_DELIVERY_FEE */
 export const BOOKING_DELIVERY_FEE = 50;
-/** Flat pickup + delivery fee charged on every booking. */
+/** @deprecated Base pickup + delivery is now absorbed by the partner shop, not billed to the
+ * customer — see calculateDeliveryFee. Kept only as calculateDeliveryFee's unused legacy param. */
 export const BOOKING_FLAT_DELIVERY_FEE = 70;
-/** Distance (km) covered by the base delivery fee before per-km charges kick in. */
+/** Distance (km) covered by the partner-absorbed base delivery before per-km charges kick in. */
 export const BOOKING_DELIVERY_BASE_DISTANCE_KM = 3;
 /** Charge per whole km beyond BOOKING_DELIVERY_BASE_DISTANCE_KM. */
 export const BOOKING_DELIVERY_PER_KM_RATE = 8;
 
-/** Delivery Fee = Base Fare + (chargeable distance x per-km rate), where chargeable distance is
- * whatever's beyond the base allowance, rounded up to the next whole km. */
+/** Customer-facing delivery fee = chargeable distance x per-km rate, where chargeable distance is
+ * whatever's beyond the base allowance, rounded up to the next whole km. The base fare itself is
+ * the partner shop's own cost of doing business, not passed on to the customer — so a pickup within
+ * the base allowance is free of any delivery charge. */
 export function calculateDeliveryFee(
   distanceKm: number,
-  baseFee: number = BOOKING_FLAT_DELIVERY_FEE,
+  _baseFee: number = BOOKING_FLAT_DELIVERY_FEE,
   baseDistanceKm: number = BOOKING_DELIVERY_BASE_DISTANCE_KM,
   perKmRate: number = BOOKING_DELIVERY_PER_KM_RATE,
 ): number {
   const chargeableKm = Math.max(0, Math.ceil(distanceKm - baseDistanceKm));
-  return baseFee + chargeableKm * perKmRate;
+  return chargeableKm * perKmRate;
 }
 /** Lunara's markup on a partner shop's own add-on prices. Base service pricing is flat bag pricing
  * (see BAG_SIZES) and no longer uses this — add-ons still do. Single source of truth — never hardcode 1.30 elsewhere. */
@@ -465,7 +468,10 @@ export function combineServiceQuotes(
   const addonsSubtotal = addons.reduce((sum, a) => sum + a.price, 0);
   const subtotal = serviceSubtotal + addonsSubtotal;
   const discount = 0;
-  const total = subtotal + deliveryFee - discount;
+  // deliveryFee is shown to the customer for transparency (see calculateDeliveryFee) but is not
+  // part of what they're charged — it's the partner shop's own cost/business, so it never enters
+  // the total.
+  const total = subtotal - discount;
 
   return {
     services: serviceQuotes,
@@ -955,9 +961,13 @@ export function calculateQuote(
     });
   const addonsSubtotal = addons.reduce((sum, a) => sum + a.price, 0);
   const subtotal = serviceSubtotal + addonsSubtotal;
-  const deliveryFee = deliveryFeeOverride ?? BOOKING_FLAT_DELIVERY_FEE;
+  // No distance known yet without a server-confirmed quote, so default to 0 rather than a flat
+  // base fee — the customer is only ever charged for distance beyond the partner-absorbed base.
+  const deliveryFee = deliveryFeeOverride ?? 0;
   const discount = 0;
-  const total = subtotal + deliveryFee - discount;
+  // deliveryFee is shown for transparency (see calculateDeliveryFee) but isn't charged to the
+  // customer — it's the partner shop's own cost — so it never enters the total.
+  const total = subtotal - discount;
 
   return {
     bookingType: input.bookingType,

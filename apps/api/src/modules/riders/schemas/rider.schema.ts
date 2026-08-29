@@ -75,6 +75,11 @@ export class Rider {
   @Prop({ type: Types.ObjectId, required: true, unique: true, index: true })
   userId!: Types.ObjectId;
 
+  /** Owning partner (a User with role PARTNER) — riders created via partner-web are scoped to this
+   * partner across all of their branches. Nullable only for pre-migration platform riders. */
+  @Prop({ type: Types.ObjectId, index: true })
+  partnerId?: Types.ObjectId;
+
   @Prop()
   firstName?: string;
 

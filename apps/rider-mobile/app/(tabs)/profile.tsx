@@ -360,15 +360,32 @@ export default function ProfileScreen() {
           hint="Daily breakdown and totals"
           onPress={() => router.push('/earnings')}
         />
-        <SectionDivider />
-        <MenuRow
-          icon="cash-outline"
-          iconBg="#ECFDF5"
-          iconColor="#059669"
-          title="Wallet & withdrawals"
-          hint="Balance, payouts, and remittance"
-          onPress={() => router.push('/wallet' as import('expo-router').Href)}
-        />
+        {!me?.partnerId && (
+          <>
+            <SectionDivider />
+            <MenuRow
+              icon="cash-outline"
+              iconBg="#ECFDF5"
+              iconColor="#059669"
+              title="Wallet & withdrawals"
+              hint="Balance, payouts, and remittance"
+              onPress={() => router.push('/wallet' as import('expo-router').Href)}
+            />
+          </>
+        )}
+        {me?.partnerId && (
+          <>
+            <SectionDivider />
+            <MenuRow
+              icon="cash-outline"
+              iconBg={colors.surfaceMuted}
+              iconColor={colors.mutedForeground}
+              title="Pay & payouts"
+              hint="Managed by your shop, not through this app"
+              onPress={() => {}}
+            />
+          </>
+        )}
       </MenuSection>
 
       {/* ── More ── */}

@@ -22,7 +22,6 @@ import { OnboardPartnerDto } from './dto/onboard-partner.dto';
 import { InitNetworkDto } from './dto/init-network.dto';
 import { CreateSetupBranchDto } from './dto/create-setup-branch.dto';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
-import { CreateRiderDto } from './dto/create-rider.dto';
 import { UpdatePromotionDto } from './dto/update-promotion.dto';
 import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
 import { Review, ReviewDocument } from '../reviews/schemas/review.schema';
@@ -652,62 +651,6 @@ export class AdminService {
           };
         }),
         statusCounts: await this.orderStatusCounts(),
-      },
-    };
-  }
-
-  async createRider(dto: CreateRiderDto) {
-    const email = dto.email.trim().toLowerCase();
-    const phone = dto.phone?.trim();
-
-    const duplicateFilter: Record<string, unknown>[] = [{ email }];
-    if (phone) duplicateFilter.push({ phone });
-
-    const existing = await this.userModel.findOne({ $or: duplicateFilter });
-    if (existing) {
-      throw new ConflictException('A user with this email or phone already exists');
-    }
-
-    const passwordHash = await bcrypt.hash(dto.password, 12);
-    const user = await this.userModel.create({
-      email,
-      phone,
-      passwordHash,
-      role: UserRole.RIDER,
-      isActive: true,
-    });
-
-    const rider = await this.riderModel.create({
-      userId: user._id,
-      firstName: dto.firstName?.trim(),
-      lastName: dto.lastName?.trim(),
-      vehicleType: dto.vehicleType ?? 'motorcycle',
-      documents: [],
-      isOnline: false,
-      shiftStatus: 'offline',
-      currentLocation: { type: 'Point', coordinates: [0, 0] },
-    });
-
-    const compliance = isRiderCompliant(rider, user);
-
-    await this.emailService.sendRiderInvite(email, dto.password);
-
-    return {
-      success: true,
-      data: {
-        _id: rider._id.toString(),
-        userId: user._id.toString(),
-        email: user.email,
-        phone: user.phone,
-        isActive: user.isActive,
-        isOnline: rider.isOnline,
-        vehicleType: rider.vehicleType,
-        firstName: rider.firstName,
-        lastName: rider.lastName,
-        verificationStatus: compliance.verificationStatus,
-        totalEarnings: rider.totalEarnings,
-        todayEarnings: rider.todayEarnings,
-        activeTasks: 0,
       },
     };
   }

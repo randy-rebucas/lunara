@@ -714,10 +714,6 @@ export default function AdminSettingsPage() {
                       <Link href="/refunds" className="link-primary">Refunds</Link>
                       <span className="text-muted"> — pending refund requests</span>
                     </li>
-                    <li>
-                      <Link href="/riders/withdrawals" className="link-primary">Rider withdrawals</Link>
-                      <span className="text-muted"> — cash-out queue</span>
-                    </li>
                   </ul>
                 </SettingsCard>
               </div>

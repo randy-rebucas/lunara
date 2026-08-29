@@ -43,9 +43,9 @@ describe('promotions', () => {
     assert.equal(computePromotionDiscountAmount(400, 50, { discountType: 'percent', discountValue: 10 }), 40);
   });
 
-  it('computes fixed discount capped at order amount', () => {
+  it('computes fixed discount capped at subtotal (deliveryFee is not part of the charged total)', () => {
     assert.equal(computePromotionDiscountAmount(400, 50, { discountType: 'fixed', discountValue: 50 }), 50);
-    assert.equal(computePromotionDiscountAmount(30, 50, { discountType: 'fixed', discountValue: 99 }), 80);
+    assert.equal(computePromotionDiscountAmount(30, 50, { discountType: 'fixed', discountValue: 99 }), 30);
   });
 
   it('validates minimum order amount', () => {
@@ -72,7 +72,7 @@ describe('promotions', () => {
       discountValue: 10,
     });
     assert.equal(discounted.discount, 25);
-    assert.equal(discounted.total, baseQuote.subtotal + baseQuote.deliveryFee - 25);
+    assert.equal(discounted.total, baseQuote.subtotal - 25);
     assert.equal(discounted.couponCode, 'WELCOME10');
     assert.equal(discounted.promotionTitle, 'Welcome discount');
   });

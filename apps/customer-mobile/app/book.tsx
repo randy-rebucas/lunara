@@ -2263,31 +2263,31 @@ export default function BookScreen() {
                     </View>
                   );
                 })}
-                <View style={[styles.estimateRow, styles.estimateDivider, { marginBottom: 0 }]}>
-                  <Text style={styles.estimateLabel}>Delivery fee</Text>
-                  <Text style={styles.estimateAmount}>{formatCurrency(activeQuote.deliveryFee)}</Text>
-                </View>
                 {activeQuote.deliveryDistanceKm != null &&
-                activeQuote.deliveryBaseFee != null &&
                 activeQuote.deliveryBaseDistanceKm != null &&
-                activeQuote.deliveryPerKmRate != null ? (
-                  (() => {
-                    const chargeableKm = Math.max(
-                      0,
-                      Math.ceil(activeQuote.deliveryDistanceKm - activeQuote.deliveryBaseDistanceKm),
-                    );
-                    return (
-                      <Text style={[styles.estimateBreakdownNote, { marginBottom: spacing.sm }]}>
-                        {activeQuote.deliveryDistanceKm.toFixed(1)} km ·{' '}
-                        {formatCurrency(activeQuote.deliveryBaseFee)} base (first{' '}
-                        {activeQuote.deliveryBaseDistanceKm} km)
-                        {chargeableKm > 0
-                          ? ` + ${formatCurrency(activeQuote.deliveryPerKmRate)}/km × ${chargeableKm} km`
-                          : ''}
-                      </Text>
-                    );
-                  })()
-                ) : null}
+                activeQuote.deliveryPerKmRate != null
+                  ? (() => {
+                      const chargeableKm = Math.max(
+                        0,
+                        Math.ceil(activeQuote.deliveryDistanceKm - activeQuote.deliveryBaseDistanceKm),
+                      );
+                      if (chargeableKm <= 0) return null;
+                      const extraDistanceFee = chargeableKm * activeQuote.deliveryPerKmRate;
+                      return (
+                        <>
+                          <View style={[styles.estimateRow, styles.estimateDivider, { marginBottom: 0 }]}>
+                            <Text style={styles.estimateLabel}>Additional distance charge</Text>
+                            <Text style={styles.estimateAmount}>{formatCurrency(extraDistanceFee)}</Text>
+                          </View>
+                          <Text style={[styles.estimateBreakdownNote, { marginBottom: spacing.sm }]}>
+                            {activeQuote.deliveryDistanceKm.toFixed(1)} km to shop ·{' '}
+                            {formatCurrency(activeQuote.deliveryPerKmRate)}/km beyond{' '}
+                            {activeQuote.deliveryBaseDistanceKm} km × {chargeableKm} km
+                          </Text>
+                        </>
+                      );
+                    })()
+                  : null}
                 {activeQuote.discount > 0 && (
                   <View style={styles.estimateRow}>
                     <Text style={styles.estimateDiscountLabel}>
@@ -2399,6 +2399,16 @@ export default function BookScreen() {
                   </Text>
                   <Text style={styles.summaryTotal}>{formatCurrency(activeQuote.total)}</Text>
                 </Text>
+                {activeQuote.deliveryFee > 0 &&
+                activeQuote.deliveryDistanceKm != null &&
+                activeQuote.deliveryBaseDistanceKm != null &&
+                activeQuote.deliveryPerKmRate != null ? (
+                  <Text style={styles.optionSub}>
+                    Includes {formatCurrency(activeQuote.deliveryFee)} distance charge (
+                    {activeQuote.deliveryDistanceKm.toFixed(1)} km, beyond{' '}
+                    {activeQuote.deliveryBaseDistanceKm} km free radius) — no base delivery fee.
+                  </Text>
+                ) : null}
                 {activeQuote.isEstimate ? (
                   <Text style={styles.optionSub}>
                     We&apos;ll confirm the actual weight/load count and final price at pickup.

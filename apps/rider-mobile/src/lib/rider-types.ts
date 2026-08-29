@@ -127,6 +127,9 @@ export type ShiftStatus = 'offline' | 'online' | 'break';
 export interface RiderMe {
   userId?: string;
   riderId?: string;
+  /** Set when this rider was added by a partner (partner-web) — their pay is managed entirely by
+   * that partner, outside the platform wallet, so wallet/withdrawal screens don't apply. */
+  partnerId?: string | null;
   isOnline: boolean;
   shiftStatus?: ShiftStatus;
   firstName?: string;
@@ -137,8 +140,9 @@ export interface RiderMe {
   plateNumber?: string;
   orCrNumber?: string;
   employmentType?: 'employee' | 'independent_contractor';
-  /** Flat per-leg fee the rider is paid — only sent (non-null) for a non-employee rider, since a
-   * salaried employee isn't paid per task. */
+  /** Flat per-leg fee the rider is paid — only sent (non-null) for a non-employee, platform-pooled
+   * rider (no partnerId), since a salaried employee isn't paid per task and a partner-owned rider
+   * isn't paid through the platform wallet at all. */
   feeRates?: { pickup: number; delivery: number } | null;
   documents?: RiderKycDocument[];
   compliance?: RiderCompliance;

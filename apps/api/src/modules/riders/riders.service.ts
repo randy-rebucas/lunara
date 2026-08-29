@@ -183,6 +183,7 @@ export class RidersService {
     return {
       userId,
       riderId: rider._id.toString(),
+      partnerId: rider.partnerId?.toString() ?? null,
       isOnline: rider.isOnline,
       shiftStatus: rider.shiftStatus ?? (rider.isOnline ? 'online' : 'offline'),
       firstName: rider.firstName,
@@ -195,8 +196,9 @@ export class RidersService {
       employmentType: rider.employmentType,
       fixedWageAmount: rider.fixedWageAmount,
       wageFrequency: rider.wageFrequency,
-      // Flat per-leg fee rates only matter to a rider paid per task, not a salaried employee.
-      feeRates: rider.employmentType !== 'employee' ? (feeRates ?? null) : null,
+      // Flat per-leg fee rates come from the platform wallet, which only applies to platform-pooled
+      // riders paid per task — partner-owned riders are paid by their partner, outside this system.
+      feeRates: !rider.partnerId && rider.employmentType !== 'employee' ? (feeRates ?? null) : null,
       documents: serializeRiderDocuments(rider.documents),
       compliance: {
         isCompliant: compliance.isCompliant,
@@ -228,7 +230,9 @@ export class RidersService {
       .select('avatarUrl')
       .lean();
     const feeRates =
-      rider.employmentType !== 'employee' ? await this.settingsService.getRiderFeeAmounts() : null;
+      !rider.partnerId && rider.employmentType !== 'employee'
+        ? await this.settingsService.getRiderFeeAmounts()
+        : null;
     return {
       success: true,
       data: this.serializeMePayload(userId, rider, user, profile?.avatarUrl, feeRates),
@@ -269,6 +273,16 @@ export class RidersService {
 
   async creditEarning(userId: string, orderId: string, type: Extract<RiderEarningType, 'pickup' | 'delivery'>) {
     const rider = await this.findOrCreate(userId);
+
+    if (rider.partnerId) {
+      // Partner-owned riders are paid entirely outside the platform wallet — the partner tracks
+      // their own payout, so there's nothing for Lunara to credit here.
+      return {
+        amount: 0,
+        totalEarnings: rider.totalEarnings,
+        todayEarnings: rider.todayEarnings,
+      };
+    }
 
     if (rider.employmentType === 'employee') {
       // Employees are paid a fixed wage, not per-task fees — nothing to credit here.
@@ -339,6 +353,12 @@ export class RidersService {
     note?: string,
   ) {
     const rider = await this.findOrCreate(userId);
+
+    if (rider.partnerId) {
+      throw new BadRequestException(
+        'This rider is partner-managed — manual earnings/wage payments are handled by their partner, not the platform wallet',
+      );
+    }
 
     if (type === 'wage' && rider.employmentType !== 'employee') {
       throw new BadRequestException('Wage payments are only valid for employee riders');

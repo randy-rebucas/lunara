@@ -216,9 +216,7 @@ function RiderCell({ userId, riderMap }: { userId: string; riderMap: Map<string,
         {name.charAt(0).toUpperCase()}
       </div>
       <div className="min-w-0">
-        <Link href={`/riders/${userId}`} className="block truncate text-sm font-medium text-slate-900 hover:text-primary hover:underline">
-          {name}
-        </Link>
+        <span className="block truncate text-sm font-medium text-slate-900">{name}</span>
         <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted">
           {r.phone && <span>{r.phone}</span>}
           {r.vehicleType && <span className="capitalize">{formatSlugLabel(r.vehicleType)}</span>}
@@ -273,7 +271,6 @@ function AccountPanel({ group, maxRows = 10, riderMap }: { group: AccountGroup; 
                 <th scope="col">{isRiderAccount ? 'Rider' : isUserAccount ? 'User' : 'Subject'}</th>
                 {isRiderAccount && <th scope="col">KYC</th>}
                 <th scope="col" className="text-right">Balance</th>
-                {isRiderAccount && <th scope="col"><span className="sr-only">Profile</span></th>}
               </tr>
             </thead>
             <tbody>
@@ -298,13 +295,6 @@ function AccountPanel({ group, maxRows = 10, riderMap }: { group: AccountGroup; 
                   <td className={`text-right tabular-nums ${balanceColor(row.accountType, row.balance)}`}>
                     {fp(row.balance)}
                   </td>
-                  {isRiderAccount && (
-                    <td>
-                      <Link href={`/riders/${row.accountSubject}`} className="link-primary text-xs font-medium">
-                        Profile →
-                      </Link>
-                    </td>
-                  )}
                 </tr>
               ))}
             </tbody>
@@ -315,7 +305,6 @@ function AccountPanel({ group, maxRows = 10, riderMap }: { group: AccountGroup; 
                   <td className={`text-right tabular-nums ${balanceColor(group.accountType, group.total)}`}>
                     {fp(group.total)}
                   </td>
-                  {isRiderAccount && <td />}
                 </tr>
               </tfoot>
             )}

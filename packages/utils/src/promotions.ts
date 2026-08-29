@@ -136,16 +136,19 @@ export function validateCustomerPromoForQuote(
   return { valid: true };
 }
 
+/** deliveryFee is accepted for backward compatibility but no longer factors in — it's shown to the
+ * customer for transparency but isn't part of what they're charged (see calculateDeliveryFee), so
+ * a discount is only ever computed/capped against the subtotal. */
 export function computePromotionDiscountAmount(
   subtotal: number,
-  deliveryFee: number,
+  _deliveryFee: number,
   promo: Pick<PromotionDiscountInput, 'discountType' | 'discountValue'>,
 ): number {
   if (promo.discountType === 'percent') {
     const pct = Math.min(100, Math.max(0, promo.discountValue));
     return Math.min(subtotal, Math.round((subtotal * pct) / 100));
   }
-  return Math.min(promo.discountValue, subtotal + deliveryFee);
+  return Math.min(promo.discountValue, subtotal);
 }
 
 export function applyPromotionToQuote<
@@ -155,7 +158,7 @@ export function applyPromotionToQuote<
   return {
     ...quote,
     discount,
-    total: quote.subtotal + quote.deliveryFee - discount,
+    total: quote.subtotal - discount,
     couponCode: promo.code,
     promotionTitle: promo.title,
   };

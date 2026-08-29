@@ -36,6 +36,15 @@ export class RiderAssignmentService {
     private riderOfferPush: RiderOfferPushService,
   ) {}
 
+  /** Rider pool for an order, scoped to the owning partner (shared across that partner's branches)
+   * so dispatch never suggests/assigns a rider that belongs to a different partner. */
+  private async getPartnerScopedRiderPool(order: OrderDocument): Promise<RiderDocument[]> {
+    if (!order.branchId) return this.riderModel.find().limit(50);
+    const branch = await this.branchModel.findById(order.branchId).select('partnerUserId');
+    if (!branch?.partnerUserId) return this.riderModel.find().limit(50);
+    return this.riderModel.find({ partnerId: branch.partnerUserId }).limit(50);
+  }
+
   /**
    * If the order's branch has a default assigned rider and that rider is online, use them directly.
    * If the default rider is offline, restricts the candidate pool to online riders within the
@@ -167,7 +176,7 @@ export class RiderAssignmentService {
     const address = await this.addressModel.findById(order.pickupAddressId);
     if (!address) throw new NotFoundException('Pickup address not found');
 
-    const allRiders = await this.riderModel.find().limit(50);
+    const allRiders = await this.getPartnerScopedRiderPool(order);
     const { shortCircuitRiderId, riders } = await this.applyBranchDefaultRider(order, allRiders);
     if (shortCircuitRiderId) {
       order.suggestedPickupRiderId = new Types.ObjectId(shortCircuitRiderId);
@@ -465,7 +474,7 @@ export class RiderAssignmentService {
     const address = await this.addressModel.findById(order.deliveryAddressId);
     if (!address) throw new NotFoundException('Delivery address not found');
 
-    const allRiders = await this.riderModel.find().limit(50);
+    const allRiders = await this.getPartnerScopedRiderPool(order);
     const { shortCircuitRiderId, riders } = await this.applyBranchDefaultRider(order, allRiders);
     if (shortCircuitRiderId) {
       order.suggestedDeliveryRiderId = new Types.ObjectId(shortCircuitRiderId);

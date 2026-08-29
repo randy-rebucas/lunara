@@ -217,6 +217,27 @@ export interface PartnerBranchRider {
   rider: PartnerAssignedRider | null;
 }
 
+/** A rider the partner has added and owns directly (see Rider.partnerId) — distinct from
+ * PartnerAssignedRider, which is just a branch's single default pickup/delivery rider. */
+export interface PartnerOwnedRider {
+  _id: string;
+  userId: string;
+  email?: string;
+  phone?: string;
+  isActive: boolean;
+  firstName?: string;
+  lastName?: string;
+  vehicleType?: string;
+  plateNumber?: string;
+  orCrNumber?: string;
+  employmentType?: 'employee' | 'independent_contractor';
+  fixedWageAmount?: number;
+  wageFrequency?: 'daily' | 'weekly' | 'monthly';
+  isOnline: boolean;
+  shiftStatus?: string;
+  verificationStatus?: string;
+}
+
 export interface PartnerInventoryItem {
   _id: string;
   sku: string;

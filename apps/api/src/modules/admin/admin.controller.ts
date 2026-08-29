@@ -39,12 +39,10 @@ import { AdminAssignRiderDto, ResolveConflictDto } from './dto/admin-operations.
 import { AdminOperationsService } from './admin-operations.service';
 import { AdminDispatchService } from './admin-dispatch.service';
 import { RiderSosService } from '../sos/rider-sos.service';
-import { ReviewRiderDocumentDto, UpdateRiderEmploymentDto } from '../riders/dto/rider.dto';
-import { CreditRiderEarningDto } from '../riders/dto/rider-earnings.dto';
 import { RidersService } from '../riders/riders.service';
 import { RiderNotificationService } from '../riders/rider-notification.service';
 import { RiderWalletService } from '../riders/rider-wallet.service';
-import { ReviewWithdrawalDto, SetWalletHoldDto } from '../riders/dto/rider-wallet.dto';
+import { ReviewWithdrawalDto } from '../riders/dto/rider-wallet.dto';
 import { CreatePartnerDto } from './dto/create-partner.dto';
 import { OnboardPartnerDto } from './dto/onboard-partner.dto';
 import { InitNetworkDto } from './dto/init-network.dto';
@@ -52,7 +50,6 @@ import { CreateSetupBranchDto } from './dto/create-setup-branch.dto';
 import { SetShopActiveDto } from './dto/set-shop-active.dto';
 import { UpdatePartnerProfileDto } from './dto/update-partner-profile.dto';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
-import { CreateRiderDto } from './dto/create-rider.dto';
 import { RiderAnnouncementDto } from './dto/rider-announcement.dto';
 import { BroadcastDto } from './dto/broadcast.dto';
 import { UpdatePromotionDto } from './dto/update-promotion.dto';
@@ -228,16 +225,6 @@ export class AdminController {
     return this.adminService.getRiders();
   }
 
-  @Post('riders')
-  createRider(@Body() dto: CreateRiderDto) {
-    return this.adminService.createRider(dto);
-  }
-
-  @Get('riders/documents/pending')
-  getPendingRiderDocuments() {
-    return this.ridersService.listPendingDocumentReviews();
-  }
-
   @Get('riders/withdrawals')
   listRiderWithdrawals(@Query('status') status?: string) {
     return this.riderWalletService.listWithdrawalsForAdmin(status);
@@ -278,45 +265,9 @@ export class AdminController {
     return this.riderWalletService.verifyRemittanceBatch(userId, req.user.sub, dto.remittanceIds);
   }
 
-  @Post('riders/:userId/wallet/hold')
-  setRiderWalletHold(@Param('userId') userId: string, @Body() dto: SetWalletHoldDto) {
-    return this.riderWalletService.setWalletHold(userId, dto.pendingHold);
-  }
-
-  @Post('riders/:userId/earnings/credit')
-  creditRiderEarning(@Param('userId') userId: string, @Body() dto: CreditRiderEarningDto) {
-    return this.ridersService
-      .creditManualEarning(userId, dto.type, dto.amount, dto.note)
-      .then((data) => ({ success: true, data }));
-  }
-
   @Get('riders/:userId/profile')
   getRiderProfile(@Param('userId') userId: string) {
     return this.ridersService.getRiderProfileForAdmin(userId);
-  }
-
-  @Patch('riders/:userId/employment')
-  updateRiderEmployment(
-    @Param('userId') userId: string,
-    @Body() dto: UpdateRiderEmploymentDto,
-  ) {
-    return this.ridersService.updateEmployment(userId, dto);
-  }
-
-  @Patch('riders/:userId/documents/:type')
-  reviewRiderDocument(
-    @Param('userId') userId: string,
-    @Param('type') type: string,
-    @Req() req: { user: { sub: string } },
-    @Body() dto: ReviewRiderDocumentDto,
-  ) {
-    return this.ridersService.reviewDocument(
-      userId,
-      type,
-      req.user.sub,
-      dto.status,
-      dto.rejectionReason,
-    );
   }
 
   @Post('riders/announcement')

@@ -16,7 +16,7 @@ const TASKS: Task[] = [
   { id: 'control-tower',  label: 'Review control tower',            href: '/control-tower',  group: 'Morning check' },
   { id: 'orders',         label: 'Clear pending orders',            href: '/orders',          group: 'Morning check' },
   { id: 'dispatch',       label: 'Confirm dispatch queue',          href: '/dispatch',        group: 'Morning check' },
-  { id: 'riders',         label: 'Check rider availability',        href: '/riders',          group: 'Morning check' },
+  { id: 'riders',         label: 'Check rider availability',        href: '/live-tracking',  group: 'Morning check' },
   { id: 'support',        label: 'Triage support tickets',          href: '/support',         group: 'Daily ops' },
   { id: 'refunds',        label: 'Process pending refunds',         href: '/refunds',         group: 'Daily ops' },
   { id: 'reconciliation', label: 'Review reconciliation',           href: '/reconciliation',  group: 'Finance' },

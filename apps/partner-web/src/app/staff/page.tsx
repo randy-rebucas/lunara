@@ -2,13 +2,20 @@
 
 import Link from 'next/link';
 import { useCallback, useMemo, useState } from 'react';
-import type { PartnerBranchRider, PartnerStaffMember } from '@lunara/types';
+import type { PartnerBranchRider, PartnerOwnedRider, PartnerStaffMember } from '@lunara/types';
 import { AuthLoading } from '../../components/auth-loading';
 import { DataPageStatus } from '../../components/data-page-status';
 import { StaffProfileModal } from '../../components/staff-profile-modal';
+import { RiderProfileModal } from '../../components/rider-profile-modal';
 import { PageHeader } from '../../components/ui/page-header';
 import { useRequirePartner } from '../../hooks/use-protected-page';
-import { listAssignedRiders, partnerFetch } from '../../lib/partner-api';
+import {
+  createOwnedRider,
+  listAssignedRiders,
+  listOwnedRiders,
+  partnerFetch,
+  removeOwnedRider,
+} from '../../lib/partner-api';
 import { usePartnerQuery } from '../../lib/use-partner-query';
 
 interface BranchOption {
@@ -45,6 +52,21 @@ export default function StaffTeamPage() {
   const [reassignError, setReassignError] = useState('');
   const [activeTab, setActiveTab] = useState<'staff' | 'riders'>('staff');
 
+  const [showRiderForm, setShowRiderForm] = useState(false);
+  const [riderEmail, setRiderEmail] = useState('');
+  const [riderPhone, setRiderPhone] = useState('');
+  const [riderFirstName, setRiderFirstName] = useState('');
+  const [riderLastName, setRiderLastName] = useState('');
+  const [riderVehicleType, setRiderVehicleType] = useState('motorcycle');
+  const [riderPassword, setRiderPassword] = useState('');
+  const [riderConfirmPassword, setRiderConfirmPassword] = useState('');
+  const [riderFormError, setRiderFormError] = useState('');
+  const [riderFormSuccess, setRiderFormSuccess] = useState('');
+  const [riderSubmitting, setRiderSubmitting] = useState(false);
+  const [editingRider, setEditingRider] = useState<PartnerOwnedRider | null>(null);
+  const [riderActionError, setRiderActionError] = useState('');
+  const [removingRiderId, setRemovingRiderId] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     return partnerFetch<PartnerStaffMember[]>('/partner/staff');
   }, []);
@@ -67,6 +89,17 @@ export default function StaffTeamPage() {
     loading: ridersLoading,
     error: ridersError,
   } = usePartnerQuery(loadRiders, []);
+
+  const loadOwnedRiders = useCallback(async () => {
+    return listOwnedRiders();
+  }, []);
+
+  const {
+    data: ownedRiders,
+    loading: ownedRidersLoading,
+    error: ownedRidersError,
+    reload: reloadOwnedRiders,
+  } = usePartnerQuery(loadOwnedRiders, []);
 
   const stats = useMemo(() => {
     const members = staff ?? [];
@@ -160,6 +193,65 @@ export default function StaffTeamPage() {
       setReassignError(err instanceof Error ? err.message : 'Could not reassign branch');
     } finally {
       setReassigningId(null);
+    }
+  }
+
+  async function handleCreateRider(e: React.FormEvent) {
+    e.preventDefault();
+    setRiderFormError('');
+    setRiderFormSuccess('');
+
+    const trimmedEmail = riderEmail.trim();
+    if (!trimmedEmail) {
+      setRiderFormError('Email is required.');
+      return;
+    }
+    if (riderPassword.length < 8) {
+      setRiderFormError('Password must be at least 8 characters.');
+      return;
+    }
+    if (riderPassword !== riderConfirmPassword) {
+      setRiderFormError('Passwords do not match.');
+      return;
+    }
+
+    setRiderSubmitting(true);
+    try {
+      await createOwnedRider({
+        email: trimmedEmail,
+        phone: riderPhone.trim() || undefined,
+        password: riderPassword,
+        firstName: riderFirstName.trim() || undefined,
+        lastName: riderLastName.trim() || undefined,
+        vehicleType: riderVehicleType,
+      });
+      setRiderFormSuccess(`Rider account created for ${trimmedEmail}. Share their credentials to sign in on the rider app.`);
+      setRiderEmail('');
+      setRiderPhone('');
+      setRiderFirstName('');
+      setRiderLastName('');
+      setRiderVehicleType('motorcycle');
+      setRiderPassword('');
+      setRiderConfirmPassword('');
+      setShowRiderForm(false);
+      await reloadOwnedRiders();
+    } catch (err) {
+      setRiderFormError(err instanceof Error ? err.message : 'Could not create rider account');
+    } finally {
+      setRiderSubmitting(false);
+    }
+  }
+
+  async function handleRemoveRider(riderUserId: string) {
+    setRiderActionError('');
+    setRemovingRiderId(riderUserId);
+    try {
+      await removeOwnedRider(riderUserId);
+      await reloadOwnedRiders();
+    } catch (err) {
+      setRiderActionError(err instanceof Error ? err.message : 'Could not remove rider');
+    } finally {
+      setRemovingRiderId(null);
     }
   }
 
@@ -440,9 +532,226 @@ export default function StaffTeamPage() {
 
       {activeTab === 'riders' && (
         <div className="mt-6">
-          <p className="text-sm text-muted">
-            Riders are onboarded and assigned by Lunara admin. This shows who&apos;s currently assigned to
-            your shop(s) for pickup and delivery.
+          <PageHeader
+            title="My riders"
+            description="Add and manage the riders working for your shop. You're responsible for how they're paid — Lunara only dispatches them."
+            actions={
+              <button
+                type="button"
+                className={showRiderForm ? 'btn-secondary' : 'btn-primary'}
+                onClick={() => {
+                  setShowRiderForm((v) => !v);
+                  setRiderFormError('');
+                  setRiderFormSuccess('');
+                }}
+              >
+                {showRiderForm ? 'Cancel' : 'Add rider'}
+              </button>
+            }
+          />
+
+          {riderFormSuccess && <div className="alert-success mt-4">{riderFormSuccess}</div>}
+
+          {showRiderForm && (
+            <form onSubmit={handleCreateRider} className="section-panel mt-4 space-y-4 p-6" autoComplete="off">
+              <h2 className="text-lg font-semibold text-slate-900">New rider account</h2>
+              <p className="text-sm text-muted">
+                Riders log in to the Lunara rider app with email and password.
+              </p>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="rider-email" className="text-sm font-medium text-slate-700">
+                    Email
+                  </label>
+                  <input
+                    id="rider-email"
+                    type="email"
+                    required
+                    autoComplete="off"
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                    placeholder="rider@example.com"
+                    value={riderEmail}
+                    onChange={(e) => setRiderEmail(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="rider-phone" className="text-sm font-medium text-slate-700">
+                    Phone <span className="font-normal text-muted">(optional)</span>
+                  </label>
+                  <input
+                    id="rider-phone"
+                    type="tel"
+                    autoComplete="off"
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                    placeholder="+63917…"
+                    value={riderPhone}
+                    onChange={(e) => setRiderPhone(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div>
+                  <label htmlFor="rider-first-name" className="text-sm font-medium text-slate-700">
+                    First name
+                  </label>
+                  <input
+                    id="rider-first-name"
+                    type="text"
+                    autoComplete="off"
+                    maxLength={80}
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                    value={riderFirstName}
+                    onChange={(e) => setRiderFirstName(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="rider-last-name" className="text-sm font-medium text-slate-700">
+                    Last name
+                  </label>
+                  <input
+                    id="rider-last-name"
+                    type="text"
+                    autoComplete="off"
+                    maxLength={80}
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                    value={riderLastName}
+                    onChange={(e) => setRiderLastName(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="rider-vehicle" className="text-sm font-medium text-slate-700">
+                    Vehicle
+                  </label>
+                  <select
+                    id="rider-vehicle"
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                    value={riderVehicleType}
+                    onChange={(e) => setRiderVehicleType(e.target.value)}
+                  >
+                    <option value="motorcycle">Motorcycle</option>
+                    <option value="bicycle">Bicycle</option>
+                    <option value="car">Car</option>
+                    <option value="van">Van</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="rider-password" className="text-sm font-medium text-slate-700">
+                    Password
+                  </label>
+                  <input
+                    id="rider-password"
+                    type="password"
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                    value={riderPassword}
+                    onChange={(e) => setRiderPassword(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="rider-confirm" className="text-sm font-medium text-slate-700">
+                    Confirm password
+                  </label>
+                  <input
+                    id="rider-confirm"
+                    type="password"
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                    value={riderConfirmPassword}
+                    onChange={(e) => setRiderConfirmPassword(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {riderFormError && <p className="text-sm text-red-600">{riderFormError}</p>}
+
+              <button type="submit" disabled={riderSubmitting} className="btn-primary disabled:opacity-50">
+                {riderSubmitting ? 'Creating…' : 'Create rider account'}
+              </button>
+            </form>
+          )}
+
+          <div className="mt-4">
+            <DataPageStatus
+              loading={ownedRidersLoading}
+              error={ownedRidersError}
+              loadingMessage="Loading riders…"
+            />
+          </div>
+
+          {riderActionError && <div className="alert-error mt-2">{riderActionError}</div>}
+
+          <div className="section-panel mt-4 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Rider</th>
+                    <th>Contact</th>
+                    <th>Vehicle</th>
+                    <th>Pay type</th>
+                    <th>Status</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(ownedRiders ?? []).map((r) => (
+                    <tr key={r._id}>
+                      <td className="font-medium text-slate-900">
+                        {[r.firstName, r.lastName].filter(Boolean).join(' ') || r.email || r.userId}
+                      </td>
+                      <td className="text-muted">{[r.email, r.phone].filter(Boolean).join(' · ') || '—'}</td>
+                      <td className="text-muted">
+                        {[r.vehicleType, r.plateNumber].filter(Boolean).join(' · ') || '—'}
+                      </td>
+                      <td>
+                        <span className="badge-neutral capitalize">
+                          {r.employmentType?.replace('_', ' ') ?? '—'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={r.isOnline ? 'badge-success' : 'badge-neutral'}>
+                          {r.isOnline ? (r.shiftStatus ?? 'Online') : 'Offline'}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="flex gap-2">
+                          <button type="button" className="btn-outline btn-sm" onClick={() => setEditingRider(r)}>
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-outline btn-sm"
+                            disabled={removingRiderId === r.userId}
+                            onClick={() => void handleRemoveRider(r.userId)}
+                          >
+                            {removingRiderId === r.userId ? 'Removing…' : 'Remove'}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {!ownedRidersLoading && !ownedRidersError && (ownedRiders ?? []).length === 0 && (
+              <p className="p-6 text-sm text-muted">
+                No riders yet. Use <strong>Add rider</strong> to create an account for your shop.
+              </p>
+            )}
+          </div>
+
+          <h3 className="mt-8 text-sm font-semibold text-slate-900">Default rider per branch</h3>
+          <p className="mt-1 text-sm text-muted">
+            Optionally set one of your riders as a branch's default for pickup and delivery.
           </p>
 
           <div className="mt-4">
@@ -514,6 +823,14 @@ export default function StaffTeamPage() {
           staff={editingStaff}
           onClose={() => setEditingStaff(null)}
           onSaved={() => reload()}
+        />
+      )}
+
+      {editingRider && (
+        <RiderProfileModal
+          rider={editingRider}
+          onClose={() => setEditingRider(null)}
+          onSaved={() => reloadOwnedRiders()}
         />
       )}
     </div>
