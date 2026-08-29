@@ -171,7 +171,7 @@ function StatTile({
       {sub ? <p className="dc-sublabel mt-0.5">{sub}</p> : null}
     </>
   );
-  const cls = `block rounded-xl p-4 ring-1 ${TILE_TONES[tone]}`;
+  const cls = `block rounded-lg p-4 ring-1 ${TILE_TONES[tone]}`;
   return href ? (
     <Link href={href} className={`${cls} transition-all hover:shadow-[var(--shadow-elevated)]`}>
       {inner}

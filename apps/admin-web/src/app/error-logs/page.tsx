@@ -103,7 +103,7 @@ export default function ErrorLogsPage() {
       {data ? (
         <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
           {SOURCES.map((s) => (
-            <div key={s} className="rounded-xl bg-primary/[0.04] p-4 ring-1 ring-primary/15">
+            <div key={s} className="rounded-lg bg-primary/[0.04] p-4 ring-1 ring-primary/15">
               <p className="text-xs font-medium text-muted">{s}</p>
               <p className="dc-value mt-1">{(data.bySource[s] ?? 0).toLocaleString()}</p>
             </div>
@@ -156,7 +156,7 @@ export default function ErrorLogsPage() {
       {loading && !data && <p className="mt-4 text-sm text-muted">Loading…</p>}
 
       {!loading && data && data.items.length === 0 && (
-        <div className="mt-8 rounded-xl border border-border bg-surface p-8 text-center">
+        <div className="mt-8 rounded-lg border border-border bg-surface p-8 text-center">
           <p className="text-sm text-muted">No errors logged. Good sign.</p>
         </div>
       )}

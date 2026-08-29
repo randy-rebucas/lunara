@@ -131,7 +131,7 @@ function StatTile({
   onClick?: () => void;
   active?: boolean;
 }) {
-  const cls = `rounded-xl p-4 text-left ring-1 transition-all ${TILE_TONES[tone]} ${
+  const cls = `rounded-lg p-4 text-left ring-1 transition-all ${TILE_TONES[tone]} ${
     active ? 'ring-2 ring-primary/40' : ''
   }`;
   const inner = (

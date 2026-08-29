@@ -113,17 +113,6 @@ export const HOW_IT_WORKS: HowItWorksItem[] = [
   },
 ];
 
-export const PARTNER_BENEFITS = [
-  'More bookings',
-  'Rider network',
-  'Customer app',
-  'Admin dashboard',
-  'Analytics & reports',
-  'Digital payments',
-  'Marketing support',
-  'Operations support',
-] as const;
-
 export const SERVICE_AREAS = [
   {
     id: 'lunara-makati',

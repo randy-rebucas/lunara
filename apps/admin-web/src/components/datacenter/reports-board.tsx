@@ -96,7 +96,7 @@ function StatTile({
   tone: keyof typeof TILE_TONES;
   href?: string;
 }) {
-  const cls = `rounded-xl p-4 ring-1 ${TILE_TONES[tone]}`;
+  const cls = `rounded-lg p-4 ring-1 ${TILE_TONES[tone]}`;
   const inner = (
     <>
       <p className="text-xs font-medium text-muted">{label}</p>

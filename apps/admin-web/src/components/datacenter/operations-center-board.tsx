@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { LiveBadge } from '../ui/stat-card';
 import { DonutChart, RevenueBarChart, TrendLegend, TrendLineChart } from './dash-charts';
 import type { DonutSegment, TrendPoint } from './dash-charts';
 import { adminFetch, getAdminUser } from '../../lib/admin-api';
@@ -163,7 +162,7 @@ function DashStatCard({
   return (
     <Link
       href={href}
-      className={`block rounded-xl p-4 ring-1 transition-all hover:shadow-[var(--shadow-elevated)] ${t.card}`}
+      className={`block rounded-lg p-4 ring-1 transition-all hover:shadow-[var(--shadow-elevated)] ${t.card}`}
     >
       <div className="flex items-start justify-between gap-2">
         <p className="text-xs font-medium text-muted">{label}</p>
@@ -308,6 +307,26 @@ export function OperationsCenterBoard() {
   return (
     <div>
       <header className="mb-5">
+        {/* Instrument strip — mirrors the console shell: status readouts before headline */}
+        <div className="console mb-4 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-md border console-line px-4 py-2.5">
+          <span className="console-eyebrow flex items-center gap-1.5">
+            <span className="console-signal-dot" aria-hidden />
+            {socketLive ? 'Realtime link' : 'Polling'}
+          </span>
+          <span className="console-readout">Refreshed {updatedLabel}</span>
+          <span className={`console-readout ${system === 'nominal' ? 'text-[color:var(--color-signal)]' : system === 'attention' ? 'text-amber-400' : 'text-red-400'}`}>
+            {sys.label.toUpperCase()}
+          </span>
+          <button
+            type="button"
+            className="ml-auto font-mono text-[0.6875rem] font-semibold uppercase tracking-wider text-[color:var(--color-console-muted)] transition-colors hover:text-[color:var(--color-console-fg)] disabled:opacity-50"
+            onClick={() => void reload()}
+            disabled={loading}
+          >
+            {loading ? 'Syncing…' : '↻ Sync'}
+          </button>
+        </div>
+
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="dc-eyebrow">Lunara platform</p>
@@ -317,22 +336,6 @@ export function OperationsCenterBoard() {
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted sm:text-base">
               Here&apos;s what&apos;s happening with your laundry business today.
             </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {socketLive ? <LiveBadge /> : (
-              <span className="badge-neutral">Polling</span>
-            )}
-            <span className="dc-sublabel tabular-nums" title="Last data refresh">
-              Updated {updatedLabel}
-            </span>
-            <button
-              type="button"
-              className="btn-outline btn-sm"
-              onClick={() => void reload()}
-              disabled={loading}
-            >
-              {loading ? 'Syncing…' : 'Sync'}
-            </button>
           </div>
         </div>
       </header>
@@ -356,7 +359,7 @@ export function OperationsCenterBoard() {
       {data ? (
         <div className="space-y-4">
           {/* System state banner */}
-          <div className={`flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 ${sys.bar}`}>
+          <div className={`flex flex-wrap items-center gap-3 rounded-md border px-4 py-3 ${sys.bar}`}>
             <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${sys.dot}`} aria-hidden />
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-slate-900">{sys.label}</p>

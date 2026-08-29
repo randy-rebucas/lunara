@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { adminLogout, getAdminUser } from '../lib/admin-api';
 import { useAdminMessageBadge } from '../hooks/use-admin-message-badge';
 import { AdminHeaderActions } from './admin-header-actions';
-import { BrandMark } from './ui/brand-mark';
 import { DailyRoutine } from './daily-routine';
 import { AdminReminders } from './admin-reminders';
+import brandIcon from '@lunara/brand/icon';
+import Image from 'next/image';
 
 // ── Icons ──────────────────────────────────────────────────────────────────
 function Icon({ d, d2 }: { d: string; d2?: string }) {
@@ -145,6 +146,10 @@ function activeHref(pathname: string): string | null {
   return best;
 }
 
+const sectionIndexByLabel = new Map<string, number>(
+  nav.filter((item): item is { section: string } => 'section' in item).map((item, i) => [item.section, i + 1]),
+);
+
 function SidebarNav({ onNavigate, messageBadge }: { onNavigate?: () => void; messageBadge?: number }) {
   const pathname = usePathname();
   const active = activeHref(pathname);
@@ -153,27 +158,26 @@ function SidebarNav({ onNavigate, messageBadge }: { onNavigate?: () => void; mes
     <nav className="space-y-0.5">
       {nav.map((item) => {
         if ('section' in item) {
+          const sectionIndex = sectionIndexByLabel.get(item.section) ?? 0;
           return (
-            <p
-              key={item.section}
-              className="mb-1 mt-4 px-3 text-[10px] font-semibold uppercase tracking-widest text-muted/60 first:mt-0"
-            >
-              {item.section}
+            <p key={item.section} className="console-section-label">
+              <span>{String(sectionIndex).padStart(2, '0')} · {item.section}</span>
             </p>
           );
         }
         const showBadge = item.href === '/messages' && messageBadge && messageBadge > 0;
+        const isActive = active === item.href;
         return (
           <Link
             key={item.href}
             href={item.href}
             onClick={onNavigate}
-            className={`flex items-center gap-2.5 ${active === item.href ? 'nav-link-active' : 'nav-link'}`}
+            className={isActive ? 'console-nav-link-active' : 'console-nav-link'}
           >
             {item.icon}
             <span className="flex-1">{item.label}</span>
             {showBadge && (
-              <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-white">
+              <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[color:var(--color-signal)] px-1 text-[10px] font-bold text-[color:var(--color-console)]">
                 {messageBadge > 99 ? '99+' : messageBadge}
               </span>
             )}
@@ -181,6 +185,25 @@ function SidebarNav({ onNavigate, messageBadge }: { onNavigate?: () => void; mes
         );
       })}
     </nav>
+  );
+}
+
+function ConsoleClock() {
+  const [now, setNow] = useState<Date | null>(null);
+
+  useEffect(() => {
+    setNow(new Date());
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <span className="console-readout hidden sm:inline-flex items-center gap-1.5">
+      <span className="console-signal-dot" aria-hidden />
+      {now
+        ? now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        : '--:--:--'}
+    </span>
   );
 }
 
@@ -210,19 +233,35 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar — console */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[var(--width-sidebar)] flex-col bg-sidebar shadow-[var(--shadow-sidebar)] transition-transform print:hidden ${
+        className={`console fixed inset-y-0 left-0 z-50 flex w-[var(--width-sidebar)] flex-col border-r console-line transition-transform print:hidden ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
         <div className="flex h-full flex-col p-4">
-          <div className="mb-6 px-1">
-            <BrandMark />
+          <div className="mb-5 flex items-center gap-2.5 border-b console-line px-1 pb-4">
+            <Image
+              src={brandIcon}
+              alt=""
+              width={34}
+              height={34}
+              className="shrink-0 rounded-md ring-1 ring-white/10"
+              aria-hidden
+              priority
+            />
+            <div className="min-w-0 text-left">
+              <p className="truncate text-sm font-bold tracking-tight text-[color:var(--color-console-fg)]">
+                Lunara Admin
+              </p>
+              <p className="console-eyebrow truncate">Control Center</p>
+            </div>
           </div>
 
           {user?.email && (
-            <p className="mb-4 truncate rounded-lg bg-slate-50 px-3 py-2 text-xs text-muted">{user.email}</p>
+            <p className="mb-4 truncate rounded-md bg-white/[0.04] px-3 py-2 font-mono text-[0.6875rem] text-[color:var(--color-console-muted)] ring-1 ring-white/[0.06]">
+              {user.email}
+            </p>
           )}
 
           <div className="flex-1 overflow-y-auto overscroll-contain">
@@ -232,7 +271,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <button
             type="button"
             onClick={logout}
-            className="btn-ghost mt-4 flex w-full items-center gap-2.5 justify-start text-left"
+            className="mt-4 flex w-full items-center gap-2.5 justify-start rounded-md px-3 py-2 text-left text-sm font-medium text-[color:var(--color-console-muted)] transition-colors hover:bg-white/[0.05] hover:text-[color:var(--color-console-fg)]"
           >
             {Icons.signout}
             Sign out
@@ -242,10 +281,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
       {/* Main column */}
       <div className="flex min-h-screen min-w-0 flex-col lg:pl-[var(--width-sidebar)] print:pl-0">
-        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-border/60 bg-surface/95 px-4 backdrop-blur-sm sm:px-6 lg:px-8 print:hidden">
+        <header className="console sticky top-0 z-30 flex h-12 shrink-0 items-center gap-3 border-b console-line px-4 sm:px-6 lg:px-8 print:hidden">
           <button
             type="button"
-            className="inline-flex rounded-lg p-2 text-muted hover:bg-slate-100 lg:hidden"
+            className="inline-flex rounded-md p-2 text-[color:var(--color-console-muted)] hover:bg-white/[0.06] lg:hidden"
             aria-expanded={sidebarOpen}
             aria-label="Toggle menu"
             onClick={() => setSidebarOpen((open) => !open)}
@@ -259,9 +298,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             </svg>
           </button>
 
-          <span className="text-sm font-semibold text-slate-900 lg:hidden">Lunara Admin</span>
+          <ConsoleClock />
+          <span className="console-eyebrow hidden md:inline">Sys nominal</span>
 
-          <AdminHeaderActions />
+          <div className="ml-auto flex items-center rounded-md bg-surface py-1 pl-1 pr-1.5 ring-1 ring-white/[0.06]">
+            <AdminHeaderActions />
+          </div>
         </header>
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>

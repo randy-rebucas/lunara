@@ -78,7 +78,7 @@ function StatTile({
   tone: keyof typeof TILE_TONES;
 }) {
   return (
-    <div className={`rounded-xl p-4 ring-1 ${TILE_TONES[tone]}`}>
+    <div className={`rounded-lg p-4 ring-1 ${TILE_TONES[tone]}`}>
       <p className="text-xs font-medium text-muted">{label}</p>
       <p className="dc-value mt-1">{value}</p>
       {sub ? <p className="dc-sublabel mt-0.5 truncate">{sub}</p> : null}
@@ -213,7 +213,7 @@ function SeedTab() {
               const isError   = result && typeof result === 'string';
               const tone: keyof typeof TILE_TONES = t.id === 'all' ? 'violet' : 'primary';
               return (
-                <div key={t.id} className={`flex flex-col gap-3 rounded-xl p-4 ring-1 ${TILE_TONES[tone]}`}>
+                <div key={t.id} className={`flex flex-col gap-3 rounded-lg p-4 ring-1 ${TILE_TONES[tone]}`}>
                   <div>
                     <p className="font-medium text-slate-900">{t.label}</p>
                     <p className="mt-0.5 text-xs text-muted">{t.description}</p>

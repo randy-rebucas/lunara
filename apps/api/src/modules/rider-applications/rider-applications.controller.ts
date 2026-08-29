@@ -44,7 +44,12 @@ const riderApplicationDocumentUploadOptions = {
 export class RiderApplicationsController {
   constructor(private readonly riderApplicationsService: RiderApplicationsService) {}
 
+  // Public submission is closed — the customer-web application form was removed and this
+  // endpoint was being hit directly by bots. Application records are now created by staff
+  // (e.g. via admin-web) after an off-platform intake, not by an anonymous POST.
   @Post()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
   @UseInterceptors(
     FileFieldsInterceptor(
       RIDER_APPLICATION_DOCUMENT_TYPES.map((name) => ({ name, maxCount: 1 })),

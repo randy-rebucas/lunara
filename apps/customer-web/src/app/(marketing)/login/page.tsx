@@ -10,6 +10,7 @@ import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { AuthShell } from '../../../components/auth-shell';
 import { FormError } from '../../../components/marketing/marketing-design';
 import { Input } from '../../../components/ui/input';
+import { getFriendlyErrorMessage } from '../../../lib/format-error';
 import { getRecaptchaToken } from '../../../lib/recaptcha';
 
 type OtpStep = 'phone' | 'code';
@@ -40,10 +41,18 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await login(email, password);
+    } catch (err) {
+      setError(getFriendlyErrorMessage(err, 'Login failed. Check your email and password and try again.'));
+      setSubmitting(false);
+      return;
+    }
+    // Sign-in itself succeeded past this point — a failure fetching onboarding status isn't a
+    // login error, so fall back to the dashboard instead of scaring the user with a raw error.
+    try {
       const status = await fetchOnboardingStatus(api);
       router.push(getOnboardingPath(status));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+    } catch {
+      router.push('/dashboard');
     } finally {
       setSubmitting(false);
     }
@@ -64,7 +73,7 @@ export default function LoginPage() {
       setOtp('');
       setOtpStep('code');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send OTP');
+      setError(getFriendlyErrorMessage(err, 'Failed to send OTP. Please try again.'));
     } finally {
       setSubmitting(false);
     }
@@ -76,10 +85,16 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await loginWithOtp(verifiedPhone || phone, otp);
+    } catch (err) {
+      setError(getFriendlyErrorMessage(err, 'Invalid or expired OTP. Please try again.'));
+      setSubmitting(false);
+      return;
+    }
+    try {
       const status = await fetchOnboardingStatus(api);
       router.replace(getOnboardingPath(status));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Invalid or expired OTP');
+    } catch {
+      router.replace('/dashboard');
     } finally {
       setSubmitting(false);
     }

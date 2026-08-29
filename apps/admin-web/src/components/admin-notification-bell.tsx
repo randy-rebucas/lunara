@@ -40,13 +40,13 @@ export function AdminNotificationBell() {
     <div className="relative" ref={panelRef}>
       <button
         type="button"
-        className="relative inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted transition-colors hover:bg-slate-100 hover:text-primary"
+        className="relative inline-flex h-8 w-8 items-center justify-center rounded-md text-muted transition-colors hover:bg-slate-100 hover:text-primary"
         aria-label={sosCount > 0 ? `${sosCount} active alerts` : 'Notifications'}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
         <svg
-          className="h-5 w-5"
+          className="h-4 w-4"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -67,10 +67,10 @@ export function AdminNotificationBell() {
       </button>
 
       {open ? (
-        <div className="absolute right-0 top-full z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-xl bg-surface shadow-[var(--shadow-elevated)] ring-1 ring-border/60">
-          <div className="border-b border-border/60 px-4 py-3">
-            <p className="text-sm font-semibold text-slate-900">Alerts</p>
-            <p className="text-xs text-muted">SOS incidents and live dispatch updates</p>
+        <div className="absolute right-0 top-full z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-lg bg-surface shadow-[var(--shadow-elevated)] ring-1 ring-border">
+          <div className="border-b border-border bg-slate-50 px-4 py-3">
+            <p className="font-mono text-[0.6875rem] font-semibold uppercase tracking-wider text-slate-700">Alerts</p>
+            <p className="mt-0.5 text-xs text-muted">SOS incidents and live dispatch updates</p>
           </div>
 
           <div className="max-h-[min(24rem,70vh)] overflow-y-auto p-3">

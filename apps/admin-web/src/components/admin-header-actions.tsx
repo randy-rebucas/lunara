@@ -21,8 +21,8 @@ function HeaderIconLink({
     <Link
       href={href}
       className={cn(
-        'inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted transition-colors hover:bg-slate-100 hover:text-primary',
-        active && 'bg-primary/10 text-primary',
+        'inline-flex h-8 w-8 items-center justify-center rounded-md text-muted transition-colors hover:bg-slate-100 hover:text-primary',
+        active && 'bg-primary/10 text-primary ring-1 ring-primary/15',
       )}
       aria-label={label}
       aria-current={active ? 'page' : undefined}
@@ -36,7 +36,7 @@ function HeaderIconLink({
 function ProfileAvatar({ email }: { email?: string }) {
   const initial = (email?.trim()[0] ?? 'A').toUpperCase();
   return (
-    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 font-mono text-[0.6875rem] font-semibold text-primary ring-1 ring-primary/20">
       {initial}
     </span>
   );
@@ -56,7 +56,7 @@ export function AdminHeaderActions() {
 
       <HeaderIconLink href="/settings" label="App settings" active={pathname.startsWith('/settings')}>
         <svg
-          className="h-5 w-5"
+          className="h-4 w-4"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"

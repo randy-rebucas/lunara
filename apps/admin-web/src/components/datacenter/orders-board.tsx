@@ -198,7 +198,7 @@ function StatTile({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-xl p-4 text-left ring-1 transition-all hover:shadow-[var(--shadow-elevated)] ${TILE_TONES[tone]} ${
+      className={`rounded-lg p-4 text-left ring-1 transition-all hover:shadow-[var(--shadow-elevated)] ${TILE_TONES[tone]} ${
         active ? 'ring-2 ring-primary/40' : ''
       }`}
     >

@@ -67,7 +67,7 @@ function StatTile({
   tone: keyof typeof TILE_TONES;
 }) {
   return (
-    <div className={`rounded-xl p-4 ring-1 ${TILE_TONES[tone]}`}>
+    <div className={`rounded-lg p-4 ring-1 ${TILE_TONES[tone]}`}>
       <p className="text-xs font-medium text-muted">{label}</p>
       <p className="dc-value mt-1">{value}</p>
       {sub ? <p className="dc-sublabel mt-0.5">{sub}</p> : null}
@@ -310,7 +310,7 @@ export function NotificationsBoard() {
 
             <div className="border-t border-border/60 px-5 py-4 lg:border-l lg:border-t-0">
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Preview</p>
-              <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+              <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
                 <div className="mb-1.5 flex items-center gap-1.5">
                   <div className="h-5 w-5 rounded bg-primary/20" aria-hidden />
                   <span className="text-xs font-medium text-slate-500">Lunara</span>
@@ -444,7 +444,7 @@ export function NotificationsBoard() {
               </RailSection>
 
               <RailSection title="Message">
-                <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
                   <div className="mb-1.5 flex items-center gap-1.5">
                     <div className="h-5 w-5 rounded bg-primary/20" aria-hidden />
                     <span className="text-xs font-medium text-slate-500">Lunara</span>

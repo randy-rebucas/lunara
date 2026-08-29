@@ -171,16 +171,7 @@ export default async function LocationsPage() {
           </MarketingActions>
         </MarketingCtaPanel>
 
-        <MarketingBackLink
-          extra={
-            <>
-              {' · '}
-              <Link href="/partners" className="link-primary">
-                Partner with us
-              </Link>
-            </>
-          }
-        />
+        <MarketingBackLink />
       </section>
     </MarketingShell>
   );

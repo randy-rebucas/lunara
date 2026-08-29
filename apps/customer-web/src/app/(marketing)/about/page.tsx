@@ -76,15 +76,12 @@ export default function AboutPage() {
         className="mt-14"
         badge="Join us"
         title="Ready to try it yourself?"
-        description="Book your first pickup in minutes, or partner with us as a laundry shop or rider."
+        description="Book your first pickup in minutes."
         align="center"
       >
         <MarketingActions align="center" gap="loose">
           <ButtonLink href="/signup" size="lg" layout="responsive">
             Book laundry pickup
-          </ButtonLink>
-          <ButtonLink href="/partners" variant="outline" size="lg" layout="responsive">
-            Partner with us
           </ButtonLink>
         </MarketingActions>
       </MarketingCtaPanel>

@@ -3,7 +3,7 @@
 
 @theme {
   --color-surface: #ffffff;
-  --color-surface-muted: #f8fafc;
+  --color-surface-muted: #f4f6fa;
   --color-sidebar: #ffffff;
   --color-border: #e2e8f0;
   --color-muted: #64748b;
@@ -15,7 +15,17 @@
   --shadow-card: 0 1px 3px 0 rgb(15 23 42 / 0.06), 0 1px 2px -1px rgb(15 23 42 / 0.06);
   --shadow-elevated: 0 4px 6px -1px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.06);
   --shadow-sidebar: 1px 0 0 0 rgb(226 232 240 / 0.8);
-  --width-sidebar: 16rem;
+  --width-sidebar: 17rem;
+
+  /* Console — the dark instrument chrome (shell, nav, header). Content
+     surfaces stay bright for daylight-desk legibility on dense tables. */
+  --color-console: #0a0f1c;
+  --color-console-raised: #0f1526;
+  --color-console-line: rgb(148 163 199 / 0.14);
+  --color-console-fg: #e7ebf5;
+  --color-console-muted: #8592ad;
+  --color-signal: #35e0b8;
+  --color-signal-dim: rgb(53 224 184 / 0.14);
 }
 
 @layer base {
@@ -52,12 +62,73 @@
       radial-gradient(circle at 50% 50%, rgb(34 197 94 / 0.02) 0%, transparent 50%);
   }
 
+  /* ── Console chrome — instrument-panel shell (sidebar + header) ─────────── */
+  .console {
+    background-color: var(--color-console);
+    background-image:
+      linear-gradient(var(--color-console-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--color-console-line) 1px, transparent 1px);
+    background-size: 22px 22px;
+    background-position: -1px -1px;
+    color: var(--color-console-fg);
+  }
+
+  .console-raised {
+    @apply bg-[color:var(--color-console-raised)];
+  }
+
+  .console-line {
+    border-color: var(--color-console-line);
+  }
+
+  .console-eyebrow {
+    @apply font-mono text-[0.625rem] font-semibold uppercase tracking-[0.16em] text-[color:var(--color-console-muted)];
+  }
+
+  .console-section-label {
+    @apply mb-1 mt-5 flex items-center gap-2 px-3 font-mono text-[0.625rem] font-semibold uppercase tracking-[0.16em] text-[color:var(--color-console-muted)] first:mt-0;
+  }
+
+  .console-section-label::before {
+    content: '';
+    @apply h-px flex-1 bg-[color:var(--color-console-line)];
+    order: 2;
+  }
+
+  .console-nav-link {
+    @apply relative flex items-center gap-2.5 rounded-md border-l-2 border-transparent px-3 py-2 text-sm font-medium text-[color:var(--color-console-muted)] transition-colors hover:border-[color:var(--color-console-line)] hover:bg-white/[0.04] hover:text-[color:var(--color-console-fg)];
+  }
+
+  .console-nav-link-active {
+    @apply relative flex items-center gap-2.5 rounded-md border-l-2 border-[color:var(--color-signal)] bg-[color:var(--color-signal-dim)] px-3 py-2 text-sm font-semibold text-[color:var(--color-console-fg)] shadow-[inset_0_0_0_1px_rgb(53_224_184_/_0.12)];
+  }
+
+  .console-signal-dot {
+    @apply relative inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-[color:var(--color-signal)];
+    box-shadow: 0 0 0 3px var(--color-signal-dim);
+  }
+
+  .console-signal-dot::after {
+    content: '';
+    @apply absolute inset-0 rounded-full bg-[color:var(--color-signal)];
+    animation: console-pulse 2.2s ease-out infinite;
+  }
+
+  @keyframes console-pulse {
+    0% { transform: scale(1); opacity: 0.7; }
+    100% { transform: scale(2.8); opacity: 0; }
+  }
+
+  .console-readout {
+    @apply font-mono text-xs tabular-nums text-[color:var(--color-console-muted)];
+  }
+
   .card {
-    @apply rounded-xl bg-surface shadow-[var(--shadow-card)] ring-1 ring-border/50;
+    @apply rounded-lg bg-surface shadow-[var(--shadow-card)] ring-1 ring-border;
   }
 
   .card-elevated {
-    @apply rounded-xl bg-surface shadow-[var(--shadow-elevated)] ring-1 ring-border/50;
+    @apply rounded-lg bg-surface shadow-[var(--shadow-elevated)] ring-1 ring-border;
   }
 
   .card-body {
@@ -65,15 +136,15 @@
   }
 
   .card-interactive {
-    @apply rounded-xl bg-surface p-5 shadow-[var(--shadow-card)] ring-1 ring-border/50 transition-all hover:ring-primary/25 hover:shadow-[var(--shadow-elevated)];
+    @apply rounded-lg bg-surface p-5 shadow-[var(--shadow-card)] ring-1 ring-border transition-all hover:ring-primary/25 hover:shadow-[var(--shadow-elevated)];
   }
 
   .stat-card {
-    @apply rounded-xl bg-surface p-5 shadow-[var(--shadow-card)] ring-1 ring-border/50 transition-all hover:ring-primary/25;
+    @apply rounded-lg bg-surface p-5 shadow-[var(--shadow-card)] ring-1 ring-border transition-all hover:ring-primary/25;
   }
 
   .section-panel {
-    @apply overflow-hidden rounded-xl bg-surface shadow-[var(--shadow-card)] ring-1 ring-border/50;
+    @apply overflow-hidden rounded-lg bg-surface shadow-[var(--shadow-card)] ring-1 ring-border;
   }
 
   .section-panel-header {
@@ -202,19 +273,19 @@
 
   /* Datacenter / metric typography — matches StatCard + PageHeader (sans) */
   .dc-eyebrow {
-    @apply text-[0.6875rem] font-semibold uppercase tracking-wider text-muted;
+    @apply font-mono text-[0.6875rem] font-semibold uppercase tracking-wider text-muted;
   }
 
   .dc-label {
-    @apply text-xs font-medium text-muted;
+    @apply font-mono text-[0.6875rem] font-medium uppercase tracking-wide text-muted;
   }
 
   .dc-value {
-    @apply text-2xl font-bold tabular-nums tracking-tight text-slate-900;
+    @apply font-mono text-2xl font-bold tabular-nums tracking-tight text-slate-900;
   }
 
   .dc-value-sm {
-    @apply text-lg font-semibold tabular-nums text-slate-900;
+    @apply font-mono text-lg font-semibold tabular-nums text-slate-900;
   }
 
   .dc-sublabel {
@@ -257,11 +328,15 @@
   }
 
   .dc-panel {
-    @apply overflow-hidden rounded-lg bg-surface ring-1 ring-border/60;
+    @apply overflow-hidden rounded-md bg-surface ring-1 ring-border;
   }
 
   .dc-panel-header {
-    @apply border-b border-border/60 bg-slate-50/90 px-3.5 py-2;
+    @apply flex items-center border-b border-border bg-slate-50 px-3.5 py-2.5;
+  }
+
+  .dc-panel-header h2 {
+    @apply font-mono text-[0.6875rem] font-semibold uppercase tracking-wider text-slate-700;
   }
 
   .dc-panel-body {

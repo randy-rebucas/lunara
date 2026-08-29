@@ -140,7 +140,7 @@ function StatTile({
   icon?: React.ReactNode;
 }) {
   return (
-    <div className={`rounded-xl p-4 ring-1 ${TILE_TONES[tone]}`}>
+    <div className={`rounded-lg p-4 ring-1 ${TILE_TONES[tone]}`}>
       <div className="flex items-center gap-2.5">
         {icon ? (
           <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${TILE_CHIPS[tone]}`}>
@@ -927,7 +927,7 @@ export function BranchesBoard() {
                 {profile ? (
                   <div className="space-y-3">
                     <div className="flex items-start gap-4">
-                      <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/60 bg-slate-50">
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border/60 bg-slate-50">
                         {profile.branch.logoUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
@@ -1009,7 +1009,7 @@ export function BranchesBoard() {
 
                     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                       <div
-                        className={`rounded-xl p-3.5 ring-1 ${
+                        className={`rounded-lg p-3.5 ring-1 ${
                           profile.capacity.ordersCapacityAvailable
                             ? TILE_TONES.primary
                             : TILE_TONES.amber
@@ -1029,7 +1029,7 @@ export function BranchesBoard() {
                         </p>
                       </div>
                       <div
-                        className={`rounded-xl p-3.5 ring-1 ${
+                        className={`rounded-lg p-3.5 ring-1 ${
                           profile.capacity.utilizationWeightPercent >= 90
                             ? TILE_TONES.rose
                             : TILE_TONES.secondary
@@ -1042,13 +1042,13 @@ export function BranchesBoard() {
                           {profile.capacity.currentLoadKg}/{profile.capacity.maxWeightCapacityKg} kg
                         </p>
                       </div>
-                      <div className={`rounded-xl p-3.5 ring-1 ${TILE_TONES.violet}`}>
+                      <div className={`rounded-lg p-3.5 ring-1 ${TILE_TONES.violet}`}>
                         <p className="text-xs font-medium text-muted">Daily orders</p>
                         <p className="dc-value-sm mt-1">{profileMetrics?.quotaOrders ?? '—'}</p>
                         <CapacityBar percent={profile.dailyQuota.ordersQuotaPercent} />
                         <p className="dc-sublabel mt-1">{profile.dailyQuota.ordersQuotaPercent}% of quota</p>
                       </div>
-                      <div className={`rounded-xl p-3.5 ring-1 ${TILE_TONES.accent}`}>
+                      <div className={`rounded-lg p-3.5 ring-1 ${TILE_TONES.accent}`}>
                         <p className="text-xs font-medium text-muted">Revenue today</p>
                         <p className="dc-value-sm mt-1">{formatPeso(profile.performance.revenueToday)}</p>
                         <p className="dc-sublabel mt-1">{profile.performance.ordersToday} orders today</p>

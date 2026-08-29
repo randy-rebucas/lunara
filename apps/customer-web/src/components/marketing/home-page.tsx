@@ -44,7 +44,6 @@ import {
   FEATURES,
   HOME_FAQS,
   HOW_IT_WORKS,
-  PARTNER_BENEFITS,
   PRICING_TIERS,
   SERVICE_AREAS,
   STATS,
@@ -258,8 +257,8 @@ export function HomePage() {
                   <ButtonLink href="/signup" size="lg" layout="responsive">
                     Book a pickup
                   </ButtonLink>
-                  <ButtonLink href="/partners" variant="outline" size="lg" layout="responsive">
-                    Become a partner
+                  <ButtonLink href="/how-it-works" variant="outline" size="lg" layout="responsive">
+                    How it works
                   </ButtonLink>
                 </MarketingActions>
               </Reveal>
@@ -461,57 +460,12 @@ export function HomePage() {
         </Reveal>
       </MarketingSection>
 
-      {/* ── Partner growth + live tracking ── */}
+      {/* ── Live tracking ── */}
       <MarketingSection tint="muted">
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Grow your laundry business */}
-          <Reveal as="div" className="card-elevated flex flex-col overflow-hidden">
-            <div className="relative h-40 w-full sm:h-48">
-              <Image
-                src="https://images.unsplash.com/photo-1757252872525-01d7703533d9?fm=jpg&q=80&w=1200&auto=format&fit=crop"
-                alt=""
-                fill
-                sizes="(min-width: 1024px) 50vw, 100vw"
-                className="object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-white via-white/10 to-transparent" aria-hidden />
-            </div>
-            <div className="flex flex-1 flex-col p-8 pt-2 sm:p-10 sm:pt-4">
-            <span className="badge-primary w-fit">For laundry shops</span>
-            <h2 className="mt-4 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-              Grow your laundry business with {appConfig.name}
-            </h2>
-            <p className="mt-3 text-muted">
-              Join {appConfig.name} and receive more customers without spending thousands on
-              marketing.
-            </p>
-
-            <ul className="mt-6 grid flex-1 grid-cols-1 gap-x-6 gap-y-2.5 sm:grid-cols-2">
-              {PARTNER_BENEFITS.map((benefit) => (
-                <li key={benefit} className="flex items-center gap-2.5 text-sm text-slate-700">
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
-                    <Check className="h-3 w-3" aria-hidden />
-                  </span>
-                  {benefit}
-                </li>
-              ))}
-            </ul>
-
-            <MarketingActions className="mt-8">
-              <ButtonLink href="/partners/apply" layout="responsive">
-                Become a founding partner
-              </ButtonLink>
-              <ButtonLink href="/partners" variant="outline" layout="responsive">
-                Learn more
-              </ButtonLink>
-            </MarketingActions>
-            </div>
-          </Reveal>
-
+        <div className="mx-auto max-w-2xl">
           {/* Real-time tracking */}
           <Reveal
             as="div"
-            delay={120}
             className="card-elevated relative flex flex-col overflow-hidden bg-slate-900 p-8 text-white sm:p-10"
           >
             {/* Grid backdrop + route line */}
@@ -807,28 +761,6 @@ export function HomePage() {
         </p>
       </MarketingSection>
 
-      {/* ── Join strip ── */}
-      <MarketingSection tint="bordered" className="relative overflow-hidden pb-20 sm:pb-24">
-        <Bubbles />
-        <Reveal as="div" className="relative flex flex-col items-center justify-between gap-6 text-center sm:flex-row sm:text-left">
-          <div>
-            <h2 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
-              Work with {appConfig.name}
-            </h2>
-            <p className="mt-1.5 text-muted">
-              Partner your laundry shop or earn on your schedule as a rider.
-            </p>
-          </div>
-          <MarketingActions className="w-full sm:w-auto" align="end">
-            <ButtonLink href="/partners" size="lg" layout="responsive">
-              Partner with us
-            </ButtonLink>
-            <ButtonLink href="/riders" variant="outline" size="lg" layout="responsive">
-              Drive with {appConfig.name}
-            </ButtonLink>
-          </MarketingActions>
-        </Reveal>
-      </MarketingSection>
     </MarketingShell>
   );
 }

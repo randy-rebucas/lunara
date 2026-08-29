@@ -19,8 +19,6 @@ const NAV_LINKS = [
 const COMPANY_LINKS = [
   { href: '/about', label: 'About' },
   { href: '/faq', label: 'FAQ' },
-  { href: '/partners', label: 'Partners' },
-  { href: '/riders', label: 'Riders' },
 ] as const;
 
 function CompanyMenu() {
@@ -214,8 +212,6 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
                   { href: '/about', label: 'About' },
                   { href: '/blog', label: 'Blog' },
                   { href: '/faq', label: 'FAQ' },
-                  { href: '/partners', label: 'Become a partner' },
-                  { href: '/riders', label: 'Become a rider' },
                 ].map((l) => (
                   <li key={l.href}>
                     <Link href={l.href} className="text-white/80 transition-colors hover:text-white">
@@ -237,12 +233,6 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
                   className="inline-flex items-center justify-center rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-primary transition hover:bg-blue-50"
                 >
                   Book a pickup
-                </Link>
-                <Link
-                  href="/partners"
-                  className="inline-flex items-center justify-center rounded-lg px-5 py-2.5 text-sm font-semibold text-white ring-1 ring-white/40 transition hover:bg-white/10"
-                >
-                  Partner with us
                 </Link>
               </div>
               <ul className="mt-5 space-y-2 text-xs text-white/70">

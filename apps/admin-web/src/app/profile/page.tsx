@@ -119,7 +119,7 @@ function SummaryTile({
   tone: keyof typeof SUMMARY_TONES;
 }) {
   return (
-    <div className={`rounded-xl p-4 ring-1 ${SUMMARY_TONES[tone]}`}>
+    <div className={`rounded-lg p-4 ring-1 ${SUMMARY_TONES[tone]}`}>
       <p className="text-xs font-medium text-muted">{label}</p>
       <p className="mt-1 text-xl font-bold tracking-tight text-slate-900">{value}</p>
       {sub ? <p className="mt-0.5 text-xs text-muted">{sub}</p> : null}

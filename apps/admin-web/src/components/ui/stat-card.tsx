@@ -40,8 +40,8 @@ export function StatCard({
 
 export function LiveBadge() {
   return (
-    <span className="badge-live">
-      <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />
+    <span className="badge-live font-mono uppercase tracking-wider">
+      <span className="console-signal-dot" aria-hidden />
       Live
     </span>
   );

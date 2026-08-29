@@ -438,7 +438,7 @@ function MiniStatTile({
   tone: keyof typeof TILE_TONES;
 }) {
   return (
-    <div className={`rounded-xl p-3 ring-1 ${TILE_TONES[tone]}`}>
+    <div className={`rounded-lg p-3 ring-1 ${TILE_TONES[tone]}`}>
       <p className="text-xs font-medium text-muted">{label}</p>
       <p className="mt-1 text-xl font-bold tabular-nums text-slate-900">{value}</p>
       {sub ? <p className="mt-0.5 text-[0.6875rem] text-muted">{sub}</p> : null}

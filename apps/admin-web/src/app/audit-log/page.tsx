@@ -81,7 +81,7 @@ function StatTile({
   tone: keyof typeof TILE_TONES;
 }) {
   return (
-    <div className={`rounded-xl p-4 ring-1 ${TILE_TONES[tone]}`}>
+    <div className={`rounded-lg p-4 ring-1 ${TILE_TONES[tone]}`}>
       <p className="text-xs font-medium text-muted">{label}</p>
       <p className="dc-value mt-1">{value}</p>
       {sub ? <p className="dc-sublabel mt-0.5 truncate">{sub}</p> : null}
@@ -238,7 +238,7 @@ export default function AuditLogPage() {
       {loading && !data && <p className="mt-4 text-sm text-muted">Loading…</p>}
 
       {!loading && data && data.items.length === 0 && (
-        <div className="mt-8 rounded-xl border border-border bg-surface p-8 text-center">
+        <div className="mt-8 rounded-lg border border-border bg-surface p-8 text-center">
           <p className="text-sm text-muted">No audit log entries found.</p>
         </div>
       )}

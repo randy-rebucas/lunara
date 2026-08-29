@@ -143,21 +143,4 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
       },
     ],
   },
-  {
-    id: 'partners',
-    label: 'Partners & riders',
-    description: 'Joining the Lunara network.',
-    items: [
-      {
-        id: 'become-partner-rider',
-        question: 'How do I become a Lunara partner or rider?',
-        answer:
-          'Laundry shops can apply through our partner program. Delivery riders can learn about onboarding, earnings, and requirements on our riders page, then contact operations to start an application.',
-        links: [
-          { href: '/partners', label: 'Partner with Lunara' },
-          { href: '/riders', label: 'Drive with Lunara' },
-        ],
-      },
-    ],
-  },
 ];

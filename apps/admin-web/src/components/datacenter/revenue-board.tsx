@@ -99,7 +99,7 @@ function StatTile({
         ? 'dc-metric-trend-up'
         : 'dc-metric-trend-down';
   return (
-    <div className={`rounded-xl p-4 ring-1 ${TILE_TONES[tone]}`}>
+    <div className={`rounded-lg p-4 ring-1 ${TILE_TONES[tone]}`}>
       <p className="text-xs font-medium text-muted">{label}</p>
       <p className="dc-value mt-1">{value}</p>
       <div className="mt-1 flex items-center gap-1.5">

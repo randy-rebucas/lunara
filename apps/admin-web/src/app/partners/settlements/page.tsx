@@ -115,7 +115,7 @@ function CreateSettlementModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-xl bg-white shadow-xl">
+      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-lg bg-white shadow-xl">
         <div className="dc-panel-header flex shrink-0 items-center justify-between">
           <div>
             <h2 className="font-semibold text-slate-900">

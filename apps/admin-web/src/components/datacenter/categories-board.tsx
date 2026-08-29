@@ -41,7 +41,7 @@ function StatTile({
   tone: keyof typeof TILE_TONES;
 }) {
   return (
-    <div className={`rounded-xl p-4 ring-1 ${TILE_TONES[tone]}`}>
+    <div className={`rounded-lg p-4 ring-1 ${TILE_TONES[tone]}`}>
       <p className="text-xs font-medium text-muted">{label}</p>
       <p className="dc-value mt-1">{value}</p>
       {sub ? <p className="dc-sublabel mt-0.5">{sub}</p> : null}

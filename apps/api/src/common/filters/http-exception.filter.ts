@@ -46,14 +46,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
       if (status >= 500 && process.env.NODE_ENV === 'production') {
         message = 'Something went wrong on our end. Please try again in a moment.';
       }
-    } else if (exception instanceof Error) {
-      // Non-HttpException errors (e.g. raw Mongoose/driver failures) can contain internal
-      // detail (connection strings, field/collection names) that shouldn't reach clients in
-      // production — log the real message server-side and return a generic one instead.
-      if (process.env.NODE_ENV !== 'production') {
-        message = exception.message;
-      }
     }
+    // Non-HttpException errors (e.g. raw Mongoose/driver failures) can contain internal
+    // detail (connection strings, field/collection names, query payloads) that shouldn't
+    // reach clients in any environment — the real message is logged server-side below and
+    // surfaced only via the (reference: ...) lookup in /admin/error-logs.
 
     // Only 5xx (server-side failures) get persisted — 4xx are expected client/validation errors
     // and would flood the log with noise (bad input, expired tokens, etc.).
