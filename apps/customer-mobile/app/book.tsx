@@ -12,13 +12,15 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Slider from '@react-native-community/slider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BookingType, PaymentMethod, type OperatingHours } from '@lunara/types';
+import { AddressType, BookingType, PaymentMethod, type OperatingHours } from '@lunara/types';
 import {
   BOOKING_MACHINE_LOAD_MIN_KG,
+  BOOKING_MAX_WEIGHT_KG,
   BOOKING_MIN_ORDER_AMOUNT,
-  BOOKING_MIN_WEIGHT_KG,
-  BOOKING_PER_KG_MAX_KG,
+  BOOKING_PER_KG_MIN_KG,
+  resolvePerKgMaxKg,
   BranchPricingMode,
   estimateMachineLoads,
   EXPRESS_RETURN_ADDON_ID,
@@ -95,6 +97,42 @@ function StepHeading({ step, title }: { step: BookingStep; title: string }) {
         <Ionicons name={STEP_ICON[step]} size={16} color={colors.primary} />
       </View>
       <Text style={styles.heading}>{title}</Text>
+    </View>
+  );
+}
+
+/** Drag-to-estimate weight slider for the PER_KG/PER_LOAD detail steps — replaces the numeric
+ * keyboard entry. Caps the visible track at maxKg, but a value already above it (e.g. from a
+ * previous larger estimate) still displays correctly, just pinned at the far end of the track. */
+function WeightSlider({
+  value,
+  maxKg,
+  onChange,
+}: {
+  value: string;
+  maxKg: number;
+  onChange: (raw: string) => void;
+}) {
+  const weight = Number(value) || 0;
+  return (
+    <View>
+      <Slider
+        minimumValue={0}
+        maximumValue={maxKg}
+        step={0.5}
+        value={Math.min(weight, maxKg)}
+        onValueChange={(v) => onChange(v > 0 ? String(v) : '')}
+        minimumTrackTintColor={colors.primary}
+        maximumTrackTintColor={colors.border}
+        thumbTintColor={colors.primary}
+        style={styles.weightSlider}
+      />
+      <View style={styles.weightSliderLabels}>
+        <Text style={styles.weightSliderLabelText}>0 kg</Text>
+        <Text style={styles.weightSliderLabelText}>
+          {weight > maxKg ? `${weight} kg` : `${maxKg}+ kg`}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -802,16 +840,16 @@ export default function BookScreen() {
       if (
         (shopPricingMode === BranchPricingMode.PER_KG || shopPricingMode === BranchPricingMode.PER_LOAD) &&
         Number(form.enteredWeightKg) &&
-        Number(form.enteredWeightKg) < BOOKING_MIN_WEIGHT_KG
+        Number(form.enteredWeightKg) < BOOKING_PER_KG_MIN_KG
       ) {
-        setError(`Minimum booking weight is ${BOOKING_MIN_WEIGHT_KG} kg`);
+        setError(`Minimum booking weight is ${BOOKING_PER_KG_MIN_KG} kg`);
         return;
       }
       if (
         shopPricingMode === BranchPricingMode.PER_KG &&
-        Number(form.enteredWeightKg) > BOOKING_PER_KG_MAX_KG
+        Number(form.enteredWeightKg) > resolvePerKgMaxKg(shopKgPerLoad)
       ) {
-        setError(`Per-kg pricing only covers up to ${BOOKING_PER_KG_MAX_KG} kg`);
+        setError(`Per-kg pricing only covers up to ${resolvePerKgMaxKg(shopKgPerLoad)} kg`);
         return;
       }
       if (
@@ -820,6 +858,20 @@ export default function BookScreen() {
         !Number(form.enteredLoadCount)
       ) {
         setError('Enter the estimated weight or load count');
+        return;
+      }
+      if (
+        shopPricingMode === BranchPricingMode.PER_LOAD &&
+        Number(form.enteredWeightKg) > BOOKING_MAX_WEIGHT_KG
+      ) {
+        setError(`Enter a realistic weight — up to ${BOOKING_MAX_WEIGHT_KG} kg per order`);
+        return;
+      }
+      if (
+        shopPricingMode === BranchPricingMode.PER_LOAD &&
+        Number(form.enteredLoadCount) > estimateMachineLoads(BOOKING_MAX_WEIGHT_KG, shopKgPerLoad)
+      ) {
+        setError('Enter a realistic load count for this order');
         return;
       }
       if (
@@ -1009,32 +1061,56 @@ export default function BookScreen() {
               {addressesError ? <Text style={styles.error}>{addressesError}</Text> : null}
               {dispatchNote ? (
                 <View style={styles.infoBox}>
+                  <Ionicons name="information-circle" size={16} color={colors.primary} />
                   <Text style={styles.infoText}>{dispatchNote}</Text>
                 </View>
               ) : null}
               {addresses.length === 0 ? (
                 <Pressable
-                  style={({ pressed }) => [styles.option, pressed && styles.optionPressed]}
+                  style={({ pressed }) => [
+                    styles.shopCard,
+                    styles.autoDispatchCard,
+                    pressed && styles.shopCardPressed,
+                  ]}
                   onPress={() => router.push('/(tabs)/profile')}
                   accessibilityRole="button"
                   accessibilityLabel="Add address in Profile"
                 >
-                  <Text style={styles.optionTitle}>Add address in Profile</Text>
-                  <Text style={styles.optionSub}>
-                    Save a pickup address with GPS so riders can navigate to you
-                  </Text>
+                  <View style={styles.shopHeaderRow}>
+                    <View style={styles.shopTitleGroup}>
+                      <View style={styles.autoDispatchIcon}>
+                        <Ionicons name="add" size={20} color={colors.primary} />
+                      </View>
+                      <View style={styles.shopTitleTextGroup}>
+                        <Text style={styles.shopName}>Add address in Profile</Text>
+                        <Text style={styles.shopMetaText}>
+                          Save a pickup address with GPS so riders can navigate to you
+                        </Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
+                  </View>
                 </Pressable>
               ) : (
                 addresses.map((a) => {
                   const selected = form.addressId === a._id;
+                  const hasCoords = addressHasCoords(a);
+                  const addressIcon =
+                    a.addressType === AddressType.WORK
+                      ? 'briefcase-outline'
+                      : a.addressType === AddressType.APARTMENT
+                        ? 'business-outline'
+                        : a.addressType === AddressType.OTHER
+                          ? 'location-outline'
+                          : 'home-outline';
                   return (
                   <Pressable
                     key={a._id}
                     style={({ pressed }) => [
-                      styles.option,
-                      selected && styles.optionSelected,
-                      !addressHasCoords(a) && styles.optionDisabled,
-                      pressed && styles.optionPressed,
+                      styles.shopCard,
+                      selected && styles.shopCardSelected,
+                      !hasCoords && styles.shopCardDisabled,
+                      pressed && styles.shopCardPressed,
                     ]}
                     onPress={() =>
                       setForm((f) => ({
@@ -1048,26 +1124,47 @@ export default function BookScreen() {
                     accessibilityRole="radio"
                     accessibilityState={{ selected }}
                   >
-                    <View style={styles.addressLabelRow}>
-                      <Text style={styles.optionTitle}>{a.label}</Text>
-                      {a.isDefault ? (
-                        <View style={styles.defaultBadge}>
-                          <Text style={styles.defaultBadgeText}>Default</Text>
+                    <View style={styles.shopHeaderRow}>
+                      <View style={styles.shopTitleGroup}>
+                        <View style={styles.shopLogoFallback}>
+                          <Ionicons name={addressIcon} size={20} color={colors.primary} />
+                        </View>
+                        <View style={styles.shopTitleTextGroup}>
+                          <View style={styles.addressLabelRow}>
+                            <Text style={styles.shopName} numberOfLines={1}>
+                              {a.label}
+                            </Text>
+                            {a.isDefault ? (
+                              <View style={styles.defaultBadge}>
+                                <Text style={styles.defaultBadgeText}>Default</Text>
+                              </View>
+                            ) : null}
+                          </View>
+                          <Text style={styles.shopMetaText} numberOfLines={2}>
+                            {formatAddressTypeLabel(a.addressType)} · {a.line1}, {a.city}
+                          </Text>
+                        </View>
+                      </View>
+                      {selected ? (
+                        <View style={styles.shopCheckBadge}>
+                          <Ionicons name="checkmark" size={14} color={colors.onPrimary} />
                         </View>
                       ) : null}
-                      {selected ? (
-                        <Ionicons name="checkmark-circle" size={18} color={colors.primary} style={styles.optionCheck} />
-                      ) : null}
                     </View>
-                    <Text style={styles.optionSub}>
-                      {formatAddressTypeLabel(a.addressType)} · {a.line1}, {a.city}
-                    </Text>
-                    {addressHasCoords(a) ? (
-                      <Text style={styles.optionGps}>GPS pinned for rider navigation</Text>
+                    {hasCoords ? (
+                      <View style={[styles.statusPill, styles.statusPillOpen]}>
+                        <Ionicons name="navigate" size={12} color={colors.accentDark} />
+                        <Text style={[styles.statusPillText, styles.statusPillTextOpen]}>
+                          GPS pinned for rider navigation
+                        </Text>
+                      </View>
                     ) : (
-                      <Text style={styles.optionGpsMissing}>
-                        No GPS pin — update in Profile before booking
-                      </Text>
+                      <View style={styles.warnPill}>
+                        <Ionicons name="alert-circle-outline" size={13} color={colors.warning} />
+                        <Text style={styles.warnPillText}>
+                          No GPS pin — update in Profile before booking
+                        </Text>
+                      </View>
                     )}
                   </Pressable>
                   );
@@ -1419,10 +1516,31 @@ export default function BookScreen() {
 
           {step === 'service' && config && (
             <View>
-              <StepHeading
-                step="service"
-                title={selectedShop ? `${selectedShop.name} services` : 'Choose service'}
-              />
+              <StepHeading step="service" title="Choose service" />
+              <View style={styles.shopContextCard}>
+                {form.autoDispatch ? (
+                  <View style={styles.autoDispatchIcon}>
+                    <Ionicons name="flash" size={18} color={colors.primary} />
+                  </View>
+                ) : selectedShop?.logoUrl ? (
+                  <Image
+                    source={{ uri: resolveMediaUrl(selectedShop.logoUrl) }}
+                    style={styles.shopLogo}
+                  />
+                ) : (
+                  <View style={styles.shopLogoFallback}>
+                    <Ionicons name="storefront-outline" size={20} color={colors.primary} />
+                  </View>
+                )}
+                <View style={styles.summaryShopTextGroup}>
+                  <Text style={styles.summaryMuted}>Booking with</Text>
+                  <Text style={styles.summaryShopName}>
+                    {form.autoDispatch
+                      ? `${brandName}'s pick (best available)`
+                      : (selectedBranch?.name ?? 'Selected shop')}
+                  </Text>
+                </View>
+              </View>
               {services.map((s) => {
                 const selected = s.isCustom
                   ? form.customServiceId === s.customServiceId
@@ -1627,41 +1745,69 @@ export default function BookScreen() {
             shopPricingMode === BranchPricingMode.PER_KG && (
             <View>
               <StepHeading step="weight" title="Estimate your weight" />
-              <Text style={styles.sub}>
-                This shop charges per kilo, for loads up to {BOOKING_PER_KG_MAX_KG} kg (minimum{' '}
-                {BOOKING_MIN_WEIGHT_KG} kg). Heavier loads are billed per machine load instead —{' '}
-                {machineLoadInfo(shopKgPerLoad)}
-              </Text>
-              <TextInput
-                style={styles.weightInput}
-                keyboardType="decimal-pad"
-                placeholder="e.g. 4"
-                value={form.enteredWeightKg}
-                onChangeText={(v) => setForm((f) => ({ ...f, enteredWeightKg: v }))}
-              />
-              <Text style={styles.optionSub}>kg</Text>
               {(() => {
+                const perKgMaxKg = resolvePerKgMaxKg(shopKgPerLoad);
                 const bag = recommendBagForWeight(Number(form.enteredWeightKg) || 0, config?.bagSizes ?? []);
-                return bag ? (
-                  <Text style={styles.optionSub}>
-                    That's roughly a {bag.label} bag (up to {bag.capacityKg} kg).
-                  </Text>
-                ) : null;
+                const belowMin =
+                  Number(form.enteredWeightKg) > 0 && Number(form.enteredWeightKg) < BOOKING_PER_KG_MIN_KG;
+                const aboveMax = Number(form.enteredWeightKg) > perKgMaxKg;
+                return (
+                  <View style={styles.weightCard}>
+                    <View style={styles.weightIconRow}>
+                      <View style={styles.autoDispatchIcon}>
+                        <Ionicons name="scale-outline" size={20} color={colors.primary} />
+                      </View>
+                      <Text style={styles.weightCardDesc}>
+                        Charged per kilo, for loads up to {perKgMaxKg} kg (minimum {BOOKING_PER_KG_MIN_KG} kg).
+                        Heavier loads are billed per machine load instead —{' '}
+                        {machineLoadInfo(shopKgPerLoad)}
+                      </Text>
+                    </View>
+                    <View style={styles.weightReadoutRow}>
+                      <Text style={styles.weightReadoutValue}>
+                        {form.enteredWeightKg ? Number(form.enteredWeightKg) : '—'}
+                      </Text>
+                      <Text style={styles.weightReadoutUnit}>kg</Text>
+                    </View>
+                    <WeightSlider
+                      value={form.enteredWeightKg}
+                      maxKg={perKgMaxKg}
+                      onChange={(v) => setForm((f) => ({ ...f, enteredWeightKg: v }))}
+                    />
+                    {bag ? (
+                      <View style={styles.weightHintPill}>
+                        <Ionicons name="bag-outline" size={13} color={colors.muted} />
+                        <Text style={styles.weightHintPillText}>
+                          Roughly a {bag.label} bag (up to {bag.capacityKg} kg)
+                        </Text>
+                      </View>
+                    ) : null}
+                    {belowMin ? (
+                      <View style={styles.warnPill}>
+                        <Ionicons name="alert-circle-outline" size={13} color={colors.warning} />
+                        <Text style={styles.warnPillText}>
+                          Minimum booking weight is {BOOKING_PER_KG_MIN_KG} kg
+                        </Text>
+                      </View>
+                    ) : null}
+                    {aboveMax ? (
+                      <View style={styles.warnPill}>
+                        <Ionicons name="alert-circle-outline" size={13} color={colors.warning} />
+                        <Text style={styles.warnPillText}>
+                          Above {perKgMaxKg} kg counts as{' '}
+                          {formatMachineLoadLabel(Number(form.enteredWeightKg), shopKgPerLoad)} instead of
+                          per-kg pricing
+                        </Text>
+                      </View>
+                    ) : null}
+                    {localQuote ? (
+                      <Text style={styles.weightPriceTag}>
+                        Estimated: {formatCurrency(localQuote.serviceSubtotal)}
+                      </Text>
+                    ) : null}
+                  </View>
+                );
               })()}
-              {Number(form.enteredWeightKg) > 0 && Number(form.enteredWeightKg) < BOOKING_MIN_WEIGHT_KG ? (
-                <Text style={styles.error}>Minimum booking weight is {BOOKING_MIN_WEIGHT_KG} kg.</Text>
-              ) : null}
-              {Number(form.enteredWeightKg) > BOOKING_PER_KG_MAX_KG ? (
-                <Text style={styles.error}>
-                  Above {BOOKING_PER_KG_MAX_KG} kg counts as{' '}
-                  {formatMachineLoadLabel(Number(form.enteredWeightKg))} instead of per-kg pricing.
-                </Text>
-              ) : null}
-              {localQuote ? (
-                <Text style={styles.optionPrice}>
-                  Estimated: {formatCurrency(localQuote.serviceSubtotal)}
-                </Text>
-              ) : null}
             </View>
           )}
 
@@ -1670,45 +1816,81 @@ export default function BookScreen() {
             shopPricingMode === BranchPricingMode.PER_LOAD && (
             <View>
               <StepHeading step="weight" title="Estimate your load count" />
-              <Text style={styles.sub}>
-                This shop charges per machine load — minimum 1 load, up to {shopKgPerLoad}{' '}
-                kg. Enter your estimated weight (or load count directly) — we&apos;ll confirm the actual
-                load count and final price at pickup. {machineLoadInfo(shopKgPerLoad)}
-              </Text>
-              <TextInput
-                style={styles.weightInput}
-                keyboardType="decimal-pad"
-                placeholder="Estimated weight (kg)"
-                value={form.enteredWeightKg}
-                onChangeText={(v) =>
-                  setForm((f) => ({
-                    ...f,
-                    enteredWeightKg: v,
-                    enteredLoadCount: v ? String(estimateMachineLoads(Number(v) || 0, shopKgPerLoad)) : '',
-                  }))
-                }
-              />
-              <Text style={styles.optionSub}>
-                {form.enteredLoadCount
-                  ? `${form.enteredLoadCount} machine load${Number(form.enteredLoadCount) === 1 ? '' : 's'}`
-                  : 'kg'}
-              </Text>
               {(() => {
                 const bag = recommendBagForWeight(Number(form.enteredWeightKg) || 0, config?.bagSizes ?? []);
-                return bag ? (
-                  <Text style={styles.optionSub}>
-                    That's roughly a {bag.label} bag (up to {bag.capacityKg} kg).
-                  </Text>
-                ) : null;
+                const belowMin =
+                  Number(form.enteredWeightKg) > 0 && Number(form.enteredWeightKg) < BOOKING_PER_KG_MIN_KG;
+                const aboveMax = Number(form.enteredWeightKg) > BOOKING_MAX_WEIGHT_KG;
+                return (
+                  <View style={styles.weightCard}>
+                    <View style={styles.weightIconRow}>
+                      <View style={styles.autoDispatchIcon}>
+                        <Ionicons name="layers-outline" size={20} color={colors.primary} />
+                      </View>
+                      <Text style={styles.weightCardDesc}>
+                        Charged per machine load — minimum 1 load, up to {shopKgPerLoad} kg. Enter your
+                        estimated weight (or load count directly); we&apos;ll confirm the actual load count
+                        and final price at pickup. {machineLoadInfo(shopKgPerLoad)}
+                      </Text>
+                    </View>
+                    <View style={styles.weightReadoutRow}>
+                      <Text style={styles.weightReadoutValue}>
+                        {form.enteredWeightKg ? Number(form.enteredWeightKg) : '—'}
+                      </Text>
+                      <Text style={styles.weightReadoutUnit}>kg</Text>
+                    </View>
+                    <WeightSlider
+                      value={form.enteredWeightKg}
+                      maxKg={BOOKING_MAX_WEIGHT_KG}
+                      onChange={(v) =>
+                        setForm((f) => ({
+                          ...f,
+                          enteredWeightKg: v,
+                          enteredLoadCount: v ? String(estimateMachineLoads(Number(v) || 0, shopKgPerLoad)) : '',
+                        }))
+                      }
+                    />
+                    {form.enteredLoadCount ? (
+                      <View style={[styles.statusPill, styles.statusPillOpen]}>
+                        <Ionicons name="layers" size={12} color={colors.accentDark} />
+                        <Text style={[styles.statusPillText, styles.statusPillTextOpen]}>
+                          {form.enteredLoadCount} machine load
+                          {Number(form.enteredLoadCount) === 1 ? '' : 's'}
+                        </Text>
+                      </View>
+                    ) : null}
+                    {bag ? (
+                      <View style={styles.weightHintPill}>
+                        <Ionicons name="bag-outline" size={13} color={colors.muted} />
+                        <Text style={styles.weightHintPillText}>
+                          Roughly a {bag.label} bag (up to {bag.capacityKg} kg)
+                        </Text>
+                      </View>
+                    ) : null}
+                    {belowMin ? (
+                      <View style={styles.warnPill}>
+                        <Ionicons name="alert-circle-outline" size={13} color={colors.warning} />
+                        <Text style={styles.warnPillText}>
+                          Minimum booking weight is {BOOKING_PER_KG_MIN_KG} kg
+                        </Text>
+                      </View>
+                    ) : null}
+                    {aboveMax ? (
+                      <View style={styles.warnPill}>
+                        <Ionicons name="alert-circle-outline" size={13} color={colors.warning} />
+                        <Text style={styles.warnPillText}>
+                          Enter a realistic weight — up to {BOOKING_MAX_WEIGHT_KG} kg per order
+                        </Text>
+                      </View>
+                    ) : null}
+                    {localQuote ? (
+                      <Text style={styles.weightPriceTag}>
+                        Estimated: {formatCurrency(localQuote.serviceSubtotal)}
+                      </Text>
+                    ) : null}
+                  </View>
+                );
               })()}
-              {Number(form.enteredWeightKg) > 0 && Number(form.enteredWeightKg) < BOOKING_MIN_WEIGHT_KG ? (
-                <Text style={styles.error}>Minimum booking weight is {BOOKING_MIN_WEIGHT_KG} kg.</Text>
-              ) : null}
-              {localQuote ? (
-                <Text style={styles.optionPrice}>
-                  Estimated: {formatCurrency(localQuote.serviceSubtotal)}
-                </Text>
-              ) : null}
             </View>
           )}
 
@@ -1728,26 +1910,38 @@ export default function BookScreen() {
               return (
                 <View>
                   <StepHeading step="weight" title={`Estimate your ${unitNoun} count`} />
-                  <Text style={styles.sub}>
-                    This shop charges per {unitNoun}. Enter an estimated {unitNoun} count now — we&apos;ll
-                    confirm the actual count and final price at pickup. Min order{' '}
-                    {formatCurrency(config?.minOrderAmount ?? BOOKING_MIN_ORDER_AMOUNT)}.
-                  </Text>
-                  <TextInput
-                    style={styles.weightInput}
-                    keyboardType="number-pad"
-                    placeholder="e.g. 4"
-                    value={form.enteredPieceCount}
-                    onChangeText={(v) => setForm((f) => ({ ...f, enteredPieceCount: v }))}
-                  />
-                  <Text style={styles.optionSub}>{unitNoun}s</Text>
-                  {localQuote ? (
-                    <Text style={styles.optionPrice}>
-                      Estimated: {formatCurrency(localQuote.serviceSubtotal)}
-                    </Text>
-                  ) : null}
+                  <View style={styles.weightCard}>
+                    <View style={styles.weightIconRow}>
+                      <View style={styles.autoDispatchIcon}>
+                        <Ionicons name="shirt-outline" size={20} color={colors.primary} />
+                      </View>
+                      <Text style={styles.weightCardDesc}>
+                        Charged per {unitNoun}. Enter an estimated {unitNoun} count now — we&apos;ll
+                        confirm the actual count and final price at pickup. Min order{' '}
+                        {formatCurrency(config?.minOrderAmount ?? BOOKING_MIN_ORDER_AMOUNT)}.
+                      </Text>
+                    </View>
+                    <View style={styles.weightInputRow}>
+                      <TextInput
+                        style={styles.weightInputLarge}
+                        keyboardType="number-pad"
+                        placeholder="0"
+                        placeholderTextColor={colors.mutedForeground}
+                        value={form.enteredPieceCount}
+                        onChangeText={(v) => setForm((f) => ({ ...f, enteredPieceCount: v }))}
+                      />
+                      <View style={styles.weightUnitChip}>
+                        <Text style={styles.weightUnitChipText}>{unitNoun}s</Text>
+                      </View>
+                    </View>
+                    {localQuote ? (
+                      <Text style={styles.weightPriceTag}>
+                        Estimated: {formatCurrency(localQuote.serviceSubtotal)}
+                      </Text>
+                    ) : null}
+                  </View>
                   {perUnitItems.length > 0 ? (
-                    <View style={{ marginTop: spacing.md }}>
+                    <View style={styles.weightCard}>
                       <Text style={styles.optionTitle}>Items priced per {unitNoun}</Text>
                       {perUnitItems.map((item) => (
                         <View key={item.id} style={styles.addonRow}>
@@ -2033,13 +2227,33 @@ export default function BookScreen() {
             <View>
               <StepHeading step="confirm" title="Confirm booking" />
               <View style={styles.summaryCard}>
+                <View style={styles.summaryShopRow}>
+                  {form.autoDispatch ? (
+                    <View style={styles.autoDispatchIcon}>
+                      <Ionicons name="flash" size={18} color={colors.primary} />
+                    </View>
+                  ) : selectedShop?.logoUrl ? (
+                    <Image
+                      source={{ uri: resolveMediaUrl(selectedShop.logoUrl) }}
+                      style={styles.shopLogo}
+                    />
+                  ) : (
+                    <View style={styles.shopLogoFallback}>
+                      <Ionicons name="storefront-outline" size={20} color={colors.primary} />
+                    </View>
+                  )}
+                  <View style={styles.summaryShopTextGroup}>
+                    <Text style={styles.summaryMuted}>Shop</Text>
+                    <Text style={styles.summaryShopName}>
+                      {form.autoDispatch
+                        ? `${brandName}'s pick (best available)`
+                        : (selectedBranch?.name ?? 'Selected shop')}
+                    </Text>
+                  </View>
+                </View>
                 <Text style={styles.summaryLine}>
                   <Text style={styles.summaryMuted}>Service: </Text>
                   {activeQuote.serviceLabel}
-                </Text>
-                <Text style={styles.summaryLine}>
-                  <Text style={styles.summaryMuted}>Shop: </Text>
-                  {form.autoDispatch ? `${brandName}'s pick (best available)` : selectedBranch?.name ?? 'Selected shop'}
                 </Text>
                 <Text style={styles.summaryLine}>
                   <Text style={styles.summaryMuted}>
@@ -2312,10 +2526,9 @@ const styles = StyleSheet.create({
   optionBadge: { fontWeight: '600', fontSize: 12, color: colors.accentDark },
   optionSub: { marginTop: spacing.xs, fontSize: 13, color: colors.muted },
   optionPrice: { marginTop: spacing.sm - 2, fontSize: 13, color: colors.primary, fontWeight: '500' },
-  optionGps: { marginTop: spacing.sm - 2, fontSize: 12, color: colors.accentDark, fontWeight: '500' },
   optionGpsMissing: { marginTop: spacing.sm - 2, fontSize: 12, color: colors.warning, fontWeight: '500' },
   addonIncludedBadge: { marginTop: spacing.xs, fontSize: 12, color: colors.accentDark, fontWeight: '500' },
-  addressLabelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
+  addressLabelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flexWrap: 'wrap' },
   defaultBadge: {
     backgroundColor: colors.primaryLight,
     paddingHorizontal: spacing.sm,
@@ -2389,6 +2602,77 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     marginBottom: spacing.sm,
   },
+  weightCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    backgroundColor: colors.surface,
+    gap: spacing.sm,
+    ...shadow.card,
+  },
+  weightIconRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  weightCardDesc: { flex: 1, fontSize: 13, lineHeight: 19, color: colors.muted },
+  weightInputRow: { flexDirection: 'row', alignItems: 'stretch', gap: spacing.sm },
+  weightInputLarge: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md,
+    fontSize: 28,
+    fontWeight: '700',
+    textAlign: 'center',
+    color: colors.foreground,
+    backgroundColor: colors.surfaceMuted,
+  },
+  weightUnitChip: {
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.primaryLight,
+  },
+  weightUnitChipText: { fontSize: 14, fontWeight: '700', color: colors.primaryDark },
+  weightReadoutRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'center',
+    gap: spacing.xs,
+  },
+  weightReadoutValue: { fontSize: 40, fontWeight: '700', color: colors.foreground },
+  weightReadoutUnit: { fontSize: 16, fontWeight: '600', color: colors.muted },
+  weightSlider: { width: '100%', height: 36, marginTop: spacing.xs },
+  weightSliderLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: -spacing.xs },
+  weightSliderLabelText: { fontSize: 12, color: colors.mutedForeground },
+  weightHintPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 5,
+    borderRadius: radius.full,
+    backgroundColor: colors.surfaceMuted,
+  },
+  weightHintPillText: { fontSize: 12, fontWeight: '500', color: colors.muted },
+  weightPriceTag: {
+    marginTop: spacing.xs,
+    alignSelf: 'flex-start',
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.primaryDark,
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm - 2,
+    borderRadius: radius.full,
+    overflow: 'hidden',
+  },
   promoApplyBtn: {
     backgroundColor: colors.secondary,
     borderRadius: radius.md,
@@ -2440,14 +2724,39 @@ const styles = StyleSheet.create({
   summaryLine: { fontSize: 14, color: colors.slate800 },
   summaryMuted: { color: colors.muted },
   summaryTotal: { fontWeight: '700' },
+  summaryShopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingBottom: spacing.sm,
+    marginBottom: spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  summaryShopTextGroup: { flexShrink: 1, gap: 2 },
+  summaryShopName: { fontSize: 15, fontWeight: '700', color: colors.foreground },
+  shopContextCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
   confirmNote: { ...typography.caption, lineHeight: 18, marginBottom: spacing.md },
   infoBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
     backgroundColor: colors.primaryLight,
     borderRadius: radius.md,
     padding: spacing.md,
     marginBottom: spacing.md,
   },
-  infoText: { fontSize: 13, color: colors.slate700, lineHeight: 20 },
+  infoText: { flex: 1, fontSize: 13, color: colors.slate700, lineHeight: 20 },
   weightValue: { fontSize: 32, fontWeight: '700', color: colors.primary },
   weightRow: { flexDirection: 'row', justifyContent: 'center', gap: spacing.xxxl, marginBottom: spacing.lg },
   weightBtnCircle: {

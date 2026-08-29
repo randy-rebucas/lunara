@@ -38,8 +38,19 @@ export const BOOKING_MACHINE_LOAD_INFO = machineLoadInfo(BOOKING_MACHINE_LOAD_MI
 /** Overall minimum weight for a weight-based booking (FLAT_BAG/PER_KG/PER_LOAD) — does not apply to PER_PIECE. */
 export const BOOKING_MIN_WEIGHT_KG = 5;
 
-/** Per-kg pricing only applies up to this weight — heavier loads are billed per machine load instead. */
+/** Minimum weight a customer can enter for PER_KG/PER_LOAD pricing — one load's worth is billed
+ * regardless, so there's no reason to force a higher floor than this. */
+export const BOOKING_PER_KG_MIN_KG = 1;
+
+/** @deprecated per-kg pricing's real ceiling is the shop's own kgPerLoad (see resolvePerKgMaxKg) —
+ * this flat default only applies when a branch hasn't configured kgPerLoad. */
 export const BOOKING_PER_KG_MAX_KG = 5;
+
+/** Per-kg pricing only applies up to one machine load's capacity — heavier weights are billed per
+ * machine load instead, so the ceiling must track the shop's own kgPerLoad, not a flat default. */
+export function resolvePerKgMaxKg(kgPerLoad: number = BOOKING_MACHINE_LOAD_MIN_KG): number {
+  return kgPerLoad;
+}
 
 /** Load-count cap referenced by the per-kg → per-load guidance (2 loads = up to 16 kg). */
 export const BOOKING_PER_KG_MAX_LOAD_COUNT = 2;
@@ -98,6 +109,11 @@ export const BAG_SIZES: BagSizeOption[] = [
 export function getBagSize(id: string): BagSizeOption | undefined {
   return BAG_SIZES.find((b) => b.id === id);
 }
+
+/** Sanity ceiling for a customer-entered weight (PER_LOAD's estimate, or PER_KG's minimum-based
+ * floor) — nothing this app books comes close to needing more than the largest bag's capacity, so
+ * anything past it is almost certainly a typo rather than a real order. */
+export const BOOKING_MAX_WEIGHT_KG = Math.max(...BAG_SIZES.map((b) => b.capacityKg));
 
 /** The smallest bag whose capacity fits a given weight — used to show a live "appropriate bag"
  * preview on the PER_KG/PER_LOAD weight steps (informational only; those modes don't bill by bag). */

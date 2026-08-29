@@ -11,8 +11,9 @@ import { buttonResponsiveClass } from '../ui/button-layout';
 import {
   BOOKING_MACHINE_LOAD_MIN_KG,
   BOOKING_MIN_ORDER_AMOUNT,
-  BOOKING_MIN_WEIGHT_KG,
-  BOOKING_PER_KG_MAX_KG,
+  BOOKING_MAX_WEIGHT_KG,
+  BOOKING_PER_KG_MIN_KG,
+  resolvePerKgMaxKg,
   BranchPricingMode,
   estimateMachineLoads,
   formatMachineLoadLabel,
@@ -1700,11 +1701,13 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                 </>
               )}
 
-              {!garmentPriced && pricingMode === BranchPricingMode.PER_KG && (
+              {!garmentPriced && pricingMode === BranchPricingMode.PER_KG && (() => {
+                const perKgMaxKg = resolvePerKgMaxKg(shopKgPerLoad);
+                return (
                 <>
                   <StepHeader
                     title="Estimate your weight"
-                    description={`This shop charges per kilo, for loads up to ${BOOKING_PER_KG_MAX_KG} kg (minimum ${BOOKING_MIN_WEIGHT_KG} kg). Heavier loads are billed per machine load instead — ${machineLoadInfo(shopKgPerLoad)}`}
+                    description={`This shop charges per kilo, for loads up to ${perKgMaxKg} kg (minimum ${BOOKING_PER_KG_MIN_KG} kg). Heavier loads are billed per machine load instead — ${machineLoadInfo(shopKgPerLoad)}`}
                   />
                   <div className="panel">
                     <label className="form-label" htmlFor={`entered-weight-${idx}`}>
@@ -1713,17 +1716,17 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                     <WeightSlider
                       id={`entered-weight-${idx}`}
                       value={service.enteredWeightKg}
-                      maxKg={BOOKING_PER_KG_MAX_KG}
+                      maxKg={perKgMaxKg}
                       onChange={(raw) => updateService({ enteredWeightKg: raw })}
                     />
                     <BagFitHint weightKg={Number(service.enteredWeightKg) || 0} bagSizes={config?.bagSizes ?? []} />
-                    {service.enteredWeightKg && Number(service.enteredWeightKg) < BOOKING_MIN_WEIGHT_KG && (
-                      <p className="mt-2 text-sm text-red-600">Minimum booking weight is {BOOKING_MIN_WEIGHT_KG} kg.</p>
+                    {service.enteredWeightKg && Number(service.enteredWeightKg) < BOOKING_PER_KG_MIN_KG && (
+                      <p className="mt-2 text-sm text-red-600">Minimum booking weight is {BOOKING_PER_KG_MIN_KG} kg.</p>
                     )}
-                    {Number(service.enteredWeightKg) > BOOKING_PER_KG_MAX_KG && (
+                    {Number(service.enteredWeightKg) > perKgMaxKg && (
                       <p className="mt-2 text-sm text-amber-600">
-                        Above {BOOKING_PER_KG_MAX_KG} kg counts as{' '}
-                        {formatMachineLoadLabel(Number(service.enteredWeightKg))} instead of per-kg pricing.
+                        Above {perKgMaxKg} kg counts as{' '}
+                        {formatMachineLoadLabel(Number(service.enteredWeightKg), shopKgPerLoad)} instead of per-kg pricing.
                       </p>
                     )}
                     {serviceQuote && (
@@ -1733,7 +1736,8 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                     )}
                   </div>
                 </>
-              )}
+                );
+              })()}
 
               {!garmentPriced && pricingMode === BranchPricingMode.PER_LOAD && (
                 <>
@@ -1748,6 +1752,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                     <WeightSlider
                       id={`entered-weight-load-${idx}`}
                       value={service.enteredWeightKg}
+                      maxKg={BOOKING_MAX_WEIGHT_KG}
                       onChange={(v) =>
                         updateService({
                           enteredWeightKg: v,
@@ -1761,8 +1766,13 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                         : 'kg'}
                     </p>
                     <BagFitHint weightKg={Number(service.enteredWeightKg) || 0} bagSizes={config?.bagSizes ?? []} />
-                    {service.enteredWeightKg && Number(service.enteredWeightKg) < BOOKING_MIN_WEIGHT_KG && (
-                      <p className="mt-2 text-sm text-red-600">Minimum booking weight is {BOOKING_MIN_WEIGHT_KG} kg.</p>
+                    {service.enteredWeightKg && Number(service.enteredWeightKg) < BOOKING_PER_KG_MIN_KG && (
+                      <p className="mt-2 text-sm text-red-600">Minimum booking weight is {BOOKING_PER_KG_MIN_KG} kg.</p>
+                    )}
+                    {Number(service.enteredWeightKg) > BOOKING_MAX_WEIGHT_KG && (
+                      <p className="mt-2 text-sm text-red-600">
+                        Enter a realistic weight — up to {BOOKING_MAX_WEIGHT_KG} kg per order.
+                      </p>
                     )}
                     {serviceQuote && (
                       <p className="mt-3 text-sm font-medium text-primary">

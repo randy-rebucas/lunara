@@ -5,12 +5,14 @@ import {
   applyShopMarkup,
   BAG_SIZES,
   BOOKING_MACHINE_LOAD_MIN_KG,
+  BOOKING_MAX_WEIGHT_KG,
   BOOKING_MIN_ORDER_AMOUNT,
-  BOOKING_MIN_WEIGHT_KG,
-  BOOKING_PER_KG_MAX_KG,
+  BOOKING_PER_KG_MIN_KG,
+  resolvePerKgMaxKg,
   BranchPricingMode,
   calculateQuote,
   combineServiceQuotes,
+  estimateMachineLoads,
   type BagSizeId,
   type GarmentSelection,
   GARMENT_CATALOG,
@@ -249,12 +251,13 @@ export class BookingService {
           throw new BadRequestException('Enter the estimated weight for this shop\'s per-kg pricing');
         }
         if (pricingMode === BranchPricingMode.PER_KG && service.enteredWeightKg != null) {
-          if (service.enteredWeightKg < BOOKING_MIN_WEIGHT_KG) {
-            throw new BadRequestException(`Minimum booking weight is ${BOOKING_MIN_WEIGHT_KG} kg`);
+          if (service.enteredWeightKg < BOOKING_PER_KG_MIN_KG) {
+            throw new BadRequestException(`Minimum booking weight is ${BOOKING_PER_KG_MIN_KG} kg`);
           }
-          if (service.enteredWeightKg > BOOKING_PER_KG_MAX_KG) {
+          const perKgMaxKg = resolvePerKgMaxKg(branch.kgPerLoad ?? BOOKING_MACHINE_LOAD_MIN_KG);
+          if (service.enteredWeightKg > perKgMaxKg) {
             throw new BadRequestException(
-              `Per-kg pricing only covers up to ${BOOKING_PER_KG_MAX_KG} kg — heavier loads are billed per machine load`,
+              `Per-kg pricing only covers up to ${perKgMaxKg} kg — heavier loads are billed per machine load`,
             );
           }
         }
@@ -264,9 +267,23 @@ export class BookingService {
         if (
           pricingMode === BranchPricingMode.PER_LOAD &&
           service.enteredWeightKg != null &&
-          service.enteredWeightKg < BOOKING_MIN_WEIGHT_KG
+          service.enteredWeightKg < BOOKING_PER_KG_MIN_KG
         ) {
-          throw new BadRequestException(`Minimum booking weight is ${BOOKING_MIN_WEIGHT_KG} kg`);
+          throw new BadRequestException(`Minimum booking weight is ${BOOKING_PER_KG_MIN_KG} kg`);
+        }
+        if (
+          pricingMode === BranchPricingMode.PER_LOAD &&
+          service.enteredWeightKg != null &&
+          service.enteredWeightKg > BOOKING_MAX_WEIGHT_KG
+        ) {
+          throw new BadRequestException(`Enter a realistic weight — up to ${BOOKING_MAX_WEIGHT_KG} kg per order`);
+        }
+        if (
+          pricingMode === BranchPricingMode.PER_LOAD &&
+          service.enteredLoadCount != null &&
+          service.enteredLoadCount > estimateMachineLoads(BOOKING_MAX_WEIGHT_KG, branch.kgPerLoad ?? BOOKING_MACHINE_LOAD_MIN_KG)
+        ) {
+          throw new BadRequestException('Enter a realistic load count for this order');
         }
         if (pricingMode === BranchPricingMode.PER_PIECE && !service.enteredPieceCount) {
           throw new BadRequestException('Enter the piece count for this shop\'s per-piece pricing');
