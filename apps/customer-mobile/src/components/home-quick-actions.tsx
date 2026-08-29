@@ -1,20 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, type Href } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, radius, spacing, typography } from '../theme';
+import { colors, radius, shadow, spacing, typography } from '../theme';
 
 interface HomeQuickActionsProps {
   firstActiveOrderId?: string;
 }
 
 const ACTIONS = [
-  {
-    id: 'book',
-    label: 'Book Laundry',
-    icon: 'calendar-outline' as const,
-    color: colors.primary,
-    bg: colors.primaryLight,
-  },
   {
     id: 'track',
     label: 'Track Order',
@@ -36,6 +29,13 @@ const ACTIONS = [
     color: colors.warning,
     bg: colors.warningBg,
   },
+  {
+    id: 'support',
+    label: 'Support',
+    icon: 'headset-outline' as const,
+    color: colors.primary,
+    bg: colors.primaryLight,
+  },
 ] as const;
 
 export function HomeQuickActions({ firstActiveOrderId }: HomeQuickActionsProps) {
@@ -43,9 +43,6 @@ export function HomeQuickActions({ firstActiveOrderId }: HomeQuickActionsProps) 
 
   function handlePress(id: (typeof ACTIONS)[number]['id']) {
     switch (id) {
-      case 'book':
-        router.push('/book');
-        break;
       case 'track':
         if (firstActiveOrderId) {
           router.push(`/orders/${firstActiveOrderId}` as Href);
@@ -58,6 +55,9 @@ export function HomeQuickActions({ firstActiveOrderId }: HomeQuickActionsProps) 
         break;
       case 'rewards':
         router.push('/rewards' as Href);
+        break;
+      case 'support':
+        router.push('/support' as Href);
         break;
     }
   }
@@ -102,8 +102,9 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     alignItems: 'center',
     gap: spacing.sm,
+    ...shadow.card,
   },
-  pressed: { opacity: 0.92 },
+  pressed: { opacity: 0.9, transform: [{ scale: 0.98 }] },
   iconWrap: {
     width: 44,
     height: 44,

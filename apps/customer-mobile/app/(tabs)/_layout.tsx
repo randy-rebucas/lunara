@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import { Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TAB_BAR_CONTENT_HEIGHT } from '../../src/hooks/use-tab-bar-height';
 import { NotificationBell } from '../../src/components/notifications-preview';
+import { BookTabButton } from '../../src/components/book-tab-button';
 import { colors, spacing } from '../../src/theme';
 
 type TabIcon = keyof typeof Ionicons.glyphMap;
@@ -16,6 +17,7 @@ function tabIcon(name: TabIcon) {
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const bottomInset = Math.max(insets.bottom, Platform.OS === 'android' ? spacing.sm : 0);
 
   return (
@@ -68,6 +70,19 @@ export default function TabsLayout() {
           title: 'Orders',
           tabBarIcon: tabIcon('receipt-outline'),
           headerRight: () => <NotificationBell />,
+        }}
+      />
+      <Tabs.Screen
+        name="book-tab"
+        options={{
+          title: '',
+          tabBarButton: BookTabButton,
+        }}
+        listeners={{
+          tabPress: (e) => {
+            e.preventDefault();
+            router.push('/book');
+          },
         }}
       />
       <Tabs.Screen
