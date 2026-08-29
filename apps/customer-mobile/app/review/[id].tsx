@@ -24,7 +24,7 @@ interface ReviewStatus {
   orderStatus: string;
 }
 
-const STAR_COLOR = '#F59E0B';
+const STAR_COLOR = colors.star;
 
 const RATING_LABELS: Record<number, string> = {
   1: 'Poor',

@@ -21,7 +21,7 @@ import { shareNative } from '../lib/share';
 import { colors, radius, shadow, spacing, typography } from '../theme';
 
 const CARD_GAP = spacing.md;
-const DEAL_ACCENTS = [colors.primary, colors.secondary, colors.accent] as const;
+const DEAL_ACCENTS = [colors.primaryDark, colors.secondaryDark, colors.accentDark] as const;
 
 function formatDealDiscount(deal: Pick<Deal, 'discountType' | 'discountValue'>): string {
   if (deal.discountType === 'percent') return `${deal.discountValue}% off`;
@@ -99,6 +99,8 @@ export function DealsCarousel({ onDealPress }: DealsCarouselProps) {
           pressed && styles.cardPressed,
         ]}
       >
+        <View style={styles.glowTop} />
+        <View style={styles.glowBottom} />
         <Ionicons name="sparkles" size={18} color="rgba(255,255,255,0.55)" style={styles.sparkle} />
 
         <View style={styles.cardTopActions}>
@@ -106,6 +108,7 @@ export function DealsCarousel({ onDealPress }: DealsCarouselProps) {
             style={styles.shareBtn}
             onPress={() => handleShareDeal(item)}
             hitSlop={8}
+            accessibilityRole="button"
             accessibilityLabel="Share deal"
           >
             <Ionicons name="share-social-outline" size={16} color={colors.onPrimary} />
@@ -125,7 +128,7 @@ export function DealsCarousel({ onDealPress }: DealsCarouselProps) {
               </Text>
             </View>
 
-            <Text style={styles.title}>{item.title}</Text>
+            <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
             <Text style={styles.description} numberOfLines={2}>
               {item.description || formatDealDiscount(item)}
             </Text>
@@ -170,7 +173,12 @@ export function DealsCarousel({ onDealPress }: DealsCarouselProps) {
     return (
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Deals for you</Text>
-        <Pressable style={[styles.errorBox, { width: cardWidth }]} onPress={load}>
+        <Pressable
+          style={[styles.errorBox, { width: cardWidth }]}
+          onPress={load}
+          accessibilityRole="button"
+          accessibilityLabel={`${error}. Tap to retry`}
+        >
           <Text style={styles.errorText}>{error}</Text>
           <Text style={styles.retryText}>Tap to retry</Text>
         </Pressable>
@@ -242,7 +250,25 @@ const styles = StyleSheet.create({
     minHeight: 188,
     overflow: 'hidden',
   },
-  cardPressed: { opacity: 0.92 },
+  cardPressed: { opacity: 0.94, transform: [{ scale: 0.98 }] },
+  glowTop: {
+    position: 'absolute',
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    top: -70,
+    right: -40,
+  },
+  glowBottom: {
+    position: 'absolute',
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: 'rgba(0,0,0,0.14)',
+    bottom: -60,
+    left: -50,
+  },
   sparkle: { position: 'absolute', top: spacing.lg, right: spacing.xl + 64 },
   cardTopActions: {
     position: 'absolute',
@@ -323,6 +349,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     alignItems: 'center',
     transform: [{ rotate: '6deg' }],
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 5,
+    elevation: 4,
   },
   tagValue: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
   tagUnit: { fontSize: 12, fontWeight: '700', letterSpacing: 1, marginTop: -2 },

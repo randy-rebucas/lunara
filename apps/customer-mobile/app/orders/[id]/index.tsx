@@ -892,7 +892,7 @@ export default function OrderTrackScreen() {
                     <Ionicons
                       name={value <= reviewRating ? 'star' : 'star-outline'}
                       size={36}
-                      color={value <= reviewRating ? '#F59E0B' : colors.border}
+                      color={value <= reviewRating ? colors.star : colors.border}
                     />
                   </Pressable>
                 ))}

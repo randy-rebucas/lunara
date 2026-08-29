@@ -25,7 +25,7 @@ export function ForceUpdateScreen({ storeUrl }: { storeUrl: string }) {
           style={styles.button}
         />
       ) : (
-        <Text style={styles.hint}>Check your device's app store for the latest version.</Text>
+        <Text style={styles.hint}>Check your device&apos;s app store for the latest version.</Text>
       )}
     </View>
   );

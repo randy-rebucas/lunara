@@ -70,7 +70,13 @@ export function MapPickerModal({
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
-          <Pressable onPress={onClose} hitSlop={12} style={styles.closeBtn}>
+          <Pressable
+            onPress={onClose}
+            hitSlop={12}
+            style={styles.closeBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+          >
             <Ionicons name="arrow-back" size={24} color={colors.foreground} />
           </Pressable>
           <Text style={styles.title}>Pin your location</Text>

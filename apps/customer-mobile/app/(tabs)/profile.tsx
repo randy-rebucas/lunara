@@ -111,6 +111,8 @@ export default function ProfileScreen() {
       } else {
         setBusinessSummary(null);
       }
+    } catch (e) {
+      Alert.alert('Could not update', e instanceof Error ? e.message : 'Try again');
     } finally {
       setBusinessSaving(false);
     }
@@ -121,6 +123,8 @@ export default function ProfileScreen() {
     try {
       await apiFetch(`/favorites/${branchId}`, { method: 'DELETE' });
       setFavorites((prev) => prev.filter((f) => f.branchId !== branchId));
+    } catch (e) {
+      Alert.alert('Could not remove favorite', e instanceof Error ? e.message : 'Try again');
     } finally {
       setActioningFavoriteId(null);
     }
@@ -393,14 +397,14 @@ export default function ProfileScreen() {
               </Card>
             ) : null}
 
-            <View style={styles.sectionHeader}>
+            <View style={[styles.sectionHeader, styles.sectionTitleSpaced]}>
               <Text style={styles.sectionTitle}>Saved addresses</Text>
               <Pressable
                 onPress={openAddAddress}
                 style={({ pressed }) => [styles.addLink, pressed && styles.linkPressed]}
                 accessibilityRole="button"
                 accessibilityLabel="Add address"
-                hitSlop={8}
+                hitSlop={14}
               >
                 <Ionicons name="add-circle-outline" size={18} color={colors.primary} />
                 <Text style={styles.addLinkText}>Add</Text>
@@ -416,11 +420,10 @@ export default function ProfileScreen() {
                 <Button label="Add address" variant="outline" onPress={openAddAddress} style={styles.sectionBtn} />
               </Card>
             ) : (
-              addresses.map((address) => (
+              addresses.map((address) => {
+                const parsed = addressToForm(address);
+                return (
                 <Card key={address._id} style={styles.addressCard}>
-                  {(() => {
-                    const parsed = addressToForm(address);
-                    return (
                   <View style={styles.addressTop}>
                     <View style={styles.addressMain}>
                       <View style={styles.addressLabelRow}>
@@ -463,7 +466,7 @@ export default function ProfileScreen() {
                           style={({ pressed }) => [styles.mapsLink, pressed && styles.linkPressed]}
                           accessibilityRole="button"
                           accessibilityLabel="Open address in Google Maps"
-                          hitSlop={4}
+                          hitSlop={14}
                         >
                           <Ionicons name="map-outline" size={12} color={colors.primary} />
                           <Text style={styles.mapsLinkText}>Open in Google Maps</Text>
@@ -471,8 +474,6 @@ export default function ProfileScreen() {
                       ) : null}
                     </View>
                   </View>
-                    );
-                  })()}
                   <View style={styles.addressActions}>
                     {!address.isDefault ? (
                       <Pressable
@@ -485,6 +486,7 @@ export default function ProfileScreen() {
                         ]}
                         accessibilityRole="button"
                         accessibilityLabel={`Set ${address.label} as default address`}
+                        hitSlop={{ top: 9, bottom: 9, left: 4, right: 4 }}
                       >
                         <Text style={styles.actionChipText}>
                           {actioningAddressId === address._id ? 'Working…' : 'Set default'}
@@ -501,6 +503,7 @@ export default function ProfileScreen() {
                       ]}
                       accessibilityRole="button"
                       accessibilityLabel={`Edit ${address.label}`}
+                      hitSlop={{ top: 9, bottom: 9, left: 4, right: 4 }}
                     >
                       <Text style={styles.actionChipText}>Edit</Text>
                     </Pressable>
@@ -515,6 +518,7 @@ export default function ProfileScreen() {
                       ]}
                       accessibilityRole="button"
                       accessibilityLabel={`Delete ${address.label}`}
+                      hitSlop={{ top: 9, bottom: 9, left: 4, right: 4 }}
                     >
                       <Text style={[styles.actionChipText, styles.actionChipDangerText]}>
                         {actioningAddressId === address._id ? 'Working…' : 'Delete'}
@@ -522,7 +526,8 @@ export default function ProfileScreen() {
                     </Pressable>
                   </View>
                 </Card>
-              ))
+                );
+              })
             )}
 
             <Text style={[styles.sectionTitle, styles.sectionTitleSpaced]}>Favorite shops</Text>
@@ -556,7 +561,7 @@ export default function ProfileScreen() {
                     <Pressable
                       onPress={() => removeFavorite(shop.branchId)}
                       disabled={actioningFavoriteId === shop.branchId}
-                      hitSlop={8}
+                      hitSlop={12}
                       accessibilityRole="button"
                       accessibilityLabel={`Remove ${shop.name} from favorites`}
                     >
@@ -775,7 +780,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: radius.full,
   },
-  typeBadgeText: { fontSize: 10, fontWeight: '700', color: colors.secondary },
+  typeBadgeText: { fontSize: 10, fontWeight: '700', color: colors.secondaryDark },
   addressLine: { fontSize: 14, color: colors.slate700, marginTop: spacing.xs },
   addressMeta: { ...typography.caption, marginTop: spacing.xs },
   gpsRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.sm - 2 },

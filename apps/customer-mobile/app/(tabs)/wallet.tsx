@@ -155,7 +155,7 @@ export default function WalletScreen() {
       />
 
       {!loading && !error ? (
-        <Card style={styles.balanceCard}>
+        <Card elevated style={styles.balanceCard}>
           <View style={styles.balanceGlowPrimary} />
           <View style={styles.balanceGlowSecondary} />
           <View style={styles.balanceRow}>
@@ -165,8 +165,8 @@ export default function WalletScreen() {
                 <Ionicons
                   name="information-circle-outline"
                   size={14}
-                  color="rgba(255,255,255,0.8)"
-                  accessibilityLabel="About your wallet balance"
+                  color="rgba(255,255,255,0.9)"
+                  accessible={false}
                 />
               </View>
               <Text style={styles.balance} accessibilityRole="text">
@@ -203,7 +203,7 @@ export default function WalletScreen() {
                 >
                   {index === 0 ? (
                     <View style={styles.recommendedBadge}>
-                      <Text style={styles.recommendedText}>Recommended</Text>
+                      <Ionicons name="checkmark" size={11} color={colors.onPrimary} />
                     </View>
                   ) : null}
                   <View style={styles.methodIcon}>
@@ -243,9 +243,6 @@ export default function WalletScreen() {
       {!loading && !error ? (
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>Transaction history</Text>
-          <Pressable hitSlop={8} accessibilityRole="button" accessibilityLabel="View all transactions">
-            <Text style={styles.viewAll}>View all</Text>
-          </Pressable>
         </View>
       ) : null}
     </>
@@ -306,24 +303,20 @@ export default function WalletScreen() {
         )}
         ListFooterComponent={
           !loading && !error ? (
-            <Pressable
-              accessibilityRole="button"
+            <Card
+              style={styles.secureCard}
+              accessible
+              accessibilityRole="text"
               accessibilityLabel="Your payments are 100% secure. We never store your card details."
-              hitSlop={4}
             >
-              {({ pressed }) => (
-                <Card style={[styles.secureCard, pressed && styles.secureCardPressed]}>
-                  <View style={styles.secureIcon}>
-                    <Ionicons name="shield-checkmark" size={18} color={colors.onPrimary} />
-                  </View>
-                  <View style={styles.secureTextCol}>
-                    <Text style={styles.secureTitle}>Your payments are 100% secure.</Text>
-                    <Text style={styles.secureHint}>We never store your card details.</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
-                </Card>
-              )}
-            </Pressable>
+              <View style={styles.secureIcon}>
+                <Ionicons name="shield-checkmark" size={18} color={colors.onPrimary} />
+              </View>
+              <View style={styles.secureTextCol}>
+                <Text style={styles.secureTitle}>Your payments are 100% secure.</Text>
+                <Text style={styles.secureHint}>We never store your card details.</Text>
+              </View>
+            </Card>
           ) : null
         }
       />
@@ -368,7 +361,7 @@ const styles = StyleSheet.create({
   balanceRow: { flexDirection: 'row', alignItems: 'flex-start' },
   balanceTextCol: { flex: 1, paddingRight: spacing.md },
   balanceLabelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  label: { ...typography.label, color: 'rgba(255,255,255,0.85)' },
+  label: { ...typography.label, color: 'rgba(255,255,255,0.97)' },
   balance: {
     fontSize: 36,
     fontWeight: '700',
@@ -376,7 +369,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     marginTop: spacing.sm,
   },
-  hint: { ...typography.caption, color: 'rgba(255,255,255,0.85)', marginTop: spacing.md },
+  hint: { ...typography.caption, color: 'rgba(255,255,255,0.97)', marginTop: spacing.md },
   walletIllustration: {
     width: 64,
     height: 64,
@@ -416,12 +409,15 @@ const styles = StyleSheet.create({
   recommendedBadge: {
     position: 'absolute',
     top: -10,
-    backgroundColor: colors.primary,
+    width: 20,
+    height: 20,
     borderRadius: radius.full,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
+    backgroundColor: colors.primary,
+    borderWidth: 2,
+    borderColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  recommendedText: { fontSize: 10, fontWeight: '700', color: colors.onPrimary },
   methodIcon: {
     width: 40,
     height: 40,
@@ -451,7 +447,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   sectionTitle: { ...typography.subheading },
-  viewAll: { fontSize: 13, fontWeight: '600', color: colors.primary },
   txCard: { paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
   txRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   txIcon: {
@@ -480,7 +475,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primaryLight,
     borderColor: colors.primaryBorder,
   },
-  secureCardPressed: { opacity: 0.88 },
   secureIcon: {
     width: 32,
     height: 32,

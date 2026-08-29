@@ -76,6 +76,8 @@ export function NotificationBell() {
       onPress={() => router.push('/notifications')}
       hitSlop={12}
       style={bellStyles.btn}
+      accessibilityRole="button"
+      accessibilityLabel={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
     >
       <Ionicons name="notifications-outline" size={22} color={colors.primary} />
       {unreadCount > 0 ? (

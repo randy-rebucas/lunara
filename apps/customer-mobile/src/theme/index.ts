@@ -28,6 +28,7 @@ export const colors = {
   primaryBorder: '#C7D2FE',
   primaryDark: '#4338CA',
   secondaryLight: '#ECFEFF',
+  secondaryDark: '#0E7490',
   accentLight: '#DCFCE7',
   accentDark: '#166534',
   warning: '#92400E',
@@ -37,6 +38,7 @@ export const colors = {
   slate700: '#334155',
   slate800: '#1E293B',
   onPrimary: '#FFFFFF',
+  star: '#F59E0B',
 } as const;
 
 export const spacing = {

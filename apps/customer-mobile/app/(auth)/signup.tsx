@@ -2,7 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { Link, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   FlatList,
+  Linking,
   Modal,
   Pressable,
   StyleSheet,
@@ -10,6 +12,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import Constants from 'expo-constants';
+import { getShareWebsiteUrl } from '@lunara/config';
 import { formatPhone } from '@lunara/utils';
 import {
   COUNTRIES,
@@ -146,6 +150,17 @@ export default function SignUpScreen() {
 
   const displayPhone = verifiedPhone || buildE164(country.dialCode, localPhone);
 
+  const privacyUrl =
+    (Constants.expoConfig?.extra?.privacyUrl as string | undefined) ?? `${getShareWebsiteUrl()}/privacy`;
+  const termsUrl =
+    (Constants.expoConfig?.extra?.termsUrl as string | undefined) ?? `${getShareWebsiteUrl()}/terms`;
+
+  function openUrl(url: string) {
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Could not open link', url);
+    });
+  }
+
   return (
     <Screen scroll padded={false}>
       <View style={styles.formSection}>
@@ -208,9 +223,21 @@ export default function SignUpScreen() {
 
               <Text style={styles.termsText}>
                 By continuing, you agree to our{' '}
-                <Text style={styles.termsLink}>Terms of Service</Text>
+                <Text
+                  style={styles.termsLink}
+                  onPress={() => openUrl(termsUrl)}
+                  accessibilityRole="link"
+                >
+                  Terms of Service
+                </Text>
                 {' '}and{' '}
-                <Text style={styles.termsLink}>Privacy Policy.</Text>
+                <Text
+                  style={styles.termsLink}
+                  onPress={() => openUrl(privacyUrl)}
+                  accessibilityRole="link"
+                >
+                  Privacy Policy.
+                </Text>
               </Text>
             </>
           ) : (

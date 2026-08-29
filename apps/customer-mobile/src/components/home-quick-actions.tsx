@@ -33,8 +33,8 @@ const ACTIONS = [
     id: 'rewards',
     label: 'Rewards',
     icon: 'gift-outline' as const,
-    color: '#D97706',
-    bg: '#FEF3C7',
+    color: colors.warning,
+    bg: colors.warningBg,
   },
 ] as const;
 

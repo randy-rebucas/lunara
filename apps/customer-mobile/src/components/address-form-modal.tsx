@@ -146,7 +146,12 @@ export function AddressFormModal({
         <View style={styles.container}>
           <View style={styles.header}>
             <Text style={styles.title}>{editing ? 'Edit address' : 'Add address'}</Text>
-            <Pressable onPress={onClose} hitSlop={12}>
+            <Pressable
+              onPress={onClose}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+            >
               <Ionicons name="close" size={24} color={colors.muted} />
             </Pressable>
           </View>

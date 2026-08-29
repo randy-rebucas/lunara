@@ -39,7 +39,7 @@ const CATALOG_STYLE: Record<
   'free-pickup': { icon: 'cube-outline', color: colors.primary, bg: colors.primaryLight },
   'free-delivery': { icon: 'bicycle-outline', color: colors.secondary, bg: colors.secondaryLight },
   'discount-10': { icon: 'pricetag-outline', color: colors.accentDark, bg: colors.accentLight },
-  'discount-20': { icon: 'pricetag', color: '#D97706', bg: '#FEF3C7' },
+  'discount-20': { icon: 'pricetag', color: colors.warning, bg: colors.warningBg },
   'free-wash-fold-3kg': { icon: 'water-outline', color: '#DB2777', bg: '#FCE7F3' },
 };
 const DEFAULT_ITEM_STYLE = { icon: 'gift-outline' as const, color: colors.primary, bg: colors.primaryLight };
@@ -120,7 +120,7 @@ export default function RewardsScreen() {
           <Text style={styles.heroTitle}>
             Get rewarded for{'\n'}
             <Text style={styles.heroTitleAccent}>doing laundry!</Text>{' '}
-            <Ionicons name="sparkles" size={20} color="#F59E0B" />
+            <Ionicons name="sparkles" size={20} color={colors.star} />
           </Text>
           <Text style={styles.sub}>Earn points from completed orders, referrals, and promotions.</Text>
         </View>
