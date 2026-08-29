@@ -78,6 +78,17 @@ export class SettingsService {
     );
   }
 
+  /** Rates behind getDeliveryFeeForAddress, for surfacing the fee breakdown to customers
+   * (e.g. "₱70 base + ₱8/km beyond 3km"). */
+  async getDeliveryFeeRates() {
+    const settings = await this.getOrCreateSettings();
+    return {
+      baseFee: settings.deliveryFee,
+      baseDistanceKm: settings.deliveryBaseDistanceKm,
+      perKmRate: settings.deliveryPerKmRate,
+    };
+  }
+
   async getRiderFeeSettings() {
     const settings = await this.getOrCreateSettings();
     return {

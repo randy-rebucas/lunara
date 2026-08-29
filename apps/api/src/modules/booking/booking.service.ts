@@ -459,6 +459,7 @@ export class BookingService {
     }
 
     const deliveryFee = await this.settingsService.getDeliveryFeeForAddress(address, dist);
+    const deliveryFeeRates = await this.settingsService.getDeliveryFeeRates();
     const quote = combineServiceQuotes(
       serviceQuotes,
       priceableAddons,
@@ -489,6 +490,9 @@ export class BookingService {
       ...finalQuote,
       resolvedBranchId,
       deliveryDistanceKm: dist,
+      deliveryBaseFee: deliveryFeeRates.baseFee,
+      deliveryBaseDistanceKm: deliveryFeeRates.baseDistanceKm,
+      deliveryPerKmRate: deliveryFeeRates.perKmRate,
       requiresDeliveryApproval,
     };
   }

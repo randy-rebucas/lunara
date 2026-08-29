@@ -451,6 +451,13 @@ export default function HomeScreen() {
           assignment={activeAssignment}
           onViewTask={() => openTask(activeAssignment.orderId, activeAssignment.status)}
           onNavigate={() => promptNavigate(activeAssignment.navigateTarget)}
+          feeAmount={
+            me?.feeRates
+              ? activeAssignment.leg === 'delivery'
+                ? me.feeRates.delivery
+                : me.feeRates.pickup
+              : undefined
+          }
         />
       ) : null}
 

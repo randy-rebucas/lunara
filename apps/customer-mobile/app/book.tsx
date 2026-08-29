@@ -2263,10 +2263,31 @@ export default function BookScreen() {
                     </View>
                   );
                 })}
-                <View style={[styles.estimateRow, styles.estimateDivider]}>
+                <View style={[styles.estimateRow, styles.estimateDivider, { marginBottom: 0 }]}>
                   <Text style={styles.estimateLabel}>Delivery fee</Text>
                   <Text style={styles.estimateAmount}>{formatCurrency(activeQuote.deliveryFee)}</Text>
                 </View>
+                {activeQuote.deliveryDistanceKm != null &&
+                activeQuote.deliveryBaseFee != null &&
+                activeQuote.deliveryBaseDistanceKm != null &&
+                activeQuote.deliveryPerKmRate != null ? (
+                  (() => {
+                    const chargeableKm = Math.max(
+                      0,
+                      Math.ceil(activeQuote.deliveryDistanceKm - activeQuote.deliveryBaseDistanceKm),
+                    );
+                    return (
+                      <Text style={[styles.estimateBreakdownNote, { marginBottom: spacing.sm }]}>
+                        {activeQuote.deliveryDistanceKm.toFixed(1)} km ·{' '}
+                        {formatCurrency(activeQuote.deliveryBaseFee)} base (first{' '}
+                        {activeQuote.deliveryBaseDistanceKm} km)
+                        {chargeableKm > 0
+                          ? ` + ${formatCurrency(activeQuote.deliveryPerKmRate)}/km × ${chargeableKm} km`
+                          : ''}
+                      </Text>
+                    );
+                  })()
+                ) : null}
                 {activeQuote.discount > 0 && (
                   <View style={styles.estimateRow}>
                     <Text style={styles.estimateDiscountLabel}>
@@ -2790,6 +2811,7 @@ const styles = StyleSheet.create({
   estimateLabelMuted: { fontSize: 13.5, color: colors.muted, flex: 1 },
   estimateAmount: { fontSize: 14, fontWeight: '600', color: colors.foreground },
   estimateAmountMuted: { fontSize: 13.5, color: colors.muted },
+  estimateBreakdownNote: { fontSize: 11.5, color: colors.mutedForeground },
   estimateDiscountLabel: { fontSize: 14, flex: 1, paddingRight: spacing.sm, color: colors.accentDark },
   estimateDiscountAmount: { fontSize: 14, fontWeight: '600', color: colors.accentDark },
   estimateDivider: {

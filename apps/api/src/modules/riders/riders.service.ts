@@ -173,6 +173,7 @@ export class RidersService {
     rider: RiderDocument,
     user: Pick<UserDocument, 'email' | 'phone'> | null,
     avatarUrl?: string,
+    feeRates?: { pickup: number; delivery: number } | null,
   ) {
     const compliance = isRiderCompliant(rider, user);
     const displayFirstName =
@@ -194,6 +195,8 @@ export class RidersService {
       employmentType: rider.employmentType,
       fixedWageAmount: rider.fixedWageAmount,
       wageFrequency: rider.wageFrequency,
+      // Flat per-leg fee rates only matter to a rider paid per task, not a salaried employee.
+      feeRates: rider.employmentType !== 'employee' ? (feeRates ?? null) : null,
       documents: serializeRiderDocuments(rider.documents),
       compliance: {
         isCompliant: compliance.isCompliant,
@@ -224,9 +227,11 @@ export class RidersService {
       .findOne({ userId: new Types.ObjectId(userId) })
       .select('avatarUrl')
       .lean();
+    const feeRates =
+      rider.employmentType !== 'employee' ? await this.settingsService.getRiderFeeAmounts() : null;
     return {
       success: true,
-      data: this.serializeMePayload(userId, rider, user, profile?.avatarUrl),
+      data: this.serializeMePayload(userId, rider, user, profile?.avatarUrl, feeRates),
     };
   }
 

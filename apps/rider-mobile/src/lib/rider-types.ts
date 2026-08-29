@@ -136,6 +136,10 @@ export interface RiderMe {
   vehicleType?: string;
   plateNumber?: string;
   orCrNumber?: string;
+  employmentType?: 'employee' | 'independent_contractor';
+  /** Flat per-leg fee the rider is paid — only sent (non-null) for a non-employee rider, since a
+   * salaried employee isn't paid per task. */
+  feeRates?: { pickup: number; delivery: number } | null;
   documents?: RiderKycDocument[];
   compliance?: RiderCompliance;
   totalEarnings: number;

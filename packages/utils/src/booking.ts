@@ -365,6 +365,14 @@ export interface QuoteBreakdown {
   pieceCount?: number;
   /** True when the base service price is provisional (PER_KG/PER_LOAD/PER_PIECE) and will be confirmed at pickup. */
   isEstimate: boolean;
+  /** Pickup-to-shop distance the delivery fee was computed from — set on the order-level quote
+   * response (booking.service.ts), not by calculateQuote itself. */
+  deliveryDistanceKm?: number;
+  /** Delivery fee formula inputs, for showing the customer a breakdown instead of just the total:
+   * deliveryFee = deliveryBaseFee + (km beyond deliveryBaseDistanceKm) x deliveryPerKmRate. */
+  deliveryBaseFee?: number;
+  deliveryBaseDistanceKm?: number;
+  deliveryPerKmRate?: number;
 }
 
 export interface MultiServiceQuoteBreakdown {
