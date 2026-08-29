@@ -36,12 +36,12 @@ export default function HomeScreen() {
     >
       <HomeWelcomeBanner profile={profile} user={user} />
       <DataLoadState loading={false} error={error} onRetry={refresh} />
-      <HomeQuickActions firstActiveOrderId={activeOrders[0]?._id} />
-      <BannerStrip />
-      <DealsCarousel />
-      <HomeReferralPromo />
       <HomeActiveOrders orders={activeOrders} loading={loading} />
+      <HomeQuickActions firstActiveOrderId={activeOrders[0]?._id} />
+      <DealsCarousel />
+      <BannerStrip />
       <HomeRecommendedServices />
+      <HomeReferralPromo />
     </Screen>
   );
 }

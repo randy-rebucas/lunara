@@ -751,7 +751,7 @@ export default function StaffTeamPage() {
 
           <h3 className="mt-8 text-sm font-semibold text-slate-900">Default rider per branch</h3>
           <p className="mt-1 text-sm text-muted">
-            Optionally set one of your riders as a branch's default for pickup and delivery.
+            Optionally set one of your riders as a branch&apos;s default for pickup and delivery.
           </p>
 
           <div className="mt-4">
