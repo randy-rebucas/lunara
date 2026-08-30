@@ -3,8 +3,19 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Heart, Minus, Plus } from 'lucide-react';
-import { BookingType, type OperatingHours } from '@lunara/types';
+import {
+  Briefcase,
+  Building2,
+  ChevronDown,
+  Heart,
+  Home,
+  MapPin,
+  Minus,
+  Plus,
+  Store,
+  Zap,
+} from 'lucide-react';
+import { AddressType, BookingType, type OperatingHours } from '@lunara/types';
 import { Button } from '@lunara/ui';
 import { ButtonLink } from '../ui/button-link';
 import { buttonResponsiveClass } from '../ui/button-layout';
@@ -16,7 +27,9 @@ import {
   resolvePerKgMaxKg,
   BranchPricingMode,
   estimateMachineLoads,
+  EXPRESS_RETURN_ADDON_ID,
   formatMachineLoadLabel,
+  formatAddressTypeLabel,
   machineLoadInfo,
   calculateQuote,
   combineServiceQuotes,
@@ -24,6 +37,7 @@ import {
   getTodayScheduleSummary,
   getGarmentCategories,
   GARMENT_CATALOG,
+  isExpressReturnAllowed,
   isGarmentPricedBookingType,
   recommendBagForWeight,
   type BagSizeId,
@@ -54,6 +68,7 @@ import {
   type BookingStep,
   type ServiceSelectionState,
 } from '../../lib/booking-flow';
+import { BranchPickerModal } from './branch-picker-modal';
 import { PickupSchedulePicker } from './pickup-schedule-picker';
 import { PromoCodeField } from './promo-code-field';
 import { QuoteBreakdownPanel } from './quote-breakdown';
@@ -76,11 +91,18 @@ interface ReorderSourceOrder {
 interface AddressOption {
   _id: string;
   label: string;
+  addressType?: string;
   line1: string;
   city: string;
   province: string;
   postalCode: string;
   deliveryInstructions?: string;
+  latitude?: number;
+  longitude?: number;
+}
+
+function addressHasCoords(address?: AddressOption | null) {
+  return address?.latitude != null && address?.longitude != null;
 }
 
 interface BookingConfig {
@@ -125,23 +147,37 @@ interface ShopAddonOption {
   applicableServiceTypes?: string[];
   allowsQuantity?: boolean;
   maxQuantity?: number;
+  /** Units of this add-on bundled free into the service by the shop — only the customer's
+   * quantity beyond this is billed. */
+  includedQuantity?: number;
 }
+
+/** Every other branch in the same partner's group carries the same full shape as the group's
+ * headline shop (pricing, schedule, withinRadius, capacity) — see findNearbyShopsWithPricing. */
+type ShopBranchVariant = Omit<ShopOption, 'mainShopId' | 'branches'>;
 
 interface ShopOption {
   branchId: string;
+  mainShopId: string;
+  isMainShop: boolean;
   code: string;
   name: string;
   city: string;
   distanceKm: number;
   distanceLabel: string;
   withinRadius: boolean;
+  /** Platform-wide delivery ceiling — beyond this, checkout always rejects the order regardless
+   * of branch, so this must gate selectability, not just styling. */
+  withinMaxDeliveryRadius: boolean;
   capacityAvailable: boolean;
+  logoUrl?: string;
   pricingMode: BranchPricingMode;
   kgPerLoad?: number;
   operatingHours: { isClosed: boolean; openTime: string; closeTime: string }[];
   holidays: BranchHoliday[];
   services: ShopServiceOption[];
   addons: ShopAddonOption[];
+  branches: ShopBranchVariant[];
   /** GARMENT_CATALOG filtered to what this shop offers — falls back to the full catalog if absent. */
   garmentCatalog?: GarmentItem[];
 }
@@ -518,7 +554,11 @@ function canProceedStep(
     case 'service':
       return form.services.length > 0;
     case 'address':
-      return Boolean(form.addressId) && addresses.length > 0;
+      return (
+        Boolean(form.addressId) &&
+        addresses.length > 0 &&
+        addressHasCoords(addresses.find((a) => a._id === form.addressId))
+      );
     case 'shop':
       return Boolean(form.branchId) || form.autoDispatch;
     case 'schedule':
@@ -567,7 +607,11 @@ function WizardActions({
         {activeQuote && !isConfirmStep && step !== 'review' && (
           <div className="rounded-lg bg-slate-50 px-4 py-3">
             <p className="mb-2 text-sm font-semibold text-slate-900">Running estimate</p>
-            <QuoteBreakdownPanel quote={activeQuote} totalLabel="Running total" />
+            <QuoteBreakdownPanel
+              quote={activeQuote}
+              totalLabel="Running total"
+              showDeliveryFee={step !== 'weight' && step !== 'addons'}
+            />
           </div>
         )}
 
@@ -790,8 +834,22 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
     }
   }, [shopOptions, shopsLoading]);
 
-  const selectedShop = shopOptions.find((s) => s.branchId === form.branchId);
+  // A partner's other branches are listed under `shop.branches[]`, keyed by the nearest branch's
+  // id (`shop.branchId`) — picking a non-nearest variant still needs to resolve back to that
+  // shop's pricing/services (the API doesn't expose per-variant pricing).
+  const selectedShop = shopOptions.find(
+    (s) => s.branchId === form.branchId || s.branches.some((b) => b.branchId === form.branchId),
+  );
+  // The customer may have picked a non-nearest branch variant — that variant carries its own
+  // name/city, so anything shown to the customer must reflect it rather than the parent shop's
+  // nearest-branch name.
+  const selectedBranch: ShopOption | ShopBranchVariant | undefined = selectedShop
+    ? selectedShop.branchId === form.branchId
+      ? selectedShop
+      : (selectedShop.branches.find((b) => b.branchId === form.branchId) ?? selectedShop)
+    : undefined;
   const shopKgPerLoad = selectedShop?.kgPerLoad ?? BOOKING_MACHINE_LOAD_MIN_KG;
+  const [branchSheetShopId, setBranchSheetShopId] = useState<string | null>(null);
   // Once a shop is chosen (customer-picked or Lunara-dispatched), its own hours/holidays are
   // stricter and authoritative — mirrors BranchesService.resolvePickupSchedule. Before that, the
   // union `operatingHours`/`holidays` from loadAvailability has no holiday filtering.
@@ -810,6 +868,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
         isPercentOfService: a.isPercentOfService,
         allowsQuantity: a.allowsQuantity,
         maxQuantity: a.maxQuantity,
+        includedQuantity: a.includedQuantity,
       }))
     : config?.addons;
 
@@ -1042,7 +1101,14 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
       )
     ) {
       if (step === 'service') setError('Select a service');
-      else if (step === 'address') setError('Select a pickup address');
+      else if (step === 'address') {
+        const selectedAddr = addresses.find((a) => a._id === form.addressId);
+        setError(
+          form.addressId && !addressHasCoords(selectedAddr)
+            ? 'Selected address has no GPS pin. Update it in your Profile with "Use current location".'
+            : 'Select a pickup address',
+        );
+      }
       else if (step === 'schedule') setError('Select a pickup time');
       else if (step === 'weight') {
         setError(
@@ -1168,6 +1234,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
             isCustom: a.isCustom ?? false,
             allowsQuantity: a.allowsQuantity ?? catalogMatch?.allowsQuantity,
             maxQuantity: a.maxQuantity ?? catalogMatch?.maxQuantity,
+            includedQuantity: a.includedQuantity,
             applicableServiceTypes: a.applicableServiceTypes,
           };
         });
@@ -1208,6 +1275,17 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
       return toAdd.length === 0 ? f : { ...f, addonIds: [...f.addonIds, ...toAdd] };
     });
   }, [addons, form.services]);
+
+  const expressReturnAllowed = isExpressReturnAllowed(form.scheduledPickupAt);
+
+  useEffect(() => {
+    if (expressReturnAllowed) return;
+    setForm((f) =>
+      f.addonIds.includes(EXPRESS_RETURN_ADDON_ID)
+        ? { ...f, addonIds: f.addonIds.filter((id) => id !== EXPRESS_RETURN_ADDON_ID) }
+        : f,
+    );
+  }, [expressReturnAllowed]);
 
   const activeQuote = quote ?? localQuote;
   const selectedAddress = addresses.find((a) => a._id === form.addressId);
@@ -1261,28 +1339,56 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
             </div>
           ) : (
             <div className="list-stack">
-              {addresses.map((a) => (
-                <SelectableOption
-                  key={a._id}
-                  selected={form.addressId === a._id}
-                  onClick={() => {
-                    setReorderNotice('');
-                    setForm((f) => ({
-                      ...f,
-                      addressId: a._id,
-                      branchId: '',
-                      autoDispatch: false,
-                      scheduledPickupAt: '',
-                      customerNotes: f.customerNotes || a.deliveryInstructions || '',
-                    }));
-                  }}
-                >
-                  <p className="font-medium text-slate-900">{a.label}</p>
-                  <p className="mt-1 text-sm text-muted">
-                    {a.line1}, {a.city}, {a.province} {a.postalCode}
-                  </p>
-                </SelectableOption>
-              ))}
+              {addresses.map((a) => {
+                const hasCoords = addressHasCoords(a);
+                const AddressIcon =
+                  a.addressType === AddressType.WORK
+                    ? Briefcase
+                    : a.addressType === AddressType.APARTMENT
+                      ? Building2
+                      : a.addressType === AddressType.OTHER
+                        ? MapPin
+                        : Home;
+                return (
+                  <SelectableOption
+                    key={a._id}
+                    selected={form.addressId === a._id}
+                    onClick={() => {
+                      setReorderNotice('');
+                      setForm((f) => ({
+                        ...f,
+                        addressId: a._id,
+                        branchId: '',
+                        autoDispatch: false,
+                        scheduledPickupAt: '',
+                        customerNotes: f.customerNotes || a.deliveryInstructions || '',
+                      }));
+                    }}
+                  >
+                    <div className="flex items-start gap-3">
+                      <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                        <AddressIcon className="h-4 w-4" aria-hidden />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-slate-900">{a.label}</p>
+                        <p className="mt-1 text-sm text-muted">
+                          {formatAddressTypeLabel(a.addressType)} · {a.line1}, {a.city}, {a.province}{' '}
+                          {a.postalCode}
+                        </p>
+                        {hasCoords ? (
+                          <p className="mt-2 text-xs font-medium text-accent">
+                            GPS pinned for rider navigation
+                          </p>
+                        ) : (
+                          <p className="mt-2 text-xs font-medium text-amber-700">
+                            No GPS pin — update in Profile before booking
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </SelectableOption>
+                );
+              })}
             </div>
           )}
           {form.addressId && !coverageMatchesSelection && (
@@ -1369,36 +1475,73 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                 const startingPriceLabel = cheapestCandidate
                   ? `From ${formatCurrency(cheapestCandidate.amount)}${cheapestCandidate.suffix}`
                   : null;
-                const disabled = !shop.withinRadius || !shop.capacityAvailable;
-                const schedule = getTodayScheduleSummary(shop.operatingHours, shop.holidays);
+                const disabled = !shop.withinRadius || !shop.withinMaxDeliveryRadius || !shop.capacityAvailable;
+                const hasMultipleBranches = shop.branches.length > 1;
+                const selected =
+                  !form.autoDispatch &&
+                  (form.branchId === shop.branchId ||
+                    shop.branches.some((b) => b.branchId === form.branchId));
+                // Once the customer has picked a specific branch from the picker, the card should
+                // reflect that branch (name/city/hours), not always the nearest one.
+                const activeBranch: ShopOption | ShopBranchVariant =
+                  selected && form.branchId !== shop.branchId
+                    ? (shop.branches.find((b) => b.branchId === form.branchId) ?? shop)
+                    : shop;
+                const schedule = getTodayScheduleSummary(activeBranch.operatingHours, activeBranch.holidays);
                 const isFavorite = favoriteBranchIds.has(shop.branchId);
                 return (
                   <div key={shop.branchId} className="relative">
                     <SelectableOption
-                      selected={!form.autoDispatch && form.branchId === shop.branchId}
+                      selected={selected}
                       disabled={disabled}
                       onClick={() => {
                         setReorderNotice('');
+                        if (hasMultipleBranches) {
+                          setBranchSheetShopId(shop.branchId);
+                          return;
+                        }
                         setForm((f) => ({ ...f, branchId: shop.branchId, autoDispatch: false }));
                       }}
                     >
-                      <p className="pr-9 font-medium text-slate-900">{shop.name}</p>
-                      <p className="mt-1 text-sm text-muted">
-                        {shop.city}
-                        {showDistanceHints ? ` · ${shop.distanceLabel}` : ''}
-                      </p>
-                      <p className={`mt-1 text-xs font-medium ${schedule.isOpenNow ? 'text-accent' : 'text-muted'}`}>
-                        {schedule.label}
-                      </p>
-                      {startingPriceLabel && (
-                        <p className="mt-2 text-sm font-medium text-primary">{startingPriceLabel}</p>
-                      )}
-                      {!shop.capacityAvailable && (
-                        <p className="mt-2 text-xs text-amber-700">Currently at capacity</p>
-                      )}
-                      {!shop.withinRadius && (
-                        <p className="mt-2 text-xs text-amber-700">Outside delivery range</p>
-                      )}
+                      <div className="flex items-start gap-3 pr-9">
+                        {shop.logoUrl ? (
+                          <img
+                            src={resolveMediaUrl(shop.logoUrl, process.env.NEXT_PUBLIC_API_URL)}
+                            alt=""
+                            className="h-10 w-10 shrink-0 rounded-lg object-cover ring-1 ring-border/40"
+                          />
+                        ) : (
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                            <Building2 className="h-5 w-5" aria-hidden />
+                          </span>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-slate-900">{activeBranch.name}</p>
+                          <p className="mt-1 text-sm text-muted">
+                            {activeBranch.city}
+                            {showDistanceHints ? ` · ${activeBranch.distanceLabel}` : ''}
+                          </p>
+                          <p className={`mt-1 text-xs font-medium ${schedule.isOpenNow ? 'text-accent' : 'text-muted'}`}>
+                            {schedule.label}
+                          </p>
+                          {startingPriceLabel && (
+                            <p className="mt-2 text-sm font-medium text-primary">{startingPriceLabel}</p>
+                          )}
+                          {hasMultipleBranches && (
+                            <p className="mt-2 text-xs font-medium text-primary">
+                              {selected
+                                ? `${shop.branches.length} branches near you — tap to change`
+                                : `${shop.branches.length} branches near you — tap to choose`}
+                            </p>
+                          )}
+                          {!shop.capacityAvailable && (
+                            <p className="mt-2 text-xs text-amber-700">Currently at capacity</p>
+                          )}
+                          {(!shop.withinRadius || !shop.withinMaxDeliveryRadius) && (
+                            <p className="mt-2 text-xs text-amber-700">Outside delivery range</p>
+                          )}
+                        </div>
+                      </div>
                     </SelectableOption>
                     <button
                       type="button"
@@ -1423,13 +1566,27 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
         </section>
       )}
 
+      {branchSheetShopId && (
+        <BranchPickerModal
+          shopName={shopOptions.find((s) => s.branchId === branchSheetShopId)?.name ?? ''}
+          branches={shopOptions.find((s) => s.branchId === branchSheetShopId)?.branches ?? []}
+          selectedBranchId={form.branchId}
+          onSelect={(branchId) => {
+            setReorderNotice('');
+            setForm((f) => ({ ...f, branchId, autoDispatch: false }));
+            setBranchSheetShopId(null);
+          }}
+          onClose={() => setBranchSheetShopId(null)}
+        />
+      )}
+
       {step === 'service' && (
         <section>
           <StepHeader
             title="Select service"
             description={
               selectedShop
-                ? `Select one or more services — prices below are what ${selectedShop.name} charges.`
+                ? `Select one or more services — prices below are what ${selectedBranch?.name ?? selectedShop.name} charges.`
                 : 'Select one or more laundry services you need.'
             }
           />
@@ -1888,8 +2045,13 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                           : a.pricingUnit === BranchPricingMode.PER_ITEM
                             ? ' / item'
                             : '';
-                const quantity = form.addonQuantities[a.id] ?? 1;
+                // Default to whatever's already bundled free, so the stepper starts where the
+                // customer's included units end rather than at a flat 1.
+                const defaultQuantity = Math.max(1, a.includedQuantity ?? 0);
+                const quantity = form.addonQuantities[a.id] ?? defaultQuantity;
                 const maxQuantity = a.maxQuantity ?? 5;
+                const isExpressReturn = a.id === EXPRESS_RETURN_ADDON_ID;
+                const expressReturnDisabled = isExpressReturn && !expressReturnAllowed;
 
                 const body = (
                   <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -1907,6 +2069,18 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                         </span>
                       </div>
                       <p className="mt-1 text-sm text-muted">{a.description}</p>
+                      {!a.isPercentOfService && a.allowsQuantity && (a.includedQuantity ?? 0) > 0 && (
+                        <p className="mt-1 text-xs font-medium text-accent">
+                          First {a.includedQuantity} included free — add more for{' '}
+                          {formatCurrency(a.price)}
+                          {unitSuffix} each
+                        </p>
+                      )}
+                      {expressReturnDisabled && (
+                        <p className="mt-1 text-xs text-amber-700">
+                          Not available for pickups at 3:00 PM or later
+                        </p>
+                      )}
                     </div>
                   </div>
                 );
@@ -1974,6 +2148,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                   <SelectableOption
                     key={a.id}
                     selected={selected}
+                    disabled={expressReturnDisabled}
                     onClick={() =>
                       setForm((f) => ({
                         ...f,
@@ -1982,7 +2157,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                           : [...f.addonIds, a.id],
                         addonQuantities:
                           a.allowsQuantity && !selected
-                            ? { ...f.addonQuantities, [a.id]: 1 }
+                            ? { ...f.addonQuantities, [a.id]: defaultQuantity }
                             : f.addonQuantities,
                       }))
                     }
@@ -2012,7 +2187,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
               onApply={applyPromoCode}
               onRemove={removePromoCode}
             />
-            <QuoteBreakdownPanel quote={activeQuote} />
+            <QuoteBreakdownPanel quote={activeQuote} showDeliveryFee={false} />
           </div>
         </section>
       )}
@@ -2024,14 +2199,33 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
             description="Double-check your details, then continue to checkout."
           />
           <div className="panel">
+            <div className="mb-4 flex items-center gap-3 border-b border-border/30 pb-4">
+              {form.autoDispatch ? (
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <Zap className="h-5 w-5" aria-hidden />
+                </span>
+              ) : selectedShop?.logoUrl ? (
+                <img
+                  src={resolveMediaUrl(selectedShop.logoUrl, process.env.NEXT_PUBLIC_API_URL)}
+                  alt=""
+                  className="h-11 w-11 shrink-0 rounded-full object-cover ring-1 ring-border/40"
+                />
+              ) : (
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <Store className="h-5 w-5" aria-hidden />
+                </span>
+              )}
+              <div className="min-w-0">
+                <p className="text-xs text-muted">Shop</p>
+                <p className="truncate font-medium text-slate-900">
+                  {form.autoDispatch ? "Lunara's pick (best available)" : selectedBranch?.name ?? 'Selected shop'}
+                </p>
+              </div>
+            </div>
             <dl className="space-y-3 text-sm">
               <SummaryRow
                 label={activeQuote.services.length > 1 ? 'Services' : 'Service'}
                 value={activeQuote.services.map((s) => s.serviceLabel).join(', ')}
-              />
-              <SummaryRow
-                label="Shop"
-                value={form.autoDispatch ? "Lunara's pick (best available)" : selectedShop?.name ?? 'Selected shop'}
               />
               <SummaryRow label="Address" value={selectedAddress?.label ?? 'Selected address'} />
               <SummaryRow
@@ -2100,11 +2294,21 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                 />
               </div>
             </dl>
+            {activeQuote.deliveryFee > 0 &&
+            activeQuote.services[0]?.deliveryDistanceKm != null &&
+            activeQuote.services[0]?.deliveryBaseDistanceKm != null &&
+            activeQuote.services[0]?.deliveryPerKmRate != null ? (
+              <p className="mt-3 text-xs text-muted-foreground">
+                Includes {formatCurrency(activeQuote.deliveryFee)} distance charge (
+                {activeQuote.services[0].deliveryDistanceKm.toFixed(1)} km, beyond{' '}
+                {activeQuote.services[0].deliveryBaseDistanceKm} km free radius) — no base delivery fee.
+              </p>
+            ) : null}
           </div>
           <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
             {form.autoDispatch
               ? 'After payment, Lunara dispatches your order to the best available shop nearby.'
-              : `Your order goes straight to ${selectedShop?.name ?? 'your selected shop'} after payment.`}{' '}
+              : `Your order goes straight to ${selectedBranch?.name ?? 'your selected shop'} after payment.`}{' '}
             Pickup riders are notified once dispatched.
             {activeQuote.isEstimate
               ? ' Final amount may adjust once the shop confirms the actual weight/load/piece count.'

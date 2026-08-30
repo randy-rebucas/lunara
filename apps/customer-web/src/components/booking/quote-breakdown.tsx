@@ -49,14 +49,19 @@ function BreakdownRow({
 interface QuoteBreakdownPanelProps {
   quote: MultiServiceQuoteBreakdown;
   showMinimumWarning?: boolean;
+  showDeliveryFee?: boolean;
   totalLabel?: string;
 }
 
 export function QuoteBreakdownPanel({
   quote,
   showMinimumWarning = true,
+  showDeliveryFee = true,
   totalLabel = 'Estimated total',
 }: QuoteBreakdownPanelProps) {
+  // deliveryFee is informational only (the partner shop's own cost) and is never part of
+  // `quote.total` — hiding its row must not touch the total, which already excludes it.
+  const displayTotal = quote.total;
   return (
     <dl className="space-y-2">
       {quote.services.map((serviceQuote, idx) => {
@@ -93,9 +98,11 @@ export function QuoteBreakdownPanel({
           />
         );
       })}
-      <div className="border-t border-border/30 pt-2">
-        <BreakdownRow label="Delivery fee" value={formatCurrency(quote.deliveryFee)} />
-      </div>
+      {showDeliveryFee && (
+        <div className="border-t border-border/30 pt-2">
+          <BreakdownRow label="Delivery fee" value={formatCurrency(quote.deliveryFee)} />
+        </div>
+      )}
       {quote.discount > 0 && (
         <BreakdownRow
           label={quote.promotionTitle ? `Discount — ${quote.promotionTitle}` : 'Discount'}
@@ -104,7 +111,7 @@ export function QuoteBreakdownPanel({
         />
       )}
       <div className="border-t border-border/30 pt-2">
-        <BreakdownRow label={totalLabel} value={formatCurrency(quote.total)} emphasis />
+        <BreakdownRow label={totalLabel} value={formatCurrency(displayTotal)} emphasis />
       </div>
       {showMinimumWarning && !quote.meetsMinimum && (
         <p className="text-xs text-amber-800">
