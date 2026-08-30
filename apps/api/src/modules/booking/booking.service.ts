@@ -492,7 +492,6 @@ export class BookingService {
       ...finalQuote,
       resolvedBranchId,
       deliveryDistanceKm: dist,
-      deliveryBaseFee: deliveryFeeRates.baseFee,
       deliveryBaseDistanceKm: deliveryFeeRates.baseDistanceKm,
       deliveryPerKmRate: deliveryFeeRates.perKmRate,
       requiresDeliveryApproval,

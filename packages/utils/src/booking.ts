@@ -372,8 +372,7 @@ export interface QuoteBreakdown {
    * response (booking.service.ts), not by calculateQuote itself. */
   deliveryDistanceKm?: number;
   /** Delivery fee formula inputs, for showing the customer a breakdown instead of just the total:
-   * deliveryFee = deliveryBaseFee + (km beyond deliveryBaseDistanceKm) x deliveryPerKmRate. */
-  deliveryBaseFee?: number;
+   * deliveryFee = (km beyond deliveryBaseDistanceKm) x deliveryPerKmRate. */
   deliveryBaseDistanceKm?: number;
   deliveryPerKmRate?: number;
 }
@@ -446,14 +445,21 @@ export function combineServiceQuotes(
         : 1;
       // The shop may bundle some units of this add-on free into the service itself — only the
       // customer's quantity beyond that bundle is actually billed (and worth showing as a line).
-      const includedQuantity = usesSelectableQuantity ? (a.includedQuantity ?? 0) : 0;
+      // This applies whether or not the customer can adjust the quantity via a stepper: a
+      // non-adjustable add-on with includedQuantity >= 1 is fully absorbed into the service price.
+      const includedQuantity =
+        unit === BranchPricingMode.FLAT_BAG || unit === BranchPricingMode.FIXED || isPerUnitCounted
+          ? (a.includedQuantity ?? 0)
+          : 0;
       const billedQuantity = Math.max(0, addonQuantity - includedQuantity);
       const price =
         unit === BranchPricingMode.FLAT_BAG || unit === BranchPricingMode.FIXED
           ? Math.round(a.price * billedQuantity * 100) / 100
           : isPerUnitCounted && a.allowsQuantity
             ? Math.round(a.price * billedQuantity * 100) / 100
-            : Math.round(a.price * (quantity ?? 0) * 100) / 100;
+            : isPerUnitCounted
+              ? Math.round(a.price * Math.max(0, (quantity ?? 0) - includedQuantity) * 100) / 100
+              : Math.round(a.price * (quantity ?? 0) * 100) / 100;
       return {
         id: a.id,
         label: a.label,
@@ -940,14 +946,22 @@ export function calculateQuote(
       const addonQuantity = usesSelectableQuantity
         ? Math.max(1, Math.min(input.addonQuantities?.[a.id] ?? 1, a.maxQuantity ?? 5))
         : 1;
-      const includedQuantity = usesSelectableQuantity ? (a.includedQuantity ?? 0) : 0;
+      // See combineServiceQuotes: bundling applies whether or not the add-on's quantity is
+      // customer-adjustable — a non-adjustable add-on with includedQuantity >= 1 is fully
+      // absorbed into the service price.
+      const includedQuantity =
+        unit === BranchPricingMode.FLAT_BAG || unit === BranchPricingMode.FIXED || isPerUnitCounted
+          ? (a.includedQuantity ?? 0)
+          : 0;
       const billedQuantity = Math.max(0, addonQuantity - includedQuantity);
       const price =
         unit === BranchPricingMode.FLAT_BAG || unit === BranchPricingMode.FIXED
           ? Math.round(a.price * billedQuantity * 100) / 100
           : isPerUnitCounted && a.allowsQuantity
             ? Math.round(a.price * billedQuantity * 100) / 100
-            : Math.round(a.price * (quantity ?? 0) * 100) / 100;
+            : isPerUnitCounted
+              ? Math.round(a.price * Math.max(0, (quantity ?? 0) - includedQuantity) * 100) / 100
+              : Math.round(a.price * (quantity ?? 0) * 100) / 100;
       return {
         id: a.id,
         label: a.label,
