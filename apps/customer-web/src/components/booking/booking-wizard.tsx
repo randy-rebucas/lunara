@@ -1517,7 +1517,14 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                 label={activeQuote.services.length > 1 ? 'Services' : 'Service'}
                 value={activeQuote.services.map((s) => s.serviceLabel).join(', ')}
               />
-              <SummaryRow label="Address" value={selectedAddress?.label ?? 'Selected address'} />
+              <SummaryRow
+                label="Address"
+                value={
+                  selectedAddress
+                    ? `${selectedAddress.line1}, ${selectedAddress.city}, ${selectedAddress.province}`
+                    : 'Selected address'
+                }
+              />
               <SummaryRow
                 label="Pickup"
                 value={pickupLabel}
@@ -1577,8 +1584,6 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
                 />
               )}
               <div className="border-t border-border/30 pt-3">
-              { console.log('activeQuote', activeQuote) }
-              
                 <SummaryRow
                   label={activeQuote.isEstimate ? 'Estimated total' : 'Total'}
                   value={formatCurrency(activeQuote.total)}

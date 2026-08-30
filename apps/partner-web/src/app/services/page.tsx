@@ -948,7 +948,11 @@ export default function ServicesPage() {
                             {a.label}
                             {!a.isCustom && <span className="text-muted">*</span>}
                           </label>
-                          {!a.isCustom && offered && (addonUnits[a.slug] ?? a.pricingUnit) === 'per_piece' ? (
+                          {!a.isCustom &&
+                          offered &&
+                          ['flat_bag', 'fixed', 'per_piece', 'per_pair', 'per_item'].includes(
+                            addonUnits[a.slug] ?? a.pricingUnit ?? 'flat_bag',
+                          ) ? (
                             <label className="flex items-center gap-1.5 text-xs text-muted">
                               Included qty
                               <input
