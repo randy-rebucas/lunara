@@ -16,6 +16,16 @@
   --shadow-elevated-lg: 0 20px 25px -5px rgb(15 23 42 / 0.1), 0 8px 10px -6px rgb(15 23 42 / 0.06);
   --width-page: 56rem;
   --width-content: 36rem;
+
+  /* ── Jeepney route/signage world (home page only) ──
+     A semantic layer over --color-primary, not a replacement — white-label tenants still
+     override --color-primary; the route palette is the home page's own committed identity. */
+  --color-route-red: #d7263d;
+  --color-route-yellow: #f5b700;
+  --color-route-blue: #1447e6;
+  --color-route-ink: #14110f;
+  --color-route-cream: #fbf3e3;
+  --font-display: var(--font-anton), 'Arial Narrow', sans-serif;
 }
 
 @layer base {
@@ -137,8 +147,24 @@
     @apply space-y-5 text-sm leading-relaxed text-slate-700;
   }
 
+  .legal-prose h1 {
+    @apply pt-2 text-xl font-bold text-slate-900;
+  }
+
   .legal-prose h2 {
     @apply pt-2 text-base font-semibold text-slate-900;
+  }
+
+  .legal-prose h3 {
+    @apply pt-1 text-sm font-semibold text-slate-900;
+  }
+
+  .legal-prose img {
+    @apply rounded-lg;
+  }
+
+  .legal-prose p {
+    @apply leading-relaxed;
   }
 
   .legal-prose ul {
@@ -262,6 +288,125 @@
   .faq-answer-link {
     @apply inline-flex items-center rounded-full bg-primary/8 px-3 py-1.5 text-sm font-medium text-primary transition hover:bg-primary/12;
   }
+
+  /* ── Route / signage system (home page) ── */
+
+  .route-ground {
+    background-color: var(--color-route-cream);
+  }
+
+  .signage-heading {
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    letter-spacing: -0.01em;
+    line-height: 0.95;
+  }
+
+  /* Hand-painted board plank behind the hero headline */
+  .route-board {
+    @apply relative overflow-hidden rounded-2xl;
+    background: var(--color-route-ink);
+    border: 3px solid var(--color-route-ink);
+    box-shadow: 0 14px 30px -12px rgb(20 17 15 / 0.45);
+  }
+
+  /* Destination placard — thick outline, one flat enamel color, no rounded-xl soft-tint chip */
+  .placard {
+    @apply relative flex flex-col items-start gap-3 rounded-md p-5;
+    border: 3px solid var(--color-route-ink);
+    box-shadow: 4px 6px 0 0 rgb(20 17 15 / 0.18);
+  }
+
+  .placard-red {
+    background: var(--color-route-red);
+    color: #fff;
+  }
+
+  .placard-yellow {
+    background: var(--color-route-yellow);
+    color: var(--color-route-ink);
+  }
+
+  .placard-blue {
+    background: var(--color-route-blue);
+    color: #fff;
+  }
+
+  /* Icon chrome: square placard badge, thick black outline, single flat color — replaces
+     the soft rounded-xl bg-primary/10 tint chip used elsewhere in the app. */
+  .icon-placard {
+    @apply flex h-12 w-12 shrink-0 items-center justify-center rounded-md;
+    border: 3px solid var(--color-route-ink);
+  }
+
+  .icon-placard-red {
+    background: var(--color-route-red);
+    color: #fff;
+  }
+
+  .icon-placard-yellow {
+    background: var(--color-route-yellow);
+    color: var(--color-route-ink);
+  }
+
+  .icon-placard-blue {
+    background: var(--color-route-blue);
+    color: #fff;
+  }
+
+  /* Ticket-style CTA — perforated stub edge via a repeating radial-gradient "punch" strip */
+  .ticket-btn {
+    @apply relative inline-flex min-h-12 items-center justify-center gap-2 rounded-md px-7 py-3 text-sm font-bold tracking-wide text-white transition-transform duration-150;
+    background: var(--color-route-red);
+    border: 3px solid var(--color-route-ink);
+    box-shadow: 3px 4px 0 0 var(--color-route-ink);
+  }
+
+  .ticket-btn:hover {
+    transform: translate(1px, 2px);
+    box-shadow: 2px 2px 0 0 var(--color-route-ink);
+  }
+
+  .ticket-btn:active {
+    transform: translate(3px, 4px);
+    box-shadow: 0 0 0 0 var(--color-route-ink);
+  }
+
+  .ticket-btn::before,
+  .ticket-btn::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 12px;
+    height: 12px;
+    border-radius: 9999px;
+    background: var(--color-route-cream);
+    border: 3px solid var(--color-route-ink);
+    transform: translateY(-50%);
+  }
+
+  .ticket-btn::before {
+    left: -9px;
+  }
+
+  .ticket-btn::after {
+    right: -9px;
+  }
+
+  /* Route stop number badge — sits on the route line at each placard */
+  .route-stop-number {
+    @apply flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold;
+    background: var(--color-route-cream);
+    color: var(--color-route-ink);
+    border: 3px solid var(--color-route-ink);
+  }
+
+  /* Route board "NOW AT" status update — replaces a live-map pin with a placard-style plate */
+  .route-status-plate {
+    @apply inline-flex items-center gap-2 rounded-md px-4 py-2 text-xs font-bold uppercase tracking-wider text-white;
+    background: var(--color-route-blue);
+    border: 3px solid var(--color-route-ink);
+  }
 }
 
 /* ── Motion ── */
@@ -328,6 +473,26 @@
   .reveal {
     opacity: 1;
     transform: none;
+  }
+}
+
+/* Route line — the signature scroll moment: each segment "paints itself on" as it enters
+   view, drawn with stroke-dashoffset. Segment length is supplied inline via --route-len. */
+@media (prefers-reduced-motion: no-preference) {
+  .route-path {
+    stroke-dasharray: var(--route-len, 1000);
+    stroke-dashoffset: var(--route-len, 1000);
+    transition: stroke-dashoffset 1100ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .route-path-drawn {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-path {
+    stroke-dashoffset: 0;
   }
 }
 

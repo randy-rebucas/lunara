@@ -11,6 +11,7 @@ import { AuthShellWide } from '../../../components/auth-shell';
 import { FormError } from '../../../components/marketing/marketing-design';
 import { OnboardingProgress } from '../../../components/onboarding-progress';
 import { Input } from '../../../components/ui/input';
+import { getFriendlyErrorMessage } from '../../../lib/format-error';
 import { getRecaptchaToken } from '../../../lib/recaptcha';
 
 type Step = 'phone' | 'otp';
@@ -47,7 +48,7 @@ export default function SignUpPage() {
       setOtp('');
       setStep('otp');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send OTP. Check your number and try again.');
+      setError(getFriendlyErrorMessage(err, 'Failed to send OTP. Check your number and try again.'));
     } finally {
       setSubmitting(false);
     }
@@ -63,7 +64,7 @@ export default function SignUpPage() {
       const status = await fetchOnboardingStatus(api);
       router.replace(getOnboardingPath(status));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Invalid or expired OTP. Request a new code.');
+      setError(getFriendlyErrorMessage(err, 'Invalid or expired OTP. Request a new code.'));
     } finally {
       setSubmitting(false);
     }

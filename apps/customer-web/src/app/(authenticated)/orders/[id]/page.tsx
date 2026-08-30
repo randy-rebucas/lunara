@@ -26,6 +26,7 @@ import { HandoffQrCard } from '../../../../components/handoff-qr-card';
 import { OrderPartnerCoverageNotice } from '../../../../components/order-partner-coverage-notice';
 import { PageShell } from '../../../../components/page-shell';
 import { DataPageStatus } from '../../../../components/data-page-status';
+import { PageHeader } from '../../../../components/ui/page-header';
 import { OrderNotifications, type OrderNotification } from '../../../../components/order-notifications';
 import { OrderTimeline } from '../../../../components/order-timeline';
 const RiderLocationMap = dynamic(
@@ -361,10 +362,8 @@ export default function OrderTrackPage() {
   if (pageLoading) {
     return (
       <PageShell>
-        <Link href="/orders" className="text-sm text-muted transition-colors hover:text-primary">
-          ← My orders
-        </Link>
-        <p className="mt-4 text-sm text-muted">Loading order…</p>
+        <PageHeader title="Track order" backHref="/orders" backLabel="My orders" />
+        <DataPageStatus loading error={''} loadingMessage="Loading order…" />
       </PageShell>
     );
   }
@@ -372,9 +371,7 @@ export default function OrderTrackPage() {
   if (loadError || !order) {
     return (
       <PageShell>
-        <Link href="/orders" className="text-sm text-muted transition-colors hover:text-primary">
-          ← My orders
-        </Link>
+        <PageHeader title="Track order" backHref="/orders" backLabel="My orders" />
         <DataPageStatus loading={false} error={loadError || 'Order not found'} loadingMessage="" />
       </PageShell>
     );
@@ -408,14 +405,11 @@ export default function OrderTrackPage() {
 
   return (
     <PageShell>
-      <Link href="/orders" className="text-sm text-muted transition-colors hover:text-primary">
-        ← My orders
-      </Link>
+      <PageHeader title="Track order" backHref="/orders" backLabel="My orders" />
 
-        <div className="mt-4 flex items-start justify-between gap-4">
+        <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold">Track order</h1>
-            <p className="mt-1 capitalize text-slate-600">
+            <p className="capitalize text-slate-600">
               {order.bookingType.replace(/_/g, ' ')} · {formatCurrency(displayTotal)}
               {isPriceFinalized && order.finalTotal == null ? ' (estimated)' : ''}
               {order.bagSizeLabel

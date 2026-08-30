@@ -8,6 +8,7 @@ import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { PageShell } from '../../../../../components/page-shell';
 import { ReviewForm } from '../../../../../components/review/review-form';
 import { StarRating } from '../../../../../components/review/star-rating';
+import { PageHeader } from '../../../../../components/ui/page-header';
 import { useProtectedPage } from '../../../../../hooks/use-protected-page';
 import { AuthLoading } from '../../../../../components/auth-loading';
 
@@ -77,16 +78,14 @@ export default function OrderReviewPage() {
 
   return (
     <PageShell narrow>
-      <Link href={`/orders/${id}`} className="text-sm text-muted transition-colors hover:text-primary">
-        ← Back to order
-      </Link>
+      <PageHeader
+        title="Rate your experience"
+        description="Help us improve by reviewing your completed laundry order"
+        backHref={`/orders/${id}`}
+        backLabel="Back to order"
+      />
 
-        <h1 className="mt-4 text-2xl font-bold">Rate your experience</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Help us improve by reviewing your completed laundry order
-        </p>
-
-        {loadError && <p className="mt-4 text-sm text-red-500">{loadError}</p>}
+        {loadError && <p className="text-sm text-red-500">{loadError}</p>}
 
         {status && !status.canReview && !showPublished && (
           <div className="panel mt-8 bg-slate-50 text-sm text-muted">

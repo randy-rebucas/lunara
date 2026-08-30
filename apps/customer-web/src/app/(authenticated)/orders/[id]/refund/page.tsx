@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { PaymentMethod } from '@lunara/types';
@@ -15,6 +14,7 @@ import { AuthLoading } from '../../../../../components/auth-loading';
 import { PageShell } from '../../../../../components/page-shell';
 import { Card, CardBody } from '../../../../../components/ui/card';
 import { FormLabel } from '../../../../../components/ui/input';
+import { PageHeader } from '../../../../../components/ui/page-header';
 import { useProtectedPage } from '../../../../../hooks/use-protected-page';
 
 export default function RequestRefundPage() {
@@ -82,14 +82,12 @@ export default function RequestRefundPage() {
 
   return (
     <PageShell narrow>
-      <Link href={`/orders/${id}`} className="text-sm text-muted transition-colors hover:text-primary">
-        ← Back to order
-      </Link>
-      <h1 className="mt-4 text-2xl font-bold tracking-tight text-primary">Request a refund</h1>
-      <p className="mt-2 text-sm text-muted">
-        Wallet and online payments can be refunded to your Lunara wallet after admin review. Cash on
-        pickup or delivery is not eligible for wallet refunds.
-      </p>
+      <PageHeader
+        title="Request a refund"
+        description="Wallet and online payments can be refunded to your Lunara wallet after admin review. Cash on pickup or delivery is not eligible for wallet refunds."
+        backHref={`/orders/${id}`}
+        backLabel="Back to order"
+      />
       {loadError && (
         <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {loadError}

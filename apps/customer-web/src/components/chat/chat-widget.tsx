@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Headset, Loader2, MessageCircle, Send, Sparkles, X } from 'lucide-react';
-import { cn } from '@lunara/ui';
+import { Button, cn } from '@lunara/ui';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { escalateToHuman, fetchSuggestedPrompts, sendChatMessage, type ChatMessage } from '../../lib/ai-chat';
 
@@ -300,21 +300,13 @@ export function ChatWidget() {
                 </div>
                 {error ? <p className="text-sm text-destructive">{error}</p> : null}
                 <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setView('chat')}
-                    className="flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold text-slate-700 ring-1 ring-border/60 transition hover:bg-surface-muted"
-                  >
+                  <Button type="button" variant="outline" className="flex-1" onClick={() => setView('chat')}>
                     Back
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={escalating}
-                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90 disabled:opacity-60"
-                  >
+                  </Button>
+                  <Button type="submit" className="flex-1 gap-1.5" disabled={escalating}>
                     {escalating ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
                     Send to support
-                  </button>
+                  </Button>
                 </div>
               </form>
             ) : null}

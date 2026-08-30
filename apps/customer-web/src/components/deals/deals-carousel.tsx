@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { appConfig, getShareWebsiteUrl } from '@lunara/config';
 import type { Deal } from '@lunara/types';
 import {
@@ -152,7 +153,7 @@ export function DealsCarousel() {
               disabled={activeIndex === 0}
               aria-label="Previous deal"
             >
-              ←
+              <ChevronLeft className="h-4 w-4" aria-hidden />
             </button>
             <button
               type="button"
@@ -161,7 +162,7 @@ export function DealsCarousel() {
               disabled={activeIndex >= slideCount - 1}
               aria-label="Next deal"
             >
-              →
+              <ChevronRight className="h-4 w-4" aria-hidden />
             </button>
           </div>
         ) : null}

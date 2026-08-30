@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Button } from '@lunara/ui';
@@ -9,6 +8,7 @@ import { AuthLoading } from '../../../../../components/auth-loading';
 import { PageShell } from '../../../../../components/page-shell';
 import { Card, CardBody } from '../../../../../components/ui/card';
 import { FormLabel, Input } from '../../../../../components/ui/input';
+import { PageHeader } from '../../../../../components/ui/page-header';
 import { useProtectedPage } from '../../../../../hooks/use-protected-page';
 
 export default function ReportLostItemPage() {
@@ -52,16 +52,14 @@ export default function ReportLostItemPage() {
 
   return (
     <PageShell narrow>
-      <Link href={`/orders/${id}`} className="text-sm text-muted transition-colors hover:text-primary">
-        ← Back to order
-      </Link>
-      <h1 className="mt-4 text-2xl font-bold tracking-tight text-primary">Report a missing item</h1>
-      <p className="mt-2 text-sm text-muted">
-        We will open a support ticket, investigate with pickup/delivery photos and shop logs,
-        and contact you with an outcome. Compensation may be credited to your wallet if approved.
-      </p>
+      <PageHeader
+        title="Report a missing item"
+        description="We will open a support ticket, investigate with pickup/delivery photos and shop logs, and contact you with an outcome. Compensation may be credited to your wallet if approved."
+        backHref={`/orders/${id}`}
+        backLabel="Back to order"
+      />
 
-      <Card className="mt-8">
+      <Card>
         <CardBody>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>

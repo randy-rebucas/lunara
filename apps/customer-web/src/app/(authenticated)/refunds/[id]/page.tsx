@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback } from 'react';
 import { ArrowRight, Check, Circle } from 'lucide-react';
@@ -11,6 +10,7 @@ import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { AuthLoading } from '../../../../components/auth-loading';
 import { PageShell } from '../../../../components/page-shell';
 import { DataPageStatus } from '../../../../components/data-page-status';
+import { PageHeader } from '../../../../components/ui/page-header';
 import { useProtectedPage } from '../../../../hooks/use-protected-page';
 import { useCustomerQuery } from '../../../../lib/use-customer-query';
 
@@ -48,9 +48,7 @@ export default function RefundDetailPage() {
   if (loading || error || !refund) {
     return (
       <PageShell narrow>
-        <Link href="/refunds" className="text-sm text-muted transition-colors hover:text-primary">
-          ← Refunds
-        </Link>
+        <PageHeader title="Refund request" backHref="/refunds" backLabel="Refunds" />
         <DataPageStatus loading={loading} error={error} loadingMessage="Loading refund…" />
       </PageShell>
     );
@@ -60,15 +58,13 @@ export default function RefundDetailPage() {
 
   return (
     <PageShell narrow>
-      <Link href="/refunds" className="text-sm text-muted transition-colors hover:text-primary">
-        ← Refunds
-      </Link>
-        <h1 className="mt-4 text-2xl font-bold">Refund request</h1>
-        <p className="mt-2 text-sm text-muted">
-          Order …{refund.orderId.slice(-6)}
-          {refund.processedAt ? ` · Processed ${formatRefundDate(refund.processedAt)}` : ''}
-        </p>
-        <span className={`mt-2 inline-flex capitalize ${refundStatusBadgeClass(refund.status)}`}>
+      <PageHeader
+        title="Refund request"
+        description={`Order …${refund.orderId.slice(-6)}${refund.processedAt ? ` · Processed ${formatRefundDate(refund.processedAt)}` : ''}`}
+        backHref="/refunds"
+        backLabel="Refunds"
+      />
+        <span className={`inline-flex capitalize ${refundStatusBadgeClass(refund.status)}`}>
           {formatRefundStatus(refund.status)}
         </span>
 

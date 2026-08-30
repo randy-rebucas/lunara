@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import QRCode from 'react-qr-code';
 import {
-  ArrowRight,
   Bike,
   Check,
   MapPin,
@@ -26,7 +25,6 @@ import { MarketingActions } from './marketing-actions';
 import {
   MarketingSection,
   MarketingSectionHeader,
-  accentClasses,
 } from './marketing-design';
 import { MarketingShell } from './marketing-shell';
 import { Reveal } from './reveal';
@@ -54,6 +52,14 @@ import {
   type CustomerReview,
   type ServiceArea,
 } from './home-page-data';
+
+/** Cycles the three committed enamel colors across a list — the route line's palette. */
+const ROUTE_COLORS = ['red', 'yellow', 'blue'] as const;
+type RouteColor = (typeof ROUTE_COLORS)[number];
+
+function routeColorAt(index: number): RouteColor {
+  return ROUTE_COLORS[index % ROUTE_COLORS.length];
+}
 
 const avatarBg: Record<'primary' | 'secondary' | 'accent', string> = {
   primary: 'bg-primary/10 text-primary',
@@ -154,18 +160,8 @@ function AppStoreBadge({ store }: { store: 'ios' | 'android' }) {
   );
 }
 
-function HeroBubbles() {
-  return (
-    <>
-      <span className="bubble left-[6%] top-[16%] h-8 w-8 sm:h-10 sm:w-10 lg:left-[4%] lg:top-[12%] lg:h-16 lg:w-16" aria-hidden />
-      <span className="bubble right-[2%] top-[6%] hidden h-24 w-24 lg:block" aria-hidden />
-      <span className="bubble bottom-[8%] right-[38%] hidden h-10 w-10 lg:block" aria-hidden />
-      <span className="bubble right-[8%] bottom-[14%] h-5 w-5 sm:h-6 sm:w-6 lg:left-[42%] lg:right-auto lg:bottom-[18%] lg:h-6 lg:w-6" aria-hidden />
-    </>
-  );
-}
-
-/** Small soap-bubble accent for sections that don't have the full hero cluster. */
+/** Small soap-bubble accent kept for the (old-world) download banner only — the hero and
+ * route sections below have moved on to the signage world and no longer use these. */
 function Bubbles({ className }: { className?: string }) {
   return (
     <div className={cn('pointer-events-none absolute inset-0 overflow-hidden', className)} aria-hidden>
@@ -194,18 +190,80 @@ function FaqChevron() {
   );
 }
 
+/**
+ * The route line's signature moment: a single SVG path that "paints itself on" once it
+ * scrolls into view, via a stroke-dashoffset transition. No-ops (drawn immediately) under
+ * prefers-reduced-motion — handled entirely in CSS (.route-path / .route-path-drawn).
+ */
+function RoutePath({
+  d,
+  viewBox,
+  className,
+  strokeWidth = 4,
+}: {
+  d: string;
+  viewBox: string;
+  className?: string;
+  strokeWidth?: number;
+}) {
+  const pathRef = useRef<SVGPathElement>(null);
+  const [drawn, setDrawn] = useState(false);
+
+  useEffect(() => {
+    const node = pathRef.current;
+    if (!node) return;
+    const length = node.getTotalLength();
+    node.style.setProperty('--route-len', `${Math.ceil(length)}`);
+
+    if (typeof IntersectionObserver === 'undefined') {
+      setDrawn(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setDrawn(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.2 },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <svg viewBox={viewBox} className={className} preserveAspectRatio="none" aria-hidden>
+      <path
+        ref={pathRef}
+        d={d}
+        fill="none"
+        stroke="var(--color-route-ink)"
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeDasharray="10 8"
+        className={cn('route-path', drawn && 'route-path-drawn')}
+      />
+    </svg>
+  );
+}
+
+const routeAccentText: Record<RouteColor, string> = {
+  red: 'text-route-red',
+  yellow: 'text-route-yellow',
+  blue: 'text-route-blue',
+};
+
 export function HomePage() {
   const { isAuthenticated, isLoading, api } = useAuthContext();
   const router = useRouter();
   const [serviceAreas, setServiceAreas] = useState<ServiceArea[]>([...SERVICE_AREAS]);
   const [customerReviews, setCustomerReviews] = useState<CustomerReview[]>([]);
 
-  const bubblesRef = useRef<HTMLDivElement>(null);
   const phoneLeftRef = useRef<HTMLDivElement>(null);
   const phoneRightRef = useRef<HTMLDivElement>(null);
   const featuresBgRef = useRef<HTMLDivElement>(null);
   useHeroParallax([
-    { ref: bubblesRef, speed: -0.06 },
     { ref: phoneLeftRef, speed: 0.05 },
     { ref: phoneRightRef, speed: 0.09 },
     { ref: featuresBgRef, speed: 0.15 },
@@ -228,71 +286,118 @@ export function HomePage() {
   // get the real page; only swap to the loader once we know we're redirecting.
   if (isAuthenticated) return <AuthLoading message="Redirecting…" />;
 
+  const heroStops = [
+    { label: 'Pickup', detail: 'Rider collects at your door', color: 'red' as const },
+    { label: 'Wash Partner', detail: 'Verified shop washes & folds', color: 'yellow' as const },
+    { label: 'Delivery', detail: 'Fresh laundry, back home', color: 'blue' as const },
+  ];
+
   return (
     <MarketingShell>
-      {/* ── Hero ── */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-blue-50/80 via-surface-muted to-surface-muted">
-        <div className="marketing-container relative pb-16 pt-12 sm:pt-16 lg:pb-24 lg:pt-20">
-          <div ref={bubblesRef} className="parallax-layer absolute inset-0">
-            <HeroBubbles />
-          </div>
-
-          <div className="relative grid items-center gap-12 lg:grid-cols-[1fr_1.05fr] lg:gap-8">
+      {/* ── Hero: the route board ── */}
+      <section className="route-ground relative overflow-hidden border-b-4 border-route-ink">
+        <div className="marketing-container relative pb-14 pt-12 sm:pt-16 lg:pb-20 lg:pt-20">
+          <div className="relative grid items-center gap-12 lg:grid-cols-[1.1fr_1fr] lg:gap-10">
             <div className="max-w-xl">
               <Reveal>
-                <span className="badge-primary">Philippines · Door-to-door laundry</span>
+                <div className="route-board px-6 py-8 sm:px-8 sm:py-10">
+                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-route-yellow">
+                    Philippines · Door-to-door laundry
+                  </p>
+                  <h1 className="signage-heading mt-3 text-5xl text-white sm:text-6xl lg:text-[4.25rem]">
+                    Your laundry
+                    <br />
+                    has a route.
+                  </h1>
+                  <p className="mt-5 max-w-md text-base leading-relaxed text-white/75 sm:text-lg">
+                    Book pickup in seconds, watch it move stop by stop, and get it delivered back
+                    fresh — run by a real network of shops and riders, not one storefront.
+                  </p>
 
-                <h1 className="mt-6 text-4xl font-extrabold tracking-tight text-slate-900 sm:text-5xl lg:text-[3.5rem] lg:leading-[1.08]">
-                  Laundry day,
-                  <br />
-                  <span className="text-primary">simplified.</span>
-                </h1>
-
-                <p className="mt-6 max-w-md text-lg leading-relaxed text-muted">
-                  Book laundry pickup in seconds. Track your order in real time, pay securely, and
-                  have freshly cleaned clothes delivered back to your doorstep.
-                </p>
-
-                <MarketingActions className="mt-8" gap="loose">
-                  <ButtonLink href="/signup" size="lg" layout="responsive">
-                    Book a pickup
-                  </ButtonLink>
-                  <ButtonLink href="/how-it-works" variant="outline" size="lg" layout="responsive">
-                    How it works
-                  </ButtonLink>
-                </MarketingActions>
+                  <MarketingActions className="mt-8" gap="loose">
+                    <ButtonLink href="/signup" size="lg" layout="responsive" className="ticket-btn">
+                      Board this route
+                    </ButtonLink>
+                    <ButtonLink
+                      href="/how-it-works"
+                      variant="outline"
+                      size="lg"
+                      layout="responsive"
+                      className="border-2 border-white/70 bg-transparent text-white hover:bg-white/10"
+                    >
+                      See how it runs
+                    </ButtonLink>
+                  </MarketingActions>
+                </div>
               </Reveal>
 
-              {/* Trust chips */}
-              <dl className="mt-10 grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-4">
+              {/* Trust chips — restyled as small placard chips, not soft tint pills */}
+              <dl className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {TRUST_CHIPS.map((chip, index) => (
-                  <Reveal as="div" key={chip.title} delay={100 + index * 60} className="flex flex-col items-start gap-2">
-                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                      <chip.icon className="h-5 w-5" aria-hidden />
+                  <Reveal
+                    as="div"
+                    key={chip.title}
+                    delay={100 + index * 60}
+                    className="flex flex-col items-start gap-2 rounded-md border-2 border-route-ink/15 bg-white p-3"
+                  >
+                    <span
+                      className={cn(
+                        'flex h-8 w-8 items-center justify-center rounded-md border-2 border-route-ink',
+                        index % 3 === 0 && 'bg-route-red text-white',
+                        index % 3 === 1 && 'bg-route-yellow text-route-ink',
+                        index % 3 === 2 && 'bg-route-blue text-white',
+                      )}
+                    >
+                      <chip.icon className="h-4 w-4" aria-hidden />
                     </span>
                     <div>
-                      <dt className="text-sm font-semibold text-slate-900">{chip.title}</dt>
-                      <dd className="text-xs text-muted">{chip.subtitle}</dd>
+                      <dt className="text-xs font-bold text-slate-900">{chip.title}</dt>
+                      <dd className="text-[11px] text-muted">{chip.subtitle}</dd>
                     </div>
                   </Reveal>
                 ))}
               </dl>
             </div>
 
-            {/* Phone trio */}
-            <div className="relative mx-auto flex items-center justify-center">
-              <div ref={phoneLeftRef} className="parallax-layer">
-                <PhoneFrame className="z-0 hidden -rotate-6 sm:block sm:-mr-10 sm:w-48">
-                  <ScreenHome />
+            {/* Route stops + phone trio */}
+            <div className="relative">
+              <ol className="relative flex flex-col gap-6 sm:flex-row sm:items-stretch sm:gap-3">
+                <RoutePath
+                  d="M8 20 H 92"
+                  viewBox="0 0 100 40"
+                  className="pointer-events-none absolute inset-x-0 top-1/2 hidden h-6 w-full -translate-y-1/2 sm:block"
+                  strokeWidth={2}
+                />
+                {heroStops.map((stop, index) => (
+                  <Reveal
+                    as="li"
+                    key={stop.label}
+                    delay={index * 90}
+                    className={cn('placard flex-1', `placard-${stop.color}`)}
+                  >
+                    <span className="route-stop-number">{index + 1}</span>
+                    <div>
+                      <p className="signage-heading text-xl">{stop.label}</p>
+                      <p className="mt-1 text-xs leading-snug opacity-90">{stop.detail}</p>
+                    </div>
+                  </Reveal>
+                ))}
+              </ol>
+
+              <div className="relative mx-auto mt-8 flex items-center justify-center">
+                <div ref={phoneLeftRef} className="parallax-layer">
+                  <PhoneFrame className="z-0 hidden -rotate-6 sm:block sm:-mr-10 sm:w-44">
+                    <ScreenHome />
+                  </PhoneFrame>
+                </div>
+                <PhoneFrame className="z-10 w-52 sm:w-56">
+                  <ScreenBooking />
                 </PhoneFrame>
-              </div>
-              <PhoneFrame className="z-10 w-56 sm:w-60">
-                <ScreenBooking />
-              </PhoneFrame>
-              <div ref={phoneRightRef} className="parallax-layer">
-                <PhoneFrame className="z-0 hidden rotate-6 sm:block sm:-ml-10 sm:w-48">
-                  <ScreenTracking />
-                </PhoneFrame>
+                <div ref={phoneRightRef} className="parallax-layer">
+                  <PhoneFrame className="z-0 hidden rotate-6 sm:block sm:-ml-10 sm:w-44">
+                    <ScreenTracking />
+                  </PhoneFrame>
+                </div>
               </div>
             </div>
           </div>
@@ -300,7 +405,7 @@ export function HomePage() {
       </section>
 
       {/* ── Founding partners strip ── */}
-      <section aria-label="Founding partners" className="border-y border-border/40 bg-surface">
+      <section aria-label="Founding partners" className="border-b border-border/40 bg-surface">
         <Reveal as="div" className="marketing-container py-8">
           <p className="text-center text-xs font-semibold uppercase tracking-widest text-muted-foreground">
             Trusted by our founding partners
@@ -335,7 +440,7 @@ export function HomePage() {
         </Reveal>
       </section>
 
-      {/* ── Features ── */}
+      {/* ── Features: route capabilities ── */}
       <MarketingSection id="features" className="relative overflow-hidden">
         <div
           ref={featuresBgRef}
@@ -349,17 +454,17 @@ export function HomePage() {
             className="object-cover"
             sizes="100vw"
           />
-          <div className="absolute inset-0 bg-white/85" />
+          <div className="absolute inset-0 bg-white/90" />
         </div>
 
         <MarketingSectionHeader
-          title="Everything laundry, handled"
+          title="Everything the route covers"
           description="Built for busy households and professionals who want laundry off their to-do list."
         />
 
         <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {FEATURES.map((feature, index) => {
-            const accent = accentClasses(feature.accent);
+            const color = routeColorAt(index);
             return (
               <Reveal
                 as="article"
@@ -367,13 +472,8 @@ export function HomePage() {
                 delay={(index % 3) * 60}
                 className="card flex h-full flex-col p-6 transition-[box-shadow,transform] duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow-elevated)]"
               >
-                <span
-                  className={cn(
-                    'flex h-11 w-11 items-center justify-center rounded-xl',
-                    accent.bg,
-                  )}
-                >
-                  <feature.icon className={cn('h-5 w-5', accent.text)} aria-hidden />
+                <span className={cn('icon-placard', `icon-placard-${color}`)}>
+                  <feature.icon className="h-5 w-5" aria-hidden />
                 </span>
                 <h3 className="mt-4 font-semibold text-slate-900">{feature.title}</h3>
                 <p className="mt-1.5 text-sm leading-relaxed text-muted">{feature.description}</p>
@@ -383,44 +483,38 @@ export function HomePage() {
         </div>
       </MarketingSection>
 
-      {/* ── How it works ── */}
-      <MarketingSection id="how-it-works" tint="muted">
+      {/* ── How it works: destination placards along the route ── */}
+      <MarketingSection id="how-it-works" className="route-ground">
         <MarketingSectionHeader
-          title={`How ${appConfig.name} works`}
-          description="Four steps from dirty laundry to fresh and delivered."
+          title={`How ${appConfig.name} runs the route`}
+          description="Four stops from dirty laundry to fresh and delivered."
         />
 
-        <ol className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
-          {HOW_IT_WORKS.map((item, index) => (
-            <Reveal
-              as="li"
-              key={item.step}
-              delay={index * 80}
-              className="relative flex flex-col items-center text-center"
-            >
-              <div className="relative">
-                <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                  <item.icon className="h-7 w-7" aria-hidden />
+        <ol className="relative mt-14 grid gap-10 sm:grid-cols-2 lg:grid-cols-4 lg:gap-6">
+          <RoutePath
+            d="M12 12 H 88"
+            viewBox="0 0 100 24"
+            className="pointer-events-none absolute inset-x-0 top-8 hidden h-6 w-full lg:block"
+            strokeWidth={2}
+          />
+          {HOW_IT_WORKS.map((item, index) => {
+            const color = routeColorAt(index);
+            return (
+              <Reveal
+                as="li"
+                key={item.step}
+                delay={index * 80}
+                className={cn('placard items-center text-center', `placard-${color}`)}
+              >
+                <span className="route-stop-number mx-auto">{item.step}</span>
+                <span className="icon-placard mx-auto border-white/70 bg-white/15">
+                  <item.icon className="h-6 w-6" aria-hidden />
                 </span>
-                <span
-                  className="absolute -left-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-white"
-                  aria-hidden
-                >
-                  {item.step}
-                </span>
-              </div>
-              <h3 className="mt-4 font-semibold text-slate-900">{item.title}</h3>
-              <p className="mt-1.5 max-w-[16rem] text-sm leading-relaxed text-muted">
-                {item.description}
-              </p>
-              {index < HOW_IT_WORKS.length - 1 ? (
-                <ArrowRight
-                  className="absolute -right-4 top-6 hidden h-5 w-5 text-primary/40 lg:block"
-                  aria-hidden
-                />
-              ) : null}
-            </Reveal>
-          ))}
+                <p className="signage-heading text-lg">{item.title}</p>
+                <p className="text-xs leading-relaxed opacity-90">{item.description}</p>
+              </Reveal>
+            );
+          })}
         </ol>
       </MarketingSection>
 
@@ -460,60 +554,59 @@ export function HomePage() {
         </Reveal>
       </MarketingSection>
 
-      {/* ── Live tracking ── */}
+      {/* ── Live tracking, staged as a route-board update (not a live-map pin) ── */}
       <MarketingSection tint="muted">
         <div className="mx-auto max-w-2xl">
-          {/* Real-time tracking */}
-          <Reveal
-            as="div"
-            className="card-elevated relative flex flex-col overflow-hidden bg-slate-900 p-8 text-white sm:p-10"
-          >
-            {/* Grid backdrop + route line */}
-            <div
-              className="absolute inset-0 opacity-20 [background-image:linear-gradient(rgb(148_163_184/0.3)_1px,transparent_1px),linear-gradient(90deg,rgb(148_163_184/0.3)_1px,transparent_1px)] [background-size:32px_32px]"
-              aria-hidden
-            />
-            <svg viewBox="0 0 200 120" className="absolute inset-x-0 bottom-0 h-40 w-full" aria-hidden>
-              <path
-                d="M-10 110 C 40 80, 60 110, 100 70 S 170 40, 210 20"
-                fill="none"
-                stroke="rgb(96 165 250 / 0.5)"
-                strokeWidth="2.5"
-                strokeDasharray="6 6"
-                strokeLinecap="round"
-              />
-            </svg>
-
-            <div className="relative">
-              <span className="inline-flex items-center rounded-full bg-white/10 px-3 py-1 text-xs font-semibold tracking-wide text-blue-200 ring-1 ring-white/15">
-                Live on every order
+          <Reveal as="div" className="route-board flex flex-col p-8 sm:p-10">
+            <div>
+              <span className="route-status-plate">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" aria-hidden />
+                Now at: Wash Partner
               </span>
-              <h2 className="mt-4 text-2xl font-bold tracking-tight sm:text-3xl">
+              <h2 className="signage-heading mt-4 text-3xl text-white sm:text-4xl">
                 Real-time tracking
               </h2>
-              <p className="mt-3 text-slate-300">Stay updated every step of the way.</p>
+              <p className="mt-3 text-white/70">
+                Every stop on the route, updated live — no guessing where your order is.
+              </p>
             </div>
 
+            {/* Route recap for this order */}
+            <ol className="relative mt-8 flex items-center gap-2">
+              {(['red', 'yellow', 'blue'] as const).map((color, index) => (
+                <li key={color} className="flex flex-1 items-center gap-2">
+                  <span
+                    className={cn(
+                      'route-stop-number shrink-0',
+                      index < 2 && 'opacity-100',
+                      index === 1 && 'ring-2 ring-white',
+                    )}
+                  >
+                    {index + 1}
+                  </span>
+                  {index < 2 ? <span className="h-0.5 flex-1 bg-white/30" aria-hidden /> : null}
+                </li>
+              ))}
+            </ol>
+
             {/* Rider card */}
-            <div className="relative mt-8 max-w-sm rounded-2xl bg-white p-5 text-slate-900 shadow-xl">
+            <div className="relative mt-6 max-w-sm rounded-md border-2 border-route-ink bg-white p-5 text-slate-900">
               <div className="flex items-center gap-3">
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-                  JD
-                </span>
+                <span className="icon-placard icon-placard-blue text-sm font-bold">JD</span>
                 <div className="min-w-0 flex-1">
                   <p className="text-xs text-muted">Rider assigned</p>
                   <p className="truncate font-semibold">John D.</p>
                 </div>
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent/10 text-accent">
+                <span className="flex h-9 w-9 items-center justify-center rounded-md border-2 border-route-ink bg-route-yellow text-route-ink">
                   <Phone className="h-4 w-4" aria-hidden />
                 </span>
               </div>
               <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                <div className="rounded-xl bg-surface-muted p-3">
+                <div className="rounded-md bg-surface-muted p-3">
                   <dt className="text-xs text-muted">ETA</dt>
                   <dd className="mt-0.5 font-semibold">12 mins</dd>
                 </div>
-                <div className="rounded-xl bg-surface-muted p-3">
+                <div className="rounded-md bg-surface-muted p-3">
                   <dt className="text-xs text-muted">Status</dt>
                   <dd className="mt-0.5 flex items-center gap-1.5 font-semibold text-primary">
                     <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" aria-hidden />
@@ -530,11 +623,11 @@ export function HomePage() {
         </div>
       </MarketingSection>
 
-      {/* ── Reviews + stats ── */}
+      {/* ── Reviews + stats: passenger testimonials ── */}
       <MarketingSection id="reviews">
         <MarketingSectionHeader
-          title="Loved by our customers"
-          description={`What customers say about booking with ${appConfig.name}.`}
+          title="What passengers say"
+          description={`Real reviews from customers who've ridden the ${appConfig.name} route.`}
         />
 
         {customerReviews.length > 0 && (
@@ -571,49 +664,55 @@ export function HomePage() {
         )}
 
         <dl className="mt-12 grid grid-cols-2 gap-6 lg:grid-cols-4">
-          {STATS.map((stat, index) => (
-            <Reveal as="div" key={stat.label} delay={index * 70} className="flex flex-col items-center text-center">
-              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                <stat.icon className="h-6 w-6" aria-hidden />
-              </span>
-              <dt className="order-2 mt-1 text-xs font-medium uppercase tracking-wide text-muted">
-                {stat.label}
-              </dt>
-              <dd className="order-1 mt-3 text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
-                {stat.value}
-              </dd>
-            </Reveal>
-          ))}
+          {STATS.map((stat, index) => {
+            const color = routeColorAt(index);
+            return (
+              <Reveal as="div" key={stat.label} delay={index * 70} className="flex flex-col items-center text-center">
+                <span className={cn('icon-placard h-12 w-12', `icon-placard-${color}`)}>
+                  <stat.icon className="h-6 w-6" aria-hidden />
+                </span>
+                <dt className="order-2 mt-2 text-xs font-medium uppercase tracking-wide text-muted">
+                  {stat.label}
+                </dt>
+                <dd className={cn('order-1 mt-3 text-2xl font-extrabold tracking-tight sm:text-3xl', routeAccentText[color])}>
+                  {stat.value}
+                </dd>
+              </Reveal>
+            );
+          })}
         </dl>
       </MarketingSection>
 
-      {/* ── Service areas ── */}
-      <MarketingSection id="service-areas" tint="muted">
+      {/* ── Service areas: the route map ── */}
+      <MarketingSection id="service-areas" className="route-ground">
         <MarketingSectionHeader
-          title="Service areas"
+          title="Where the route runs"
           description="Live pickup and delivery across Metro Manila. Enter your address when booking to confirm coverage."
         />
 
         <div className="mt-12 grid gap-6 md:grid-cols-3">
-          {serviceAreas.slice(0, 3).map((branch, index) => (
-            <Reveal
-              as={Link}
-              key={branch.id}
-              delay={index * 70}
-              href={`/service-areas/${branch.id}`}
-              className="card flex h-full flex-col p-6 transition-[box-shadow,transform] duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow-elevated)]"
-            >
-              <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <MapPin className="h-5 w-5" aria-hidden />
-              </span>
-              <h3 className="mt-4 font-semibold text-slate-900">{branch.name}</h3>
-              <p className="mt-0.5 text-sm font-medium text-primary">{branch.city}</p>
-              <p className="mt-2 flex-1 text-sm leading-relaxed text-muted">{branch.area}</p>
-              <p className="mt-4 text-xs text-muted-foreground">
-                ~{branch.radiusKm} km service radius
-              </p>
-            </Reveal>
-          ))}
+          {serviceAreas.slice(0, 3).map((branch, index) => {
+            const color = routeColorAt(index);
+            return (
+              <Reveal
+                as={Link}
+                key={branch.id}
+                delay={index * 70}
+                href={`/service-areas/${branch.id}`}
+                className="card flex h-full flex-col p-6 transition-[box-shadow,transform] duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow-elevated)]"
+              >
+                <span className={cn('icon-placard', `icon-placard-${color}`)}>
+                  <MapPin className="h-5 w-5" aria-hidden />
+                </span>
+                <h3 className="mt-4 font-semibold text-slate-900">{branch.name}</h3>
+                <p className="mt-0.5 text-sm font-medium text-primary">{branch.city}</p>
+                <p className="mt-2 flex-1 text-sm leading-relaxed text-muted">{branch.area}</p>
+                <p className="mt-4 text-xs text-muted-foreground">
+                  ~{branch.radiusKm} km service radius
+                </p>
+              </Reveal>
+            );
+          })}
         </div>
 
         <div className="mt-8 flex flex-col items-center gap-4 text-center">
@@ -633,47 +732,50 @@ export function HomePage() {
         </div>
       </MarketingSection>
 
-      {/* ── Pricing ── */}
+      {/* ── Pricing: the fare board ── */}
       <MarketingSection id="pricing">
         <MarketingSectionHeader
-          title="Simple, transparent pricing"
+          title="The fare board"
           description="Know what you'll pay before you confirm. No hidden fees."
         />
 
         <div className="mt-12 grid gap-6 md:grid-cols-3">
-          {PRICING_TIERS.map((tier, index) => (
-            <Reveal
-              as="div"
-              key={tier.service}
-              delay={index * 70}
-              className="card-elevated flex h-full flex-col p-6 transition-[box-shadow,transform] duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow-elevated-lg)] sm:p-8"
-            >
-              <div className="flex items-start justify-between">
-                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <tier.icon className="h-5 w-5" aria-hidden />
-                </span>
-                <span className={cn('shrink-0', `badge-${tier.badgeVariant}`)}>{tier.badge}</span>
-              </div>
-              <h3 className="mt-4 text-lg font-semibold text-slate-900">{tier.service}</h3>
-              <div className="mt-3 flex items-baseline gap-1">
-                <span className="text-3xl font-bold text-primary">{tier.from}</span>
-                <span className="text-sm text-muted">{tier.unit}</span>
-              </div>
-              <ul className="mt-4 flex-1 space-y-2">
-                {tier.highlights.map((highlight) => (
-                  <li key={highlight} className="flex items-center gap-2 text-sm text-muted">
-                    <Check className="h-4 w-4 shrink-0 text-accent" aria-hidden />
-                    {highlight}
-                  </li>
-                ))}
-              </ul>
-              <div className="mt-6">
-                <ButtonLink href="/signup" size="sm" layout="responsive">
-                  Book now
-                </ButtonLink>
-              </div>
-            </Reveal>
-          ))}
+          {PRICING_TIERS.map((tier, index) => {
+            const color = routeColorAt(index);
+            return (
+              <Reveal
+                as="div"
+                key={tier.service}
+                delay={index * 70}
+                className="card-elevated flex h-full flex-col p-6 transition-[box-shadow,transform] duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow-elevated-lg)] sm:p-8"
+              >
+                <div className="flex items-start justify-between">
+                  <span className={cn('icon-placard', `icon-placard-${color}`)}>
+                    <tier.icon className="h-5 w-5" aria-hidden />
+                  </span>
+                  <span className={cn('shrink-0', `badge-${tier.badgeVariant}`)}>{tier.badge}</span>
+                </div>
+                <h3 className="mt-4 text-lg font-semibold text-slate-900">{tier.service}</h3>
+                <div className="mt-3 flex items-baseline gap-1">
+                  <span className="text-3xl font-bold text-primary">{tier.from}</span>
+                  <span className="text-sm text-muted">{tier.unit}</span>
+                </div>
+                <ul className="mt-4 flex-1 space-y-2">
+                  {tier.highlights.map((highlight) => (
+                    <li key={highlight} className="flex items-center gap-2 text-sm text-muted">
+                      <Check className="h-4 w-4 shrink-0 text-accent" aria-hidden />
+                      {highlight}
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-6">
+                  <ButtonLink href="/signup" size="sm" layout="responsive">
+                    Book now
+                  </ButtonLink>
+                </div>
+              </Reveal>
+            );
+          })}
         </div>
 
         <p className="mt-6 text-center text-sm text-muted-foreground">
@@ -681,7 +783,7 @@ export function HomePage() {
         </p>
       </MarketingSection>
 
-      {/* ── Download app banner ── */}
+      {/* ── Download app banner: board this route ── */}
       <MarketingSection id="download-app" tint="muted">
         <Reveal as="div" className="card-elevated relative overflow-hidden bg-slate-900">
           <Image
@@ -698,8 +800,8 @@ export function HomePage() {
           <Bubbles />
           <div className="relative flex flex-col items-center gap-8 p-8 text-center sm:p-10 lg:flex-row lg:justify-between lg:text-left">
             <div className="max-w-xl">
-              <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-                Download the {appConfig.name} app
+              <h2 className="signage-heading text-3xl text-white sm:text-4xl">
+                Board the {appConfig.name} route
               </h2>
               <p className="mt-3 text-slate-300">
                 Book, track, and manage your laundry anytime, anywhere. Pay with GCash, card,

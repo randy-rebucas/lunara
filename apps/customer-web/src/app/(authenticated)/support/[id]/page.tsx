@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback } from 'react';
 import { ArrowRight, Check, Circle } from 'lucide-react';
@@ -10,6 +9,7 @@ import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { AuthLoading } from '../../../../components/auth-loading';
 import { PageShell } from '../../../../components/page-shell';
 import { DataPageStatus } from '../../../../components/data-page-status';
+import { PageHeader } from '../../../../components/ui/page-header';
 import { useProtectedPage } from '../../../../hooks/use-protected-page';
 import { useCustomerQuery } from '../../../../lib/use-customer-query';
 
@@ -58,9 +58,7 @@ export default function CustomerTicketPage() {
   if (loading || error || !data) {
     return (
       <PageShell narrow>
-        <Link href="/support" className="text-sm text-muted transition-colors hover:text-primary">
-          ← My support tickets
-        </Link>
+        <PageHeader title="Support ticket" backHref="/support" backLabel="My support tickets" />
         <DataPageStatus loading={loading} error={error} loadingMessage="Loading ticket…" />
       </PageShell>
     );
@@ -71,13 +69,12 @@ export default function CustomerTicketPage() {
 
   return (
     <PageShell narrow>
-      <Link href="/support" className="text-sm text-muted transition-colors hover:text-primary">
-        ← My support tickets
-      </Link>
-        <h1 className="mt-4 text-2xl font-bold">{ticket.subject}</h1>
-        <p className="mt-1 text-sm capitalize text-slate-500">
-          Status: {ticket.status.replace(/_/g, ' ')}
-        </p>
+      <PageHeader
+        title={ticket.subject}
+        description={`Status: ${ticket.status.replace(/_/g, ' ')}`}
+        backHref="/support"
+        backLabel="My support tickets"
+      />
 
         {ticket.type === 'lost_item' && (
           <>

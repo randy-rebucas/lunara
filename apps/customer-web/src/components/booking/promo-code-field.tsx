@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { Button } from '@lunara/ui';
 
 interface PromoCodeFieldProps {
@@ -22,7 +21,6 @@ export function PromoCodeField({
   onApply,
   onRemove,
 }: PromoCodeFieldProps) {
-  const [focused, setFocused] = useState(false);
   const isApplied = Boolean(appliedCode);
 
   return (
@@ -42,15 +40,13 @@ export function PromoCodeField({
           </Button>
         </div>
       ) : (
-        <div className={`flex gap-2 ${focused ? 'ring-2 ring-primary/20 rounded-xl' : ''}`}>
+        <div className="flex gap-2">
           <input
             type="text"
             value={value}
             onChange={(e) => onValueChange(e.target.value.toUpperCase())}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
             placeholder="e.g. WELCOME10"
-            className="min-w-0 flex-1 rounded-xl border border-border/60 bg-white px-4 py-2.5 text-sm uppercase tracking-wide outline-none"
+            className="input-field min-w-0 flex-1 uppercase tracking-wide"
             aria-label="Promo code"
           />
           <Button

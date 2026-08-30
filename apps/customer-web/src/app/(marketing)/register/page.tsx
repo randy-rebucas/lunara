@@ -9,6 +9,7 @@ import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { AuthShell } from '../../../components/auth-shell';
 import { FormError } from '../../../components/marketing/marketing-design';
 import { Input } from '../../../components/ui/input';
+import { getFriendlyErrorMessage } from '../../../lib/format-error';
 import { getRecaptchaToken } from '../../../lib/recaptcha';
 
 export default function RegisterPage() {
@@ -52,7 +53,7 @@ export default function RegisterPage() {
       const status = await fetchOnboardingStatus(api);
       router.push(getOnboardingPath(status));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed');
+      setError(getFriendlyErrorMessage(err, 'Registration failed. Please check your details and try again.'));
     } finally {
       setSubmitting(false);
     }

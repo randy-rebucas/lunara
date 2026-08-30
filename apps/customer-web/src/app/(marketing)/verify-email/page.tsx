@@ -8,6 +8,7 @@ import { fetchOnboardingStatus, getOnboardingPath } from '@lunara/hooks/onboardi
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { AuthShell } from '../../../components/auth-shell';
 import { Input } from '../../../components/ui/input';
+import { getFriendlyErrorMessage } from '../../../lib/format-error';
 
 type Status = 'verifying' | 'success' | 'error';
 
@@ -36,7 +37,7 @@ export default function VerifyEmailPage() {
       })
       .catch((err) => {
         setStatus('error');
-        setError(err instanceof Error ? err.message : 'Verification failed');
+        setError(getFriendlyErrorMessage(err, 'Verification failed. The link may be expired.'));
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
@@ -48,7 +49,7 @@ export default function VerifyEmailPage() {
       await resendVerification(resendEmail);
       setResent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to resend verification email');
+      setError(getFriendlyErrorMessage(err, 'Failed to resend verification email. Please try again.'));
     } finally {
       setResending(false);
     }

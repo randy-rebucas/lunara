@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import { appConfig } from '@lunara/config';
 import { resolveApiV1BaseUrl } from '@lunara/hooks';
 import { PublicShell } from '../../../../components/public-shell';
+import { MarketingBackLink } from '../../../../components/marketing/marketing-design';
 import { fetchBlogPostBySlug } from '../../../../components/marketing/blog-data';
 import { buildPageMetadata } from '../../../../lib/seo';
 
@@ -53,6 +54,7 @@ export default async function BlogPostPage({ params }: Props) {
         />
       )}
       <ReactMarkdown>{post.content}</ReactMarkdown>
+      <MarketingBackLink href="/blog" label="← Back to blog" />
     </PublicShell>
   );
 }

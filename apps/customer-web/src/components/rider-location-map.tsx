@@ -2,15 +2,25 @@
 
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { MapContainer, Marker, Polyline, TileLayer, useMap } from 'react-leaflet';
 
-const riderIcon = L.divIcon({
-  className: '',
-  html: '<div style="width:16px;height:16px;border-radius:9999px;background:#2563eb;border:3px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.4)"></div>',
-  iconSize: [16, 16],
-  iconAnchor: [8, 8],
-});
+/** Resolves the live --color-primary token so the map matches white-label tenant branding
+ * instead of a hardcoded royal blue — Leaflet icons/paths need a literal color string, not a CSS var. */
+function resolvePrimaryColor() {
+  if (typeof window === 'undefined') return '#2563eb';
+  const value = getComputedStyle(document.documentElement).getPropertyValue('--color-primary').trim();
+  return value || '#2563eb';
+}
+
+function buildRiderIcon(color: string) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:16px;height:16px;border-radius:9999px;background:${color};border:3px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.4)"></div>`,
+    iconSize: [16, 16],
+    iconAnchor: [8, 8],
+  });
+}
 
 const destinationIcon = L.divIcon({
   className: '',
@@ -44,7 +54,13 @@ function FitBounds({ points }: { points: { lat: number; lng: number }[] }) {
   return null;
 }
 
-function RiderMarker({ position }: { position: { lat: number; lng: number } }) {
+function RiderMarker({
+  position,
+  icon,
+}: {
+  position: { lat: number; lng: number };
+  icon: L.DivIcon;
+}) {
   const map = useMap();
   const hasCentered = useRef(false);
   useEffect(() => {
@@ -53,7 +69,7 @@ function RiderMarker({ position }: { position: { lat: number; lng: number } }) {
       hasCentered.current = true;
     }
   }, [map, position]);
-  return <Marker position={[position.lat, position.lng]} icon={riderIcon} />;
+  return <Marker position={[position.lat, position.lng]} icon={icon} />;
 }
 
 interface RiderLocationMapProps {
@@ -69,6 +85,8 @@ export function RiderLocationMap({ lat, lng, destinationLat, destinationLng }: R
   const destination = hasDestination ? { lat: destinationLat, lng: destinationLng } : null;
   const distanceKm = destination ? haversineKm(rider, destination) : null;
   const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+  const primaryColor = useMemo(() => resolvePrimaryColor(), []);
+  const riderIcon = useMemo(() => buildRiderIcon(primaryColor), [primaryColor]);
 
   return (
     <div className="mt-6 overflow-hidden rounded-xl ring-1 ring-border/50">
@@ -83,7 +101,7 @@ export function RiderLocationMap({ lat, lng, destinationLat, destinationLng }: R
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <RiderMarker position={rider} />
+        <RiderMarker position={rider} icon={riderIcon} />
         {destination && <Marker position={[destination.lat, destination.lng]} icon={destinationIcon} />}
         {destination && (
           <Polyline
@@ -91,7 +109,7 @@ export function RiderLocationMap({ lat, lng, destinationLat, destinationLng }: R
               [rider.lat, rider.lng],
               [destination.lat, destination.lng],
             ]}
-            pathOptions={{ color: '#2563eb', weight: 2, dashArray: '6 6', opacity: 0.6 }}
+            pathOptions={{ color: primaryColor, weight: 2, dashArray: '6 6', opacity: 0.6 }}
           />
         )}
         {destination && <FitBounds points={[rider, destination]} />}

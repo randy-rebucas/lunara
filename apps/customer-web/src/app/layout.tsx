@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter } from 'next/font/google';
+import { Anton, Inter } from 'next/font/google';
 import { headers } from 'next/headers';
 import brandIcon from '@lunara/brand/icon';
 import { appConfig } from '@lunara/config';
@@ -18,6 +18,15 @@ import './globals.css';
 const inter = Inter({
   subsets: ['latin'],
   variable: '--font-inter',
+  display: 'swap',
+});
+
+// Signage/display face for the jeepney destination-board home redesign — headlines and
+// route/placard labels only; body copy stays on Inter. See the direction contract below.
+const anton = Anton({
+  subsets: ['latin'],
+  weight: '400',
+  variable: '--font-anton',
   display: 'swap',
 });
 
@@ -121,8 +130,25 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     : undefined;
 
   return (
-    <html lang="en" className={inter.variable} style={brandStyle}>
+    <html lang="en" className={`${inter.variable} ${anton.variable}`} style={brandStyle}>
       <body className="min-h-screen font-sans antialiased">
+        {/*
+          DIRECTION CONTRACT — customer-web home page (seed 4fbe65fa, "Jeepney destination signage")
+          THESIS: the jeepney destination board replaces the generic delivery-app hero; an order is a
+          route with real stops (Pickup -> Wash Partner -> Delivery), dramatizing Lunara's real
+          differentiator: a network of shops/riders running a route, not one storefront.
+          OWN-WORLD: saturated jeepney-enamel palette (candy-red/marigold/cobalt/black outline) on an
+          enamel-white ground as a semantic layer over --color-primary (white-label still overrides
+          primary); display headlines in self-hosted Anton, body stays Inter; page composed as a route
+          line connecting "stops" (hero=board, how-it-works=placards, features=capabilities, service
+          areas=route map, pricing=fare board, reviews=passenger testimonials, footer=board this
+          route); icons wrapped in painted placard chrome (thick black outline, flat enamel color).
+          STORY: visitor reads their laundry as a physical route, feels the local/energetic/trustworthy
+          network character, and books a pickup.
+          FIRST VIEWPORT: full-width route-board hero, 3 painted destination placards along a route
+          line, ticket-style primary CTA, phone trio restyled into the board.
+          FORM: "Jeepney destination signage," direction 4, seed key 4fbe65fa.
+        */}
         <Providers>{children}</Providers>
       </body>
     </html>
