@@ -267,12 +267,12 @@ export function HomePage() {
       </section>
 
       {/* ── Founding partners strip ── */}
-      <section aria-label="Founding partners" className="border-y border-border/40 bg-surface">
-        <div className="marketing-container py-8">
-          <p className="text-center text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+      <section aria-label="Founding partners" className="bg-surface-muted/60">
+        <div className="marketing-container py-12">
+          <p className="text-center text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
             Trusted by our founding partners
           </p>
-          <ul className="mt-5 flex flex-wrap items-center justify-center gap-x-10 gap-y-4">
+          <ul className="mt-7 flex flex-wrap items-stretch justify-center gap-4 sm:gap-5">
             {groupServiceAreasByPartner(serviceAreas)
               .filter((partner) => partner.logoUrl)
               .slice(0, 4)
@@ -280,23 +280,25 @@ export function HomePage() {
                 <li key={partner.partnerId}>
                   <Link
                     href={`/service-areas/${partner.branches[0].id}`}
-                    className="flex h-16 w-32 items-center justify-center rounded-xl border border-border/60 bg-white p-2"
+                    className="group flex h-28 w-52 items-center justify-center p-2 transition-transform duration-200 hover:-translate-y-0.5"
                     aria-label={partner.partnerName}
                     title={partner.partnerName}
                   >
                     <Image
                       src={partner.logoUrl!}
                       alt={partner.partnerName}
-                      width={128}
-                      height={64}
+                      width={192}
+                      height={96}
                       className="h-full w-full object-contain"
                     />
                   </Link>
                 </li>
               ))}
-            <li className="flex items-center gap-2 text-sm font-medium text-muted">
-              <Store className="h-4 w-4 text-primary" aria-hidden />
-              More partner laundries coming soon
+            <li>
+              <span className="flex h-28 items-center gap-2 px-5 text-sm font-medium text-muted">
+                <Store className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+                More partner laundries coming soon
+              </span>
             </li>
           </ul>
         </div>
