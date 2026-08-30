@@ -240,6 +240,9 @@ export interface PartnerOwnedRider {
 
 export interface PartnerInventoryItem {
   _id: string;
+  branchId?: string;
+  branchName?: string;
+  branchCode?: string;
   sku: string;
   name: string;
   category: string;
@@ -542,4 +545,52 @@ export interface PartnerShelfLookupResult {
   currentStepLabel?: string;
   customerName?: string;
   customerPhone?: string;
+}
+
+export interface PartnerShelfItem {
+  _id: string;
+  name: string;
+  quantity: number;
+  note?: string;
+  createdAt: string;
+}
+
+export interface PartnerShelf {
+  _id: string;
+  branchId: string;
+  name: string;
+  items: PartnerShelfItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PartnerCustomerSummary {
+  customerId: string;
+  name: string;
+  phone?: string;
+  totalOrders: number;
+  totalSpent: number;
+  lastOrderAt: string;
+}
+
+export interface PartnerCustomerDetail {
+  customerId: string;
+  firstName: string;
+  lastName: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  totalOrders: number;
+  totalSpent: number;
+  lastOrderAt: string;
+  customerSince: string | null;
+}
+
+export interface PartnerShelfItemSearchResult {
+  shelfId: string;
+  shelfName: string;
+  itemId: string;
+  name: string;
+  quantity: number;
+  note?: string;
 }

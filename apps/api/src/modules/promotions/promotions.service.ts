@@ -237,6 +237,13 @@ export class PromotionsService implements OnModuleInit {
       if (!partnerId || promo.partnerUserId.toString() !== partnerId) {
         throw new BadRequestException('This promo code is not valid for the selected shop');
       }
+    } else if (partnerId) {
+      // Platform (admin-created) promotions are suggestions — a shop only honors one once its
+      // partner has explicitly opted in, so it doesn't silently discount orders the partner never agreed to fund.
+      const optedIn = promo.optedInPartnerIds.some((id) => id.toString() === partnerId);
+      if (!optedIn) {
+        throw new BadRequestException('This promo code is not valid for the selected shop');
+      }
     }
 
     const context = await this.buildCustomerContext(userId, quote.subtotal);
@@ -471,15 +478,18 @@ export class PromotionsService implements OnModuleInit {
     return deals;
   }
 
-  /** Read-only view for partner-web: currently-active platform-wide promotions that could
-   * apply to orders at any shop. Promotions aren't branch-scoped, so this skips the
-   * per-customer new-customer-audience eligibility filtering that listDealsForCustomer does. */
-  async listActivePromotionsForPartner() {
+  /** Platform-wide (admin-created) promotions a partner can choose to run at their own shop(s).
+   * These are suggestions, not automatically live — a promo only discounts orders at this
+   * partner's branches once `isOptedIn` is toggled on (see setPlatformPromotionOptIn and
+   * applyCouponToQuote above). `partnerUserId` is omitted for STAFF/ADMIN callers, who get a
+   * read-only view with `isOptedIn: false` since only the owning partner can opt in. */
+  async listActivePromotionsForPartner(partnerUserId?: string) {
     const now = new Date();
     const shared = await this.promotionModel
       .find({
         kind: PromotionKind.STANDARD,
         isActive: true,
+        partnerUserId: { $exists: false },
         $and: [
           { $or: [{ startsAt: { $exists: false } }, { startsAt: null }, { startsAt: { $lte: now } }] },
           { $or: [{ endsAt: { $exists: false } }, { endsAt: null }, { endsAt: { $gte: now } }] },
@@ -489,9 +499,36 @@ export class PromotionsService implements OnModuleInit {
 
     const deals = shared
       .filter((p) => isPromotionActive(p, now))
-      .map((p) => this.serializeDealFromPromotion(p));
+      .map((p) => ({
+        ...this.serializeDealFromPromotion(p),
+        isOptedIn: !!partnerUserId && p.optedInPartnerIds.some((id) => id.toString() === partnerUserId),
+      }));
 
     return { success: true, data: deals };
+  }
+
+  /** Lets a partner accept or decline an admin-suggested platform promotion for their own shop(s).
+   * Toggling this is the only way a platform promo code becomes valid at that partner's checkout
+   * (see the `else if (partnerId)` branch in applyCouponToQuote above). */
+  async setPlatformPromotionOptIn(partnerUserId: string, promotionId: string, optIn: boolean) {
+    const promo = await this.promotionModel.findById(promotionId);
+    if (!promo) throw new NotFoundException('Promotion not found');
+    if (promo.partnerUserId) {
+      throw new ForbiddenException('This promotion is not a platform promotion');
+    }
+    const partnerObjectId = new Types.ObjectId(partnerUserId);
+    if (optIn) {
+      await this.promotionModel.updateOne(
+        { _id: promo._id },
+        { $addToSet: { optedInPartnerIds: partnerObjectId } },
+      );
+    } else {
+      await this.promotionModel.updateOne(
+        { _id: promo._id },
+        { $pull: { optedInPartnerIds: partnerObjectId } },
+      );
+    }
+    return { success: true, data: { promotionId, isOptedIn: optIn } };
   }
 
   private serializePartnerPromotion(p: PromotionDocument) {

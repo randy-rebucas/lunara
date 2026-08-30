@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useCallback, useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import { BookingType } from '@lunara/types';
 import { GARMENT_CATALOG, getGarmentCategories, SHOP_PRICE_MARKUP_MULTIPLIER } from '@lunara/utils';
 import { AuthLoading } from '../../components/auth-loading';
@@ -195,6 +196,47 @@ function serviceCategoryLabel(category?: string) {
 function addonCategoryLabel(category?: string) {
   if (!category) return 'Custom';
   return ADDON_CATEGORY_LABELS[category] ?? category;
+}
+
+function RightDrawer({
+  open,
+  onClose,
+  title,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className={`fixed inset-0 z-50 ${open ? '' : 'pointer-events-none'}`} aria-hidden={!open}>
+      <div
+        className={`absolute inset-0 bg-black/40 transition-opacity duration-300 ${
+          open ? 'opacity-100' : 'opacity-0'
+        }`}
+        onClick={onClose}
+      />
+      <div
+        className={`absolute right-0 top-0 flex h-full w-full max-w-md flex-col bg-white shadow-xl transition-transform duration-300 ease-in-out ${
+          open ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+          <h3 className="text-base font-semibold text-slate-900">{title}</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-5">{children}</div>
+      </div>
+    </div>
+  );
 }
 
 type PricingTab = 'services' | 'addons' | 'garments' | 'machine';
@@ -669,9 +711,9 @@ export default function ServicesPage() {
               <button
                 type="button"
                 className="btn-outline btn-sm"
-                onClick={() => setShowServiceForm((v) => !v)}
+                onClick={() => setShowServiceForm(true)}
               >
-                {showServiceForm ? 'Cancel' : 'Add custom service'}
+                Add custom service
               </button>
             </div>
 
@@ -679,84 +721,86 @@ export default function ServicesPage() {
               Set the billing unit per service — mix per-kilo, per-load, per-piece, and flat-bag freely across your services.
             </p>
 
-            {showServiceForm && (
-              <div className="border-b border-border bg-surface-subtle p-4">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <label className="form-label">Anchor to existing service type</label>
-                    <select
-                      className="input-field"
-                      value={newService.baseBookingType}
-                      onChange={(e) =>
-                        setNewService((s) => ({ ...s, baseBookingType: e.target.value }))
-                      }
-                    >
-                      {Object.values(BookingType).map((t) => (
-                        <option key={t} value={t}>
-                          {BOOKING_TYPE_LABELS[t] ?? t}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="form-label">Your label</label>
-                    <input
-                      className="input-field"
-                      value={newService.label}
-                      onChange={(e) => setNewService((s) => ({ ...s, label: e.target.value }))}
-                      placeholder="e.g. Express Comforter Wash"
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="form-label">Description</label>
-                    <input
-                      className="input-field"
-                      value={newService.description}
-                      onChange={(e) =>
-                        setNewService((s) => ({ ...s, description: e.target.value }))
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="form-label">Billing unit</label>
-                    <select
-                      className="input-field"
-                      value={newService.pricingUnit}
-                      onChange={(e) =>
-                        setNewService((s) => ({ ...s, pricingUnit: e.target.value as PricingMode }))
-                      }
-                    >
-                      {NEW_SERVICE_UNIT_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="form-label">Your price</label>
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.5"
-                      className="input-field"
-                      value={newService.rate}
-                      onChange={(e) => setNewService((s) => ({ ...s, rate: e.target.value }))}
-                    />
-                  </div>
-                </div>
-                <div className="mt-3">
-                  <button
-                    type="button"
-                    className="btn-primary btn-sm"
-                    disabled={addingService || !newService.label || !newService.rate}
-                    onClick={() => void createService()}
+            <RightDrawer
+              open={showServiceForm}
+              onClose={() => setShowServiceForm(false)}
+              title="Add custom service"
+            >
+              <div className="grid gap-3">
+                <div>
+                  <label className="form-label">Anchor to existing service type</label>
+                  <select
+                    className="input-field"
+                    value={newService.baseBookingType}
+                    onChange={(e) =>
+                      setNewService((s) => ({ ...s, baseBookingType: e.target.value }))
+                    }
                   >
-                    {addingService ? 'Adding…' : 'Add service'}
-                  </button>
+                    {Object.values(BookingType).map((t) => (
+                      <option key={t} value={t}>
+                        {BOOKING_TYPE_LABELS[t] ?? t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="form-label">Your label</label>
+                  <input
+                    className="input-field"
+                    value={newService.label}
+                    onChange={(e) => setNewService((s) => ({ ...s, label: e.target.value }))}
+                    placeholder="e.g. Express Comforter Wash"
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Description</label>
+                  <input
+                    className="input-field"
+                    value={newService.description}
+                    onChange={(e) =>
+                      setNewService((s) => ({ ...s, description: e.target.value }))
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Billing unit</label>
+                  <select
+                    className="input-field"
+                    value={newService.pricingUnit}
+                    onChange={(e) =>
+                      setNewService((s) => ({ ...s, pricingUnit: e.target.value as PricingMode }))
+                    }
+                  >
+                    {NEW_SERVICE_UNIT_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="form-label">Your price</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.5"
+                    className="input-field"
+                    value={newService.rate}
+                    onChange={(e) => setNewService((s) => ({ ...s, rate: e.target.value }))}
+                  />
                 </div>
               </div>
-            )}
+              <div className="mt-4">
+                <button
+                  type="button"
+                  className="btn-primary btn-sm w-full"
+                  disabled={addingService || !newService.label || !newService.rate}
+                  onClick={() => void createService()}
+                >
+                  {addingService ? 'Adding…' : 'Add service'}
+                </button>
+              </div>
+            </RightDrawer>
 
             <div className="overflow-x-auto">
               <table className="data-table">
@@ -998,130 +1042,132 @@ export default function ServicesPage() {
               <button
                 type="button"
                 className="btn-outline btn-sm"
-                onClick={() => setShowAddonForm((v) => !v)}
+                onClick={() => setShowAddonForm(true)}
               >
-                {showAddonForm ? 'Cancel' : 'Add custom add-on'}
+                Add custom add-on
               </button>
             </div>
 
-            {showAddonForm && (
-              <div className="border-b border-border bg-surface-subtle p-4">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <label className="form-label">Slug (lowercase, hyphens)</label>
+            <RightDrawer
+              open={showAddonForm}
+              onClose={() => setShowAddonForm(false)}
+              title="Add custom add-on"
+            >
+              <div className="grid gap-3">
+                <div>
+                  <label className="form-label">Slug (lowercase, hyphens)</label>
+                  <input
+                    className="input-field"
+                    value={newAddon.slug}
+                    onChange={(e) => setNewAddon((a) => ({ ...a, slug: e.target.value }))}
+                    placeholder="e.g. fabric-softener"
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Label</label>
+                  <input
+                    className="input-field"
+                    value={newAddon.label}
+                    onChange={(e) => setNewAddon((a) => ({ ...a, label: e.target.value }))}
+                    placeholder="e.g. Fabric Softener"
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Description</label>
+                  <input
+                    className="input-field"
+                    value={newAddon.description}
+                    onChange={(e) => setNewAddon((a) => ({ ...a, description: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Your price</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.5"
+                    className="input-field"
+                    value={newAddon.price}
+                    onChange={(e) => setNewAddon((a) => ({ ...a, price: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="form-label">
+                    Only offer with{' '}
+                    <span className="font-normal text-muted">(pick at least one service)</span>
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {[...new Map(pricing.services.map((s) => [s.type, s])).values()].map((s) => {
+                      const type = s.type;
+                      const checked = newAddon.applicableServiceTypes.includes(type);
+                      return (
+                        <label
+                          key={type}
+                          className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) =>
+                              setNewAddon((a) => ({
+                                ...a,
+                                applicableServiceTypes: e.target.checked
+                                  ? [...a.applicableServiceTypes, type]
+                                  : a.applicableServiceTypes.filter((t) => t !== type),
+                              }))
+                            }
+                          />
+                          {BOOKING_TYPE_LABELS[type] ?? s.label}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-1.5 text-xs text-muted">
                     <input
-                      className="input-field"
-                      value={newAddon.slug}
-                      onChange={(e) => setNewAddon((a) => ({ ...a, slug: e.target.value }))}
-                      placeholder="e.g. fabric-softener"
+                      type="checkbox"
+                      checked={newAddon.allowsQuantity}
+                      onChange={(e) =>
+                        setNewAddon((a) => ({ ...a, allowsQuantity: e.target.checked }))
+                      }
                     />
-                  </div>
-                  <div>
-                    <label className="form-label">Label</label>
-                    <input
-                      className="input-field"
-                      value={newAddon.label}
-                      onChange={(e) => setNewAddon((a) => ({ ...a, label: e.target.value }))}
-                      placeholder="e.g. Fabric Softener"
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="form-label">Description</label>
-                    <input
-                      className="input-field"
-                      value={newAddon.description}
-                      onChange={(e) => setNewAddon((a) => ({ ...a, description: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <label className="form-label">Your price</label>
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.5"
-                      className="input-field"
-                      value={newAddon.price}
-                      onChange={(e) => setNewAddon((a) => ({ ...a, price: e.target.value }))}
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="form-label">
-                      Only offer with{' '}
-                      <span className="font-normal text-muted">(pick at least one service)</span>
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {[...new Map(pricing.services.map((s) => [s.type, s])).values()].map((s) => {
-                        const type = s.type;
-                        const checked = newAddon.applicableServiceTypes.includes(type);
-                        return (
-                          <label
-                            key={type}
-                            className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={(e) =>
-                                setNewAddon((a) => ({
-                                  ...a,
-                                  applicableServiceTypes: e.target.checked
-                                    ? [...a.applicableServiceTypes, type]
-                                    : a.applicableServiceTypes.filter((t) => t !== type),
-                                }))
-                              }
-                            />
-                            {BOOKING_TYPE_LABELS[type] ?? s.label}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  <div className="sm:col-span-2 flex items-center gap-3">
+                    Let customers pick a quantity
+                  </label>
+                  {newAddon.allowsQuantity && (
                     <label className="flex items-center gap-1.5 text-xs text-muted">
+                      Max
                       <input
-                        type="checkbox"
-                        checked={newAddon.allowsQuantity}
+                        type="number"
+                        min={1}
+                        step={1}
+                        className="input-field w-16"
+                        value={newAddon.maxQuantity}
                         onChange={(e) =>
-                          setNewAddon((a) => ({ ...a, allowsQuantity: e.target.checked }))
+                          setNewAddon((a) => ({ ...a, maxQuantity: e.target.value }))
                         }
                       />
-                      Let customers pick a quantity
                     </label>
-                    {newAddon.allowsQuantity && (
-                      <label className="flex items-center gap-1.5 text-xs text-muted">
-                        Max
-                        <input
-                          type="number"
-                          min={1}
-                          step={1}
-                          className="input-field w-16"
-                          value={newAddon.maxQuantity}
-                          onChange={(e) =>
-                            setNewAddon((a) => ({ ...a, maxQuantity: e.target.value }))
-                          }
-                        />
-                      </label>
-                    )}
-                  </div>
-                </div>
-                <div className="mt-3">
-                  <button
-                    type="button"
-                    className="btn-primary btn-sm"
-                    disabled={
-                      addingAddon ||
-                      !newAddon.slug ||
-                      !newAddon.label ||
-                      !newAddon.price ||
-                      newAddon.applicableServiceTypes.length === 0
-                    }
-                    onClick={() => void createAddon()}
-                  >
-                    {addingAddon ? 'Adding…' : 'Add add-on'}
-                  </button>
+                  )}
                 </div>
               </div>
-            )}
+              <div className="mt-4">
+                <button
+                  type="button"
+                  className="btn-primary btn-sm w-full"
+                  disabled={
+                    addingAddon ||
+                    !newAddon.slug ||
+                    !newAddon.label ||
+                    !newAddon.price ||
+                    newAddon.applicableServiceTypes.length === 0
+                  }
+                  onClick={() => void createAddon()}
+                >
+                  {addingAddon ? 'Adding…' : 'Add add-on'}
+                </button>
+              </div>
+            </RightDrawer>
 
             <div className="overflow-x-auto">
               <table className="data-table">

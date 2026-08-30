@@ -50,6 +50,14 @@ export class Promotion {
   @Prop({ type: Types.ObjectId, index: true })
   partnerUserId?: Types.ObjectId;
 
+  /** Platform (admin-created) promotions only: partners who've opted into running this promo at
+   * their own shops. Admin promos are suggestions — a platform promo code is only valid at
+   * checkout for a partner's branch once that partner has opted in (see
+   * PromotionsService.applyCouponToQuote). Meaningless/unused on partner-created promotions,
+   * which are always scoped to their own creator via partnerUserId instead. */
+  @Prop({ type: [Types.ObjectId], default: [] })
+  optedInPartnerIds!: Types.ObjectId[];
+
   /** Who absorbs the discount amount. Platform promotions always absorb it as a Lunara cost;
    * partner promotions deduct it from the partner's own payout at settlement. */
   @Prop({ enum: ['platform', 'partner'], default: 'platform' })

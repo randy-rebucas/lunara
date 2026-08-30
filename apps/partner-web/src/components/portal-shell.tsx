@@ -34,7 +34,6 @@ const Icons = {
   notifications:<Icon d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />,
   messages:     <Icon d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />,
   queue:        <Icon d="M4 6h16M4 10h16M4 14h16M4 18h16" />,
-  board:        <Icon d="M4 5a1 1 0 011-1h4a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm7 4a1 1 0 011-1h4a1 1 0 011 1v10a1 1 0 01-1 1h-4a1 1 0 01-1-1V9zm7-4a1 1 0 011-1h1a1 1 0 011 1v14a1 1 0 01-1 1h-1a1 1 0 01-1-1V5z" />,
   intake:       <Icon d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />,
   shelf:        <Icon d="M21 21V3M3 21V3M3 8h18M3 16h18" d2="M8 8v8M13 8v8" />,
   scan:         <Icon d="M4 7V5a1 1 0 011-1h2M4 17v2a1 1 0 001 1h2m10-14V5a1 1 0 00-1-1h-2m3 14v2a1 1 0 01-1 1h-2M4 12h16" />,
@@ -65,7 +64,6 @@ const partnerNavGroups: NavGroup[] = [
   {
     label: 'Orders',
     items: [
-      { href: '/orders/board', label: 'Staff board', icon: Icons.board },
       { href: '/orders/incoming', label: 'Incoming', icon: Icons.incoming },
       { href: '/orders/progress', label: 'Monitor progress', icon: Icons.progress },
       { href: '/orders/history', label: 'History', icon: Icons.history },
@@ -104,7 +102,6 @@ const staffNavGroups: NavGroup[] = [
   {
     label: 'Work',
     items: [
-      { href: '/orders/board', label: 'Staff board', icon: Icons.board },
       { href: '/orders', label: 'Processing queue', icon: Icons.queue },
       { href: '/orders/incoming', label: 'Shop intake', icon: Icons.intake },
       { href: '/shelf-lookup', label: 'Find on shelf', icon: Icons.shelf },

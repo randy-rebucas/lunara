@@ -1,6 +1,6 @@
 # Audit: Partner-web — Reports
 
-Date: 2026-07-23
+Date: 2026-08-30 (re-audited; see finding 2 below)
 
 ## Entry point
 - Page: `apps/partner-web/src/app/reports/page.tsx`
@@ -44,12 +44,15 @@ query plus one `branches` query, all in-memory aggregation after that.
 None — this page is read-only (a report view), aside from the client-only "Export CSV" action which doesn't touch the network.
 
 ## Authorization
-`GET /partner/reports` is `@Roles(UserRole.PARTNER, UserRole.ADMIN)` (`partner.controller.ts:502`), matching the frontend's `useRequirePartner()` (`PARTNER`/`ADMIN` only, no `STAFF`). Scope is derived entirely server-side from `req.user` via the shared `dashboardScopeFilter`/`resolvePartnerBranches` helpers (already verified correct in prior audits) — no request param can widen it. No `[authz]` issues.
+`GET /partner/reports` is `@Roles(UserRole.PARTNER, UserRole.ADMIN)` (`partner.controller.ts:644`), matching the frontend's `useRequirePartner()` (`PARTNER`/`ADMIN` only, no `STAFF`). Scope is derived entirely server-side from `req.user` — no request param can widen it. **Correction to this doc's prior claim**: `dashboardScopeFilter`'s `ADMIN` branch is not actually unscoped — see finding 2. No other `[authz]` issues.
 
 ## Findings
 
 1. **[FIXED] Dead, misleadingly-named field in the report response.** `getReports` (pre-fix, `partner-operations.service.ts:894`) returned `processingStepsCompleted: LAUNDRY_PROCESSING_STEPS.length` — but `LAUNDRY_PROCESSING_STEPS` is the static, fixed list of *defined pipeline step types* (a constant, same value on every call regardless of period/data), not anything about steps actually completed in the reported period. The name strongly implies a dynamic, period-derived metric — and a field with the identical name exists elsewhere in the codebase (`support.service.ts:548`, `order.laundryProcessing?.completedSteps?.length`) computing something real and per-order, which is almost certainly where this name was copied from and then wired to the wrong value. The field was never declared in the frontend's `PartnerReportData` type (`packages/types/src/partner.ts:182-192`) and never read by this page — confirmed dead, not silently relied upon anywhere.
-   **Fix:** removed the field from `getReports`'s response and the now-unused `LAUNDRY_PROCESSING_STEPS` import — `apps/api/src/modules/partner/partner-operations.service.ts`. Typechecked `apps/api` clean.
+   **Fix:** removed the field from `getReports`'s response and the now-unused `LAUNDRY_PROCESSING_STEPS` import — `apps/api/src/modules/partner/partner-operations.service.ts`. Typechecked `apps/api` clean. (Still fixed as of this re-audit — confirmed the field hasn't reappeared.)
+
+2. **ADMIN role gets inconsistent report scope across sibling pages.** `getReports` and `getDashboard` both use `dashboardScopeFilter` (`partner-operations.service.ts:259-281`), whose `ADMIN` branch does `this.branchModel.findOne({ branchType: 'partner_shop' }).sort({ name: 1 })` and scopes the whole report to that **one, alphabetically-first partner branch** — not platform-wide. But the sibling Revenue page's `getRevenue` uses `revenueOrderFilter` (`partner-operations.service.ts:1309-1316`), whose `ADMIN` branch applies **no branchId filter at all** (genuinely platform-wide, every branch). So an ADMIN account sees "Operational reports" numbers for a single arbitrary shop, then clicks "Revenue →" (`page.tsx:118-120`) and sees a completely differently-scoped, platform-wide number for what looks like the same kind of metric — with no UI indication the scope changed. This also means the "By branch" breakdown on this page (only rendered `if (role === UserRole.PARTNER && branches.length > 1)`, `partner-operations.service.ts:1270`) never appears for ADMIN even though ADMIN's top-line numbers are secretly single-branch too.
+   **Fix: left unresolved — needs a product decision.** Both behaviors are plausibly intentional for different reasons (reports/dashboard as a "preview one shop's view" tool vs. revenue as a true platform total), but they can't both be right for the same "ADMIN viewing partner-web" mental model. Fixing this means picking one semantic (aggregate all partner branches, or explicitly pick one via a query param) and applies to `dashboardScopeFilter` — shared by both `getDashboard` and `getReports` — so it's a cross-page change, not scoped to this file alone. Flagging here rather than silently changing shared scoping logic.
 
 No other issues found — every other field the backend returns is declared in `PartnerReportData` and rendered somewhere on this page, and the "touched in period" (`updatedAt`) windowing is accurately described by the page's own copy rather than silently differing from what a reader would assume.
 

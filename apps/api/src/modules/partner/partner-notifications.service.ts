@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Notification, NotificationDocument } from '../reviews/schemas/notification.schema';
+import { Notification, NotificationDocument, notificationExpiryFor } from '../reviews/schemas/notification.schema';
 import { inferPartnerNotificationCategory } from '../push/partner-notification.constants';
 
 @Injectable()
@@ -51,9 +51,11 @@ export class PartnerNotificationsService {
   }
 
   async markAllRead(userId: string) {
+    // `updateMany` bypasses document middleware, so the read-retention TTL shortening from
+    // NotificationSchema's pre('save') hook needs setting explicitly here too.
     const result = await this.notificationModel.updateMany(
       { userId: new Types.ObjectId(userId), read: false },
-      { $set: { read: true } },
+      { $set: { read: true, expiresAt: notificationExpiryFor(true) } },
     );
     return {
       success: true,

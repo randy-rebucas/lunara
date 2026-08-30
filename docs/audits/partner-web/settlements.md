@@ -1,6 +1,6 @@
 # Audit: Partner-web — Settlements
 
-Date: 2026-07-23
+Date: 2026-07-23 (re-audited 2026-08-30 — no changes, no new findings)
 
 ## Entry point
 - Page: `apps/partner-web/src/app/settlements/page.tsx`

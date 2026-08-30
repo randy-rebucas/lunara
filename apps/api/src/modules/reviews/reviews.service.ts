@@ -6,7 +6,7 @@ import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { NotificationDispatchService } from '../push/notification-dispatch.service';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { CreateReviewDto } from './dto/create-review.dto';
-import { Notification, NotificationDocument } from './schemas/notification.schema';
+import { Notification, NotificationDocument, notificationExpiryFor } from './schemas/notification.schema';
 import { Review, ReviewDocument } from './schemas/review.schema';
 
 @Injectable()
@@ -151,9 +151,11 @@ export class ReviewsService {
   }
 
   async markAllNotificationsRead(userId: string) {
+    // `updateMany` bypasses document middleware, so the read-retention TTL shortening from
+    // NotificationSchema's pre('save') hook needs setting explicitly here too.
     await this.notificationModel.updateMany(
       { userId: new Types.ObjectId(userId), read: false },
-      { read: true },
+      { read: true, expiresAt: notificationExpiryFor(true) },
     );
     return { success: true, data: { ok: true } };
   }

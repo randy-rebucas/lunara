@@ -19,6 +19,7 @@ interface PartnerPromotion {
   minOrderAmount?: number;
   startsAt?: string;
   endsAt?: string;
+  isOptedIn: boolean;
 }
 
 interface OwnPromotion extends PartnerPromotion {
@@ -68,7 +69,7 @@ export default function PromotionsPage() {
   const loadPlatform = useCallback(async () => {
     return partnerFetch<PartnerPromotion[]>('/partner/promotions');
   }, []);
-  const { data: platformPromotions, loading: platformLoading, error: platformError } = usePartnerQuery(loadPlatform, []);
+  const { data: platformPromotions, loading: platformLoading, error: platformError, reload: reloadPlatform } = usePartnerQuery(loadPlatform, []);
 
   const loadOwn = useCallback(async () => {
     if (!canManageOwn) return [];
@@ -90,6 +91,8 @@ export default function PromotionsPage() {
   const [formError, setFormError] = useState('');
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [toggleError, setToggleError] = useState('');
+  const [togglingOptInId, setTogglingOptInId] = useState<string | null>(null);
+  const [optInError, setOptInError] = useState('');
 
   const discountCap = discountType === 'percent' ? MAX_PERCENT_DISCOUNT : MAX_FIXED_DISCOUNT;
 
@@ -143,6 +146,22 @@ export default function PromotionsPage() {
       setToggleError(err instanceof Error ? err.message : 'Failed to update promo code');
     } finally {
       setTogglingId(null);
+    }
+  }
+
+  async function toggleOptIn(promo: PartnerPromotion) {
+    setTogglingOptInId(promo._id);
+    setOptInError('');
+    try {
+      await partnerFetch(`/partner/promotions/${promo._id}/opt-in`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isOptedIn: !promo.isOptedIn }),
+      });
+      await reloadPlatform();
+    } catch (err) {
+      setOptInError(err instanceof Error ? err.message : 'Failed to update promotion');
+    } finally {
+      setTogglingOptInId(null);
     }
   }
 
@@ -277,7 +296,13 @@ export default function PromotionsPage() {
 
       <section className="mt-8">
         <h2 className="text-sm font-semibold text-slate-900">Platform-wide promotions</h2>
-        <p className="mt-1 text-xs text-muted">Managed by Lunara — customers may apply these at any shop.</p>
+        <p className="mt-1 text-xs text-muted">
+          {canManageOwn
+            ? "Suggested by Lunara — these only apply at your shop once you opt in. Lunara covers the discount cost either way."
+            : 'Suggested by Lunara — customers can only use these at shops whose partner has opted in.'}
+        </p>
+
+        {optInError && <div className="alert-error mt-3" role="alert">{optInError}</div>}
 
         <DataPageStatus loading={platformLoading} error={platformError} loadingMessage="Loading promotions…" />
 
@@ -286,19 +311,40 @@ export default function PromotionsPage() {
             <div className="card p-6 text-center text-sm text-muted sm:col-span-2 lg:col-span-3">No active promotions right now.</div>
           )}
           {platformList.map((promo) => (
-            <div key={promo._id} className="card p-4">
+            <div key={promo._id} className="card flex flex-col p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="font-medium text-slate-900">{promo.title}</p>
                   {promo.description && <p className="mt-1 text-sm text-muted">{promo.description}</p>}
                 </div>
-                <span className="badge-primary shrink-0">{formatDiscount(promo)}</span>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  {promo.isOptedIn ? (
+                    <span className="badge-accent">In use</span>
+                  ) : (
+                    <span className="badge-neutral">Suggested</span>
+                  )}
+                  <span className="badge-primary">{formatDiscount(promo)}</span>
+                </div>
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                 <span className="font-mono uppercase">{promo.code}</span>
                 <span>{formatDateRange(promo)}</span>
                 {promo.minOrderAmount != null && <span>Min. order ₱{promo.minOrderAmount}</span>}
               </div>
+              {canManageOwn && (
+                <button
+                  type="button"
+                  className="btn-outline btn-sm mt-3"
+                  disabled={togglingOptInId === promo._id}
+                  onClick={() => void toggleOptIn(promo)}
+                >
+                  {togglingOptInId === promo._id
+                    ? 'Saving…'
+                    : promo.isOptedIn
+                      ? 'Stop using at my shop'
+                      : 'Use at my shop'}
+                </button>
+              )}
             </div>
           ))}
         </div>

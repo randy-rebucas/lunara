@@ -285,6 +285,13 @@ export class LaundryTagsService {
         shortCode: order._id.toString().slice(-6).toUpperCase(),
         status: order.status,
         branchId: order.branchId?.toString(),
+        bookingType: order.bookingType,
+        shelfSlot: order.laundryProcessing?.shelfSlot,
+        items: (order.items ?? []).map((item) => ({
+          serviceType: item.serviceType,
+          quantity: item.quantity,
+          notes: item.notes,
+        })),
       },
       customer: customerProfile
         ? { firstName: customerProfile.firstName, lastName: customerProfile.lastName, phone: customerUser?.phone }

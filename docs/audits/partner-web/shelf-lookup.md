@@ -1,77 +1,100 @@
 # Audit: Partner-web — Find on shelf
 
-Date: 2026-07-23
+Date: 2026-08-31
+
+**This page was rebuilt since the last audit (2026-07-23) — it now backs a completely
+different feature.** The old page searched by order/tag shelf-*slot* assignment
+(`/partner/orders/shelf-lookup`) and linked out to `orders/[id]`. The current page
+manages **physical shelves with freeform named items** (`/partner/shelves*`) — create
+a shelf, add/remove named items on it, and search across all your shelves by item
+name. It's the same backend feature already reached from `scan/page.tsx`'s "Add to
+shelf" panel (see [scan.md](scan.md)); this page is the standalone management UI for
+it (create/delete shelves, remove items) that the scan panel doesn't expose. The
+previous order-shelfSlot lookup feature this page used to host appears to have been
+retired — no other partner-web page was found calling
+`/partner/orders/shelf-lookup`.
 
 ## Entry point
 - Page: `apps/partner-web/src/app/shelf-lookup/page.tsx`
 - Component(s): inline in the page file, no separate component
 
 ## Sub-pages
-| Sub-page | Linked from | Param passed | Matches sub-page's fetch? |
-|---|---|---|---|
-| `orders/[id]/page.tsx` | "Open order →" link, `page.tsx:89-94` | `result.orderId` -> `id` route param | yes |
-
-Same large, independent order-processing feature already flagged as
-out-of-scope for a full trace in `docs/audits/partner-web/customers.md`,
-`messages.md`, and `orders-queue.md` — not re-traced here. Notably, that
-page's own shelf-slot *assignment* input (`orders/[id]/page.tsx:488`) is
-where the case-sensitivity mismatch fixed in Finding #1 originates — see
-below.
+None — no outbound navigation into a detail route. Everything (search, shelf list,
+per-shelf item add/remove) is inline on this one page.
 
 ## Data flow
 | Call | Method | Path | Frontend type | Backend handler |
 |---|---|---|---|---|
-| Shelf/tag lookup | GET | `/partner/orders/shelf-lookup?query=` | `PartnerShelfLookupResult \| null` | `PartnerController.findOnShelf` -> `ProcessingService.findOnShelf` |
+| Search items across shelves | GET | `/partner/shelves/search?query=` | `PartnerShelfItemSearchResult[]` | `PartnerController.searchShelfItems` -> `ShelfService.searchItems` |
+| List shelves | GET | `/partner/shelves` | `PartnerShelf[]` | `PartnerController.listShelves` -> `ShelfService.listShelves` |
+| Create shelf | POST | `/partner/shelves` | — | `PartnerController.createShelf` -> `ShelfService.createShelf` |
+| Delete shelf | DELETE | `/partner/shelves/:shelfId` | `{ _id: string }` | `PartnerController.deleteShelf` -> `ShelfService.deleteShelf` |
+| Add item to shelf | POST | `/partner/shelves/:shelfId/items` | `PartnerShelf` | `PartnerController.addShelfItem` -> `ShelfService.addItem` |
+| Remove item from shelf | DELETE | `/partner/shelves/:shelfId/items/:itemId` | `PartnerShelf` | `PartnerController.removeShelfItem` -> `ShelfService.removeItem` |
 
 ## Backend trace
-`findOnShelf` first tries to resolve `query` as a tag code via
-`LaundryTagsService.findByCode` (which normalizes case/whitespace through
-`resolveTagCode`/`normalizeTagCode` — `packages/utils/src/qr-tag.ts`), and if
-that tag is currently attached to an order, matches by that order's `_id`
-directly. Otherwise it falls back to matching `laundryProcessing.shelfSlot`
-— see Finding #1 for what was wrong with that fallback. Role scoping matches
-the pattern already verified correct in `docs/audits/partner-web/scan.md`'s
-sibling tag-lookup feature: `PARTNER` -> own `partnerId`, `STAFF` -> their
-resolved branch (`resolvePortalBranchId`/`applyStaffBranchFilter`), `ADMIN`
--> unscoped. Customer identity is resolved via the `customerModel`
-(`userId`-keyed `firstName`/`lastName`) plus a separate `phone` lookup on
-`User` — the *correct* two-collection pattern (unlike the bug already found
-and fixed in `docs/audits/partner-web/customers.md`, which had looked up
-name fields on the wrong collection). A sparse partial index backs the
-`shelfSlot` fallback query specifically to avoid a full collection scan
-(`order.schema.ts:465-471`, with a code comment referencing this exact
-method) — see Finding #1's Fix note for how the case-insensitivity change
-interacts with that index.
+`ShelfService` resolves accessible branches per role the same way as the rest of this
+module (`STAFF` -> their one branch, `PARTNER` -> every branch they own, `ADMIN` ->
+every `partner_shop` branch), and every mutating call independently re-verifies the
+target shelf's `branchId` is in that set (`assertShelfAccess`) before allowing a
+write — a partner/staff account can't read, edit, or delete another shop's shelf by
+guessing its `_id`. `createShelf` case-insensitively rejects a duplicate name within
+the same branch. `searchItems` escapes the query before building a `RegExp` (`.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')`), so user input can't inject regex
+metacharacters — safe against both a broken match and any ReDoS-shaped pattern.
+`removeItem` throws `NotFoundException` if the given `itemId` doesn't match any item on
+the shelf (filter length unchanged after removal), rather than silently no-op'ing.
 
 ## Cards / panels
 | Card | Fields consumed | Notes |
 |---|---|---|
-| Search input + Find button | local `query` state; Enter key or button click both trigger `search()` | input has a CSS-only `uppercase` text-transform (visual display only, doesn't change the submitted value) — see Finding #1 |
-| Result card | `result.customerName` (fallback `'Customer'`), `.customerPhone` (conditional), `.shelfSlot` (conditional badge), `.currentStepLabel ?? .status` (badge), link to the order | |
-| Empty-result card | n/a | shown when `searched && !error && !result` — i.e. a successful lookup that found nothing |
+| Search box + results list | `r.name`, `.note`, `.quantity`, `.shelfName` | client only filters on Enter/button click, not live-as-you-type; empty-query search is a no-op (`setResults(null)`), matching the backend's own early-return for an empty/whitespace query |
+| New-shelf input | local `newShelfName` | Enter key submits, same as the search box |
+| Shelf card (per shelf) | `shelf.name`, `shelf.items[].name/.quantity/.note/._id` | "Delete shelf" removes the whole shelf and everything on it |
+| Add-item row (per shelf) | local per-shelf draft (`name`/`quantity`/`note`), keyed by `shelf._id` in `itemDrafts` | Enter key on name/note submits, matching the search/create inputs' behavior |
 
 ## Mutations
-None — this page only performs a read (shelf/tag lookup), no create/update/delete actions.
+| Action | Destructive? | Confirmed? | Double-submit guard? | Failure visible? |
+|---|---|---|---|---|
+| Create shelf | no | n/a | yes — `disabled={creatingShelf \|\| !newShelfName.trim()}` | yes — `createError` |
+| Add item to shelf | no | n/a | yes — `disabled={savingItem === shelf._id \|\| !draft.name.trim()}` | **was no (before fix)** — see Findings #1 |
+| Remove item from shelf | no (single item) | no (low-impact, single-item undo-by-re-add) | no busy-state guard, but idempotent (a repeat click 404s harmlessly once the item's gone) | **was no (before fix)** — see Findings #1 |
+| Delete shelf | **yes** — removes the shelf and every item on it | **was no (before fix)** — see Findings #1 | no busy-state guard (single click fires the DELETE immediately) | **was no (before fix)** — see Findings #1 |
 
 ## Authorization
-`GET /partner/orders/shelf-lookup` is `@Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)`, matching the frontend's `useProtectedPage({ roles: [PARTNER, STAFF, ADMIN] })` exactly. Role-scoped filters (`partnerId`/branch) are derived entirely server-side from `req.user` — the `query` param only selects *which* shelf slot/tag to search for, never whose orders to search across. No `[authz]` issues.
+All six `/partner/shelves*` endpoints are `@Roles(PARTNER, STAFF, ADMIN)`, matching
+this page's `useProtectedPage` gate. Branch ownership is independently re-verified
+server-side on every read/write (see Backend trace) — no request param can widen
+access past the caller's own accessible branches. No `[authz]` issues.
 
 ## Findings
 
-1. **[FIXED] Shelf-slot lookup was case-sensitive, but nothing in the product ever normalizes case — a real, silent "not found" trap.** Neither the shelf-slot *assignment* input (`orders/[id]/page.tsx:488`, a plain text field saved with only `.trim()`, no case transform) nor this lookup page's search input (`page.tsx:49-58`, likewise only `query.trim()` sent to the backend) normalize case, yet `findOnShelf`'s fallback filter (pre-fix, `processing.service.ts:358-360`) was an *exact* string match on `laundryProcessing.shelfSlot`. Worse, this lookup page's search input has a CSS-only `uppercase` class (`page.tsx:51`) — it visually displays whatever the user types as uppercase, actively suggesting the search is case-normalized when the actual submitted `query` value retains whatever case was typed. A shelf slot assigned as `"a-12"` by one staff member and searched as `"A-12"` (or vice versa) by another would silently return "No order found" despite the order existing exactly where expected — a real, reachable failure mode for a tool whose entire purpose is fast physical-shelf lookup during a live handoff.
-   **Fix:** the shelf-slot fallback match is now a case-insensitive anchored regex (`new RegExp(`^${escaped}$`, 'i')`, with the query string regex-escaped first, mirroring the same escaping fix applied to the audit-log search in the admin-web audits) instead of an exact string match — `apps/api/src/modules/partner/processing.service.ts:353-363`. Tag-code lookups are unaffected (already case-normalized via `resolveTagCode`). **Performance note:** the sparse partial index on `shelfSlot` (`order.schema.ts:468-471`, added specifically for this method per its own comment) can't be used for an index *seek* by a case-insensitive regex the way it could for an exact match — MongoDB would scan the index's entries rather than seek directly to one. Since the index is already sparse (only orders that currently have a shelf slot assigned — a small, actively-processing subset, not the whole `orders` collection), this is an acceptable, deliberate trade-off for correctness over a marginal, bounded performance cost, not a full-collection-scan regression of the kind the index was originally added to prevent.
-   - Typechecked `apps/api` clean. Regression-checked: `findOnShelf` has exactly one caller (`PartnerController.findOnShelf`), so this fix has no other consumers to verify.
-
-No other issues found — every field `PartnerShelfLookupResult` declares is
-both returned and rendered, and the customer-identity lookup correctly uses
-the same two-collection pattern already fixed elsewhere in this app.
+1. **Deleting a shelf had no confirmation, and none of the three write actions
+   (add item, remove item, delete shelf) surfaced a failure to the user.**
+   `deleteShelf`/`removeItem` (pre-fix, `page.tsx:78-81,112-115`) called their DELETE
+   endpoints with no `try`/`catch` at all — a failed request became an unhandled
+   promise rejection with zero UI feedback (the button just appeared to do nothing).
+   `addItem` (pre-fix) had a `try`/`finally` but no `catch`, so a failed POST also
+   silently vanished rather than showing an error. Separately, "Delete shelf"
+   (pre-fix) fired its DELETE on a single click with no confirmation step at
+   all — unlike every other destructive action already audited in this app
+   (inventory's item delete, services' custom-service/add-on delete), which all use
+   a `window.confirm` prompt. A misclick here would silently wipe an entire shelf's
+   contents with no undo and no visible acknowledgment that anything happened.
+   **Fix:** added a `window.confirm('Delete shelf "..." and everything on it? This
+   cannot be undone.')` guard before `deleteShelf`'s request, and a shared
+   `shelfActionError` state (rendered via the existing `alert-error` convention used
+   elsewhere on this page for `createError`) that `addItem`/`removeItem`/`deleteShelf`
+   all now set in a `catch` block on failure —
+   `apps/partner-web/src/app/shelf-lookup/page.tsx`. Typechecked `apps/partner-web`
+   clean.
 
 ## Unused/dead fields
-None — every field the endpoint returns is rendered on this page.
+None — every field on `PartnerShelf`/`PartnerShelfItemSearchResult` is rendered.
 
 ## Loading/error/realtime behavior
-No `usePartnerQuery`/list-style loading — a single one-shot lookup per
-search, with `loading`/`error`/`searched` all managed locally. A failed
-request shows an error message; a successful-but-empty result shows a
-dedicated "No order found" card distinct from the error state. No polling or
-realtime subscription — appropriate for an on-demand physical-lookup tool.
+Shelves list uses the shared `usePartnerQuery` hook (loading/error via
+`DataPageStatus`, previous data preserved on a failed reload). Search is a one-shot
+manual fetch (`searching`/`searchError` local state), not tied to `usePartnerQuery`,
+appropriate since it's user-triggered rather than list-on-mount. No polling or
+realtime subscription — reasonable for a manually-curated shelf inventory that only
+changes through this page's own actions.

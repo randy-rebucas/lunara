@@ -38,7 +38,7 @@ export class ShopReceivingService {
 
   async getReceiving(orderId: string, partnerUserId: string, role: UserRole) {
     const order = await this.getOrderForPartner(orderId, partnerUserId, role);
-    return { success: true, data: this.buildView(order) };
+    return { success: true, data: await this.buildView(order) };
   }
 
   async receiveLaundry(
@@ -73,7 +73,7 @@ export class ShopReceivingService {
     });
     this.emitPipeline(order);
 
-    return { success: true, data: this.buildView(order) };
+    return { success: true, data: await this.buildView(order) };
   }
 
   async verifyWeight(
@@ -156,7 +156,7 @@ export class ShopReceivingService {
     });
     this.emitPipeline(order);
 
-    return { success: true, data: this.buildView(order) };
+    return { success: true, data: await this.buildView(order) };
   }
 
   async confirmItems(
@@ -169,8 +169,11 @@ export class ShopReceivingService {
     if (!order.shopReceiving?.receivedAt) {
       throw new BadRequestException('Receive laundry first');
     }
-    if (order.shopReceiving.verifiedWeightKg == null) {
-      throw new BadRequestException('Verify weight before confirming items');
+    if (order.shopReceiving.verifiedWeightKg == null && order.branchId) {
+      const branch = await this.branchesService.getActivePartnerShop(order.branchId.toString());
+      if (branch.portalSettings?.requireWeightVerificationOnReceive !== false) {
+        throw new BadRequestException('Verify weight before confirming items');
+      }
     }
     if (order.shopReceiving.itemsConfirmedAt || order.status === OrderStatus.RECEIVED_AT_SHOP) {
       throw new BadRequestException('Items already confirmed at shop');
@@ -214,7 +217,7 @@ export class ShopReceivingService {
     });
     this.emitPipeline(order);
 
-    return { success: true, data: this.buildView(order) };
+    return { success: true, data: await this.buildView(order) };
   }
 
   private emitPipeline(order: OrderDocument) {
@@ -238,11 +241,15 @@ export class ShopReceivingService {
     return order;
   }
 
-  private buildView(order: OrderDocument) {
+  private async buildView(order: OrderDocument) {
     const stepIndex = getShopReceivingStepIndex({
       status: order.status,
       shopReceiving: order.shopReceiving,
     });
+    const weightVerificationRequired = order.branchId
+      ? (await this.branchesService.getActivePartnerShop(order.branchId.toString())).portalSettings
+          ?.requireWeightVerificationOnReceive !== false
+      : true;
 
     return {
       order: {
@@ -271,7 +278,7 @@ export class ShopReceivingService {
         order.shopReceiving.verifiedWeightKg == null &&
         order.status !== OrderStatus.RECEIVED_AT_SHOP,
       canConfirmItems:
-        order.shopReceiving?.verifiedWeightKg != null &&
+        (order.shopReceiving?.verifiedWeightKg != null || !weightVerificationRequired) &&
         !order.shopReceiving?.itemsConfirmedAt &&
         order.status === OrderStatus.IN_TRANSIT_TO_SHOP,
       isComplete:

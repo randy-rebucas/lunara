@@ -25,16 +25,168 @@ function stockLevel(item: PartnerInventoryItem): 'ok' | 'low' | 'out' {
   return 'ok';
 }
 
+type SortKey = 'name' | 'quantity' | 'stock';
+
+const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: 'name', label: 'Name (A–Z)' },
+  { value: 'quantity', label: 'Quantity (low → high)' },
+  { value: 'stock', label: 'Stock level (worst first)' },
+];
+
+const STOCK_RANK: Record<'out' | 'low' | 'ok', number> = { out: 0, low: 1, ok: 2 };
+
+function AddItemForm({
+  branches,
+  defaultBranchId,
+  onCreate,
+  onCancel,
+}: {
+  branches: [string, string][];
+  defaultBranchId?: string;
+  onCreate: (dto: {
+    sku: string;
+    name: string;
+    category: string;
+    unit: string;
+    quantity: number;
+    lowStockThreshold: number;
+    branchId?: string;
+  }) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [sku, setSku] = useState('');
+  const [name, setName] = useState('');
+  const [category, setCategory] = useState('supplies');
+  const [unit, setUnit] = useState('units');
+  const [quantity, setQuantity] = useState('0');
+  const [threshold, setThreshold] = useState('10');
+  const [branchId, setBranchId] = useState(defaultBranchId ?? branches[0]?.[0] ?? '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  async function submit() {
+    if (!sku.trim() || !name.trim() || !category.trim()) {
+      setError('SKU, name, and category are required.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      await onCreate({
+        sku: sku.trim(),
+        name: name.trim(),
+        category: category.trim(),
+        unit: unit.trim() || 'units',
+        quantity: Number.parseInt(quantity, 10) || 0,
+        lowStockThreshold: Number.parseInt(threshold, 10) || 0,
+        ...(branches.length > 1 ? { branchId } : {}),
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not create item');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="card card-body mt-4 !py-5">
+      <p className="text-sm font-semibold text-slate-900">Add inventory item</p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {branches.length > 1 && (
+          <div>
+            <label className="text-xs font-medium text-slate-600">Shop</label>
+            <select
+              className="input-field mt-1"
+              value={branchId}
+              onChange={(e) => setBranchId(e.target.value)}
+            >
+              {branches.map(([id, name]) => (
+                <option key={id} value={id}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        <div>
+          <label className="text-xs font-medium text-slate-600">SKU</label>
+          <input
+            className="input-field mt-1"
+            value={sku}
+            onChange={(e) => setSku(e.target.value)}
+            placeholder="e.g. DET-003"
+          />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-slate-600">Name</label>
+          <input
+            className="input-field mt-1"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Stain remover"
+          />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-slate-600">Category</label>
+          <input
+            className="input-field mt-1"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            placeholder="e.g. detergent"
+          />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-slate-600">Unit</label>
+          <input className="input-field mt-1" value={unit} onChange={(e) => setUnit(e.target.value)} />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-slate-600">Starting quantity</label>
+          <input
+            type="number"
+            min={0}
+            className="input-field mt-1"
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-slate-600">Low-stock alert</label>
+          <input
+            type="number"
+            min={0}
+            className="input-field mt-1"
+            value={threshold}
+            onChange={(e) => setThreshold(e.target.value)}
+          />
+        </div>
+      </div>
+      {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
+      <div className="mt-4 flex gap-2">
+        <button type="button" disabled={saving} className="btn-primary btn-sm disabled:opacity-50" onClick={submit}>
+          {saving ? 'Adding…' : 'Add item'}
+        </button>
+        <button type="button" className="btn-outline btn-sm" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function InventoryPage() {
   const { ready } = useRequirePartner();
   const [saving, setSaving] = useState<string | null>(null);
   const [actionError, setActionError] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [branchFilter, setBranchFilter] = useState<string>('all');
   const [draftQty, setDraftQty] = useState<Record<string, string>>({});
   const [draftThreshold, setDraftThreshold] = useState<Record<string, string>>({});
   const [draftUsagePerOrder, setDraftUsagePerOrder] = useState<Record<string, string>>({});
   const [draftUsagePerKg, setDraftUsagePerKg] = useState<Record<string, string>>({});
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortKey, setSortKey] = useState<SortKey>('name');
+  const [showAddForm, setShowAddForm] = useState(false);
 
   const loadSettings = useCallback(async () => {
     return partnerFetch<PartnerSettingsData>('/partner/settings');
@@ -53,21 +205,52 @@ export default function InventoryPage() {
     return [...set].sort();
   }, [items]);
 
+  const branches = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const i of items ?? []) {
+      if (i.branchId) map.set(i.branchId, i.branchName ?? i.branchId);
+    }
+    return [...map.entries()].sort(([, a], [, b]) => a.localeCompare(b));
+  }, [items]);
+
   const filtered = useMemo(() => {
-    const list = items ?? [];
-    if (categoryFilter === 'all') return list;
-    return list.filter((i) => i.category === categoryFilter);
-  }, [items, categoryFilter]);
+    let list = items ?? [];
+    if (categoryFilter !== 'all') list = list.filter((i) => i.category === categoryFilter);
+    if (branchFilter !== 'all') list = list.filter((i) => i.branchId === branchFilter);
+    const q = searchQuery.trim().toLowerCase();
+    if (q) list = list.filter((i) => i.name.toLowerCase().includes(q) || i.sku.toLowerCase().includes(q));
+    return list;
+  }, [items, categoryFilter, branchFilter, searchQuery]);
+
+  const sorted = useMemo(() => {
+    const list = [...filtered];
+    list.sort((a, b) => {
+      if (sortKey === 'quantity') return a.quantity - b.quantity;
+      if (sortKey === 'stock') return STOCK_RANK[stockLevel(a)] - STOCK_RANK[stockLevel(b)];
+      return a.name.localeCompare(b.name);
+    });
+    return list;
+  }, [filtered, sortKey]);
+
+  const branchCount = useMemo(
+    () => new Set((items ?? []).map((i) => i.branchId).filter(Boolean)).size,
+    [items],
+  );
+  const multiBranch = branchCount > 1;
 
   const grouped = useMemo(() => {
-    const map = new Map<string, PartnerInventoryItem[]>();
-    for (const item of filtered) {
-      const list = map.get(item.category) ?? [];
-      list.push(item);
-      map.set(item.category, list);
+    const map = new Map<string, { branchName?: string; category: string; items: PartnerInventoryItem[] }>();
+    for (const item of sorted) {
+      const key = multiBranch ? `${item.branchId ?? ''}|${item.category}` : item.category;
+      const entry = map.get(key) ?? { branchName: item.branchName, category: item.category, items: [] };
+      entry.items.push(item);
+      map.set(key, entry);
     }
-    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [filtered]);
+    return [...map.values()].sort((a, b) => {
+      const branchCmp = (a.branchName ?? '').localeCompare(b.branchName ?? '');
+      return branchCmp !== 0 ? branchCmp : a.category.localeCompare(b.category);
+    });
+  }, [sorted, multiBranch]);
 
   const stats = useMemo(() => {
     const list = items ?? [];
@@ -75,6 +258,37 @@ export default function InventoryPage() {
     const out = list.filter((i) => stockLevel(i) === 'out').length;
     return { total: list.length, low, out };
   }, [items]);
+
+  async function createItem(dto: {
+    sku: string;
+    name: string;
+    category: string;
+    unit: string;
+    quantity: number;
+    lowStockThreshold: number;
+    branchId?: string;
+  }) {
+    const created = await partnerFetch<PartnerInventoryItem>('/partner/inventory', {
+      method: 'POST',
+      body: JSON.stringify(dto),
+    });
+    setData((prev) => [...(prev ?? []), created]);
+    setShowAddForm(false);
+  }
+
+  async function deleteItem(item: PartnerInventoryItem) {
+    if (!window.confirm(`Delete "${item.name}" from inventory? This cannot be undone.`)) return;
+    setSaving(item._id);
+    setActionError('');
+    try {
+      await partnerFetch(`/partner/inventory/${item._id}`, { method: 'DELETE' });
+      setData((prev) => (prev ?? []).filter((i) => i._id !== item._id));
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Failed to delete item');
+    } finally {
+      setSaving(null);
+    }
+  }
 
   async function patchItem(
     id: string,
@@ -208,11 +422,25 @@ export default function InventoryPage() {
         title="Shop inventory"
         description="Track detergent, bags, tags, and maintenance supplies. Low-stock items appear on your dashboard."
         actions={
-          <button type="button" className="btn-outline btn-sm" onClick={() => reload()}>
-            Refresh
-          </button>
+          <div className="flex gap-2">
+            <button type="button" className="btn-outline btn-sm" onClick={() => reload()}>
+              Refresh
+            </button>
+            <button type="button" className="btn-primary btn-sm" onClick={() => setShowAddForm((v) => !v)}>
+              {showAddForm ? 'Close' : 'Add item'}
+            </button>
+          </div>
         }
       />
+
+      {showAddForm && (
+        <AddItemForm
+          branches={branches}
+          defaultBranchId={branchFilter !== 'all' ? branchFilter : undefined}
+          onCreate={createItem}
+          onCancel={() => setShowAddForm(false)}
+        />
+      )}
 
       <div className="mt-6 grid gap-3 grid-cols-2 sm:grid-cols-3">
         <div className="stat-card">
@@ -229,8 +457,50 @@ export default function InventoryPage() {
         </div>
       </div>
 
+      <div className="mt-6 flex flex-wrap items-center gap-3">
+        <input
+          className="input-field min-h-[2.5rem] flex-1 sm:max-w-xs"
+          placeholder="Search by name or SKU…"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+        <select
+          className="input-field min-h-[2.5rem] w-auto"
+          value={sortKey}
+          onChange={(e) => setSortKey(e.target.value as SortKey)}
+        >
+          {SORT_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              Sort: {opt.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {branches.length > 1 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            className={branchFilter === 'all' ? 'filter-chip-active' : 'filter-chip'}
+            onClick={() => setBranchFilter('all')}
+          >
+            All shops
+          </button>
+          {branches.map(([id, name]) => (
+            <button
+              key={id}
+              type="button"
+              className={branchFilter === id ? 'filter-chip-active' : 'filter-chip'}
+              onClick={() => setBranchFilter(id)}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+      )}
+
       {categories.length > 1 && (
-        <div className="mt-6 flex flex-wrap gap-2">
+        <div className="mt-3 flex flex-wrap gap-2">
           <button
             type="button"
             className={categoryFilter === 'all' ? 'filter-chip-active' : 'filter-chip'}
@@ -257,13 +527,14 @@ export default function InventoryPage() {
       {actionError && <div className="alert-error mt-2">{actionError}</div>}
 
       <div className="mt-6 space-y-8">
-        {grouped.map(([category, categoryItems]) => (
-          <section key={category}>
+        {grouped.map((group) => (
+          <section key={`${group.branchName ?? ''}|${group.category}`}>
             <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">
-              {categoryLabel(category)}
+              {multiBranch && group.branchName ? `${group.branchName} · ` : ''}
+              {categoryLabel(group.category)}
             </h2>
             <div className="space-y-3">
-              {categoryItems.map((item) => {
+              {group.items.map((item) => {
                 const level = stockLevel(item);
                 const busy = saving === item._id;
                 const isEditing = editingId === item._id;
@@ -362,6 +633,14 @@ export default function InventoryPage() {
                         }}
                       >
                         {isEditing ? 'Close' : 'Adjust'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-outline btn-sm text-red-600"
+                        disabled={busy}
+                        onClick={() => void deleteItem(item)}
+                      >
+                        Delete
                       </button>
                     </div>
 

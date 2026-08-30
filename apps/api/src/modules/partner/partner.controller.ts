@@ -43,6 +43,7 @@ import { CreateStaffDto } from './dto/create-staff.dto';
 import { AssignStaffBranchDto } from './dto/assign-staff-branch.dto';
 import { AdvanceProcessingDto, MoveProcessingStepDto, SetShelfSlotDto } from './dto/processing.dto';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
+import { CreateInventoryDto } from './dto/create-inventory.dto';
 import { PartnerOperationsService } from './partner-operations.service';
 import { ProcessingService } from './processing.service';
 import { ShopReceivingService } from './shop-receiving.service';
@@ -63,6 +64,11 @@ import {
 } from './dto/shop-receiving.dto';
 import { CreatePartnerPromotionDto } from './dto/create-partner-promotion.dto';
 import { SetPromotionActiveDto } from './dto/set-promotion-active.dto';
+import { ShelfService } from './shelf.service';
+import { AddShelfItemDto, CreateShelfDto } from './dto/shelf.dto';
+import { SetPromotionOptInDto } from './dto/set-promotion-opt-in.dto';
+import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
+import { UpdateCustomerDto } from './dto/update-customer.dto';
 
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/jpg']);
 
@@ -97,15 +103,29 @@ export class PartnerController {
     private readonly userModel: Model<UserDocument>,
     @InjectModel('Order')
     private readonly orderModel: Model<Record<string, unknown>>,
+    @InjectModel(Customer.name)
+    private readonly customerModel: Model<CustomerDocument>,
     private readonly cloudinaryStorageService: CloudinaryStorageService,
     private readonly branchesService: BranchesService,
     private readonly promotionsService: PromotionsService,
+    private readonly shelfService: ShelfService,
   ) {}
 
   @Get('promotions')
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
-  getActivePromotions() {
-    return this.promotionsService.listActivePromotionsForPartner();
+  getActivePromotions(@Req() req: { user: { sub: string; role: UserRole } }) {
+    const partnerUserId = req.user.role === UserRole.PARTNER ? req.user.sub : undefined;
+    return this.promotionsService.listActivePromotionsForPartner(partnerUserId);
+  }
+
+  @Patch('promotions/:id/opt-in')
+  @Roles(UserRole.PARTNER)
+  setPlatformPromotionOptIn(
+    @Req() req: { user: { sub: string } },
+    @Param('id') id: string,
+    @Body() dto: SetPromotionOptInDto,
+  ) {
+    return this.promotionsService.setPlatformPromotionOptIn(req.user.sub, id, dto.isOptedIn);
   }
 
   @Get('promotions/mine')
@@ -592,6 +612,15 @@ export class PartnerController {
     return this.operationsService.getInventory(req.user.sub, req.user.role);
   }
 
+  @Post('inventory')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  createInventoryItem(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Body() dto: CreateInventoryDto,
+  ) {
+    return this.operationsService.createInventoryItem(req.user.sub, req.user.role, dto);
+  }
+
   @Patch('inventory/:id')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   updateInventory(
@@ -600,6 +629,15 @@ export class PartnerController {
     @Body() dto: UpdateInventoryDto,
   ) {
     return this.operationsService.updateInventory(req.user.sub, req.user.role, id, dto);
+  }
+
+  @Delete('inventory/:id')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  deleteInventoryItem(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('id') id: string,
+  ) {
+    return this.operationsService.deleteInventoryItem(req.user.sub, req.user.role, id);
   }
 
   @Get('reports')
@@ -800,6 +838,59 @@ export class PartnerController {
     return this.processingService.findOnShelf(query ?? '', req.user.sub, req.user.role);
   }
 
+  @Get('shelves/search')
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
+  searchShelfItems(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Query('query') query?: string,
+  ) {
+    return this.shelfService.searchItems(req.user.sub, req.user.role, query ?? '');
+  }
+
+  @Get('shelves')
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
+  listShelves(@Req() req: { user: { sub: string; role: UserRole } }) {
+    return this.shelfService.listShelves(req.user.sub, req.user.role);
+  }
+
+  @Post('shelves')
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
+  createShelf(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Body() dto: CreateShelfDto,
+  ) {
+    return this.shelfService.createShelf(req.user.sub, req.user.role, dto);
+  }
+
+  @Delete('shelves/:shelfId')
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
+  deleteShelf(
+    @Param('shelfId') shelfId: string,
+    @Req() req: { user: { sub: string; role: UserRole } },
+  ) {
+    return this.shelfService.deleteShelf(req.user.sub, req.user.role, shelfId);
+  }
+
+  @Post('shelves/:shelfId/items')
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
+  addShelfItem(
+    @Param('shelfId') shelfId: string,
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Body() dto: AddShelfItemDto,
+  ) {
+    return this.shelfService.addItem(req.user.sub, req.user.role, shelfId, dto);
+  }
+
+  @Delete('shelves/:shelfId/items/:itemId')
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
+  removeShelfItem(
+    @Param('shelfId') shelfId: string,
+    @Param('itemId') itemId: string,
+    @Req() req: { user: { sub: string; role: UserRole } },
+  ) {
+    return this.shelfService.removeItem(req.user.sub, req.user.role, shelfId, itemId);
+  }
+
   @Post('orders/:orderId/delivery/dispatch')
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
   dispatchDelivery(@Param('orderId') orderId: string) {
@@ -865,5 +956,100 @@ export class PartnerController {
       { $limit: 200 },
     ]);
     return { success: true, data: rows };
+  }
+
+  @Get('customers/:customerId')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  async getCustomer(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('customerId') customerId: string,
+  ) {
+    if (!Types.ObjectId.isValid(customerId)) {
+      throw new BadRequestException('Invalid customer id');
+    }
+    const { sub, role } = req.user;
+    const matchStage: Record<string, unknown> = {
+      customerId: new Types.ObjectId(customerId),
+      status: { $in: [OrderStatus.COMPLETED, OrderStatus.DELIVERED, OrderStatus.CUSTOMER_PICKUP] },
+    };
+    if (role === UserRole.PARTNER) {
+      matchStage.partnerId = new Types.ObjectId(sub);
+    } else if (role === UserRole.STAFF) {
+      const staffUser = await this.userModel.findById(sub).select('branchId').lean();
+      if (staffUser?.branchId) matchStage.branchId = staffUser.branchId;
+    }
+    const [summary] = await this.orderModel.aggregate([
+      { $match: matchStage },
+      { $group: {
+        _id: '$customerId',
+        totalOrders: { $sum: 1 },
+        totalSpent: { $sum: '$totalAmount' },
+        lastOrderAt: { $max: '$createdAt' },
+      }},
+    ]);
+    if (!summary) {
+      throw new NotFoundException('Customer not found');
+    }
+    const [user, customer] = await Promise.all([
+      this.userModel.findById(customerId).select('email phone').lean(),
+      this.customerModel.findOne({ userId: customerId }).select('firstName lastName createdAt').lean(),
+    ]);
+    return {
+      success: true,
+      data: {
+        customerId,
+        firstName: customer?.firstName ?? '',
+        lastName: customer?.lastName ?? '',
+        name: `${customer?.firstName ?? ''} ${customer?.lastName ?? ''}`.trim(),
+        email: user?.email ?? null,
+        phone: user?.phone ?? null,
+        totalOrders: summary.totalOrders,
+        totalSpent: summary.totalSpent,
+        lastOrderAt: summary.lastOrderAt,
+        customerSince: customer?.createdAt ?? null,
+      },
+    };
+  }
+
+  @Patch('customers/:customerId')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  async updateCustomer(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('customerId') customerId: string,
+    @Body() dto: UpdateCustomerDto,
+  ) {
+    if (!Types.ObjectId.isValid(customerId)) {
+      throw new BadRequestException('Invalid customer id');
+    }
+    const { sub, role } = req.user;
+    const matchStage: Record<string, unknown> = {
+      customerId: new Types.ObjectId(customerId),
+      status: { $in: [OrderStatus.COMPLETED, OrderStatus.DELIVERED, OrderStatus.CUSTOMER_PICKUP] },
+    };
+    if (role === UserRole.PARTNER) {
+      matchStage.partnerId = new Types.ObjectId(sub);
+    } else if (role === UserRole.STAFF) {
+      const staffUser = await this.userModel.findById(sub).select('branchId').lean();
+      if (staffUser?.branchId) matchStage.branchId = staffUser.branchId;
+    }
+    const hasOrder = await this.orderModel.exists(matchStage);
+    if (!hasOrder) {
+      throw new NotFoundException('Customer not found');
+    }
+    if (dto.firstName !== undefined || dto.lastName !== undefined) {
+      await this.customerModel.updateOne(
+        { userId: customerId },
+        {
+          $set: {
+            ...(dto.firstName !== undefined ? { firstName: dto.firstName } : {}),
+            ...(dto.lastName !== undefined ? { lastName: dto.lastName } : {}),
+          },
+        },
+      );
+    }
+    if (dto.phone !== undefined) {
+      await this.userModel.updateOne({ _id: customerId }, { $set: { phone: dto.phone } });
+    }
+    return this.getCustomer(req, customerId);
   }
 }

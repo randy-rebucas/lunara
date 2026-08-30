@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -37,6 +38,7 @@ import {
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { AssignStaffBranchDto } from './dto/assign-staff-branch.dto';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
+import { CreateInventoryDto } from './dto/create-inventory.dto';
 import { CreateRiderDto } from '../admin/dto/create-rider.dto';
 import { UpdateRiderByPartnerDto } from './dto/update-rider.dto';
 import { isRiderCompliant } from '../riders/rider-compliance';
@@ -441,7 +443,7 @@ export class PartnerOperationsService {
             value: completedToday.length,
             deltaPct: deltaPct(completedToday.length, completedYesterday.length),
           },
-          revenueToday: { value: todayBreakdown.gross, deltaPct: deltaPct(todayBreakdown.gross, yesterdayBreakdown.gross) },
+          revenueToday: { value: todayBreakdown.payout, deltaPct: deltaPct(todayBreakdown.payout, yesterdayBreakdown.payout) },
           staffMembers: { value: staffCount, deltaPct: deltaPct(staffCount, staffCountYesterday) },
         },
         services,
@@ -1121,9 +1123,12 @@ export class PartnerOperationsService {
     };
   }
 
-  private formatInventoryItem(item: ShopInventoryDocument) {
+  private formatInventoryItem(item: ShopInventoryDocument, branchLabel?: { name: string; code: string }) {
     return {
       _id: item._id.toString(),
+      branchId: item.branchId?.toString(),
+      branchName: branchLabel?.name,
+      branchCode: branchLabel?.code,
       sku: item.sku,
       name: item.name,
       category: item.category,
@@ -1144,7 +1149,46 @@ export class PartnerOperationsService {
     const items = await this.inventoryModel
       .find({ branchId: { $in: branchIds } })
       .sort({ category: 1, name: 1 });
-    return { success: true, data: items.map((i) => this.formatInventoryItem(i)) };
+    const branchById = new Map(branches.map((b) => [b._id.toString(), { name: b.name, code: b.code }]));
+    return {
+      success: true,
+      data: items.map((i) => this.formatInventoryItem(i, branchById.get(i.branchId?.toString()))),
+    };
+  }
+
+  async createInventoryItem(userId: string, role: UserRole, dto: CreateInventoryDto) {
+    const branches = await this.resolvePartnerBranches(userId, role);
+    if (branches.length === 0) throw new BadRequestException('No shop branch found for this account');
+    const branch = dto.branchId ? branches.find((b) => b._id.toString() === dto.branchId) : branches[0];
+    if (!branch) throw new ForbiddenException('Branch is not managed by this account');
+    const branchId = branch._id;
+
+    const existing = await this.inventoryModel.findOne({ branchId, sku: dto.sku });
+    if (existing) throw new ConflictException('An item with this SKU already exists');
+
+    const item = await this.inventoryModel.create({
+      branchId,
+      sku: dto.sku,
+      name: dto.name,
+      category: dto.category,
+      unit: dto.unit ?? 'units',
+      quantity: dto.quantity ?? 0,
+      lowStockThreshold: dto.lowStockThreshold ?? 10,
+      usagePerOrder: dto.usagePerOrder ?? 0,
+      usagePerKg: dto.usagePerKg ?? 0,
+    });
+    return { success: true, data: this.formatInventoryItem(item, { name: branch.name, code: branch.code }) };
+  }
+
+  async deleteInventoryItem(userId: string, role: UserRole, itemId: string) {
+    const branches = await this.resolvePartnerBranches(userId, role);
+    const branchIds = new Set(branches.map((b) => b._id.toString()));
+    const item = await this.inventoryModel.findById(itemId);
+    if (!item || !branchIds.has(item.branchId?.toString())) {
+      throw new NotFoundException('Inventory item not found');
+    }
+    await item.deleteOne();
+    return { success: true, data: { _id: itemId } };
   }
 
   async updateInventory(userId: string, role: UserRole, itemId: string, dto: UpdateInventoryDto) {

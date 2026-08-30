@@ -1,10 +1,14 @@
 # Audit: Partner-web — Revenue
 
-Date: 2026-07-23
+Date: 2026-08-31
 
 ## Entry point
 - Page: `apps/partner-web/src/app/revenue/page.tsx`
-- Component(s): `PaymentBadge` (inline in the page file)
+- Component(s): `PaymentBadge`, `StatCards`, `DailyChart`, `DailyTable`, `BranchBreakdownTable`,
+  `CompletedOrdersTable` (all inline in the page file). The page has since been split into
+  tabs (Overview / By branch / Completed orders — the latter two shown only when the
+  corresponding data is non-empty) and gained a PDF export button alongside the existing CSV
+  export; both new pieces are traced below since the last audit predates them.
 
 ## Sub-pages
 None — no outbound navigation into a dynamic detail route. "Full reports →"
@@ -39,10 +43,12 @@ for a real N+1 query pattern found and fixed here.
 | Daily breakdown bar chart | `data.daily[].date/revenue/payout/orders`, `chart.maxRevenue`/`.totalWeek`/`.bestDay` (all client-derived from `data.daily`) | bar height and "best day" label are client-computed from already-server-computed per-day payout; consistent single source of truth (server), no client/server duplication of the fee math itself |
 | Daily table (reversed chronological) + 7-day total footer | same `data.daily` fields | |
 | Completed orders table + Cash/Digital/All filter | `o.completedAt`, `.orderId` (truncated to last 8 chars, uppercased, for display only), `.paymentMethod`, `.cashCollected`, `.cashTiming`, `.cashCollectedAt`, `.partnerPayout` (fallback `.amount`) | `PaymentBadge` hardcodes GCASH/MAYA/WALLET display labels — matches `PaymentMethod` enum values currently in use, would silently fall back to showing the raw method string for any new method added later (graceful degradation, not a crash) |
+| By branch table (`branches` tab, multi-branch partners only) | `b.branchId`, `.branchName`, `.branchCode`, `.monthOrders`, `.monthRevenue`, `.monthPayout` | Server pre-splits the same month-to-date totals per branch (`partner-operations.service.ts:1474-1496`), gated to `role === PARTNER && branches.length > 1` — correctly hidden for single-branch partners and for `ADMIN` (who has no "owned branches" concept here); frontend independently gates the tab itself on `hasBranches = !!data?.byBranch?.length`, so the two conditions agree |
 | Export CSV | `data.daily[].date/revenue/payout/orders` | button disabled only when `!data`, same "export last-known-good during a background refresh" pattern as Reports, not a bug |
+| Export PDF (new) | same `data.daily[]` fields as CSV, via `exportPdf()` (`lib/export-pdf.ts`, `jsPDF`+`jspdf-autotable`) | same disabled-when-`!data` guard as CSV; purely client-side rendering, no injection risk (all cell values coerced through `String(v ?? '')` before being handed to `autoTable`) |
 
 ## Mutations
-None — this page is read-only (a revenue/earnings view), aside from the client-only "Export CSV" action.
+None — this page is read-only (a revenue/earnings view), aside from the client-only "Export CSV"/"Export PDF" actions.
 
 ## Authorization
 `GET /partner/revenue` is `@Roles(UserRole.PARTNER, UserRole.ADMIN)` (`partner.controller.ts:511`), matching the frontend's `useRequirePartner()` (no `STAFF`). Scope comes entirely from `revenueOrderFilter`'s server-derived `branchId $in` clause — no request param exists to widen it. No `[authz]` issues.

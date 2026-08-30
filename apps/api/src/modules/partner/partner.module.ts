@@ -15,6 +15,8 @@ import { ProcessingService } from './processing.service';
 import { ShopReceivingService } from './shop-receiving.service';
 import { PartnerNotificationsService } from './partner-notifications.service';
 import { ShopInventoryItem, ShopInventorySchema } from './schemas/shop-inventory.schema';
+import { Shelf, ShelfSchema } from './schemas/shelf.schema';
+import { ShelfService } from './shelf.service';
 import { PartnerSettlement, PartnerSettlementSchema } from './schemas/partner-settlement.schema';
 import { Notification, NotificationSchema } from '../reviews/schemas/notification.schema';
 import { Branch, BranchSchema } from '../branches/schemas/branch.schema';
@@ -33,6 +35,7 @@ import { PromotionsModule } from '../promotions/promotions.module';
       { name: User.name, schema: UserSchema },
       { name: Customer.name, schema: CustomerSchema },
       { name: ShopInventoryItem.name, schema: ShopInventorySchema },
+      { name: Shelf.name, schema: ShelfSchema },
       { name: Notification.name, schema: NotificationSchema },
       { name: Branch.name, schema: BranchSchema },
       { name: Payment.name, schema: PaymentSchema },
@@ -57,6 +60,7 @@ import { PromotionsModule } from '../promotions/promotions.module';
     PartnerNotificationsService,
     PartnerSettingsService,
     PartnerProfileService,
+    ShelfService,
   ],
   exports: [ProcessingService, PartnerOperationsService, ShopReceivingService],
 })

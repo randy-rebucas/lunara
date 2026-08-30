@@ -1,8 +1,9 @@
 'use client';
 
 import jsQR from 'jsqr';
+import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { UserRole } from '@lunara/types';
+import { UserRole, type PartnerShelf } from '@lunara/types';
 import { PageHeader } from '../../components/ui/page-header';
 import { useProtectedPage } from '../../hooks/use-protected-page';
 import { AuthLoading } from '../../components/auth-loading';
@@ -10,8 +11,146 @@ import { partnerFetch } from '../../lib/partner-api';
 
 interface TagLookupResult {
   tag: { code: string; status: string };
-  order: { id: string; shortCode: string; status: string; branchId?: string } | null;
+  order: {
+    id: string;
+    shortCode: string;
+    status: string;
+    branchId?: string;
+    bookingType?: string;
+    shelfSlot?: string;
+    items?: { serviceType: string; quantity: number; notes?: string }[];
+  } | null;
   customer: { firstName: string; lastName: string; phone?: string } | null;
+}
+
+function AddToShelfPanel({ result, onClose }: { result: TagLookupResult; onClose: () => void }) {
+  const [shelves, setShelves] = useState<PartnerShelf[] | null>(null);
+  const [shelvesError, setShelvesError] = useState('');
+  const [selectedShelfId, setSelectedShelfId] = useState('');
+  const [newShelfName, setNewShelfName] = useState('');
+  const [itemName, setItemName] = useState(
+    result.order?.bookingType ? result.order.bookingType.replace(/_/g, ' ') : 'Laundry bag',
+  );
+  const [note, setNote] = useState(`Tag ${result.tag.code}${result.order ? ` · Order ${result.order.shortCode}` : ''}`);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    partnerFetch<PartnerShelf[]>('/partner/shelves')
+      .then((data) => {
+        setShelves(data);
+        if (data.length > 0) setSelectedShelfId(data[0]._id);
+      })
+      .catch((e) => setShelvesError(e instanceof Error ? e.message : 'Failed to load shelves'));
+  }, []);
+
+  async function save() {
+    if (!itemName.trim()) return;
+    setSaving(true);
+    setSaveError('');
+    try {
+      let shelfId = selectedShelfId;
+      if (!shelfId) {
+        if (!newShelfName.trim()) throw new Error('Pick a shelf or name a new one');
+        const created = await partnerFetch<PartnerShelf>('/partner/shelves', {
+          method: 'POST',
+          body: JSON.stringify({ name: newShelfName.trim() }),
+        });
+        shelfId = created._id;
+      }
+      await partnerFetch(`/partner/shelves/${shelfId}/items`, {
+        method: 'POST',
+        body: JSON.stringify({ name: itemName.trim(), note: note.trim() || undefined }),
+      });
+      setSaved(true);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'Could not add to shelf');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (saved) {
+    return (
+      <div className="mt-4 rounded-lg border border-accent/30 bg-green-50 p-4 text-sm text-accent">
+        Added to shelf.
+        <button type="button" className="btn-outline btn-sm ml-3" onClick={onClose}>
+          Done
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 rounded-lg border border-border/60 bg-surface p-4">
+      <p className="text-sm font-semibold text-slate-900">Add to shelf</p>
+
+      {shelvesError && <p className="mt-2 text-sm text-red-500">{shelvesError}</p>}
+
+      <label className="form-label mt-3" htmlFor="scan-item-name">
+        Item name
+      </label>
+      <input
+        id="scan-item-name"
+        className="input-field"
+        value={itemName}
+        onChange={(e) => setItemName(e.target.value)}
+      />
+
+      <label className="form-label mt-3" htmlFor="scan-shelf-select">
+        Shelf
+      </label>
+      <select
+        id="scan-shelf-select"
+        className="input-field"
+        value={selectedShelfId}
+        onChange={(e) => setSelectedShelfId(e.target.value)}
+      >
+        {(shelves ?? []).map((s) => (
+          <option key={s._id} value={s._id}>
+            {s.name}
+          </option>
+        ))}
+        <option value="">+ New shelf…</option>
+      </select>
+
+      {!selectedShelfId && (
+        <input
+          className="input-field mt-2"
+          placeholder="New shelf name"
+          value={newShelfName}
+          onChange={(e) => setNewShelfName(e.target.value)}
+        />
+      )}
+
+      <label className="form-label mt-3" htmlFor="scan-item-note">
+        Note <span className="font-normal text-muted-foreground">(optional)</span>
+      </label>
+      <input
+        id="scan-item-note"
+        className="input-field"
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+      />
+
+      {saveError && <p className="mt-2 text-sm text-red-500">{saveError}</p>}
+
+      <div className="mt-4 flex gap-2">
+        <button
+          type="button"
+          disabled={saving || !itemName.trim()}
+          className="btn-primary btn-sm disabled:opacity-50"
+          onClick={save}
+        >
+          {saving ? 'Saving…' : 'Save to shelf'}
+        </button>
+        <button type="button" className="btn-outline btn-sm" onClick={onClose}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export default function ScanTagPage() {
@@ -27,6 +166,7 @@ export default function ScanTagPage() {
   const [lookupError, setLookupError] = useState('');
   const [loading, setLoading] = useState(false);
   const [paused, setPaused] = useState(false);
+  const [addingToShelf, setAddingToShelf] = useState(false);
 
   const lookup = useCallback(async (code: string) => {
     setLoading(true);
@@ -104,6 +244,7 @@ export default function ScanTagPage() {
   function scanAgain() {
     setResult(null);
     setLookupError('');
+    setAddingToShelf(false);
     setPaused(false);
   }
 
@@ -152,12 +293,64 @@ export default function ScanTagPage() {
               <div className="mt-3 flex flex-wrap gap-2">
                 <span className="badge-neutral font-mono uppercase">Order {result.order.shortCode}</span>
                 <span className="badge-neutral capitalize">{result.order.status.replace(/_/g, ' ')}</span>
+                {result.order.shelfSlot && (
+                  <span className="badge-neutral font-mono uppercase">Shelf {result.order.shelfSlot}</span>
+                )}
               </div>
+
+              {result.order.items && result.order.items.length > 0 && (
+                <div className="mt-4 border-t border-border/60 pt-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Items in this order
+                  </p>
+                  <ul className="mt-2 space-y-1.5 text-sm text-slate-700">
+                    {result.order.items.map((item, i) => (
+                      <li key={i} className="flex items-center justify-between">
+                        <span className="capitalize">{item.serviceType.replace(/_/g, ' ')}</span>
+                        {item.quantity > 1 && <span className="text-muted">× {item.quantity}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Link href={`/orders/${result.order.id}`} className="btn-outline btn-sm">
+                  View details →
+                </Link>
+                <button
+                  type="button"
+                  className="btn-primary btn-sm"
+                  onClick={() => setAddingToShelf(true)}
+                  disabled={addingToShelf}
+                >
+                  Add to shelf
+                </button>
+              </div>
+
+              {addingToShelf && (
+                <AddToShelfPanel result={result} onClose={() => setAddingToShelf(false)} />
+              )}
             </>
           ) : (
-            <p className="mt-2 text-slate-500">This tag isn&apos;t currently attached to any order.</p>
+            <>
+              <p className="mt-2 text-slate-500">This tag isn&apos;t currently attached to any order.</p>
+              <div className="mt-4">
+                <button
+                  type="button"
+                  className="btn-primary btn-sm"
+                  onClick={() => setAddingToShelf(true)}
+                  disabled={addingToShelf}
+                >
+                  Add to shelf
+                </button>
+              </div>
+              {addingToShelf && (
+                <AddToShelfPanel result={result} onClose={() => setAddingToShelf(false)} />
+              )}
+            </>
           )}
-          <button type="button" className="btn-primary btn-sm mt-4 w-fit" onClick={scanAgain}>
+          <button type="button" className="btn-outline btn-sm mt-4 w-fit" onClick={scanAgain}>
             Scan another tag
           </button>
         </div>

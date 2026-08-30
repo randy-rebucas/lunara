@@ -7,7 +7,6 @@ import { AuthLoading } from '../components/auth-loading';
 import { DataPageStatus } from '../components/data-page-status';
 import { LiveBadge, StatCard, StatusPill } from '../components/ui/card';
 import { PageHeader } from '../components/ui/page-header';
-import { Icon, ICONS } from '../components/ui/icon';
 import { DonutChart, DonutLegend, RevenueLineChart, withDonutColors } from '../components/dash-charts';
 import { useRequirePartner } from '../hooks/use-protected-page';
 import { formatPeso } from '../lib/format-peso';
@@ -15,13 +14,6 @@ import { partnerOrderHref } from '../lib/partner-order-links';
 import { getPortalUser, partnerFetch } from '../lib/partner-api';
 import { usePartnerQuery } from '../lib/use-partner-query';
 import { usePartnerPipelineSocket } from '../lib/use-partner-pipeline-socket';
-
-const QUICK_ACTIONS = [
-  { href: '/orders/incoming', label: 'Incoming orders', icon: ICONS.receipt },
-  { href: '/orders', label: 'Processing queue', icon: ICONS.list },
-  { href: '/staff', label: 'Staff team', icon: ICONS.users },
-  { href: '/inventory', label: 'Inventory', icon: ICONS.shelf },
-] as const;
 
 function orderActionHint(order: PartnerOrderSummary): string | null {
   if (order.canAccept) return 'Awaiting acceptance';
@@ -124,18 +116,7 @@ export default function PartnerDashboardPage() {
             </div>
           )}
 
-          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {QUICK_ACTIONS.map((a) => (
-              <Link key={a.href} href={a.href} className="quick-action-tile">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <Icon d={a.icon} />
-                </span>
-                <span className="text-sm font-medium text-slate-700">{a.label}</span>
-              </Link>
-            ))}
-          </div>
-
-          <div className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
             <StatCard
               label="Today's orders"
               value={data.trends.ordersToday.value}

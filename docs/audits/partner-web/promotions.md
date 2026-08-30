@@ -1,6 +1,6 @@
 # Audit: Partner-web — Promotions
 
-Date: 2026-08-23
+Date: 2026-08-31
 
 ## Entry point
 - Page: `apps/partner-web/src/app/promotions/page.tsx` (`'use client'`, single self-contained component — no separate promotions component file)
@@ -28,6 +28,7 @@ None — no outbound navigation (`Link`/`router.push`/`<a href=`) into a detail 
 | Own promotions | GET | `/partner/promotions/mine` | `OwnPromotion[]` | `PartnerController.listOwnPromotions` -> `PromotionsService.listPromotionsForPartnerOwner` |
 | Create promotion | POST | `/partner/promotions` | body `CreatePartnerPromotionDto`-shaped | `PartnerController.createOwnPromotion` -> `PromotionsService.createPartnerPromotion` |
 | Toggle active | PATCH | `/partner/promotions/:id/active` | body `{ isActive: boolean }` | `PartnerController.setOwnPromotionActive` -> `PromotionsService.setPartnerPromotionActive` |
+| Opt in/out of a platform promotion | PATCH | `/partner/promotions/:id/opt-in` | body `{ isOptedIn: boolean }` (`SetPromotionOptInDto`) | `PartnerController.setPlatformPromotionOptIn` -> `PromotionsService.setPlatformPromotionOptIn` |
 
 `partnerFetch` (`apps/partner-web/src/lib/partner-api.ts:83`) unwraps `body.data`, matching the `{ success, data }` envelope every service method returns.
 
@@ -40,23 +41,26 @@ None — no outbound navigation (`Link`/`router.push`/`<a href=`) into a detail 
 
 `setPartnerPromotionActive` (`promotions.service.ts:518`) loads the promo by id, checks `promo.partnerUserId.toString() === partnerUserId` before allowing the toggle — correctly scoped, no widening possible via the `:id` param (ownership is re-verified server-side regardless of what id is passed).
 
-No obvious N+1s or unindexed queries — all four calls are single-document/simple-filter Mongo operations.
+`setPlatformPromotionOptIn` (`promotions.service.ts:513-532`) loads the promo by id (404 if missing), rejects opting into a partner-owned promo (`promo.partnerUserId` set -> 403 "not a platform promotion"), then `$addToSet`/`$pull`s the caller's own id into/out of `optedInPartnerIds` — idempotent either way, and the promo's identity is never client-suppliable beyond the id itself. `listActivePromotionsForPartner` (`promotions.service.ts:486-508`) derives each promo's `isOptedIn` by checking whether the *caller's own* id is in `optedInPartnerIds` (`:504`) — a partner can't see or infer another partner's opt-in status through this response shape.
+
+No obvious N+1s or unindexed queries — all five calls are single-document/simple-filter Mongo operations.
 
 ## Cards / panels
 | Card | Fields consumed | Notes |
 |---|---|---|
 | New promo code form (`canManageOwn` only) | `code`, `title`, `discountType`, `discountValue`, `minOrderAmount`, `maxUsesPerCustomer`, `startsAt`, `endsAt`, `description` (all local form state) | `discountCap` (50/300) is a client-side hardcoded mirror of the backend's `MAX_PARTNER_PERCENT_DISCOUNT`/`MAX_PARTNER_FIXED_DISCOUNT` — must be kept in sync manually; backend re-validates so no real bypass risk, just a maintenance footgun. |
 | Own promo code card (per item) | `title`, `description`, `approvalStatus`, `isActive`, `discountType`+`discountValue` (via `formatDiscount`), `code`, `startsAt`/`endsAt` (via `formatDateRange`), `minOrderAmount`, `adminNote` | `approvalBadge()` derives a status pill client-side from `approvalStatus`/`isActive` — a hardcoded color map (`amber`/`red`/`primary`/`slate`) that must stay in sync with the backend's `approvalStatus` enum values. Turn on/off button hidden once `approvalStatus === 'rejected'`. |
-| Platform promo card (per item) | `title`, `description`, `discountType`+`discountValue`, `code`, `startsAt`/`endsAt`, `minOrderAmount` | Read-only, no actions. |
+| Platform promo card (per item) | `title`, `description`, `discountType`+`discountValue`, `code`, `startsAt`/`endsAt`, `minOrderAmount`, `isOptedIn` (badge: "In use" vs "Suggested"), opt-in/out button (`canManageOwn` only) | Toggle button label/state driven directly by `isOptedIn` from the payload, no client-derived approximation. |
 
 ## Mutations
 | Action | Destructive? | Confirmed? | Double-submit guard? | Failure visible? |
 |---|---|---|---|---|
 | Create promo code | no (starts pending, reviewable) | n/a | yes — `disabled={saving}` on submit button | yes — `formError` rendered in an `alert-error` inside the form |
 | Toggle active on/off | no (reversible, no re-review needed) | n/a | yes — `disabled={togglingId === promo._id}` on the button | **was no** — `toggleError` was set but never rendered anywhere in JSX; fixed (see Findings #1) |
+| Toggle platform-promo opt-in/out | no (reversible, immediately effective per `applyCouponToQuote`) | n/a | yes — `disabled={togglingOptInId === promo._id}` on the button | yes — `optInError` set on failure and rendered via `alert-error` (`page.tsx:305`), same pattern as `toggleError`, not repeating Finding #1's earlier oversight |
 
 ## Authorization
-`/partner/promotions` (list platform-wide) is guarded `@Roles(PARTNER, STAFF, ADMIN)` and matches the frontend, which fetches it for all three roles unconditionally. `/partner/promotions/mine`, the POST, and the PATCH are all guarded `@Roles(PARTNER)` only — the frontend correctly gates the entire "Your promo codes" section (form + own-promo fetch + toggle) behind `canManageOwn = user?.role === UserRole.PARTNER`, so STAFF/ADMIN never see UI for actions they'd get a 403 on. Role-scoped filters (`listPromotionsForPartnerOwner`, `setPartnerPromotionActive`) both key off `req.user.sub` server-side, not any client-supplied id — a partner cannot pass another partner's id to read or toggle someone else's promotions. No `[authz]` issues found.
+`/partner/promotions` (list platform-wide) is guarded `@Roles(PARTNER, STAFF, ADMIN)` and matches the frontend, which fetches it for all three roles unconditionally. `/partner/promotions/mine`, the POST, the active-toggle PATCH, and the opt-in PATCH are all guarded `@Roles(PARTNER)` only — the frontend correctly gates the entire "Your promo codes" section and the opt-in button behind `canManageOwn = user?.role === UserRole.PARTNER`, so STAFF/ADMIN never see UI for actions they'd get a 403 on (they still see the platform list, correctly, with `isOptedIn: false` from the backend since `partnerUserId` is omitted for non-partner callers). Role-scoped filters (`listPromotionsForPartnerOwner`, `setPartnerPromotionActive`, `setPlatformPromotionOptIn`) all key off `req.user.sub` server-side, not any client-supplied id — a partner cannot pass another partner's id to read, toggle, or opt into/out of someone else's promotions. No `[authz]` issues found.
 
 ## Findings
 1. **Failure visibility gap on toggle mutation (now fixed):** `toggleError` was set on a failed PATCH (`page.tsx:147`, pre-fix) but never rendered — a user clicking "Turn on/off" and hitting a failure (e.g. network blip, stale `_id`) would see the button return to its normal label with zero feedback, looking like a silent no-op.

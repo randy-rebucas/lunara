@@ -1,5 +1,17 @@
 # Audit: Partner-web — Orders (staff board)
 
+**RETIRED 2026-08-31.** `apps/partner-web/src/app/orders/board/page.tsx` has been
+deleted from the codebase. Its two sub-pages (`orders/[id]/receiving`,
+`orders/[id]/page.tsx`) are still live and reachable — the "Receive"/detail links
+this board used to provide now come from `orders/incoming/page.tsx` and
+`orders/[id]/page.tsx`'s own banner instead (see [receiving.md](receiving.md), newly
+audited, and the already-audited [order-detail.md](order-detail.md)). Grepped the
+whole app for `orders/board`/`/orders/board` — no remaining references, so nothing
+links to a dead route. Left below for historical reference only; do not use this
+doc to reason about current behavior.
+
+---
+
 Date: 2026-07-23
 
 ## Entry point

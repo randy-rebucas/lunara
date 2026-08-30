@@ -1,6 +1,18 @@
 # Audit: Partner-web — Services & pricing
 
-Date: 2026-07-23 (re-audited 2026-08-12 — garment pricing overrides)
+Date: 2026-07-23 (re-audited 2026-08-12 — garment pricing overrides; 2026-08-31 — tabs, machine load, per-service add-on assignment, included-quantity)
+
+**2026-08-31 addition:** the page was restructured into tabs (Services / Add-ons /
+Dry cleaning garments / Machine load — garments hidden entirely once the Dry
+Cleaning service itself is turned off) and the add/create forms moved into a
+`RightDrawer` slide-over instead of inline forms. Functionally new since the last
+pass: a per-service, per-branch `kgPerLoad` setting (Machine load tab, saved via
+the existing pricing PATCH), an "Add-ons for {service}" modal letting a partner
+choose which add-ons apply to which service (`applicableServiceTypes`, saved
+instantly for custom add-ons via a dedicated PATCH, or via the batched "Save
+pricing" for standard add-ons), and an `includedQuantity` per add-on ("units
+bundled free before billing kicks in"). Traced fresh below; no functional
+regressions found in the existing Findings #1-7, all still fixed as documented.
 
 ## Entry point
 - Page: `apps/partner-web/src/app/services/page.tsx`
@@ -20,6 +32,7 @@ None — no outbound navigation into a dynamic detail route.
 | Create custom service | POST | `/partner/branches/:id/custom-services` | — | `BranchesService.createCustomService` |
 | Delete custom service | DELETE | `/partner/branches/:id/custom-services/:serviceId` | — | `BranchesService.deleteCustomService` |
 | Create custom add-on | POST | `/partner/branches/:id/custom-addons` | — | `BranchesService.createCustomAddon` |
+| Update custom add-on (assign to a service) | PATCH | `/partner/branches/:id/custom-addons/:addonId` | — | `PartnerController.updateOwnCustomAddon` -> `BranchesService.updateCustomAddon` |
 | Delete custom add-on | DELETE | `/partner/branches/:id/custom-addons/:addonId` | — | `BranchesService.deleteCustomAddon` |
 
 **2026-08-12 addition:** the "Save hidden catalog" PATCH now also carries `garmentPricing:
@@ -58,7 +71,9 @@ already reflects the partner's own price, not just the global reference price.
 | Services table | `s.label`, per-row pricing-unit `<select>` (`serviceUnits[s.type]`), the matching rate input (`servicePrices`/`serviceLoadPrices`/`servicePiecePrices[s.type]` depending on selected unit — each is its own independent local-state bucket, correctly read/written per unit, not a shared single field), a live "Customer pays" preview (`base * MARKUP_MULTIPLIER`), and an Offer/Hidden checkbox (`hiddenServiceTypes`) | custom services (`s.isCustom`) render as a simpler read-only-priced row with a Delete button instead |
 | Add-ons table | Same shape as Services, keyed by `slug` instead of `type` | |
 | Add custom service / add-on forms | Local draft state (`newService`/`newAddon`), Add button disabled until required fields are filled | |
-| Dry cleaning garments panel | `pricing.garmentCatalog[].id/category/label/price` (price already override-applied server-side), local `hiddenGarmentItemIds`/`garmentPrices`/`collapsedGarmentCategories` | Added 2026-08-12: per-garment ₱ price input next to the offer/hide checkbox, editable even while hidden (consistent with services/add-ons keeping rate inputs live while hidden). Category collapse state defaults to all-collapsed on every load — pure UI state, not persisted. |
+| Dry cleaning garments panel | `pricing.garmentCatalog[].id/category/label/price` (price already override-applied server-side), local `hiddenGarmentItemIds`/`garmentPrices`/`collapsedGarmentCategories` | Added 2026-08-12: per-garment ₱ price input next to the offer/hide checkbox, editable even while hidden (consistent with services/add-ons keeping rate inputs live while hidden). Category collapse state defaults to all-collapsed on every load — pure UI state, not persisted. Tab hidden entirely once Dry Cleaning is toggled off (`hiddenServiceTypes.includes(DRY_CLEANING)`), with an effect that bounces `activeTab` back to "services" if it was already on "garments" when that happens — correct, no dead/blank tab state. |
+| Machine load tab (new) | `kgPerLoad` (local string state, seeded from `pricing.kgPerLoad`) | one plain number input, saved through the existing service-pricing PATCH's optional `kgPerLoad` field — no new endpoint |
+| "Add-ons for {service}" modal (new) | per add-on: `offered` (from `applicableServiceTypes` — custom add-ons' own field, or the standard add-on's local `addonServiceTypes` draft), `includedQuantity` draft input (shown only when the addon's unit is one of `flat_bag`/`fixed`/`per_piece`/`per_pair`/`per_item` — a per-kg/per-load add-on has no natural "included units" concept, correctly excluded) | Custom add-ons save immediately via their own PATCH (`toggleAddonForService`); standard add-ons stage into `addonServiceTypes`/`addonIncludedQty` and only persist when "Done" triggers the same batched `save()` as the main "Save pricing" button — copy in the modal ("Custom add-ons save instantly...") accurately describes this split |
 | Save pricing button | n/a (submits all local draft state) | |
 
 `MARKUP_MULTIPLIER` was a locally hardcoded `1.3` — see Finding #2.
@@ -69,6 +84,7 @@ already reflects the partner's own price, not just the global reference price.
 | Save pricing (3 parallel PATCHes: services, add-ons, hidden catalog) | no | n/a | yes (`disabled={saving}`) | yes (`saveError`); on partial failure `Promise.all` rejects before `reloadPricing()`, but nothing is lost — local edits stay in place for retry, and any request that did succeed is idempotently re-sent on the next attempt |
 | Add custom service / add-on | no | n/a | yes (`disabled={addingService/addingAddon || ...required fields empty}`) | yes (`rowError`) |
 | Delete custom service / add-on | yes — permanently removes a partner-defined service/add-on and its pricing | **no (before fix)** | no busy-state guard, but the backend delete is idempotent (`deleteCount === 0` -> a harmless `NotFoundException` on a duplicate click, not a second deletion of something else) | yes (`rowError`) |
+| Assign/unassign a custom add-on to a service (modal checkbox) | no | n/a | no explicit busy-state guard on the checkbox itself, but each toggle is its own independent PATCH keyed by `addonSlug`/`customAddonId` — a rapid double-toggle at worst races two idempotent writes of the same final `applicableServiceTypes` array, not a corrupting one | yes (`rowError`) |
 
 ## Authorization
 Every `/partner/branches/:id/*` route here is `@Roles(UserRole.PARTNER, UserRole.ADMIN)` and, for non-admin callers, additionally gated by `getOwnBranchOrThrow` — matching the frontend's `useRequirePartner()`. No request param can widen scope past the caller's own branch(es). No `[authz]` issues.
@@ -139,6 +155,13 @@ Every `/partner/branches/:id/*` route here is `@Roles(UserRole.PARTNER, UserRole
    isn't either an active global addon (`catalogService.listActiveAddons()`) or one of this
    branch's own custom addons (`CUSTOM_ADDON_ID_PREFIX`-prefixed slug from `customAddonModel`) —
    both in `apps/api/src/modules/branches/branches.service.ts`. Typechecked `apps/api` clean.
+
+No new findings from the 2026-08-31 pass — `kgPerLoad`, the add-on/service assignment
+modal, and `includedQuantity` are all validated server-side (`@Min`/`@IsEnum` on the
+relevant DTOs — `update-branch-pricing.dto.ts`, `update-branch-addon-pricing.dto.ts`)
+and branch-ownership-checked the same way as every other route on this page
+(`getOwnBranchOrThrow` before any non-admin write, including the new
+`updateOwnCustomAddon` PATCH).
 
 ## Unused/dead fields
 None — every field `ShopPricing`/`ShopServicePrice`/`ShopAddonPrice`/`ShopGarmentItem` declares
