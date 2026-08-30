@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { Fragment, useCallback, useState } from 'react';
-import type { PartnerInvoice, PartnerInvoiceOrder } from '@lunara/types';
+import type { PartnerInvoice, PartnerInvoiceOrder, PartnerSubscriptionInfo } from '@lunara/types';
 import { AuthLoading } from '../../components/auth-loading';
 import { DataPageStatus } from '../../components/data-page-status';
 import { PageHeader } from '../../components/ui/page-header';
@@ -22,6 +22,13 @@ function formatDate(d?: string) {
   if (!d) return '—';
   return new Date(d).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
 }
+
+const SUBSCRIPTION_PLAN_LABELS: Record<PartnerSubscriptionInfo['subscriptionPlan'], string> = {
+  trial: 'Trial',
+  basic: 'Basic',
+  starter: 'Starter',
+  professional: 'Professional',
+};
 
 export default function InvoicesPage() {
   const { ready } = useRequirePartner();
@@ -83,8 +90,14 @@ export default function InvoicesPage() {
     return partnerFetch<{ partnerId: string; receivableBalance: number }>('/partner/receivable-balance');
   }, []);
 
+  const loadSubscription = useCallback(
+    () => partnerFetch<PartnerSubscriptionInfo>('/partner/subscription'),
+    [],
+  );
+
   const { data, loading, error, reload } = usePartnerQuery(load, []);
   const { data: receivable } = usePartnerQuery(loadReceivableBalance, []);
+  const { data: subscription } = usePartnerQuery(loadSubscription, []);
 
   if (!ready) return <AuthLoading message="Loading invoices…" />;
 
@@ -147,7 +160,7 @@ export default function InvoicesPage() {
 
       {data && (
         <>
-          <div className="mt-6 grid gap-3 grid-cols-2 lg:grid-cols-4">
+          <div className="mt-6 grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
             <div className="stat-card col-span-2 sm:col-span-1">
               <p className="text-xs text-muted">Outstanding balance</p>
               <p className="text-2xl font-semibold text-slate-900">
@@ -183,6 +196,29 @@ export default function InvoicesPage() {
                 </Link>
               </p>
               <p className="mt-1 text-xs text-muted-foreground">See per-order cash collection status</p>
+            </div>
+            <div className="stat-card">
+              <p className="text-xs text-muted">Subscription plan</p>
+              {subscription ? (
+                <>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">
+                    {SUBSCRIPTION_PLAN_LABELS[subscription.subscriptionPlan]}
+                    {subscription.subscriptionPlan !== 'trial' ? ` · ${formatPeso(subscription.planPrice)}/mo` : ''}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {subscription.subscriptionPlan === 'trial'
+                      ? `Trial ends ${formatDate(subscription.trialEndsAt)}`
+                      : `Renews ${formatDate(subscription.planRenewsAt)}`}
+                  </p>
+                </>
+              ) : (
+                <p className="mt-1 text-sm text-muted">—</p>
+              )}
+              <p className="mt-2 text-xs">
+                <Link href="/settings?tab=plan" className="text-primary underline hover:opacity-80">
+                  View plan details →
+                </Link>
+              </p>
             </div>
           </div>
 
@@ -269,6 +305,12 @@ export default function InvoicesPage() {
                                     <>
                                       <span className="text-muted">Rider delivery cost</span>
                                       <span className="text-right text-slate-900">{formatPeso(inv.riderCostDue)}</span>
+                                    </>
+                                  ) : null}
+                                  {inv.subscriptionFeeDue ? (
+                                    <>
+                                      <span className="text-muted">Subscription fee</span>
+                                      <span className="text-right text-slate-900">{formatPeso(inv.subscriptionFeeDue)}</span>
                                     </>
                                   ) : null}
                                   {inv.creditApplied ? (

@@ -135,7 +135,7 @@ export default function PortalLoginPage() {
           />
           <div>
             <p className="text-sm font-bold tracking-wide">LUNARA</p>
-            <p className="text-xs text-slate-400">Partner Portal</p>
+            <p className="text-xs text-slate-400">Lunara Business Account</p>
           </div>
         </div>
 

@@ -696,6 +696,12 @@ export class PartnerController {
     return this.operationsService.getReceivableBalance(req.user.sub);
   }
 
+  @Get('subscription')
+  @Roles(UserRole.PARTNER)
+  getSubscription(@Req() req: { user: { sub: string } }) {
+    return this.operationsService.getSubscriptionInfo(req.user.sub);
+  }
+
   @Get('orders/:orderId/receiving')
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
   getReceiving(

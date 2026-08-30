@@ -38,25 +38,6 @@ export class PartnerPortalSettings {
   /** Whether this shop tracks supply inventory; shops that don't sell products can disable this */
   @Prop({ default: true })
   inventoryEnabled!: boolean;
-
-  /** Preferred payout channel: gcash | maya | bank | counter */
-  @Prop({ type: String, default: null })
-  payoutMethod?: string | null;
-
-  @Prop({ type: String, default: null })
-  gcashNumber?: string | null;
-
-  @Prop({ type: String, default: null })
-  mayaNumber?: string | null;
-
-  @Prop({ type: String, default: null })
-  bankName?: string | null;
-
-  @Prop({ type: String, default: null })
-  bankAccountName?: string | null;
-
-  @Prop({ type: String, default: null })
-  bankAccountNumber?: string | null;
 }
 
 export const DEFAULT_PARTNER_PORTAL_SETTINGS: PartnerPortalSettings = {

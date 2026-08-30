@@ -495,6 +495,7 @@ export default function PartnerInvoicesPage() {
                           <th className="text-right">Collected</th>
                           <th className="text-right">Commission</th>
                           <th className="text-right">Rider cost</th>
+                          <th className="text-right">Subscription</th>
                           <th className="text-right">Amount due</th>
                           <th />
                         </tr>
@@ -535,6 +536,9 @@ export default function PartnerInvoicesPage() {
                             </td>
                             <td className="text-right text-sm text-slate-900">
                               {inv.riderCostDue ? formatPeso(inv.riderCostDue) : '—'}
+                            </td>
+                            <td className="text-right text-sm text-slate-900">
+                              {inv.subscriptionFeeDue ? formatPeso(inv.subscriptionFeeDue) : '—'}
                             </td>
                             <td className="text-right font-semibold text-slate-900">
                               {formatPeso(inv.amountDue)}
@@ -579,6 +583,7 @@ export default function PartnerInvoicesPage() {
                           <td className="text-right text-muted">{formatPeso(invoices.reduce((s, r) => s + r.totalCollected, 0))}</td>
                           <td className="text-right text-slate-900">{formatPeso(invoices.reduce((s, r) => s + r.commissionDue, 0))}</td>
                           <td className="text-right text-slate-900">{formatPeso(invoices.reduce((s, r) => s + (r.riderCostDue ?? 0), 0))}</td>
+                          <td className="text-right text-slate-900">{formatPeso(invoices.reduce((s, r) => s + (r.subscriptionFeeDue ?? 0), 0))}</td>
                           <td className="text-right text-slate-900">{formatPeso(invoices.reduce((s, r) => s + r.amountDue, 0))}</td>
                           <td />
                         </tr>

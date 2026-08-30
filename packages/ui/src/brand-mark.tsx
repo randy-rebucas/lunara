@@ -16,7 +16,7 @@ const variantCopy: Record<
 > = {
   customer: { title: appConfig.name, subtitle: appConfig.tagline },
   admin: { title: 'Lunara Admin', subtitle: 'Platform management' },
-  partner: { title: 'Partner Portal', subtitle: 'Shop operations' },
+  partner: { title: 'Lunara Business Account', subtitle: 'Shop operations' },
   staff: { title: 'Lunara Staff', subtitle: 'Laundry processing' },
 };
 

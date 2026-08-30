@@ -1,6 +1,6 @@
 {
-  "name": "Lunara Partner Portal",
-  "short_name": "Lunara Partner",
+  "name": "Lunara Business Account",
+  "short_name": "Lunara Business",
   "description": "Laundry shop operations — orders, staff, inventory, revenue",
   "start_url": "/",
   "scope": "/",

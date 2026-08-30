@@ -3,10 +3,23 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { getPortalUser, isPartnerRole, staffLogout } from '../lib/partner-api';
+import type { PartnerSubscriptionInfo } from '@lunara/types';
+import { getPortalUser, isPartnerRole, partnerFetch, staffLogout } from '../lib/partner-api';
 import { usePartnerNotificationsSocket } from '../lib/use-partner-notifications-socket';
 import { BrandMark } from './ui/brand-mark';
 import { PortalHeaderActions } from './portal-header-actions';
+
+const SUBSCRIPTION_PLAN_LABELS: Record<PartnerSubscriptionInfo['subscriptionPlan'], string> = {
+  trial: 'Trial',
+  basic: 'Basic',
+  starter: 'Starter',
+  professional: 'Professional',
+};
+
+function formatShortDate(d?: string) {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
+}
 
 // ── Icons ──────────────────────────────────────────────────────────────────
 function Icon({ d, d2 }: { d: string; d2?: string }) {
@@ -152,11 +165,30 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [partner, setPartner] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [subscription, setSubscription] = useState<PartnerSubscriptionInfo | null>(null);
   const user = getPortalUser();
 
   useEffect(() => {
     setPartner(isPartnerRole());
   }, [pathname]);
+
+  useEffect(() => {
+    if (!partner) {
+      setSubscription(null);
+      return;
+    }
+    let cancelled = false;
+    partnerFetch<PartnerSubscriptionInfo>('/partner/subscription')
+      .then((data) => {
+        if (!cancelled) setSubscription(data);
+      })
+      .catch(() => {
+        if (!cancelled) setSubscription(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [partner]);
 
   const { connected } = usePartnerNotificationsSocket({ enabled: pathname !== '/login' && pathname !== '/offline' });
 
@@ -168,7 +200,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   }
 
   const groups = partner ? partnerNavGroups : staffNavGroups;
-  const title = partner ? 'Partner Portal' : 'Lunara Staff';
+  const title = partner ? 'Lunara Business Account' : 'Lunara Staff';
 
   return (
     <div className="portal-bg min-h-screen">
@@ -193,7 +225,23 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
           </div>
 
           {user?.email && (
-            <p className="mb-4 truncate rounded-lg bg-slate-50 px-3 py-2 text-xs text-muted">{user.email}</p>
+            <p className="mb-2 truncate rounded-lg bg-slate-50 px-3 py-2 text-xs text-muted">{user.email}</p>
+          )}
+
+          {subscription && (
+            <Link
+              href="/settings?tab=plan"
+              className="mb-4 flex items-center justify-between rounded-lg border border-border/60 px-3 py-2 text-xs hover:bg-slate-50"
+            >
+              <span className="font-medium text-slate-700">
+                {SUBSCRIPTION_PLAN_LABELS[subscription.subscriptionPlan]} plan
+              </span>
+              <span className="text-muted">
+                {subscription.subscriptionPlan === 'trial'
+                  ? `Trial ends ${formatShortDate(subscription.trialEndsAt)}`
+                  : `Renews ${formatShortDate(subscription.planRenewsAt)}`}
+              </span>
+            </Link>
           )}
 
           <div className="flex-1 overflow-y-auto overscroll-contain">

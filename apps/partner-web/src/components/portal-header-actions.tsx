@@ -90,7 +90,7 @@ export function PortalHeaderActions() {
         >
           <ProfileAvatar avatarUrl={profile?.avatarUrl} name={profile?.displayName} email={user?.email} />
           <span className="hidden max-w-[9rem] truncate text-sm font-medium text-slate-900 sm:inline">
-            {profile?.displayName || user?.email || 'Partner Portal'}
+            {profile?.displayName || user?.email || 'Lunara Business Account'}
           </span>
           <ChevronDown />
         </button>

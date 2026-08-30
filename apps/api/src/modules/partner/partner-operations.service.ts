@@ -330,6 +330,25 @@ export class PartnerOperationsService {
     return new Map(branches.map((b) => [b._id.toString(), b.commissionRate ?? 0.2]));
   }
 
+  /** Whether this partner's flat platform subscription fee is due to be billed right now —
+   * trial partners are never charged, and a paid partner is only charged once per renewal
+   * cycle (planRenewsAt unset counts as due, so a newly-upgraded partner is billed on the very
+   * next invoice run rather than waiting up to a month). */
+  private computeDueSubscriptionFee(partner: UserDocument): number {
+    if (!partner.subscriptionPlan || partner.subscriptionPlan === 'trial') return 0;
+    if (!partner.planPrice || partner.planPrice <= 0) return 0;
+    const due = !partner.planRenewsAt || partner.planRenewsAt.getTime() <= Date.now();
+    return due ? partner.planPrice : 0;
+  }
+
+  /** Used by the weekly invoicing sweep to decide whether a partner with no uninvoiced orders
+   * still needs a subscription-only invoice this cycle. */
+  async isSubscriptionFeeDue(partnerId: string): Promise<boolean> {
+    const partner = await this.userModel.findById(partnerId);
+    if (!partner) return false;
+    return this.computeDueSubscriptionFee(partner) > 0;
+  }
+
   async ensureInventorySeeded(branchId: Types.ObjectId) {
     const count = await this.inventoryModel.countDocuments({ branchId });
     if (count === 0) {
@@ -1634,6 +1653,23 @@ export class PartnerOperationsService {
     return { success: true, data: { partnerId, receivableBalance } };
   }
 
+  async getSubscriptionInfo(partnerId: string) {
+    const partner = await this.userModel
+      .findById(partnerId)
+      .select('subscriptionPlan planPrice planRenewsAt trialEndsAt')
+      .lean();
+    if (!partner) throw new NotFoundException('Partner not found');
+    return {
+      success: true,
+      data: {
+        subscriptionPlan: partner.subscriptionPlan ?? 'trial',
+        planPrice: partner.planPrice ?? 0,
+        planRenewsAt: partner.planRenewsAt,
+        trialEndsAt: partner.trialEndsAt,
+      },
+    };
+  }
+
   async getUninvoicedOrders(partnerId: string) {
     const branches = await this.branchModel.find({
       partnerUserId: new Types.ObjectId(partnerId),
@@ -1757,7 +1793,11 @@ export class PartnerOperationsService {
     partnerId: string,
     dto: { orderIds: string[]; adminNote?: string; applyCredit?: boolean },
   ) {
-    if (!dto.orderIds || dto.orderIds.length === 0) {
+    const partner = await this.userModel.findById(partnerId);
+    if (!partner) throw new NotFoundException('Partner not found');
+    const subscriptionFeeDue = this.computeDueSubscriptionFee(partner);
+
+    if ((!dto.orderIds || dto.orderIds.length === 0) && subscriptionFeeDue === 0) {
       throw new BadRequestException('At least one order must be selected');
     }
 
@@ -1775,26 +1815,30 @@ export class PartnerOperationsService {
     // still unclaimed at the moment their write lands — MongoDB serializes per-document writes, so
     // the same order can never end up stamped into two invoices.
     const invoiceId = new Types.ObjectId();
-    const claim = await this.orderModel.updateMany(
-      {
-        _id: { $in: dto.orderIds.map((id) => new Types.ObjectId(id)) },
-        branchId: { $in: branches.map((b) => b._id) },
-        status: { $in: COMPLETED_STATUSES },
-        invoiceId: { $exists: false },
-      },
-      { $set: { invoiceId } },
-    );
+    let completedOrders: OrderDocument[] = [];
+    if (dto.orderIds && dto.orderIds.length > 0) {
+      const claim = await this.orderModel.updateMany(
+        {
+          _id: { $in: dto.orderIds.map((id) => new Types.ObjectId(id)) },
+          branchId: { $in: branches.map((b) => b._id) },
+          status: { $in: COMPLETED_STATUSES },
+          invoiceId: { $exists: false },
+        },
+        { $set: { invoiceId } },
+      );
 
-    if (claim.modifiedCount === 0) {
-      throw new BadRequestException('No valid uninvoiced orders found for the selected IDs');
+      if (claim.modifiedCount === 0) {
+        throw new BadRequestException('No valid uninvoiced orders found for the selected IDs');
+      }
+
+      completedOrders = await this.orderModel.find({ invoiceId });
     }
 
-    const completedOrders = await this.orderModel.find({ invoiceId });
-
-    // Derive period from the selected orders' completion timestamps
+    // Derive period from the selected orders' completion timestamps — a subscription-only
+    // invoice (no orders) simply covers "now", since there's no order activity to bound it.
     const timestamps = completedOrders.map((o) => o.updatedAt?.getTime() ?? o.createdAt?.getTime() ?? Date.now());
-    const start = new Date(Math.min(...timestamps));
-    const end = new Date(Math.max(...timestamps));
+    const start = timestamps.length > 0 ? new Date(Math.min(...timestamps)) : new Date();
+    const end = timestamps.length > 0 ? new Date(Math.max(...timestamps)) : new Date();
 
     const paymentsByOrderId = await loadLatestOrderPaymentsByOrderId(
       this.paymentModel,
@@ -1858,7 +1902,10 @@ export class PartnerOperationsService {
       }
     }
 
-    const amountDue = Math.max(0, commissionDue + riderCostDue - creditApplied);
+    // Subscription fee is billed additively and never netted against credit — credit only offsets
+    // what the partner's own order activity generated (commission + rider cost).
+    const commissionAndRiderDue = Math.max(0, commissionDue + riderCostDue - creditApplied);
+    const amountDue = commissionAndRiderDue + subscriptionFeeDue;
 
     // Stored commissionRate becomes a display-only weighted average across the legacy-priced
     // orders in this invoice (shop_markup/commission orders don't have a "rate" at all, their fee
@@ -1895,6 +1942,7 @@ export class PartnerOperationsService {
         totalCollected,
         commissionDue,
         riderCostDue,
+        subscriptionFeeDue,
         amountDue,
         creditApplied,
         commissionRate: weightedCommissionRate,
@@ -1913,6 +1961,15 @@ export class PartnerOperationsService {
       throw err;
     }
 
+    // Advance the partner's renewal date now that the fee has actually been billed, so the next
+    // invoice run doesn't charge it again until the next cycle is due.
+    if (subscriptionFeeDue > 0) {
+      const nextRenewal = new Date(partner.planRenewsAt ?? new Date());
+      nextRenewal.setMonth(nextRenewal.getMonth() + 1);
+      partner.planRenewsAt = nextRenewal;
+      await partner.save();
+    }
+
     // Mark the recovered credit as no longer outstanding on the invoices it came from — after
     // createInvoice's own document write succeeds, so a failure above never marks credit
     // recovered without an actual invoice to show for it.
@@ -1927,25 +1984,49 @@ export class PartnerOperationsService {
     // partner owes) and the revenue it represents are booked. creditApplied needs no separate
     // debit here: it was already expensed via refund_expense at credit time (recordInvoiceCredit),
     // so simply booking a smaller receivable here is what actually recovers it.
-    await this.ledgerService.post(
-      `invoice:${invoice._id.toString()}`,
-      'invoice',
-      invoice._id.toString(),
-      [
-        {
-          accountType: 'partner_receivable',
-          direction: 'debit',
-          amount: amountDue,
-          description: `Invoice ${invoiceNumber} issued to partner ${partnerId} (${start.toISOString().slice(0, 10)}..${end.toISOString().slice(0, 10)})`,
-        },
-        {
-          accountType: 'platform_revenue',
-          direction: 'credit',
-          amount: amountDue,
-          description: `Commission + rider cost billed to partner ${partnerId} via invoice ${invoiceNumber} (rate ${(weightedCommissionRate * 100).toFixed(1)}%)${riderCostDue > 0 ? `, incl. ₱${riderCostDue} rider delivery cost` : ''}${creditApplied > 0 ? `, net of ₱${creditApplied} applied credit` : ''}`,
-        },
-      ],
-    );
+    if (commissionAndRiderDue > 0 || amountDue === 0) {
+      await this.ledgerService.post(
+        `invoice:${invoice._id.toString()}`,
+        'invoice',
+        invoice._id.toString(),
+        [
+          {
+            accountType: 'partner_receivable',
+            direction: 'debit',
+            amount: commissionAndRiderDue,
+            description: `Invoice ${invoiceNumber} issued to partner ${partnerId} (${start.toISOString().slice(0, 10)}..${end.toISOString().slice(0, 10)})`,
+          },
+          {
+            accountType: 'platform_revenue',
+            direction: 'credit',
+            amount: commissionAndRiderDue,
+            description: `Commission + rider cost billed to partner ${partnerId} via invoice ${invoiceNumber} (rate ${(weightedCommissionRate * 100).toFixed(1)}%)${riderCostDue > 0 ? `, incl. ₱${riderCostDue} rider delivery cost` : ''}${creditApplied > 0 ? `, net of ₱${creditApplied} applied credit` : ''}`,
+          },
+        ],
+      );
+    }
+
+    if (subscriptionFeeDue > 0) {
+      await this.ledgerService.post(
+        `subscription_fee:${invoice._id.toString()}`,
+        'subscription_fee',
+        invoice._id.toString(),
+        [
+          {
+            accountType: 'partner_receivable',
+            direction: 'debit',
+            amount: subscriptionFeeDue,
+            description: `${partner.subscriptionPlan} plan subscription fee billed to partner ${partnerId} via invoice ${invoiceNumber}`,
+          },
+          {
+            accountType: 'platform_revenue',
+            direction: 'credit',
+            amount: subscriptionFeeDue,
+            description: `${partner.subscriptionPlan} plan subscription fee revenue from partner ${partnerId} via invoice ${invoiceNumber}`,
+          },
+        ],
+      );
+    }
 
     // Auto-email the PDF invoice to the partner — never fails invoice creation itself.
     try {
@@ -1959,6 +2040,7 @@ export class PartnerOperationsService {
           totalCollected: invoice.totalCollected,
           commissionDue: invoice.commissionDue,
           riderCostDue: invoice.riderCostDue,
+          subscriptionFeeDue: invoice.subscriptionFeeDue,
           creditApplied: invoice.creditApplied,
           amountDue: invoice.amountDue,
           status: invoice.status,
@@ -2062,6 +2144,7 @@ export class PartnerOperationsService {
         totalCollected: invoice.totalCollected,
         commissionDue: invoice.commissionDue,
         riderCostDue: invoice.riderCostDue,
+        subscriptionFeeDue: invoice.subscriptionFeeDue,
         creditApplied: invoice.creditApplied,
         amountDue: invoice.amountDue,
         status: invoice.status,

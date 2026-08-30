@@ -17,6 +17,7 @@ export interface InvoicePdfData {
   totalCollected: number;
   commissionDue: number;
   riderCostDue: number;
+  subscriptionFeeDue: number;
   creditApplied: number;
   amountDue: number;
   status: 'pending' | 'paid' | 'void';
@@ -103,6 +104,7 @@ export class PartnerInvoicePdfService {
     totalsLine('Total collected (info only)', formatPeso(invoice.totalCollected));
     totalsLine('Commission due', formatPeso(invoice.commissionDue));
     if (invoice.riderCostDue > 0) totalsLine('Rider cost fronted', formatPeso(invoice.riderCostDue));
+    if (invoice.subscriptionFeeDue > 0) totalsLine('Subscription fee', formatPeso(invoice.subscriptionFeeDue));
     if (invoice.creditApplied > 0) totalsLine('Credit applied', `-${formatPeso(invoice.creditApplied)}`);
     totalsLine('Amount due', formatPeso(invoice.amountDue), true);
 

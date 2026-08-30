@@ -56,12 +56,6 @@ export interface PartnerPortalSettings {
   allowStaffToRequestDelivery: boolean;
   requireWeightVerificationOnReceive: boolean;
   inventoryEnabled: boolean;
-  payoutMethod?: 'gcash' | 'maya' | 'bank' | 'counter' | null;
-  gcashNumber?: string | null;
-  mayaNumber?: string | null;
-  bankName?: string | null;
-  bankAccountName?: string | null;
-  bankAccountNumber?: string | null;
 }
 
 export interface PartnerShopBranchSummary {
@@ -91,6 +85,13 @@ export interface PartnerSettingsData {
   branch: PartnerShopBranchSummary;
   settings: PartnerPortalSettings;
   canEdit: boolean;
+}
+
+export interface PartnerSubscriptionInfo {
+  subscriptionPlan: 'trial' | 'basic' | 'starter' | 'professional';
+  planPrice: number;
+  planRenewsAt?: string;
+  trialEndsAt?: string;
 }
 
 export interface PartnerDashboardShop {
@@ -357,6 +358,7 @@ export interface PartnerInvoice {
   totalCollected: number;
   commissionDue: number;
   riderCostDue: number;
+  subscriptionFeeDue: number;
   amountDue: number;
   commissionRate: number;
   status: 'pending' | 'paid' | 'void';

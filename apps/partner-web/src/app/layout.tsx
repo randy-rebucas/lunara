@@ -15,7 +15,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'Lunara Partner Portal',
+  title: 'Lunara Business Account',
   description: 'Laundry shop operations — orders, staff, inventory, revenue',
   manifest: '/manifest.json',
   icons: {

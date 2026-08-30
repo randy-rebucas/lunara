@@ -2,7 +2,8 @@
 
 import { UserRole } from '@lunara/types';
 import { PH_REGULAR_HOLIDAYS } from '@lunara/utils';
-import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { AuthLoading } from '../../components/auth-loading';
 import { DataPageStatus } from '../../components/data-page-status';
@@ -16,6 +17,7 @@ import type {
   OperatingHours,
   PartnerPortalSettings,
   PartnerSettingsData,
+  PartnerSubscriptionInfo,
 } from '@lunara/types';
 import { usePartnerQuery } from '../../lib/use-partner-query';
 
@@ -66,14 +68,13 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
   );
 }
 
-type PayoutMethod = 'gcash' | 'maya' | 'bank' | 'counter';
-type Tab = 'shop' | 'hours' | 'machines' | 'preferences' | 'payout';
+type Tab = 'shop' | 'hours' | 'machines' | 'preferences' | 'plan';
 
-const PAYOUT_METHOD_LABELS: Record<PayoutMethod, string> = {
-  gcash: 'GCash',
-  maya: 'Maya',
-  bank: 'Bank transfer',
-  counter: 'Personal / Over the counter',
+const SUBSCRIPTION_PLAN_LABELS: Record<PartnerSubscriptionInfo['subscriptionPlan'], string> = {
+  trial: 'Trial',
+  basic: 'Basic',
+  starter: 'Starter',
+  professional: 'Professional',
 };
 
 const TABS: { id: Tab; label: string }[] = [
@@ -81,8 +82,13 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'hours', label: 'Hours' },
   { id: 'machines', label: 'Machines' },
   { id: 'preferences', label: 'Preferences' },
-  { id: 'payout', label: 'Payout' },
+  { id: 'plan', label: 'Plan' },
 ];
+
+function formatSubscriptionDate(d?: string) {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+}
 
 // ── Machines ───────────────────────────────────────────────────────────────
 interface BranchMachine {
@@ -417,11 +423,14 @@ const WEEKDAY_ROWS: { dayIndex: number; label: string }[] = [
   { dayIndex: 0, label: 'Sunday' },
 ];
 
-export default function PartnerSettingsPage() {
+function PartnerSettingsContent() {
   const { ready } = useProtectedPage({
     roles: [UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN],
   });
-  const [activeTab, setActiveTab] = useState<Tab>('shop');
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  const initialTab: Tab = TABS.some((t) => t.id === requestedTab) ? (requestedTab as Tab) : 'shop';
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [saving, setSaving] = useState(false);
   const [logoBusy, setLogoBusy] = useState(false);
   const [hoursDraft, setHoursDraft] = useState<OperatingHours | null>(null);
@@ -429,17 +438,18 @@ export default function PartnerSettingsPage() {
   const [newHolidayDate, setNewHolidayDate] = useState('');
   const [newHolidayLabel, setNewHolidayLabel] = useState('');
   const [newHolidayRecurring, setNewHolidayRecurring] = useState(false);
-  const [payoutDraft, setPayoutDraft] = useState<{
-    method: PayoutMethod | '';
-    gcashNumber: string;
-    mayaNumber: string;
-    bankName: string;
-    bankAccountName: string;
-    bankAccountNumber: string;
-  } | null>(null);
 
   const load = useCallback(() => partnerFetch<PartnerSettingsData>('/partner/settings'), []);
   const { data, loading, error, reload } = usePartnerQuery(load, [ready]);
+
+  const loadSubscription = useCallback(() => {
+    if (!isPartnerRole()) return Promise.resolve(null);
+    return partnerFetch<PartnerSubscriptionInfo>('/partner/subscription');
+  }, []);
+  const { data: subscription, loading: subscriptionLoading, error: subscriptionError } = usePartnerQuery(
+    loadSubscription,
+    [ready],
+  );
 
   async function saveSettings(patch: Partial<PartnerPortalSettings>, successMessage = 'Settings saved') {
     if (!data?.canEdit) return;
@@ -462,19 +472,6 @@ export default function PartnerSettingsPage() {
     if (!data) return;
     void saveSettings({ [key]: value });
   }
-
-  useEffect(() => {
-    if (data && payoutDraft === null) {
-      setPayoutDraft({
-        method: (data.settings.payoutMethod as PayoutMethod) ?? '',
-        gcashNumber: data.settings.gcashNumber ?? '',
-        mayaNumber: data.settings.mayaNumber ?? '',
-        bankName: data.settings.bankName ?? '',
-        bankAccountName: data.settings.bankAccountName ?? '',
-        bankAccountNumber: data.settings.bankAccountNumber ?? '',
-      });
-    }
-  }, [data, payoutDraft]);
 
   useEffect(() => {
     if (data && hoursDraft === null) {
@@ -595,20 +592,6 @@ export default function PartnerSettingsPage() {
     } finally {
       setLogoBusy(false);
     }
-  }
-
-  async function savePayoutMethod() {
-    if (!payoutDraft?.method) return;
-    const patch: Partial<PartnerPortalSettings> = { payoutMethod: payoutDraft.method };
-    if (payoutDraft.method === 'gcash') patch.gcashNumber = payoutDraft.gcashNumber;
-    if (payoutDraft.method === 'maya') patch.mayaNumber = payoutDraft.mayaNumber;
-    if (payoutDraft.method === 'bank') {
-      patch.bankName = payoutDraft.bankName;
-      patch.bankAccountName = payoutDraft.bankAccountName;
-      patch.bankAccountNumber = payoutDraft.bankAccountNumber;
-    }
-    await saveSettings(patch, 'Payout method saved');
-    setPayoutDraft(null);
   }
 
   if (!ready) return <AuthLoading message="Loading shop settings…" />;
@@ -1034,126 +1017,59 @@ export default function PartnerSettingsPage() {
               </>
             )}
 
-            {/* Payout tab */}
-            {activeTab === 'payout' && (
-              <>
-                {canEdit && payoutDraft !== null ? (
-                  <SectionPanel
-                    title="Payout method"
-                    description="Choose how Lunara sends your settlement payout every Saturday."
-                  >
-                    <div className="space-y-3 px-6 py-4 sm:px-8">
-                      {(['gcash', 'maya', 'bank', 'counter'] as PayoutMethod[]).map((m) => (
-                        <label key={m} className="flex cursor-pointer items-center gap-3">
-                          <input
-                            type="radio"
-                            name="payoutMethod"
-                            value={m}
-                            checked={payoutDraft.method === m}
-                            disabled={saving}
-                            className="h-4 w-4 text-primary focus:ring-primary/30"
-                            onChange={() => setPayoutDraft((d) => d && { ...d, method: m })}
-                          />
-                          <span className="text-sm font-medium text-slate-900">{PAYOUT_METHOD_LABELS[m]}</span>
-                        </label>
-                      ))}
-
-                      {payoutDraft.method === 'gcash' && (
-                        <div className="mt-3 pl-7">
-                          <label className="text-xs font-medium text-slate-600">GCash number</label>
-                          <input
-                            type="tel"
-                            placeholder="09XXXXXXXXX"
-                            className="mt-1 block w-full max-w-xs rounded-lg border px-3 py-2 text-sm"
-                            value={payoutDraft.gcashNumber}
-                            disabled={saving}
-                            onChange={(e) => setPayoutDraft((d) => d && { ...d, gcashNumber: e.target.value })}
-                          />
-                        </div>
+            {/* Plan tab */}
+            {activeTab === 'plan' && (
+              <SectionPanel
+                title="Subscription plan"
+                description="Your platform plan and billing status with Lunara. Contact support to change plans."
+              >
+                {subscriptionLoading ? (
+                  <p className="px-6 py-4 text-sm text-muted sm:px-8">Loading plan details…</p>
+                ) : subscription ? (
+                  <dl className="px-6 py-2 sm:px-8">
+                    <DetailRow label="Plan" value={SUBSCRIPTION_PLAN_LABELS[subscription.subscriptionPlan]} />
+                    <DetailRow
+                      label="Price / month"
+                      value={
+                        subscription.subscriptionPlan === 'trial'
+                          ? 'Free'
+                          : `₱${subscription.planPrice.toLocaleString('en-PH')}`
+                      }
+                    />
+                    <DetailRow
+                      label={subscription.subscriptionPlan === 'trial' ? 'Trial ends' : 'Renews on'}
+                      value={formatSubscriptionDate(
+                        subscription.subscriptionPlan === 'trial'
+                          ? subscription.trialEndsAt
+                          : subscription.planRenewsAt,
                       )}
-
-                      {payoutDraft.method === 'maya' && (
-                        <div className="mt-3 pl-7">
-                          <label className="text-xs font-medium text-slate-600">Maya number</label>
-                          <input
-                            type="tel"
-                            placeholder="09XXXXXXXXX"
-                            className="mt-1 block w-full max-w-xs rounded-lg border px-3 py-2 text-sm"
-                            value={payoutDraft.mayaNumber}
-                            disabled={saving}
-                            onChange={(e) => setPayoutDraft((d) => d && { ...d, mayaNumber: e.target.value })}
-                          />
-                        </div>
-                      )}
-
-                      {payoutDraft.method === 'bank' && (
-                        <div className="mt-3 space-y-3 pl-7">
-                          <div>
-                            <label className="text-xs font-medium text-slate-600">Bank name</label>
-                            <input
-                              type="text"
-                              placeholder="e.g. BDO, BPI, UnionBank"
-                              className="mt-1 block w-full max-w-xs rounded-lg border px-3 py-2 text-sm"
-                              value={payoutDraft.bankName}
-                              disabled={saving}
-                              onChange={(e) => setPayoutDraft((d) => d && { ...d, bankName: e.target.value })}
-                            />
-                          </div>
-                          <div>
-                            <label className="text-xs font-medium text-slate-600">Account name</label>
-                            <input
-                              type="text"
-                              placeholder="Full name on account"
-                              className="mt-1 block w-full max-w-xs rounded-lg border px-3 py-2 text-sm"
-                              value={payoutDraft.bankAccountName}
-                              disabled={saving}
-                              onChange={(e) => setPayoutDraft((d) => d && { ...d, bankAccountName: e.target.value })}
-                            />
-                          </div>
-                          <div>
-                            <label className="text-xs font-medium text-slate-600">Account number</label>
-                            <input
-                              type="text"
-                              placeholder="Account number"
-                              className="mt-1 block w-full max-w-xs rounded-lg border px-3 py-2 text-sm"
-                              value={payoutDraft.bankAccountNumber}
-                              disabled={saving}
-                              onChange={(e) => setPayoutDraft((d) => d && { ...d, bankAccountNumber: e.target.value })}
-                            />
-                          </div>
-                        </div>
-                      )}
-
-                      {payoutDraft.method === 'counter' && (
-                        <p className="mt-2 pl-7 text-sm text-muted">
-                          Lunara will coordinate with you directly for over-the-counter payout.
-                        </p>
-                      )}
-
-                      {payoutDraft.method && (
-                        <div className="mt-4 pl-7">
-                          <button
-                            type="button"
-                            className="btn-primary btn-sm"
-                            disabled={saving}
-                            onClick={() => void savePayoutMethod()}
-                          >
-                            {saving ? 'Saving…' : 'Save payout method'}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </SectionPanel>
+                    />
+                  </dl>
+                ) : subscriptionError ? (
+                  <p className="px-6 py-4 text-sm text-destructive sm:px-8">{subscriptionError}</p>
                 ) : (
-                  <p className="text-sm text-muted">
-                    Only shop partners can configure the payout method.
+                  <p className="px-6 py-4 text-sm text-muted sm:px-8">
+                    Only shop partners can view plan details.
                   </p>
                 )}
-              </>
+                {subscription && subscription.subscriptionPlan !== 'trial' ? (
+                  <p className="border-t border-border/60 px-6 py-3 text-xs text-muted sm:px-8">
+                    Billed automatically alongside your weekly invoice once the renewal date is reached.
+                  </p>
+                ) : null}
+              </SectionPanel>
             )}
           </div>
         </div>
       ) : null}
     </div>
+  );
+}
+
+export default function PartnerSettingsPage() {
+  return (
+    <Suspense fallback={<AuthLoading message="Loading shop settings…" />}>
+      <PartnerSettingsContent />
+    </Suspense>
   );
 }

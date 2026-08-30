@@ -90,9 +90,7 @@ export class PartnerSettingsService {
       success: true,
       data: {
         branch: await this.formatBranch(branch),
-        // Payout details (bank/e-wallet account info) are only relevant to whoever can actually
-        // change them — staff have no need to see the shop owner's financial account numbers.
-        settings: canEdit ? settings : this.stripPayoutDetails(settings),
+        settings,
         canEdit,
       },
     };
@@ -104,19 +102,6 @@ export class PartnerSettingsService {
     if (role === UserRole.PARTNER || role === UserRole.ADMIN) return true;
     const staff = await this.userModel.findById(userId).select('canManageSettings').lean();
     return Boolean(staff?.canManageSettings);
-  }
-
-  private stripPayoutDetails(settings: PartnerPortalSettings): PartnerPortalSettings {
-    const {
-      payoutMethod: _payoutMethod,
-      gcashNumber: _gcashNumber,
-      mayaNumber: _mayaNumber,
-      bankName: _bankName,
-      bankAccountName: _bankAccountName,
-      bankAccountNumber: _bankAccountNumber,
-      ...rest
-    } = settings;
-    return rest as PartnerPortalSettings;
   }
 
   async updateSettings(userId: string, role: UserRole, dto: UpdatePartnerSettingsDto) {

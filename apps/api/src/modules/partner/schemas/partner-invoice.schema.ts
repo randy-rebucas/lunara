@@ -44,7 +44,12 @@ export class PartnerInvoice {
   @Prop({ required: true, default: 0 })
   riderCostDue!: number;
 
-  /** commissionDue + riderCostDue - creditApplied. What the partner must pay Lunara. */
+  /** Flat recurring platform subscription fee charged on this invoice, if the partner's plan
+   * renewal was due during this billing cycle. See PartnerOperationsService.createInvoice. */
+  @Prop({ required: true, default: 0 })
+  subscriptionFeeDue!: number;
+
+  /** commissionDue + riderCostDue + subscriptionFeeDue - creditApplied. What the partner must pay Lunara. */
   @Prop({ required: true, default: 0 })
   amountDue!: number;
 

@@ -56,6 +56,7 @@ export class LedgerEntry {
       'invoice',
       'invoice_credit',
       'invoice_payment',
+      'subscription_fee',
       'remittance',
       'withdrawal',
       'rider_earning',
@@ -71,6 +72,7 @@ export class LedgerEntry {
     | 'invoice'
     | 'invoice_credit'
     | 'invoice_payment'
+    | 'subscription_fee'
     | 'remittance'
     | 'withdrawal'
     | 'rider_earning'

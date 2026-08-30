@@ -82,30 +82,6 @@ export class UpdatePartnerSettingsDto {
   @IsBoolean()
   requireWeightVerificationOnReceive?: boolean;
 
-  @IsOptional()
-  @IsString()
-  payoutMethod?: string;
-
-  @IsOptional()
-  @IsString()
-  gcashNumber?: string;
-
-  @IsOptional()
-  @IsString()
-  mayaNumber?: string;
-
-  @IsOptional()
-  @IsString()
-  bankName?: string;
-
-  @IsOptional()
-  @IsString()
-  bankAccountName?: string;
-
-  @IsOptional()
-  @IsString()
-  bankAccountNumber?: string;
-
   /** Weekly schedule, length 7, index = JS `Date.getDay()` (0 = Sunday … 6 = Saturday). */
   @IsOptional()
   @IsArray()

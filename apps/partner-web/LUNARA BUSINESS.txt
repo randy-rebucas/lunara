@@ -1,0 +1,30 @@
+LUNARA BUSINESS
+
+Overview
+├── Dashboard
+├── Orders
+├── Customers
+├── Services
+├── Pricing
+├── Pickup & Delivery
+│
+├── Staff
+├── Branches
+├── Inventory
+│
+├── Accounting
+│   ├── Income
+│   ├── Expenses
+│   ├── Transactions
+│   ├── Accounts
+│   ├── Profit & Loss
+│   └── Reports
+│
+├── Marketing
+│   ├── Promotions
+│   ├── Loyalty
+│   └── Campaigns
+│
+├── AI Assistant
+│
+└── Settings
