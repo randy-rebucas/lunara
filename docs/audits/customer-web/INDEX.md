@@ -3,6 +3,10 @@
 One row per module audited with the `audit-module` skill. Findings counts are
 `open / fixed`, taken from each doc's Findings section.
 
+**Audit complete (2026-08-30):** customer-web's core surface area — auth/onboarding, booking &
+checkout, orders, refunds/reviews/lost items, rewards/wallet/subscriptions, support/chat/
+notifications, and now marketing/branding — has been fully audited.
+
 | Module | Doc | Last audited | Findings (open / fixed) |
 |---|---|---|---|
 | FAQ | [faq.md](faq.md) | 2026-07-23 | 0 / 0 |
@@ -36,3 +40,5 @@ One row per module audited with the `audit-module` skill. Findings counts are
 | Refunds, Reviews & Lost Items (submission flows) | [refunds-reviews.md](refunds-reviews.md) | 2026-08-30 | 0 / 2 |
 | Rewards, Wallet & Subscriptions (combined pass + deals carousel) | [rewards-wallet-subscriptions.md](rewards-wallet-subscriptions.md) | 2026-08-30 | 1 / 0 (raw-doc/no-serializer gap, no PII/admin-only exposure, deliberately left for a scoped follow-up) |
 | Support, Chat & Notifications (support tickets, AI chat widget, notifications combined pass) | [support-chat-notifications.md](support-chat-notifications.md) | 2026-08-30 | 0 / 3 (**[sensitive-data]** raw ticket serializer leaks in `createGeneralTicket`/`createAreaCoverageRequest`/`createRiderIssueTicket`, all fixed) |
+| Auth, Onboarding, Profile & Settings (login/signup/register/verify-email + onboarding + profile + settings, combined consolidation pass) | [auth-onboarding-profile.md](auth-onboarding-profile.md) | 2026-08-30 | 0 / 1 (**[authz]** shared `verifyEmail` missing the role check its siblings `login`/`loginWithOtp` already had, fixed defensively — not live-exploitable today) |
+| Marketing Pages & Branding (home/about/blog/faq/how-it-works/locations/service-areas/privacy/terms + `@lunara/brand`, combined pass) | [marketing-branding.md](marketing-branding.md) | 2026-08-30 | 0 / 1 (raw blog-detail serializer leaking non-sensitive internal fields, fixed) |

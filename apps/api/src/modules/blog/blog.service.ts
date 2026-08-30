@@ -111,7 +111,9 @@ export class BlogService {
 
   /** Public single post by slug — only if published. */
   async getPublishedBySlug(slug: string) {
-    const post = await this.blogPostModel.findOne({ slug, isPublished: true });
+    const post = await this.blogPostModel
+      .findOne({ slug, isPublished: true })
+      .select('title slug excerpt content coverImageUrl authorName publishedAt');
     if (!post) throw new NotFoundException('Post not found');
     return { success: true, data: post };
   }

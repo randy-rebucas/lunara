@@ -23,8 +23,6 @@ import { appConfig } from '@lunara/config';
 /**
  * CSS-only phone frame — no raster mockup images. Content is decorative
  * (aria-hidden) miniature app UI rendered at a fixed intrinsic width.
- * Styled after a modern iPhone: metallic chamfered edge, Dynamic Island,
- * and side buttons (mute switch + volume rocker, power button).
  */
 export function PhoneFrame({
   children,
@@ -37,19 +35,12 @@ export function PhoneFrame({
 }) {
   return (
     <figure className={cn('w-56 shrink-0', className)}>
-      <div className="relative">
-        {/* Side buttons — decorative nubs sitting on the outline */}
-        <span className="absolute left-[-3px] top-[16%] z-0 h-[3%] w-[3px] rounded-l-sm bg-slate-900" aria-hidden />
-        <span className="absolute left-[-3px] top-[23%] z-0 h-[7%] w-[3px] rounded-l-sm bg-slate-900" aria-hidden />
-        <span className="absolute left-[-3px] top-[32%] z-0 h-[7%] w-[3px] rounded-l-sm bg-slate-900" aria-hidden />
-        <span className="absolute right-[-3px] top-[26%] z-0 h-[9%] w-[3px] rounded-r-sm bg-slate-900" aria-hidden />
-
-        {/* Thin outline frame — flat, line-art style */}
-        <div className="relative rounded-[16%] border-[6px] border-slate-900 bg-white p-[3px]">
-          <div className="relative overflow-hidden rounded-[13%] bg-surface">
-            <div className="aspect-[9/19.5] overflow-hidden" aria-hidden>
-              {children}
-            </div>
+      <div className="rounded-[2.4rem] bg-slate-900 p-[6px] shadow-[0_24px_48px_-16px_rgb(15_23_42/0.35)] ring-1 ring-slate-950/60">
+        <div className="relative overflow-hidden rounded-[2rem] bg-surface">
+          {/* Notch pill */}
+          <div className="absolute left-1/2 top-2 z-10 h-4 w-16 -translate-x-1/2 rounded-full bg-slate-900" aria-hidden />
+          <div className="aspect-[9/19] overflow-hidden" aria-hidden>
+            {children}
           </div>
         </div>
       </div>
