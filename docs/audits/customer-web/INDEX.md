@@ -32,3 +32,7 @@ One row per module audited with the `audit-module` skill. Findings counts are
 | Signup | [signup.md](signup.md) | 2026-08-23 | 0 / 1 (+1 a11y fix) |
 | Settings | [settings.md](settings.md) | 2026-08-23 | 0 / 2 |
 | Health scan | [HEALTH-SCAN.md](HEALTH-SCAN.md) | 2026-08-23 | repo-wide triage: 1 typecheck error (fixed), 5 lint warnings (open), dep version mismatch (open) |
+| Booking & Checkout (wizard + checkout + orders, combined end-to-end pass) | [booking-checkout-orders.md](booking-checkout-orders.md) | 2026-08-30 | 1 / 1 |
+| Refunds, Reviews & Lost Items (submission flows) | [refunds-reviews.md](refunds-reviews.md) | 2026-08-30 | 0 / 2 |
+| Rewards, Wallet & Subscriptions (combined pass + deals carousel) | [rewards-wallet-subscriptions.md](rewards-wallet-subscriptions.md) | 2026-08-30 | 1 / 0 (raw-doc/no-serializer gap, no PII/admin-only exposure, deliberately left for a scoped follow-up) |
+| Support, Chat & Notifications (support tickets, AI chat widget, notifications combined pass) | [support-chat-notifications.md](support-chat-notifications.md) | 2026-08-30 | 0 / 3 (**[sensitive-data]** raw ticket serializer leaks in `createGeneralTicket`/`createAreaCoverageRequest`/`createRiderIssueTicket`, all fixed) |

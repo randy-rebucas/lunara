@@ -135,7 +135,7 @@ export class RefundsService {
 
     void this.tryAutoApprove(refund);
 
-    return { success: true, data: this.serializeRefund(refund) };
+    return { success: true, data: this.serializeRefundForCustomer(refund) };
   }
 
   /** Runs the same start_review -> verify_order -> approve -> process steps an admin would, when

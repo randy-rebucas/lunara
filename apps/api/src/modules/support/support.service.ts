@@ -132,7 +132,7 @@ export class SupportService {
 
     return {
       success: true,
-      data: this.serializeTicket(ticket),
+      data: this.serializeTicketForCustomer(ticket),
       message: 'Your request was submitted. We will respond as soon as we can.',
     };
   }
@@ -175,7 +175,7 @@ export class SupportService {
 
     return {
       success: true,
-      data: this.serializeTicket(ticket),
+      data: this.serializeTicketForRider(ticket),
       message: 'Your report was submitted. Dispatch will follow up if needed.',
     };
   }
@@ -244,7 +244,7 @@ export class SupportService {
       ],
     });
 
-    return { success: true, data: this.serializeTicket(ticket) };
+    return { success: true, data: this.serializeTicketForCustomer(ticket) };
   }
 
   async createAreaCoverageRequest(customerId: string, dto: CreateAreaRequestDto) {
@@ -260,7 +260,7 @@ export class SupportService {
     if (existing) {
       return {
         success: true,
-        data: this.serializeTicket(existing),
+        data: this.serializeTicketForCustomer(existing),
         message: 'We already received your pickup area request and will contact you soon.',
       };
     }
@@ -300,7 +300,7 @@ export class SupportService {
 
     return {
       success: true,
-      data: this.serializeTicket(ticket),
+      data: this.serializeTicketForCustomer(ticket),
       message: 'Thanks — our team will review your address and follow up.',
     };
   }
