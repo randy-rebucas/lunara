@@ -488,8 +488,17 @@ export class Order {
   @Prop()
   customerPickupAt?: Date;
 
+  /** Legacy: which PartnerSettlement (Lunara-pays-partner payout) claimed this order for payout,
+   * from before the invoicing model. Only ever set on pre-cutover orders — new completions are
+   * claimed via invoiceId instead. */
   @Prop({ type: Types.ObjectId, ref: 'PartnerSettlement' })
   settlementId?: Types.ObjectId;
+
+  /** Which PartnerInvoice (partner-owes-Lunara commission billing) claimed this order for
+   * invoicing. Kept separate from settlementId so legacy settled orders and newly-invoiced
+   * orders are never ambiguous. */
+  @Prop({ type: Types.ObjectId, ref: 'PartnerInvoice' })
+  invoiceId?: Types.ObjectId;
 
   /** Pickup-to-shop distance computed at checkout. */
   @Prop()

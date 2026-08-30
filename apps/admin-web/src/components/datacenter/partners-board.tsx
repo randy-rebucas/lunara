@@ -99,7 +99,7 @@ interface ShopDetail {
   recentOrders: RecentOrder[];
 }
 
-type DetailTab = 'overview' | 'branches' | 'subscription' | 'documents' | 'settlements' | 'audit' | 'settings';
+type DetailTab = 'overview' | 'branches' | 'subscription' | 'documents' | 'invoices' | 'audit' | 'settings';
 
 const ORDER_STATUS_BADGE: Record<string, string> = {
   delivered: 'badge-accent',
@@ -451,7 +451,7 @@ function DetailTabs({ tab, onChange }: { tab: DetailTab; onChange: (t: DetailTab
     { id: 'overview', label: 'Overview' },
     { id: 'branches', label: 'Branches' },
     { id: 'subscription', label: 'Subscription' },
-    { id: 'settlements', label: 'Settlements' },
+    { id: 'invoices', label: 'Invoices' },
     { id: 'documents', label: 'Documents' },
     { id: 'audit', label: 'Audit Trail' },
     { id: 'settings', label: 'Settings' },
@@ -955,13 +955,13 @@ function PartnerDetailsDrawer({
           </div>
         ) : null}
 
-        {detail && tab === 'settlements' ? (
+        {detail && tab === 'invoices' ? (
           <div className="px-5 py-4">
             <p className="text-sm text-muted">
-              Payout batches and remittance history for this partner are managed in Settlements.
+              Commission billing and payment history for this partner are managed in Invoices.
             </p>
-            <Link href="/partners/settlements" className="link-primary mt-2 inline-block text-xs font-medium">
-              Open Settlements →
+            <Link href="/partners/invoices" className="link-primary mt-2 inline-block text-xs font-medium">
+              Open Invoices →
             </Link>
           </div>
         ) : null}

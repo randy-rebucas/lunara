@@ -6,6 +6,7 @@ export interface EmailPayload {
   subject: string;
   text: string;
   html?: string;
+  attachments?: { filename: string; content: Buffer }[];
 }
 
 @Injectable()
@@ -34,10 +35,13 @@ export class EmailService {
     }
   }
 
-  async send(payload: EmailPayload): Promise<void> {
+  /** Returns whether the email was actually sent — false (never throws) if SMTP is disabled or
+   * sending failed, so most callers can just fire-and-forget while callers that need to know
+   * (e.g. recording emailedAt/emailError on an invoice) can check the result. */
+  async send(payload: EmailPayload): Promise<boolean> {
     if (!this.transporter) {
       this.logger.debug(`Email skipped (SMTP disabled): ${payload.subject} → ${payload.to}`);
-      return;
+      return false;
     }
     try {
       await this.transporter.sendMail({
@@ -46,9 +50,12 @@ export class EmailService {
         subject: payload.subject,
         text: payload.text,
         html: payload.html ?? `<p>${payload.text.replace(/\n/g, '<br>')}</p>`,
+        attachments: payload.attachments,
       });
+      return true;
     } catch (err) {
       this.logger.error(`Failed to send email to ${payload.to}: ${err}`);
+      return false;
     }
   }
 
@@ -142,6 +149,24 @@ export class EmailService {
       to,
       subject: `New message from ${senderName} — Lunara`,
       text: `${senderName} sent a new message:\n\n"${preview}"\n\nReply in the admin messages inbox.`,
+    });
+  }
+
+  /** Auto-sent when a weekly partner invoice is generated (see PartnerOperationsService.createInvoice).
+   * Returns whether the send succeeded so the caller can record emailedAt/emailError on the invoice. */
+  async sendPartnerInvoice(
+    to: string,
+    invoice: { invoiceNumber: string; amountDue: number; dueDate?: Date },
+    pdfBuffer: Buffer,
+  ): Promise<boolean> {
+    const dueLine = invoice.dueDate
+      ? ` Payment is due by ${invoice.dueDate.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}.`
+      : '';
+    return this.send({
+      to,
+      subject: `Invoice ${invoice.invoiceNumber} — ₱${invoice.amountDue.toFixed(2)} due — Lunara`,
+      text: `Your Lunara invoice ${invoice.invoiceNumber} for ₱${invoice.amountDue.toFixed(2)} is attached.${dueLine}\n\nThis covers Lunara's commission and any delivery costs fronted on your behalf for orders your shop completed this period. Please settle it via your usual payment channel (bank transfer/GCash) and we'll mark it paid on our end.`,
+      attachments: [{ filename: `${invoice.invoiceNumber}.pdf`, content: pdfBuffer }],
     });
   }
 

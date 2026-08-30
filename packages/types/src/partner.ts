@@ -343,6 +343,53 @@ export interface PartnerSettlement {
   createdAt: string;
 }
 
+/** Partner-owes-Lunara commission billing — replaces the legacy PartnerSettlement
+ * (Lunara-pays-partner payout) now that partners collect payment directly from customers. */
+export interface PartnerInvoice {
+  _id: string;
+  partnerId: string;
+  invoiceNumber: string;
+  periodStart: string;
+  periodEnd: string;
+  totalOrders: number;
+  cashOrders: number;
+  digitalOrders: number;
+  totalCollected: number;
+  commissionDue: number;
+  riderCostDue: number;
+  amountDue: number;
+  commissionRate: number;
+  status: 'pending' | 'paid' | 'void';
+  dueDate?: string;
+  paidAt?: string;
+  paidBy?: string;
+  paymentReference?: string;
+  adminNote?: string;
+  creditTotal?: number;
+  creditOrderCount?: number;
+  creditRecovered?: number;
+  creditApplied?: number;
+  pdfGeneratedAt?: string;
+  emailedAt?: string;
+  emailError?: string;
+  createdAt: string;
+}
+
+export interface PartnerInvoiceOrder {
+  orderId: string;
+  completedAt: string;
+  amount: number;
+  subtotal?: number;
+  commissionDue?: number;
+  commissionRate?: number;
+  bookingType: string;
+  paymentMethod: string | null;
+  cashTiming: 'pickup' | 'delivery' | null;
+  cashCollected: boolean;
+  cashCollectedAt?: string | null;
+  receiptCode?: string | null;
+}
+
 export interface PartnerOrderDetail {
   orderId: string;
   completedAt: string;

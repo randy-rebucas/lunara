@@ -304,8 +304,8 @@ function CompletedOrdersTable({
 
       <p className="mt-2 text-xs text-muted-foreground">
         Showing most recent {recentOrdersCount} completed orders.{' '}
-        <Link href="/settlements" className="underline hover:text-primary">
-          View settlements →
+        <Link href="/invoices" className="underline hover:text-primary">
+          View invoices →
         </Link>
       </p>
     </div>

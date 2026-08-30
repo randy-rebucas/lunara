@@ -27,7 +27,7 @@ interface AutomationSettings {
   autoDispatchOrders: boolean;
   autoAssignPickupRider: boolean;
   autoAssignDeliveryRider: boolean;
-  autoGenerateSettlements: boolean;
+  autoGenerateInvoices: boolean;
   autoApproveRefunds: boolean;
   autoApproveRefundsThreshold: number;
   autoApproveWithdrawals: boolean;
@@ -448,7 +448,7 @@ export default function AdminSettingsPage() {
         automation.autoDispatchOrders,
         automation.autoAssignPickupRider,
         automation.autoAssignDeliveryRider,
-        automation.autoGenerateSettlements,
+        automation.autoGenerateInvoices,
         automation.autoApproveRefunds,
         automation.autoApproveWithdrawals,
       ].filter(Boolean).length
@@ -669,14 +669,14 @@ export default function AdminSettingsPage() {
               <div className="space-y-5">
                 <SettingsCard
                   title="Financial automation"
-                  description="Settlements, refunds, and rider withdrawals. Amounts over a threshold always go to manual review."
+                  description="Invoices, refunds, and rider withdrawals. Amounts over a threshold always go to manual review."
                 >
                   <ToggleRow
-                    id="auto-settlements"
-                    label="Auto-generate partner settlements"
-                    description="Run a weekly settlement for every partner branch with unsettled completed orders."
-                    checked={automation.autoGenerateSettlements}
-                    onChange={(autoGenerateSettlements) => setAutomation({ ...automation, autoGenerateSettlements })}
+                    id="auto-invoices"
+                    label="Auto-generate partner invoices"
+                    description="Run a weekly invoice for every partner branch with uninvoiced completed orders."
+                    checked={automation.autoGenerateInvoices}
+                    onChange={(autoGenerateInvoices) => setAutomation({ ...automation, autoGenerateInvoices })}
                   />
                   <ToggleRow
                     id="auto-refunds"

@@ -47,8 +47,12 @@ interface AccountingOverview {
 }
 
 const SOURCE_LABELS: Record<string, string> = {
-  settlement: 'Payout',
-  settlement_clawback: 'Adjustment',
+  // Legacy Lunara-pays-partner records — still shown for historical entries.
+  settlement: 'Payout (legacy)',
+  settlement_clawback: 'Adjustment (legacy)',
+  invoice: 'Invoice issued',
+  invoice_payment: 'Invoice paid',
+  invoice_credit: 'Credit applied',
   remittance: 'Remittance',
   withdrawal: 'Payout',
   rider_earning: 'Expense',
@@ -139,9 +143,11 @@ const ACCOUNT_HELP: Record<string, string> = {
   platform_cash:
     'Total cash received — PayMongo payments, wallet topups, and verified rider remittances.',
   cash_out:
-    'Cash disbursed to partners (settlements) and riders (withdrawals).',
+    'Cash disbursed to riders (withdrawals) and, historically, partners (legacy settlements).',
   partner_payable:
-    'What Lunara owes each partner from unsettled orders.',
+    'Legacy: what Lunara owed each partner from unsettled orders, before the invoicing model.',
+  partner_receivable:
+    'What each partner owes Lunara — commission and fronted rider costs billed via invoice, until marked paid.',
   rider_payable:
     'What Lunara owes each rider for earned but unwithdrawn balance.',
   rider_remittance_receivable:
@@ -167,6 +173,7 @@ const PLATFORM_ACCOUNTS = new Set([
 // Accounts with many per-entity rows — shown full-width
 const WIDE_ACCOUNTS = new Set([
   'rider_payable',
+  'partner_receivable',
   'customer_wallet_liability',
   'rider_remittance_receivable',
 ]);
@@ -180,6 +187,7 @@ const ACCOUNT_ORDER = [
   'refund_expense',
   'rider_payable',
   'partner_payable',
+  'partner_receivable',
   'rider_remittance_receivable',
   'customer_wallet_liability',
 ];
@@ -373,7 +381,7 @@ function TrialBalancePanel({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted">
-          Net balance per account from every settlement, payment, remittance, withdrawal, and refund
+          Net balance per account from every invoice, payment, remittance, withdrawal, and refund
           posted to the double-entry ledger.
         </p>
         <button type="button" className="btn-outline btn-sm" onClick={() => void reload()} disabled={loading}>
@@ -401,8 +409,8 @@ function TrialBalancePanel({
               </p>
               <p className="text-xs text-muted">
                 {Math.abs(clearingDrift) < 1
-                  ? 'Clearing account balanced — all recognized revenue is fully settled or refunded.'
-                  : 'Unsettled balance — orders paid but not yet settled, or refunds outpacing settlement.'}
+                  ? 'Clearing account balanced — all recognized revenue is fully settled/invoiced or refunded.'
+                  : 'Unsettled balance — orders paid but not yet settled/invoiced, or refunds outpacing that.'}
               </p>
             </div>
             <Link href="/reconciliation" className="link-primary text-xs font-medium">Full reconciliation →</Link>
@@ -432,7 +440,7 @@ function TrialBalancePanel({
             <div className="dc-panel-empty">
               <p className="font-medium text-slate-900">No ledger entries yet</p>
               <p className="mt-1 text-sm text-muted">
-                Entries are posted automatically as payments, settlements, remittances, withdrawals, and refunds happen.
+                Entries are posted automatically as payments, invoices, remittances, withdrawals, and refunds happen.
               </p>
             </div>
           ) : (
@@ -552,7 +560,7 @@ export function AccountingBoard() {
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted sm:text-base">
               Revenue, expenses, and cash flow derived from the double-entry ledger — every payment,
-              settlement, withdrawal, and refund posted on the platform.
+              invoice, withdrawal, and refund posted on the platform.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">

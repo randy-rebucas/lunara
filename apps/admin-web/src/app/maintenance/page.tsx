@@ -27,7 +27,8 @@ const SEED_TARGETS = [
 
 const RESET_SCOPES = [
   { id: 'orders',      label: 'Orders',              description: 'Drop orders collection' },
-  { id: 'settlements', label: 'Settlements + Ledger', description: 'Drop partner_settlements + ledger_entries' },
+  { id: 'invoices',    label: 'Invoices + Ledger',    description: 'Drop partner_invoices + ledger_entries' },
+  { id: 'settlements', label: 'Settlements (legacy) + Ledger', description: 'Drop partner_settlements + ledger_entries — historical payout records only' },
   { id: 'ledger',      label: 'Ledger only',          description: 'Drop ledger_entries' },
   { id: 'wallets',     label: 'Wallets',              description: 'Drop wallets + rider_wallets' },
   { id: 'remittances', label: 'Remittances',          description: 'Drop rider_cash_remittances' },

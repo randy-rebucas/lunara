@@ -126,7 +126,7 @@ export class SettingsService {
       autoDispatchOrders: settings.autoDispatchOrders,
       autoAssignPickupRider: settings.autoAssignPickupRider,
       autoAssignDeliveryRider: settings.autoAssignDeliveryRider,
-      autoGenerateSettlements: settings.autoGenerateSettlements,
+      autoGenerateInvoices: settings.autoGenerateInvoices,
       autoApproveRefunds: settings.autoApproveRefunds,
       autoApproveRefundsThreshold: settings.autoApproveRefundsThreshold,
       autoApproveWithdrawals: settings.autoApproveWithdrawals,
@@ -210,7 +210,7 @@ export class SettingsService {
       | 'autoDispatchOrders'
       | 'autoAssignPickupRider'
       | 'autoAssignDeliveryRider'
-      | 'autoGenerateSettlements'
+      | 'autoGenerateInvoices'
       | 'autoApproveRefunds'
       | 'autoApproveWithdrawals',
   ) {

@@ -507,7 +507,9 @@ export class RefundsService {
       await order.save();
     }
 
-    if (order.settlementId) {
+    if (order.invoiceId) {
+      await this.partnerOperationsService.recordInvoiceCredit(order, amount);
+    } else if (order.settlementId) {
       await this.partnerOperationsService.recordSettlementClawback(order, amount);
     }
 
@@ -581,7 +583,9 @@ export class RefundsService {
     const order = payment.orderId ? await this.orderModel.findById(payment.orderId) : null;
     if (!order) throw new NotFoundException('Order not found for this payment');
 
-    if (order.settlementId) {
+    if (order.invoiceId) {
+      await this.partnerOperationsService.recordInvoiceCredit(order, chargebackAmount, 'chargeback');
+    } else if (order.settlementId) {
       await this.partnerOperationsService.recordSettlementClawback(order, chargebackAmount, 'chargeback');
     } else {
       await this.ledgerService.post(

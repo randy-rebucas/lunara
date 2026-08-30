@@ -10,12 +10,14 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
+import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { OrderStatus, UserRole } from '@lunara/types';
@@ -655,25 +657,43 @@ export class PartnerController {
     return this.operationsService.getRevenue(req.user.sub, req.user.role);
   }
 
-  @Get('settlements')
+  @Get('invoices')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
-  getSettlements(@Req() req: { user: { sub: string; role: UserRole } }) {
-    return this.operationsService.getSettlements(req.user.sub, req.user.role);
+  getInvoices(@Req() req: { user: { sub: string; role: UserRole } }) {
+    return this.operationsService.getInvoices(req.user.sub, req.user.role);
   }
 
-  @Get('settlements/:settlementId/orders')
+  @Get('invoices/:invoiceId/orders')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
-  getSettlementOrders(
+  getInvoiceOrders(
     @Req() req: { user: { sub: string; role: UserRole } },
-    @Param('settlementId') settlementId: string,
+    @Param('invoiceId') invoiceId: string,
   ) {
-    return this.operationsService.getSettlementOrders(req.user.sub, req.user.role, settlementId);
+    return this.operationsService.getInvoiceOrders(req.user.sub, req.user.role, invoiceId);
   }
 
-  @Get('ledger-balance')
+  @Get('invoices/:invoiceId/pdf')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  async downloadInvoicePdf(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('invoiceId') invoiceId: string,
+    @Res() res: Response,
+  ) {
+    const { buffer, filename } = await this.operationsService.downloadInvoicePdf(
+      req.user.sub,
+      req.user.role,
+      invoiceId,
+    );
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', buffer.length);
+    res.end(buffer);
+  }
+
+  @Get('receivable-balance')
   @Roles(UserRole.PARTNER)
-  getLedgerBalance(@Req() req: { user: { sub: string } }) {
-    return this.operationsService.getLedgerBalance(req.user.sub);
+  getReceivableBalance(@Req() req: { user: { sub: string } }) {
+    return this.operationsService.getReceivableBalance(req.user.sub);
   }
 
   @Get('orders/:orderId/receiving')

@@ -73,8 +73,8 @@ const FEATURES = [
   },
   {
     icon: ICONS.scale,
-    title: 'Revenue & Settlements',
-    description: 'See earnings and payouts as soon as orders complete',
+    title: 'Revenue & Invoices',
+    description: 'Track your earnings and Lunara billing in one place',
   },
 ];
 

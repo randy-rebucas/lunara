@@ -9,12 +9,14 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
+import type { Response } from 'express';
 import { UserRole } from '@lunara/types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -60,7 +62,8 @@ import { UpdateLaundryServiceDto } from './dto/update-laundry-service.dto';
 import { CatalogService } from '../catalog/catalog.service';
 import { CloudinaryStorageService } from '../../common/storage/cloudinary-storage.service';
 import { PartnerOperationsService } from '../partner/partner-operations.service';
-import { CreateSettlementDto } from '../partner/dto/create-settlement.dto';
+import { CreateInvoiceDto } from '../partner/dto/create-invoice.dto';
+import { MarkInvoicePaidDto } from '../partner/dto/mark-invoice-paid.dto';
 import { PushNotificationService } from '../push/push-notification.service';
 import { ServiceAreasService } from '../service-areas/service-areas.service';
 import { CreateServiceAreaDto, UpdateServiceAreaDto } from '../service-areas/dto/service-area.dto';
@@ -320,28 +323,54 @@ export class AdminController {
     return this.adminService.onboardPartner(dto);
   }
 
-  @Get('partners/:partnerId/settlements')
-  getPartnerSettlements(@Param('partnerId') partnerId: string) {
-    return this.partnerOperationsService.getPartnerSettlementsForAdmin(partnerId);
+  @Get('partners/:partnerId/invoices')
+  getPartnerInvoices(@Param('partnerId') partnerId: string) {
+    return this.partnerOperationsService.getPartnerInvoicesForAdmin(partnerId);
   }
 
-  @Get('partners/:partnerId/clawback-balance')
-  getPartnerClawbackBalance(@Param('partnerId') partnerId: string) {
-    return this.partnerOperationsService.getOutstandingClawbackBalance(partnerId);
+  @Get('partners/:partnerId/credit-balance')
+  getPartnerCreditBalance(@Param('partnerId') partnerId: string) {
+    return this.partnerOperationsService.getOutstandingCreditBalance(partnerId);
   }
 
-  @Get('partners/:partnerId/unsettled-orders')
-  getUnsettledOrders(@Param('partnerId') partnerId: string) {
-    return this.partnerOperationsService.getUnsettledOrders(partnerId);
+  @Get('partners/:partnerId/uninvoiced-orders')
+  getUninvoicedOrders(@Param('partnerId') partnerId: string) {
+    return this.partnerOperationsService.getUninvoicedOrders(partnerId);
   }
 
-  @Post('partners/:partnerId/settlements')
-  createPartnerSettlement(
+  @Post('partners/:partnerId/invoices')
+  createPartnerInvoice(
     @Param('partnerId') partnerId: string,
     @Req() req: { user: { sub: string } },
-    @Body() dto: CreateSettlementDto,
+    @Body() dto: CreateInvoiceDto,
   ) {
-    return this.partnerOperationsService.createSettlement(req.user.sub, partnerId, dto);
+    return this.partnerOperationsService.createInvoice(req.user.sub, partnerId, dto);
+  }
+
+  @Post('invoices/:invoiceId/mark-paid')
+  markInvoicePaid(
+    @Param('invoiceId') invoiceId: string,
+    @Req() req: { user: { sub: string } },
+    @Body() dto: MarkInvoicePaidDto,
+  ) {
+    return this.partnerOperationsService.markInvoicePaid(req.user.sub, invoiceId, dto);
+  }
+
+  @Get('invoices/:invoiceId/pdf')
+  async downloadInvoicePdf(
+    @Param('invoiceId') invoiceId: string,
+    @Req() req: { user: { sub: string } },
+    @Res() res: Response,
+  ) {
+    const { buffer, filename } = await this.partnerOperationsService.downloadInvoicePdf(
+      req.user.sub,
+      UserRole.ADMIN,
+      invoiceId,
+    );
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', buffer.length);
+    res.end(buffer);
   }
 
   @Get('setup/status')

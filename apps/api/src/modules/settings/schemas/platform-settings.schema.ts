@@ -44,9 +44,9 @@ export class PlatformSettings {
   @Prop({ default: false })
   autoAssignDeliveryRider!: boolean;
 
-  /** Auto-generate partner settlements on a schedule instead of requiring a manual admin trigger. */
+  /** Auto-generate partner invoices on a schedule instead of requiring a manual admin trigger. */
   @Prop({ default: false })
-  autoGenerateSettlements!: boolean;
+  autoGenerateInvoices!: boolean;
 
   /** Auto-approve/reject refund requests under autoApproveRefundsThreshold with clean evidence. */
   @Prop({ default: false })

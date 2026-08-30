@@ -15,7 +15,7 @@ export class UpdateAutomationSettingsDto {
 
   @IsOptional()
   @IsBoolean()
-  autoGenerateSettlements?: boolean;
+  autoGenerateInvoices?: boolean;
 
   @IsOptional()
   @IsBoolean()

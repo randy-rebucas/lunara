@@ -18,6 +18,8 @@ import { ShopInventoryItem, ShopInventorySchema } from './schemas/shop-inventory
 import { Shelf, ShelfSchema } from './schemas/shelf.schema';
 import { ShelfService } from './shelf.service';
 import { PartnerSettlement, PartnerSettlementSchema } from './schemas/partner-settlement.schema';
+import { PartnerInvoice, PartnerInvoiceSchema } from './schemas/partner-invoice.schema';
+import { PartnerInvoicePdfService } from './partner-invoice-pdf.service';
 import { Notification, NotificationSchema } from '../reviews/schemas/notification.schema';
 import { Branch, BranchSchema } from '../branches/schemas/branch.schema';
 import { BranchesModule } from '../branches/branches.module';
@@ -40,6 +42,7 @@ import { PromotionsModule } from '../promotions/promotions.module';
       { name: Branch.name, schema: BranchSchema },
       { name: Payment.name, schema: PaymentSchema },
       { name: PartnerSettlement.name, schema: PartnerSettlementSchema },
+      { name: PartnerInvoice.name, schema: PartnerInvoiceSchema },
       { name: LaundryService.name, schema: LaundryServiceSchema },
       { name: LaundryAddon.name, schema: LaundryAddonSchema },
       { name: UserProfile.name, schema: UserProfileSchema },
@@ -61,6 +64,7 @@ import { PromotionsModule } from '../promotions/promotions.module';
     PartnerSettingsService,
     PartnerProfileService,
     ShelfService,
+    PartnerInvoicePdfService,
   ],
   exports: [ProcessingService, PartnerOperationsService, ShopReceivingService],
 })

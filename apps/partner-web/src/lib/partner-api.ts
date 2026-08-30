@@ -16,6 +16,12 @@ const USER_KEY = 'lunara_portal_user';
 
 export type { PortalRole, PortalUser };
 
+/** Base API URL for callers that need to build a raw `fetch` (e.g. a binary PDF download that
+ * can't go through partnerFetch's JSON-only response handling). */
+export function getApiBaseUrl() {
+  return API_URL;
+}
+
 export function getPartnerToken() {
   if (typeof window === 'undefined') return '';
   return localStorage.getItem(STORAGE_KEY) ?? '';

@@ -5,9 +5,9 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import * as bcrypt from 'bcrypt';
-import { Model, Types } from 'mongoose';
+import { Connection, Model, Types } from 'mongoose';
 import { OrderStatus, PaymentMethod, PaymentStatus, UserRole } from '@lunara/types';
 import {
   computePickupSla,
@@ -30,6 +30,12 @@ import {
   PartnerSettlement,
   PartnerSettlementDocument,
 } from './schemas/partner-settlement.schema';
+import {
+  PartnerInvoice,
+  PartnerInvoiceDocument,
+} from './schemas/partner-invoice.schema';
+import { PartnerInvoicePdfService } from './partner-invoice-pdf.service';
+import { EmailService } from '../../common/email/email.service';
 import {
   Branch,
   BranchDocument,
@@ -106,13 +112,32 @@ export class PartnerOperationsService {
     @InjectModel(ShopInventoryItem.name) private inventoryModel: Model<ShopInventoryDocument>,
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
     @InjectModel(PartnerSettlement.name) private settlementModel: Model<PartnerSettlementDocument>,
+    @InjectModel(PartnerInvoice.name) private invoiceModel: Model<PartnerInvoiceDocument>,
     @InjectModel(UserProfile.name) private userProfileModel: Model<UserProfileDocument>,
     @InjectModel(Rider.name) private riderModel: Model<RiderDocument>,
+    @InjectConnection() private connection: Connection,
     private trackingGateway: TrackingGateway,
     private riderAssignmentService: RiderAssignmentService,
     private partnerOrderNotifications: PartnerOrderNotificationService,
     private ledgerService: LedgerService,
+    private invoicePdfService: PartnerInvoicePdfService,
+    private emailService: EmailService,
   ) {}
+
+  /** Concurrency-safe sequential invoice number (INV-<year>-<seq>), backed by a `counters`
+   * collection findOneAndUpdate — safe even when the weekly cron invoices many branches
+   * near-simultaneously. */
+  private async nextInvoiceNumber(): Promise<string> {
+    const year = new Date().getFullYear();
+    const counterId = `partner_invoice_${year}`;
+    const result = await this.connection.collection('counters').findOneAndUpdate(
+      { _id: counterId as unknown as never },
+      { $inc: { seq: 1 } },
+      { upsert: true, returnDocument: 'after' },
+    );
+    const seq = (result as unknown as { seq?: number } | null)?.seq ?? 1;
+    return `INV-${year}-${String(seq).padStart(6, '0')}`;
+  }
 
   /**
    * Lunara's cut of a single order. Orders placed through the shop-markup flow (customer
@@ -232,6 +257,64 @@ export class PartnerOperationsService {
         entries,
       );
     }
+  }
+
+  /**
+   * The invoicing-era counterpart of recordSettlementClawback, called by refunds.service.ts and
+   * PaymentsService.recordChargeback() for an order that was already claimed by a PartnerInvoice.
+   * Under the invoicing model the partner collects payment directly, so Lunara never held a
+   * "payout share" to claw back — only the commission Lunara already recognized on this order
+   * needs reversing. Credited to the invoice's own creditTotal so a later invoice can net it off.
+   */
+  async recordInvoiceCredit(
+    order: OrderDocument,
+    refundAmount: number,
+    kind: 'refund' | 'chargeback' = 'refund',
+  ) {
+    if (!order.invoiceId || refundAmount <= 0) return;
+
+    const invoice = await this.invoiceModel.findById(order.invoiceId);
+    if (!invoice) return;
+
+    const branch = order.branchId ? await this.branchModel.findById(order.branchId) : null;
+    const commissionRateByBranchId = branch
+      ? this.commissionRateMap([branch])
+      : new Map<string, number>();
+    const feeShare = Math.min(
+      this.computeOrderFee(order, commissionRateByBranchId),
+      refundAmount,
+    );
+    if (feeShare <= 0) return;
+
+    await this.invoiceModel.updateOne(
+      { _id: invoice._id },
+      { $inc: { creditTotal: feeShare, creditOrderCount: 1 } },
+    );
+
+    const label = kind === 'chargeback' ? 'chargeback' : 'refund';
+    const creditAccount = kind === 'chargeback' ? ('platform_cash' as const) : ('refund_expense' as const);
+    await this.ledgerService.post(
+      `${kind === 'chargeback' ? 'chargeback-invoice-credit' : 'invoice-credit'}:${order._id.toString()}`,
+      'invoice_credit',
+      order._id.toString(),
+      [
+        {
+          accountType: 'platform_revenue',
+          direction: 'debit',
+          amount: feeShare,
+          description: `Commission reversed — order ${order._id.toString().slice(-6)} ${label} after invoice ${invoice.invoiceNumber}`,
+        },
+        {
+          accountType: creditAccount,
+          direction: 'credit',
+          amount: feeShare,
+          description:
+            kind === 'chargeback'
+              ? `Cash pulled back by chargeback on order ${order._id.toString().slice(-6)} (already invoiced)`
+              : `Post-invoice refund credit for order ${order._id.toString().slice(-6)}`,
+        },
+      ],
+    );
   }
 
   /** All branches a user manages orders/revenue for: every branch under a partner's account, or the one representative branch shown to admins by default. */
@@ -1523,38 +1606,35 @@ export class PartnerOperationsService {
     };
   }
 
-  async getSettlements(userId: string, role: UserRole) {
+  async getInvoices(userId: string, role: UserRole) {
     if (role === UserRole.ADMIN) {
-      const settlements = await this.settlementModel
-        .find()
-        .sort({ createdAt: -1 })
-        .limit(100);
-      return { success: true, data: settlements.map((s) => this.formatSettlement(s)) };
+      const invoices = await this.invoiceModel.find().sort({ createdAt: -1 }).limit(100);
+      return { success: true, data: invoices.map((i) => this.formatInvoice(i)) };
     }
-    const settlements = await this.settlementModel
+    const invoices = await this.invoiceModel
       .find({ partnerId: new Types.ObjectId(userId) })
       .sort({ createdAt: -1 });
-    return { success: true, data: settlements.map((s) => this.formatSettlement(s)) };
+    return { success: true, data: invoices.map((i) => this.formatInvoice(i)) };
   }
 
-  async getPartnerSettlementsForAdmin(partnerId: string) {
-    const settlements = await this.settlementModel
+  async getPartnerInvoicesForAdmin(partnerId: string) {
+    const invoices = await this.invoiceModel
       .find({ partnerId: new Types.ObjectId(partnerId) })
       .sort({ createdAt: -1 });
-    return { success: true, data: settlements.map((s) => this.formatSettlement(s)) };
+    return { success: true, data: invoices.map((i) => this.formatInvoice(i)) };
   }
 
-  /** Net amount Lunara still owes this partner — sum of pending settlement payouts. */
-  async getLedgerBalance(partnerId: string) {
-    const pendingSettlements = await this.settlementModel.find({
+  /** Net amount this partner owes Lunara — sum of pending invoice amounts due. */
+  async getReceivableBalance(partnerId: string) {
+    const pendingInvoices = await this.invoiceModel.find({
       partnerId: new Types.ObjectId(partnerId),
       status: 'pending',
     });
-    const payableBalance = pendingSettlements.reduce((sum, s) => sum + (s.partnerPayout ?? s.totalAmount), 0);
-    return { success: true, data: { partnerId, payableBalance } };
+    const receivableBalance = pendingInvoices.reduce((sum, i) => sum + i.amountDue, 0);
+    return { success: true, data: { partnerId, receivableBalance } };
   }
 
-  async getUnsettledOrders(partnerId: string) {
+  async getUninvoicedOrders(partnerId: string) {
     const branches = await this.branchModel.find({
       partnerUserId: new Types.ObjectId(partnerId),
     });
@@ -1565,7 +1645,7 @@ export class PartnerOperationsService {
       .find({
         branchId: { $in: branches.map((b) => b._id) },
         status: { $in: COMPLETED_STATUSES },
-        settlementId: { $exists: false },
+        invoiceId: { $exists: false },
       })
       .sort({ updatedAt: -1 });
 
@@ -1579,16 +1659,14 @@ export class PartnerOperationsService {
       const isCash = payment?.method === PaymentMethod.CASH;
       const cashCollected = isCash && payment?.status === PaymentStatus.PAID;
       const subtotal = o.subtotal ?? o.total;
-      const lunaraFee = this.computeOrderFee(o, commissionRateByBranchId);
-      const partnerPayout = o.total - lunaraFee;
+      const commissionDue = this.computeOrderFee(o, commissionRateByBranchId);
       const commissionRate = commissionRateByBranchId.get(o.branchId?.toString() ?? '') ?? 0.2;
       return {
         orderId: o._id.toString(),
         completedAt: o.updatedAt?.toISOString() ?? o.createdAt?.toISOString(),
         amount: o.total,
         subtotal,
-        lunaraFee,
-        partnerPayout,
+        commissionDue,
         commissionRate,
         pricingModel: o.pricingModel ?? 'legacy_commission',
         bookingType: o.bookingType,
@@ -1601,24 +1679,24 @@ export class PartnerOperationsService {
     return { success: true, data };
   }
 
-  async getSettlementOrders(userId: string, role: UserRole, settlementId: string) {
-    const settlement = await this.settlementModel.findById(settlementId);
-    if (!settlement) throw new NotFoundException('Settlement not found');
+  async getInvoiceOrders(userId: string, role: UserRole, invoiceId: string) {
+    const invoice = await this.invoiceModel.findById(invoiceId);
+    if (!invoice) throw new NotFoundException('Invoice not found');
 
-    // For partners, scope to their own settlement only
+    // For partners, scope to their own invoice only
     if (role !== UserRole.ADMIN) {
-      if (settlement.partnerId.toString() !== userId) {
-        throw new NotFoundException('Settlement not found');
+      if (invoice.partnerId.toString() !== userId) {
+        throw new NotFoundException('Invoice not found');
       }
     }
 
     const branches = await this.branchModel.find({
-      partnerUserId: new Types.ObjectId(settlement.partnerId),
+      partnerUserId: new Types.ObjectId(invoice.partnerId),
     });
     if (branches.length === 0) throw new NotFoundException('Partner branch not found');
 
     const orders = await this.orderModel
-      .find({ settlementId: settlement._id })
+      .find({ invoiceId: invoice._id })
       .sort({ updatedAt: -1 });
 
     const paymentsByOrderId = await loadLatestOrderPaymentsByOrderId(
@@ -1626,10 +1704,10 @@ export class PartnerOperationsService {
       orders.map((o) => o._id),
     );
 
-    // Use the commission rate snapshot from the settlement (a weighted average across whichever
+    // Use the commission rate snapshot from the invoice (a weighted average across whichever
     // branches contributed orders) for legacy orders, for exact historical reconciliation.
     // shop_markup orders ignore this and use their own baseSubtotal regardless (see computeOrderFee).
-    const commissionRate = settlement.commissionRate ?? 0.20;
+    const commissionRate = invoice.commissionRate ?? 0.20;
     const emptyBranchRateMap = new Map<string, number>();
 
     const data = orders.map((o) => {
@@ -1637,15 +1715,13 @@ export class PartnerOperationsService {
       const isCash = payment?.method === PaymentMethod.CASH;
       const cashCollected = isCash && payment?.status === PaymentStatus.PAID;
       const subtotal = o.subtotal ?? o.total;
-      const lunaraFee = this.computeOrderFee(o, emptyBranchRateMap, commissionRate);
-      const partnerPayout = o.total - lunaraFee;
+      const commissionDue = this.computeOrderFee(o, emptyBranchRateMap, commissionRate);
       return {
         orderId: o._id.toString(),
         completedAt: o.updatedAt?.toISOString() ?? o.createdAt?.toISOString(),
         amount: o.total,
         subtotal,
-        lunaraFee,
-        partnerPayout,
+        commissionDue,
         commissionRate,
         pricingModel: o.pricingModel ?? 'legacy_commission',
         bookingType: o.bookingType,
@@ -1660,61 +1736,60 @@ export class PartnerOperationsService {
     return { success: true, data };
   }
 
-  /** Sum of clawbackTotal − clawbackRecovered across every settlement for this partner — how much
-   * is still outstanding from post-settlement refunds that were never actually recovered from a
-   * later payout. Surfaced to admin before creating a new settlement so they can choose to net it. */
-  async getOutstandingClawbackBalance(partnerId: string) {
-    const [result] = await this.settlementModel.aggregate<{ outstanding: number }>([
+  /** Sum of creditTotal − creditRecovered across every invoice for this partner — how much is
+   * still outstanding from post-invoice refund credits that were never actually applied to a
+   * later invoice. Surfaced to admin before creating a new invoice so they can choose to net it. */
+  async getOutstandingCreditBalance(partnerId: string) {
+    const [result] = await this.invoiceModel.aggregate<{ outstanding: number }>([
       { $match: { partnerId: new Types.ObjectId(partnerId) } },
       {
         $group: {
           _id: null,
-          outstanding: { $sum: { $subtract: ['$clawbackTotal', '$clawbackRecovered'] } },
+          outstanding: { $sum: { $subtract: ['$creditTotal', '$creditRecovered'] } },
         },
       },
     ]);
     return { success: true, data: { outstanding: Math.max(0, result?.outstanding ?? 0) } };
   }
 
-  async createSettlement(
+  async createInvoice(
     adminUserId: string,
     partnerId: string,
-    dto: { orderIds: string[]; adminNote?: string; recoverClawback?: boolean },
+    dto: { orderIds: string[]; adminNote?: string; applyCredit?: boolean },
   ) {
     if (!dto.orderIds || dto.orderIds.length === 0) {
       throw new BadRequestException('At least one order must be selected');
     }
 
     // Find all of the partner's branches — a partner account can own several shops, and orders
-    // selected for this settlement may span any of them.
+    // selected for this invoice may span any of them.
     const branches = await this.branchModel.find({
       partnerUserId: new Types.ObjectId(partnerId),
     });
     if (branches.length === 0) throw new NotFoundException('Partner branch not found');
     const commissionRateByBranchId = this.commissionRateMap(branches);
 
-    // Pre-generate the settlement id and use it to atomically *claim* the selected orders before
-    // computing any totals. The updateMany's filter re-asserts settlementId is still unset, so two
-    // concurrent createSettlement calls with overlapping order IDs can each only claim the orders
+    // Pre-generate the invoice id and use it to atomically *claim* the selected orders before
+    // computing any totals. The updateMany's filter re-asserts invoiceId is still unset, so two
+    // concurrent createInvoice calls with overlapping order IDs can each only claim the orders
     // still unclaimed at the moment their write lands — MongoDB serializes per-document writes, so
-    // the same order can never end up stamped into two settlements (the previous find-then-updateMany
-    // form had no such guard and could double-pay the same orders).
-    const settlementId = new Types.ObjectId();
+    // the same order can never end up stamped into two invoices.
+    const invoiceId = new Types.ObjectId();
     const claim = await this.orderModel.updateMany(
       {
         _id: { $in: dto.orderIds.map((id) => new Types.ObjectId(id)) },
         branchId: { $in: branches.map((b) => b._id) },
         status: { $in: COMPLETED_STATUSES },
-        settlementId: { $exists: false },
+        invoiceId: { $exists: false },
       },
-      { $set: { settlementId } },
+      { $set: { invoiceId } },
     );
 
     if (claim.modifiedCount === 0) {
-      throw new BadRequestException('No valid unsettled orders found for the selected IDs');
+      throw new BadRequestException('No valid uninvoiced orders found for the selected IDs');
     }
 
-    const completedOrders = await this.orderModel.find({ settlementId });
+    const completedOrders = await this.orderModel.find({ invoiceId });
 
     // Derive period from the selected orders' completion timestamps
     const timestamps = completedOrders.map((o) => o.updatedAt?.getTime() ?? o.createdAt?.getTime() ?? Date.now());
@@ -1737,62 +1812,59 @@ export class PartnerOperationsService {
       }
     }
 
-    const totalAmount = completedOrders.reduce((s, o) => s + o.total, 0);
+    const totalCollected = completedOrders.reduce((s, o) => s + o.total, 0);
     // shop_markup orders already have Lunara's cut baked into the price the customer paid;
     // legacy orders take their own branch's commissionRate off the laundry subtotal (not the
     // delivery fee) — branches under the same partner can carry different rates, so this must
     // be computed per order rather than with one flat number.
-    const lunaraFee = Math.round(
+    const commissionDue = Math.round(
       completedOrders.reduce((s, o) => s + this.computeOrderFee(o, commissionRateByBranchId), 0),
     );
 
-    // totalAmount includes the full customer-paid deliveryFee, which — with lunaraFee computed
-    // on subtotal only — would otherwise flow entirely into partnerPayout, while Lunara pays
-    // riders separately out of platform_cash with nothing connecting the two. The partner already
-    // received the delivery fee revenue inside totalAmount, so their payout funds the delivery:
-    // actual rider cost for these orders (read from the ledger, not estimated — correctly ₱0 for
-    // orders an employee rider handled) is deducted here and credited to platform_revenue instead.
+    // The partner now collects the full customer-paid deliveryFee directly, but Lunara still
+    // fronts the rider's pickup+delivery cost out of platform_cash — actual rider cost for these
+    // orders (read from the ledger, not estimated — correctly ₱0 for orders an employee rider
+    // handled) is billed back to the partner alongside the commission, additive rather than
+    // capped (there's no payout to cap it against anymore).
     const riderCostByOrderId = await this.ledgerService.getRiderCostByOrderId(
       completedOrders.map((o) => o._id.toString()),
     );
-    const riderCostForPeriod = completedOrders.reduce(
-      (s, o) => s + (riderCostByOrderId.get(o._id.toString()) ?? 0),
+    const riderCostDue = Math.max(
       0,
+      completedOrders.reduce((s, o) => s + (riderCostByOrderId.get(o._id.toString()) ?? 0), 0),
     );
-    const riderCostRecovered = Math.max(0, Math.min(riderCostForPeriod, totalAmount - lunaraFee));
 
-    // Opt-in: net this partner's outstanding balance from earlier post-settlement clawbacks
-    // (refunds on orders already paid out) against this new payout, and mark it recovered on
-    // the settlements it came from so it isn't counted as outstanding twice.
-    let clawbackRecoveryApplied = 0;
-    const clawbackSourceSettlements: { id: Types.ObjectId; apply: number }[] = [];
-    if (dto.recoverClawback) {
-      const outstandingSettlements = await this.settlementModel
+    // Opt-in: net this partner's outstanding balance from earlier post-invoice credits (refunds
+    // on orders already invoiced) against this new invoice, and mark it recovered on the invoices
+    // it came from so it isn't counted as outstanding twice.
+    let creditApplied = 0;
+    const creditSourceInvoices: { id: Types.ObjectId; apply: number }[] = [];
+    if (dto.applyCredit) {
+      const outstandingInvoices = await this.invoiceModel
         .find({
           partnerId: new Types.ObjectId(partnerId),
-          $expr: { $gt: ['$clawbackTotal', '$clawbackRecovered'] },
+          $expr: { $gt: ['$creditTotal', '$creditRecovered'] },
         })
         .sort({ createdAt: 1 });
-      let remainingCapacity = totalAmount - lunaraFee - riderCostRecovered;
-      for (const s of outstandingSettlements) {
+      let remainingCapacity = commissionDue + riderCostDue;
+      for (const inv of outstandingInvoices) {
         if (remainingCapacity <= 0) break;
-        const outstanding = s.clawbackTotal - s.clawbackRecovered;
+        const outstanding = inv.creditTotal - inv.creditRecovered;
         const apply = Math.min(outstanding, remainingCapacity);
         if (apply <= 0) continue;
-        clawbackSourceSettlements.push({ id: s._id, apply });
-        clawbackRecoveryApplied += apply;
+        creditSourceInvoices.push({ id: inv._id, apply });
+        creditApplied += apply;
         remainingCapacity -= apply;
       }
     }
 
-    const partnerPayout =
-      totalAmount - lunaraFee - riderCostRecovered - clawbackRecoveryApplied;
+    const amountDue = Math.max(0, commissionDue + riderCostDue - creditApplied);
 
     // Stored commissionRate becomes a display-only weighted average across the legacy-priced
-    // orders in this settlement (shop_markup/commission orders don't have a "rate" at all, their
-    // fee is baked into baseSubtotal) — once a settlement can span branches with different rates,
-    // this field is no longer the single source of truth for the fee; lunaraFee (computed per-order
-    // above) always is.
+    // orders in this invoice (shop_markup/commission orders don't have a "rate" at all, their fee
+    // is baked into baseSubtotal) — once an invoice can span branches with different rates, this
+    // field is no longer the single source of truth for the fee; commissionDue (computed
+    // per-order above) always is.
     const legacyOrders = completedOrders.filter(
       (o) => o.pricingModel !== 'shop_markup' && o.pricingModel !== 'commission',
     );
@@ -1805,105 +1877,237 @@ export class PartnerOperationsService {
           }, 0) / legacySubtotalSum
         : 0.2;
 
-    let settlement;
+    const invoiceNumber = await this.nextInvoiceNumber();
+    const dueDate = new Date(end.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const fullyCoveredByCredit = amountDue === 0 && creditApplied > 0;
+
+    let invoice: PartnerInvoiceDocument;
     try {
-      settlement = await this.settlementModel.create({
-        _id: settlementId,
+      invoice = await this.invoiceModel.create({
+        _id: invoiceId,
         partnerId: new Types.ObjectId(partnerId),
+        invoiceNumber,
         periodStart: start,
         periodEnd: end,
         totalOrders: completedOrders.length,
         cashOrders,
         digitalOrders,
-        totalAmount,
-        lunaraFee,
-        partnerPayout,
-        riderCostRecovered,
-        clawbackRecoveryApplied,
+        totalCollected,
+        commissionDue,
+        riderCostDue,
+        amountDue,
+        creditApplied,
         commissionRate: weightedCommissionRate,
-        status: 'paid',
-        paidAt: new Date(),
-        paidBy: new Types.ObjectId(adminUserId),
+        dueDate,
+        status: fullyCoveredByCredit ? 'paid' : 'pending',
+        ...(fullyCoveredByCredit ? { paidAt: new Date(), paidBy: new Types.ObjectId(adminUserId) } : {}),
         adminNote: dto.adminNote,
       });
     } catch (err) {
-      // Release the claimed orders so they aren't stuck referencing a settlement that was never
+      // Release the claimed orders so they aren't stuck referencing an invoice that was never
       // actually created.
       await this.orderModel.updateMany(
-        { settlementId },
-        { $unset: { settlementId: 1 } },
+        { invoiceId },
+        { $unset: { invoiceId: 1 } },
       );
       throw err;
     }
 
-    // Mark the recovered clawback as no longer outstanding on the settlements it came from —
-    // after createSettlement's own document write succeeds, so a failure above never marks a
-    // clawback recovered without an actual settlement to show for it.
-    for (const src of clawbackSourceSettlements) {
-      await this.settlementModel.updateOne(
+    // Mark the recovered credit as no longer outstanding on the invoices it came from — after
+    // createInvoice's own document write succeeds, so a failure above never marks credit
+    // recovered without an actual invoice to show for it.
+    for (const src of creditSourceInvoices) {
+      await this.invoiceModel.updateOne(
         { _id: src.id },
-        { $inc: { clawbackRecovered: src.apply } },
+        { $inc: { creditRecovered: src.apply } },
       );
     }
 
-    // platform_revenue is credited lunaraFee + riderCostRecovered, not lunaraFee alone — the
-    // recovered rider cost is real margin Lunara keeps instead of funding out of platform_cash
-    // with nothing to show for it (see comment above). clawbackRecoveryApplied needs no separate
-    // credit: it was already expensed via refund_expense at clawback time (recordSettlementClawback),
-    // so simply crediting a smaller cash_out here is what actually recovers it — the debit posted
-    // there and the smaller credit posted here net to zero on the cash_out account over time.
+    // Lunara never holds the collected cash under this model — only the receivable (what the
+    // partner owes) and the revenue it represents are booked. creditApplied needs no separate
+    // debit here: it was already expensed via refund_expense at credit time (recordInvoiceCredit),
+    // so simply booking a smaller receivable here is what actually recovers it.
     await this.ledgerService.post(
-      `settlement:${settlement._id.toString()}`,
-      'settlement',
-      settlement._id.toString(),
+      `invoice:${invoice._id.toString()}`,
+      'invoice',
+      invoice._id.toString(),
       [
         {
-          accountType: 'order_revenue_clearing',
+          accountType: 'partner_receivable',
           direction: 'debit',
-          amount: totalAmount,
-          description: `Orders settled for partner ${partnerId} (${start.toISOString().slice(0, 10)}..${end.toISOString().slice(0, 10)})`,
-        },
-        {
-          accountType: 'cash_out',
-          direction: 'credit',
-          amount: partnerPayout,
-          description: `Cash paid out to partner ${partnerId}${clawbackRecoveryApplied > 0 ? ` (net of ₱${clawbackRecoveryApplied} recovered clawback)` : ''}`,
+          amount: amountDue,
+          description: `Invoice ${invoiceNumber} issued to partner ${partnerId} (${start.toISOString().slice(0, 10)}..${end.toISOString().slice(0, 10)})`,
         },
         {
           accountType: 'platform_revenue',
           direction: 'credit',
-          amount: lunaraFee + riderCostRecovered,
-          description: `Commission earned on partner ${partnerId} settlement (rate ${(weightedCommissionRate * 100).toFixed(1)}%)${riderCostRecovered > 0 ? ` + ₱${riderCostRecovered} rider delivery cost recovered from partner payout` : ''}`,
+          amount: amountDue,
+          description: `Commission + rider cost billed to partner ${partnerId} via invoice ${invoiceNumber} (rate ${(weightedCommissionRate * 100).toFixed(1)}%)${riderCostDue > 0 ? `, incl. ₱${riderCostDue} rider delivery cost` : ''}${creditApplied > 0 ? `, net of ₱${creditApplied} applied credit` : ''}`,
         },
       ],
     );
 
-    return { success: true, data: this.formatSettlement(settlement) };
+    // Auto-email the PDF invoice to the partner — never fails invoice creation itself.
+    try {
+      const partnerUser = await this.userModel.findById(partnerId).select('email').lean();
+      const pdfBuffer = await this.invoicePdfService.build(
+        {
+          invoiceNumber: invoice.invoiceNumber,
+          periodStart: invoice.periodStart,
+          periodEnd: invoice.periodEnd,
+          dueDate: invoice.dueDate,
+          totalCollected: invoice.totalCollected,
+          commissionDue: invoice.commissionDue,
+          riderCostDue: invoice.riderCostDue,
+          creditApplied: invoice.creditApplied,
+          amountDue: invoice.amountDue,
+          status: invoice.status,
+        },
+        { name: branches[0]?.name ?? 'Partner', email: partnerUser?.email },
+        completedOrders.map((o) => ({
+          orderId: o._id.toString(),
+          completedAt: (o.updatedAt ?? o.createdAt)?.toISOString(),
+          amount: o.total,
+          commissionDue: this.computeOrderFee(o, commissionRateByBranchId),
+          paymentMethod: paymentsByOrderId.get(o._id.toString())?.method ?? undefined,
+        })),
+      );
+      invoice.pdfGeneratedAt = new Date();
+      if (partnerUser?.email) {
+        const sent = await this.emailService.sendPartnerInvoice(
+          partnerUser.email,
+          { invoiceNumber: invoice.invoiceNumber, amountDue: invoice.amountDue, dueDate: invoice.dueDate },
+          pdfBuffer,
+        );
+        if (sent) {
+          invoice.emailedAt = new Date();
+          invoice.emailError = undefined;
+        } else {
+          invoice.emailError = 'Email send failed or SMTP not configured';
+        }
+      } else {
+        invoice.emailError = 'Partner has no email on file';
+      }
+      await invoice.save();
+    } catch (err) {
+      invoice.emailError = err instanceof Error ? err.message : 'Failed to generate/send invoice PDF';
+      await invoice.save();
+    }
+
+    return { success: true, data: this.formatInvoice(invoice) };
   }
 
-  private formatSettlement(s: PartnerSettlementDocument) {
+  /** Admin marks an invoice paid once the partner settles it through an offline channel
+   * (bank transfer/GCash) — there's no in-app payment collection under this model. */
+  async markInvoicePaid(adminUserId: string, invoiceId: string, dto: { paymentReference?: string; note?: string }) {
+    const invoice = await this.invoiceModel.findById(invoiceId);
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (invoice.status !== 'pending') {
+      throw new BadRequestException(`Invoice is already ${invoice.status}`);
+    }
+
+    invoice.status = 'paid';
+    invoice.paidAt = new Date();
+    invoice.paidBy = new Types.ObjectId(adminUserId);
+    if (dto.paymentReference) invoice.paymentReference = dto.paymentReference;
+    if (dto.note) invoice.adminNote = invoice.adminNote ? `${invoice.adminNote}\n${dto.note}` : dto.note;
+    await invoice.save();
+
+    if (invoice.amountDue > 0) {
+      await this.ledgerService.post(
+        `invoice-payment:${invoice._id.toString()}`,
+        'invoice_payment',
+        invoice._id.toString(),
+        [
+          {
+            accountType: 'platform_cash',
+            direction: 'debit',
+            amount: invoice.amountDue,
+            description: `Cash received from partner ${invoice.partnerId.toString()} for invoice ${invoice.invoiceNumber}${dto.paymentReference ? ` (ref ${dto.paymentReference})` : ''}`,
+          },
+          {
+            accountType: 'partner_receivable',
+            direction: 'credit',
+            amount: invoice.amountDue,
+            description: `Receivable cleared for invoice ${invoice.invoiceNumber}`,
+          },
+        ],
+      );
+    }
+
+    return { success: true, data: this.formatInvoice(invoice) };
+  }
+
+  /** Regenerates the invoice PDF on demand (no storage — cheap and deterministic from the
+   * invoice + its claimed orders) for partner-web/admin-web download buttons. */
+  async downloadInvoicePdf(userId: string, role: UserRole, invoiceId: string): Promise<{ buffer: Buffer; filename: string }> {
+    const invoice = await this.invoiceModel.findById(invoiceId);
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (role !== UserRole.ADMIN && invoice.partnerId.toString() !== userId) {
+      throw new NotFoundException('Invoice not found');
+    }
+
+    const branches = await this.branchModel.find({ partnerUserId: invoice.partnerId });
+    const partnerUser = await this.userModel.findById(invoice.partnerId).select('email').lean();
+    const orders = await this.orderModel.find({ invoiceId: invoice._id }).sort({ updatedAt: -1 });
+    const paymentsByOrderId = await loadLatestOrderPaymentsByOrderId(this.paymentModel, orders.map((o) => o._id));
+    const emptyBranchRateMap = new Map<string, number>();
+
+    const buffer = await this.invoicePdfService.build(
+      {
+        invoiceNumber: invoice.invoiceNumber,
+        periodStart: invoice.periodStart,
+        periodEnd: invoice.periodEnd,
+        dueDate: invoice.dueDate,
+        totalCollected: invoice.totalCollected,
+        commissionDue: invoice.commissionDue,
+        riderCostDue: invoice.riderCostDue,
+        creditApplied: invoice.creditApplied,
+        amountDue: invoice.amountDue,
+        status: invoice.status,
+      },
+      { name: branches[0]?.name ?? 'Partner', email: partnerUser?.email },
+      orders.map((o) => ({
+        orderId: o._id.toString(),
+        completedAt: (o.updatedAt ?? o.createdAt)?.toISOString(),
+        amount: o.total,
+        commissionDue: this.computeOrderFee(o, emptyBranchRateMap, invoice.commissionRate),
+        paymentMethod: paymentsByOrderId.get(o._id.toString())?.method ?? undefined,
+      })),
+    );
+
+    return { buffer, filename: `${invoice.invoiceNumber}.pdf` };
+  }
+
+  private formatInvoice(i: PartnerInvoiceDocument) {
     return {
-      _id: s._id.toString(),
-      partnerId: s.partnerId.toString(),
-      periodStart: s.periodStart.toISOString(),
-      periodEnd: s.periodEnd.toISOString(),
-      totalOrders: s.totalOrders,
-      cashOrders: s.cashOrders,
-      digitalOrders: s.digitalOrders,
-      totalAmount: s.totalAmount,
-      lunaraFee: s.lunaraFee ?? 0,
-      partnerPayout: s.partnerPayout ?? s.totalAmount,
-      commissionRate: s.commissionRate ?? 0.20,
-      status: s.status,
-      paidAt: s.paidAt?.toISOString(),
-      paidBy: s.paidBy?.toString(),
-      adminNote: s.adminNote,
-      clawbackTotal: s.clawbackTotal ?? 0,
-      clawbackOrderCount: s.clawbackOrderCount ?? 0,
-      clawbackRecovered: s.clawbackRecovered ?? 0,
-      clawbackRecoveryApplied: s.clawbackRecoveryApplied ?? 0,
-      riderCostRecovered: s.riderCostRecovered ?? 0,
-      createdAt: s.createdAt.toISOString(),
+      _id: i._id.toString(),
+      partnerId: i.partnerId.toString(),
+      invoiceNumber: i.invoiceNumber,
+      periodStart: i.periodStart.toISOString(),
+      periodEnd: i.periodEnd.toISOString(),
+      totalOrders: i.totalOrders,
+      cashOrders: i.cashOrders,
+      digitalOrders: i.digitalOrders,
+      totalCollected: i.totalCollected,
+      commissionDue: i.commissionDue ?? 0,
+      riderCostDue: i.riderCostDue ?? 0,
+      amountDue: i.amountDue ?? 0,
+      commissionRate: i.commissionRate ?? 0.20,
+      status: i.status,
+      dueDate: i.dueDate?.toISOString(),
+      paidAt: i.paidAt?.toISOString(),
+      paidBy: i.paidBy?.toString(),
+      paymentReference: i.paymentReference,
+      adminNote: i.adminNote,
+      creditTotal: i.creditTotal ?? 0,
+      creditOrderCount: i.creditOrderCount ?? 0,
+      creditRecovered: i.creditRecovered ?? 0,
+      creditApplied: i.creditApplied ?? 0,
+      pdfGeneratedAt: i.pdfGeneratedAt?.toISOString(),
+      emailedAt: i.emailedAt?.toISOString(),
+      emailError: i.emailError,
+      createdAt: i.createdAt.toISOString(),
     };
   }
 

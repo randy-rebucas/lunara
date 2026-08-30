@@ -7,6 +7,7 @@ export const LEDGER_ACCOUNT_TYPES = [
   'order_revenue_clearing',
   'platform_revenue',
   'partner_payable',
+  'partner_receivable',
   'rider_payable',
   'rider_remittance_receivable',
   'cash_out',
@@ -52,6 +53,9 @@ export class LedgerEntry {
     enum: [
       'settlement',
       'settlement_clawback',
+      'invoice',
+      'invoice_credit',
+      'invoice_payment',
       'remittance',
       'withdrawal',
       'rider_earning',
@@ -64,6 +68,9 @@ export class LedgerEntry {
   sourceType!:
     | 'settlement'
     | 'settlement_clawback'
+    | 'invoice'
+    | 'invoice_credit'
+    | 'invoice_payment'
     | 'remittance'
     | 'withdrawal'
     | 'rider_earning'

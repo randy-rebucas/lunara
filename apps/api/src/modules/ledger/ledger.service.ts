@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { PartnerSettlement, PartnerSettlementDocument } from '../partner/schemas/partner-settlement.schema';
+import { PartnerInvoice, PartnerInvoiceDocument } from '../partner/schemas/partner-invoice.schema';
 import { RiderWithdrawal, RiderWithdrawalDocument } from '../riders/schemas/rider-wallet.schema';
 import { Wallet, WalletDocument } from '../wallets/schemas/wallet.schema';
 import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
@@ -29,6 +30,7 @@ export class LedgerService {
     @InjectModel(LedgerTransactionMarker.name)
     private markerModel: Model<LedgerTransactionMarkerDocument>,
     @InjectModel(PartnerSettlement.name) private settlementModel: Model<PartnerSettlementDocument>,
+    @InjectModel(PartnerInvoice.name) private invoiceModel: Model<PartnerInvoiceDocument>,
     @InjectModel(RiderWithdrawal.name) private withdrawalModel: Model<RiderWithdrawalDocument>,
     @InjectModel(Wallet.name) private walletModel: Model<WalletDocument>,
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
@@ -194,6 +196,25 @@ export class LedgerService {
       },
     ]);
 
+    const [invoiceAgg] = await this.invoiceModel.aggregate<{
+      totalCollected: number;
+      totalCommissionAndRiderCost: number;
+      totalAmountDue: number;
+      paidCount: number;
+      pendingCount: number;
+    }>([
+      {
+        $group: {
+          _id: null,
+          totalCollected: { $sum: '$totalCollected' },
+          totalCommissionAndRiderCost: { $sum: { $add: ['$commissionDue', '$riderCostDue'] } },
+          totalAmountDue: { $sum: '$amountDue' },
+          paidCount: { $sum: { $cond: [{ $eq: ['$status', 'paid'] }, 1, 0] } },
+          pendingCount: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } },
+        },
+      },
+    ]);
+
     const [withdrawalAgg] = await this.withdrawalModel.aggregate<{
       totalPaid: number;
       paidCount: number;
@@ -217,6 +238,13 @@ export class LedgerService {
 
     const db = {
       settlements: settlementAgg ?? { totalRevenue: 0, totalLunaraFee: 0, totalPartnerPayout: 0, paidCount: 0, pendingCount: 0 },
+      invoices: invoiceAgg ?? {
+        totalCollected: 0,
+        totalCommissionAndRiderCost: 0,
+        totalAmountDue: 0,
+        paidCount: 0,
+        pendingCount: 0,
+      },
       withdrawals: withdrawalAgg ?? { totalPaid: 0, paidCount: 0, pendingTotal: 0, pendingCount: 0 },
       wallets: walletAgg ?? { totalBalance: 0, walletCount: 0 },
     };
@@ -237,7 +265,11 @@ export class LedgerService {
 
     // ── Spot checks ──
     const clearingDrift = get('order_revenue_clearing'); // liability-like, should converge to 0
-    const commissionDrift = platformRevenue - db.settlements.totalLunaraFee;
+    // Legacy settlements always credited platform_revenue with the gross fee; invoices credit it
+    // with amountDue (net of any applied credit — see PartnerOperationsService.createInvoice) —
+    // so a nonzero drift here after an admin opts to apply outstanding credit to a later invoice
+    // is expected and not itself a bug, just a byproduct of that netting simplification.
+    const commissionDrift = platformRevenue - db.settlements.totalLunaraFee - db.invoices.totalAmountDue;
     const cashOutDrift = cashOut - (db.settlements.totalPartnerPayout + db.withdrawals.totalPaid);
     // Ledger customer_wallet_liability sum vs actual wallet balances
     const walletLedgerTotal = get('customer_wallet_liability');
@@ -258,6 +290,7 @@ export class LedgerService {
         cashOut,
         net: cashIn - cashOut,
       },
+      // Legacy Lunara-pays-partner records — historical only, no new settlements are created.
       settlements: {
         count: db.settlements.paidCount + db.settlements.pendingCount,
         paidCount: db.settlements.paidCount,
@@ -265,6 +298,15 @@ export class LedgerService {
         totalRevenue: db.settlements.totalRevenue,
         totalLunaraFee: db.settlements.totalLunaraFee,
         totalPartnerPayout: db.settlements.totalPartnerPayout,
+      },
+      invoices: {
+        count: db.invoices.paidCount + db.invoices.pendingCount,
+        paidCount: db.invoices.paidCount,
+        pendingCount: db.invoices.pendingCount,
+        totalCollected: db.invoices.totalCollected,
+        totalCommissionAndRiderCost: db.invoices.totalCommissionAndRiderCost,
+        totalAmountDue: db.invoices.totalAmountDue,
+        partnerReceivableBalance: -get('partner_receivable'), // asset: negate
       },
       riderWithdrawals: {
         paidCount: db.withdrawals.paidCount,
@@ -434,7 +476,7 @@ export class LedgerService {
     // recency window than low-volume types, skewing "most recent N overall" and the
     // matched/unmatched mix away from true recency. The merge+sort+slice below still
     // produces exactly the true top `limit` by date across all types.
-    const [payments, settlements, withdrawals, refunds] = await Promise.all([
+    const [payments, settlements, invoicesPaid, withdrawals, refunds] = await Promise.all([
       this.paymentModel
         .find({ status: 'paid' })
         .sort({ paidAt: -1 })
@@ -446,6 +488,12 @@ export class LedgerService {
         .sort({ paidAt: -1 })
         .limit(limit)
         .select('partnerPayout partnerId paidAt')
+        .lean(),
+      this.invoiceModel
+        .find({ status: 'paid' })
+        .sort({ paidAt: -1 })
+        .limit(limit)
+        .select('invoiceNumber amountDue partnerId paidAt')
         .lean(),
       this.withdrawalModel
         .find({ status: 'paid' })
@@ -464,6 +512,7 @@ export class LedgerService {
     const refs = [
       ...payments.map((p) => `payment:${p._id.toString()}`),
       ...settlements.map((s) => `settlement:${s._id.toString()}`),
+      ...invoicesPaid.map((i) => `invoice-payment:${i._id.toString()}`),
       ...withdrawals.map((w) => `withdrawal:${w._id.toString()}`),
       ...refunds.map((r) => `refund:${r._id.toString()}`),
     ];
@@ -529,6 +578,24 @@ export class LedgerService {
         matched,
         matchedWith: matched ? ref : null,
         difference: matched ? 0 : -s.partnerPayout,
+      });
+    }
+
+    for (const i of invoicesPaid) {
+      const ref = `invoice-payment:${i._id.toString()}`;
+      const ledgerAmount = ledgerByRef.get(ref);
+      const matched = ledgerAmount != null;
+      rows.push({
+        id: i._id.toString(),
+        date: i.paidAt ?? i._id.getTimestamp(),
+        type: 'payment',
+        typeLabel: 'Partner invoice payment',
+        reference: i.invoiceNumber,
+        source: 'Partner invoice',
+        amount: i.amountDue,
+        matched,
+        matchedWith: matched ? ref : null,
+        difference: matched ? 0 : i.amountDue,
       });
     }
 

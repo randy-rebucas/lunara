@@ -19,7 +19,10 @@ const ALLOWED_SCRIPTS = [
 
 const RESET_SCOPE_MAP: Record<string, string[]> = {
   orders: ['orders'],
+  // 'settlements' is the legacy Lunara-pays-partner collection, kept read-only for history —
+  // resetting it stays available separately from the current invoices scope below.
   settlements: ['partner_settlements', 'ledger_entries'],
+  invoices: ['partner_invoices', 'ledger_entries'],
   ledger: ['ledger_entries'],
   wallets: ['wallets', 'rider_wallets'],
   remittances: ['rider_cash_remittances'],
@@ -27,6 +30,7 @@ const RESET_SCOPE_MAP: Record<string, string[]> = {
   all: [
     'orders',
     'partner_settlements',
+    'partner_invoices',
     'ledger_entries',
     'wallets',
     'rider_wallets',

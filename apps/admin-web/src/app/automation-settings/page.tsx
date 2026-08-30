@@ -10,7 +10,7 @@ interface AutomationSettings {
   autoDispatchOrders: boolean;
   autoAssignPickupRider: boolean;
   autoAssignDeliveryRider: boolean;
-  autoGenerateSettlements: boolean;
+  autoGenerateInvoices: boolean;
   autoApproveRefunds: boolean;
   autoApproveRefundsThreshold: number;
   autoApproveWithdrawals: boolean;
@@ -170,13 +170,13 @@ export default function AutomationSettingsPage() {
             />
           </SectionPanel>
 
-          <SectionPanel title="Financial" description="Settlements, refunds, and withdrawals.">
+          <SectionPanel title="Financial" description="Invoices, refunds, and withdrawals.">
             <AutomationToggle
-              id="auto-settlements"
-              label="Auto-generate partner settlements"
-              description="Run a weekly settlement for every partner branch with unsettled completed orders, instead of requiring a manual admin trigger."
-              checked={form.autoGenerateSettlements}
-              onChange={(autoGenerateSettlements) => patch({ autoGenerateSettlements })}
+              id="auto-invoices"
+              label="Auto-generate partner invoices"
+              description="Run a weekly invoice for every partner branch with uninvoiced completed orders, instead of requiring a manual admin trigger."
+              checked={form.autoGenerateInvoices}
+              onChange={(autoGenerateInvoices) => patch({ autoGenerateInvoices })}
             />
             <AutomationToggle
               id="auto-refunds"

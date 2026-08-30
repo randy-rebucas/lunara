@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { PartnerSettlement, PartnerSettlementSchema } from '../partner/schemas/partner-settlement.schema';
+import { PartnerInvoice, PartnerInvoiceSchema } from '../partner/schemas/partner-invoice.schema';
 import { RiderWithdrawal, RiderWithdrawalSchema } from '../riders/schemas/rider-wallet.schema';
 import { Wallet, WalletSchema } from '../wallets/schemas/wallet.schema';
 import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
@@ -20,6 +21,7 @@ import { LedgerController } from './ledger.controller';
       { name: LedgerEntry.name, schema: LedgerEntrySchema },
       { name: LedgerTransactionMarker.name, schema: LedgerTransactionMarkerSchema },
       { name: PartnerSettlement.name, schema: PartnerSettlementSchema },
+      { name: PartnerInvoice.name, schema: PartnerInvoiceSchema },
       { name: RiderWithdrawal.name, schema: RiderWithdrawalSchema },
       { name: Wallet.name, schema: WalletSchema },
       { name: Payment.name, schema: PaymentSchema },

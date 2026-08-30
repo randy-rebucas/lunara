@@ -21,7 +21,7 @@ const TASKS: Task[] = [
   { id: 'refunds',        label: 'Process pending refunds',         href: '/refunds',         group: 'Daily ops' },
   { id: 'reconciliation', label: 'Review reconciliation',           href: '/reconciliation',  group: 'Finance' },
   // Saturday only (day 6)
-  { id: 'settlements',    label: 'Process partner settlements',     href: '/partners/settlements', group: 'Finance', days: [6] },
+  { id: 'invoices',       label: 'Review/send partner invoices',    href: '/partners/invoices', group: 'Finance', days: [6] },
   // Monday (day 1)
   { id: 'reports',        label: 'Pull weekly reports',             href: '/reports',         group: 'Weekly', days: [1] },
   { id: 'revenue',        label: 'Review weekly revenue',           href: '/revenue',         group: 'Weekly', days: [1] },

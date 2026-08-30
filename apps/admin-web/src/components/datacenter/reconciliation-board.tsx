@@ -22,6 +22,7 @@ interface ReconciliationData {
     cashOut: number;
     net: number;
   };
+  // Legacy Lunara-pays-partner records — historical only, no new settlements are created.
   settlements: {
     count: number;
     paidCount: number;
@@ -29,6 +30,15 @@ interface ReconciliationData {
     totalRevenue: number;
     totalLunaraFee: number;
     totalPartnerPayout: number;
+  };
+  invoices: {
+    count: number;
+    paidCount: number;
+    pendingCount: number;
+    totalCollected: number;
+    totalCommissionAndRiderCost: number;
+    totalAmountDue: number;
+    partnerReceivableBalance: number;
   };
   riderWithdrawals: {
     paidCount: number;
@@ -292,7 +302,7 @@ export function ReconciliationBoard() {
               <p className={`text-sm font-semibold ${allChecksPassed ? 'text-slate-900' : 'text-red-700'}`}>
                 {allChecksPassed ? 'All checks passed — ledger is balanced' : 'Reconciliation issues detected — review spot checks below'}
               </p>
-              <p className="text-xs text-muted">Ledger vs database cross-check across settlements, cash flow, and wallets</p>
+              <p className="text-xs text-muted">Ledger vs database cross-check across invoices, cash flow, and wallets</p>
             </div>
             {!allChecksPassed && <span className="badge-danger px-3 py-1 text-xs font-semibold">Drift detected</span>}
           </div>
@@ -401,9 +411,35 @@ export function ReconciliationBoard() {
                   </OpsPanel>
 
                   <OpsPanel
-                    title="Partner settlements"
-                    description="All-time settlement records from DB"
-                    headerAction={<Link href="/partners/settlements" className="link-primary text-xs font-medium">View all →</Link>}
+                    title="Partner invoices"
+                    description="All-time invoice records from DB — partners collect payment directly, Lunara bills them for commission + rider costs"
+                    headerAction={<Link href="/partners/invoices" className="link-primary text-xs font-medium">View all →</Link>}
+                  >
+                    <dl>
+                      <DetailRow
+                        label="Total invoices"
+                        value={`${data.invoices.count.toLocaleString()} (${data.invoices.paidCount} paid, ${data.invoices.pendingCount} pending)`}
+                      />
+                      <DetailRow label="Gross revenue collected by partners (info only)" value={peso(data.invoices.totalCollected)} />
+                      <DetailRow
+                        label="Commission + rider cost billed"
+                        value={<span className="text-emerald-700">{peso(data.invoices.totalCommissionAndRiderCost)}</span>}
+                      />
+                      <DetailRow label="Total amount due (net of credits)" value={peso(data.invoices.totalAmountDue)} />
+                      <DetailRow
+                        label="Outstanding receivable"
+                        value={
+                          data.invoices.partnerReceivableBalance > 0
+                            ? <span className="text-amber-600">{peso(data.invoices.partnerReceivableBalance)}</span>
+                            : peso(data.invoices.partnerReceivableBalance)
+                        }
+                      />
+                    </dl>
+                  </OpsPanel>
+
+                  <OpsPanel
+                    title="Partner settlements (legacy)"
+                    description="Historical Lunara-pays-partner payout records — no new settlements are created"
                   >
                     <dl>
                       <DetailRow
@@ -481,7 +517,7 @@ export function ReconciliationBoard() {
                     <div className="grid gap-2 sm:grid-cols-2">
                       {[
                         { value: data.spotChecks.clearingDrift, label: 'Order revenue clearing', sub: 'Uncleared orders still in transit' },
-                        { value: data.spotChecks.commissionDrift, label: 'Commission', sub: 'Ledger platform_revenue vs sum of settlement lunaraFee' },
+                        { value: data.spotChecks.commissionDrift, label: 'Commission', sub: 'Ledger platform_revenue vs settlement lunaraFee + invoice amountDue' },
                         { value: data.spotChecks.cashOutDrift, label: 'Cash out', sub: 'Ledger vs partner payouts + rider withdrawals paid' },
                         { value: data.spotChecks.walletDrift, label: 'Customer wallets', sub: 'Ledger liability vs actual Wallet.balance records' },
                       ].map((c) => {

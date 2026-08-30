@@ -43,7 +43,7 @@ const Icons: Record<string, React.ReactNode> = {
   serviceAreas:   <Icon d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" d2="M9.879 9.879a3 3 0 104.242 4.242" />,
   // Partners
   branding:       <Icon d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />,
-  settlements:    <Icon d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />,
+  invoices:       <Icon d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />,
   // Finance
   revenue:        <Icon d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />,
   reconciliation: <Icon d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21H5a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v14a2 2 0 01-2 2h-2M9 3h6v4H9V3z" />,
@@ -99,7 +99,7 @@ const nav: NavItem[] = [
   { section: 'Partners' },
   { href: '/partners',             label: 'Partners',    icon: Icons.shops },
   { href: '/partners/branding',    label: 'Branding',    icon: Icons.branding },
-  { href: '/partners/settlements', label: 'Settlements', icon: Icons.settlements },
+  { href: '/partners/invoices', label: 'Invoices', icon: Icons.invoices },
 
   // Money in (analytics) → books → money out (approval queues)
   { section: 'Finance' },
@@ -131,7 +131,7 @@ function matchesRoute(pathname: string, href: string) {
   return pathname === href || (href !== '/' && pathname.startsWith(`${href}/`));
 }
 
-/** Longest matching nav href wins so nested routes (e.g. /partners/settlements)
+/** Longest matching nav href wins so nested routes (e.g. /partners/invoices)
  * highlight their own entry instead of every prefix ancestor too. */
 function activeHref(pathname: string): string | null {
   let best: string | null = null;
