@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import type { PartnerSubscriptionInfo } from '@lunara/types';
-import { getPortalUser, isPartnerRole, partnerFetch, staffLogout } from '../lib/partner-api';
+import { isPartnerRole, partnerFetch, staffLogout } from '../lib/partner-api';
 import { usePartnerNotificationsSocket } from '../lib/use-partner-notifications-socket';
 import { BrandMark } from './ui/brand-mark';
 import { PortalHeaderActions } from './portal-header-actions';
@@ -53,6 +53,12 @@ const Icons = {
   profile:      <Icon d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />,
   settings:     <Icon d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" d2="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />,
   signout:      <Icon d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />,
+  pricing:      <Icon d="M7 8h10M7 12h6m-6 4h10M5 4h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1z" />,
+  pickup:       <Icon d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m-3-2v6m-3-3h6" />,
+  branches:     <Icon d="M3 21h18M6 21V9l6-4 6 4v12M9 21v-6h6v6M9 9h.01M15 9h.01" />,
+  accounting:   <Icon d="M9 7h6m-6 4h6m-6 4h4M5 3h14a1 1 0 011 1v16a1 1 0 01-1 1H5a1 1 0 01-1-1V4a1 1 0 011-1z" />,
+  marketing:    <Icon d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />,
+  ai:           <Icon d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" d2="M18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />,
 };
 
 // ── Nav structure ──────────────────────────────────────────────────────────
@@ -60,6 +66,10 @@ interface NavItem {
   href: string;
   label: string;
   icon: React.ReactNode;
+  /** Not built yet — placeholder page reserved in the layout, tagged in the UI. */
+  soon?: boolean;
+  /** Rendered indented beneath the parent item, sharing its icon column. */
+  children?: { href: string; label: string }[];
 }
 
 interface NavGroup {
@@ -72,34 +82,57 @@ const partnerNavGroups: NavGroup[] = [
     label: 'Overview',
     items: [
       { href: '/', label: 'Dashboard', icon: Icons.dashboard },
-    ],
-  },
-  {
-    label: 'Orders',
-    items: [
-      { href: '/orders/incoming', label: 'Incoming', icon: Icons.incoming },
-      { href: '/orders/progress', label: 'Monitor progress', icon: Icons.progress },
-      { href: '/orders/history', label: 'History', icon: Icons.history },
-    ],
-  },
-  {
-    label: 'Shop',
-    items: [
-      { href: '/staff', label: 'Staff team', icon: Icons.staff },
-      { href: '/shelf-lookup', label: 'Find on shelf', icon: Icons.shelf },
-      { href: '/scan', label: 'Scan tag', icon: Icons.scan },
-      { href: '/inventory', label: 'Inventory', icon: Icons.inventory },
+      {
+        href: '/orders/incoming',
+        label: 'Orders',
+        icon: Icons.incoming,
+        children: [
+          { href: '/orders/incoming', label: 'Incoming' },
+          { href: '/orders/progress', label: 'Monitor progress' },
+          { href: '/orders/history', label: 'History' },
+        ],
+      },
       { href: '/customers', label: 'Customers', icon: Icons.customers },
-      { href: '/services', label: 'Services & pricing', icon: Icons.services },
-      { href: '/promotions', label: 'Promotions', icon: Icons.promotions },
+      { href: '/services', label: 'Services', icon: Icons.services },
+      { href: '/pricing', label: 'Pricing', icon: Icons.pricing, soon: true },
+      { href: '/pickup-delivery', label: 'Pickup & Delivery', icon: Icons.pickup, soon: true },
     ],
   },
   {
-    label: 'Finance',
+    label: 'Operations',
+    items: [
+      { href: '/staff', label: 'Staff', icon: Icons.staff },
+      { href: '/branches', label: 'Branches', icon: Icons.branches, soon: true },
+      {
+        href: '/inventory',
+        label: 'Inventory',
+        icon: Icons.inventory,
+        children: [
+          { href: '/shelf-lookup', label: 'Find on shelf' },
+          { href: '/scan', label: 'Scan tag' },
+        ],
+      },
+    ],
+  },
+  {
+    label: 'Accounting',
     items: [
       { href: '/revenue', label: 'Revenue', icon: Icons.revenue },
-      { href: '/reports', label: 'Reports', icon: Icons.reports },
       { href: '/invoices', label: 'Invoices', icon: Icons.invoices },
+      { href: '/accounting/income', label: 'Income', icon: Icons.accounting, soon: true },
+      { href: '/accounting/expenses', label: 'Expenses', icon: Icons.accounting, soon: true },
+      { href: '/accounting/transactions', label: 'Transactions', icon: Icons.accounting, soon: true },
+      { href: '/accounting/accounts', label: 'Accounts', icon: Icons.accounting, soon: true },
+      { href: '/accounting/profit-loss', label: 'Profit & Loss', icon: Icons.accounting, soon: true },
+      { href: '/reports', label: 'Reports', icon: Icons.reports },
+    ],
+  },
+  {
+    label: 'Marketing',
+    items: [
+      { href: '/promotions', label: 'Promotions', icon: Icons.promotions },
+      { href: '/marketing/loyalty', label: 'Loyalty', icon: Icons.marketing, soon: true },
+      { href: '/marketing/campaigns', label: 'Campaigns', icon: Icons.marketing, soon: true },
     ],
   },
   {
@@ -107,6 +140,13 @@ const partnerNavGroups: NavGroup[] = [
     items: [
       { href: '/messages', label: 'Messages', icon: Icons.messages },
       { href: '/notifications', label: 'Notifications', icon: Icons.notifications },
+    ],
+  },
+  {
+    label: 'More',
+    items: [
+      { href: '/ai-assistant', label: 'AI Assistant', icon: Icons.ai, soon: true },
+      { href: '/settings', label: 'Settings', icon: Icons.settings },
     ],
   },
 ];
@@ -139,20 +179,49 @@ function SidebarNav({
   const pathname = usePathname();
 
   return (
-    <nav className="space-y-1">
+    <nav className="space-y-4">
       {groups.map((group) => (
         <div key={group.label}>
-          {group.items.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onNavigate}
-              className={`flex items-center gap-3 ${isActive(pathname, item.href) ? 'nav-link-active' : 'nav-link'}`}
-            >
-              {item.icon}
-              {item.label}
-            </Link>
-          ))}
+          <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {group.label}
+          </p>
+          <div className="space-y-1">
+            {group.items.map((item) => (
+              <div key={item.href}>
+                <Link
+                  href={item.href}
+                  onClick={onNavigate}
+                  className={`flex items-center gap-3 ${isActive(pathname, item.href) ? 'nav-link-active' : 'nav-link'}`}
+                >
+                  {item.icon}
+                  <span className="flex-1">{item.label}</span>
+                  {item.soon && (
+                    <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                      Soon
+                    </span>
+                  )}
+                </Link>
+                {item.children && (
+                  <div className="ml-[30px] space-y-0.5 border-l border-border/60 pl-3">
+                    {item.children.map((child) => (
+                      <Link
+                        key={child.href}
+                        href={child.href}
+                        onClick={onNavigate}
+                        className={`block rounded-lg px-2 py-1.5 text-sm ${
+                          isActive(pathname, child.href)
+                            ? 'font-medium text-primary'
+                            : 'text-muted hover:text-slate-700'
+                        }`}
+                      >
+                        {child.label}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       ))}
     </nav>
@@ -166,7 +235,6 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   const [partner, setPartner] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [subscription, setSubscription] = useState<PartnerSubscriptionInfo | null>(null);
-  const user = getPortalUser();
 
   useEffect(() => {
     setPartner(isPartnerRole());
@@ -224,31 +292,26 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
             <BrandMark partner={partner} />
           </div>
 
-          {user?.email && (
-            <p className="mb-2 truncate rounded-lg bg-slate-50 px-3 py-2 text-xs text-muted">{user.email}</p>
-          )}
-
-          {subscription && (
-            <Link
-              href="/settings?tab=plan"
-              className="mb-4 flex items-center justify-between rounded-lg border border-border/60 px-3 py-2 text-xs hover:bg-slate-50"
-            >
-              <span className="font-medium text-slate-700">
-                {SUBSCRIPTION_PLAN_LABELS[subscription.subscriptionPlan]} plan
-              </span>
-              <span className="text-muted">
-                {subscription.subscriptionPlan === 'trial'
-                  ? `Trial ends ${formatShortDate(subscription.trialEndsAt)}`
-                  : `Renews ${formatShortDate(subscription.planRenewsAt)}`}
-              </span>
-            </Link>
-          )}
-
           <div className="flex-1 overflow-y-auto overscroll-contain">
             <SidebarNav groups={groups} onNavigate={() => setSidebarOpen(false)} />
           </div>
 
           <div className="mt-4 border-t border-border/60 pt-3">
+            {subscription && (
+              <Link
+                href="/settings?tab=plan"
+                className="mb-3 flex items-center justify-between rounded-lg border border-border/60 px-3 py-2 text-xs hover:bg-slate-50"
+              >
+                <span className="font-medium text-slate-700">
+                  {SUBSCRIPTION_PLAN_LABELS[subscription.subscriptionPlan]} plan
+                </span>
+                <span className="text-muted">
+                  {subscription.subscriptionPlan === 'trial'
+                    ? `Trial ends ${formatShortDate(subscription.trialEndsAt)}`
+                    : `Renews ${formatShortDate(subscription.planRenewsAt)}`}
+                </span>
+              </Link>
+            )}
             <button type="button" onClick={logout} className="nav-link flex w-full items-center gap-3 text-left">
               {Icons.signout}
               Sign out
