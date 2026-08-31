@@ -37,6 +37,7 @@ export class RewardsService {
       tier: current.name,
       nextTier: next?.name ?? null,
       pointsToNextTier: next ? Math.max(0, next.min - points) : 0,
+      currentTierMin: current.min,
     };
   }
 

@@ -270,6 +270,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       const body = await res.json();
       if (!body.success) throw new Error(parseAuthError(body, 'Verification failed'));
+      if (body.data.user.role !== UserRole.CUSTOMER) {
+        throw new Error('This account is not a customer account. Use the app for your account type.');
+      }
       persist(authDataFromSession(body.data.user, body.data.tokens));
     },
     [persist],

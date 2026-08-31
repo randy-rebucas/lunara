@@ -29,6 +29,7 @@ interface RewardsBalance {
   tier: string;
   nextTier: string | null;
   pointsToNextTier: number;
+  currentTierMin: number;
   transactions: RewardsTransaction[];
 }
 
@@ -104,9 +105,11 @@ export default function RewardsScreen() {
   }
 
   const points = rewards?.balance ?? 0;
+  const currentTierMin = rewards?.currentTierMin ?? 0;
+  const nextTierMin = points + (rewards?.pointsToNextTier ?? 0);
   const progress =
-    rewards?.nextTier && rewards.pointsToNextTier + points > 0
-      ? Math.min(1, Math.max(0, points / (rewards.pointsToNextTier + points)))
+    rewards?.nextTier && nextTierMin > currentTierMin
+      ? Math.min(1, Math.max(0, (points - currentTierMin) / (nextTierMin - currentTierMin)))
       : 1;
 
   return (

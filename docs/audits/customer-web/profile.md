@@ -1,6 +1,13 @@
 # Audit: Customer-web — Profile
 
-Date: 2026-07-23
+Date: 2026-07-23 (re-verified 2026-08-31, plus 2026-08-30 pass — see [auth-onboarding-profile.md](auth-onboarding-profile.md))
+
+**2026-08-31 re-verification:** re-read `profile/page.tsx` and `address-form-modal.tsx` fresh.
+Findings #1-#3 below (address-action busy guard, name `maxLength`, address-label `maxLength`) are
+all confirmed still in place, unregressed. Note: this pass also re-checked the *adjacent*
+`auth-onboarding-profile.md` Finding 1 (`verifyEmail` role check in the shared
+`packages/hooks/src/auth-provider.tsx`) since it's part of the same combined module, and found it
+had regressed — see that doc for the re-fix; not a `profile.md`-scoped finding itself.
 
 ## Entry point
 - Page: `apps/customer-web/src/app/(authenticated)/profile/page.tsx` (`'use client'`)

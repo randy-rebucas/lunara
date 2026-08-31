@@ -1,6 +1,14 @@
 # Audit: Customer-web — Wallet
 
-Date: 2026-07-23
+Date: 2026-07-23 (re-verified 2026-08-31, plus 2026-08-30 cross-cutting pass — see [rewards-wallet-subscriptions.md](rewards-wallet-subscriptions.md))
+
+**2026-08-31 re-verification:** re-read `wallet/page.tsx`, `WalletTopupForm`, `WalletsController`/
+`WalletsService`, and the wallet-topup-intent/sync paths in `payments.service.ts` fresh against
+current source. Both Finding #1 (status-aware sync messaging) and Finding #2 (atomic dedup on
+concurrent top-ups) are confirmed still in place exactly as described below — no regression, no new
+issues found. `debit()`/`credit()` in `wallets.service.ts` also reconfirmed idempotent
+(reference-uniqueness reservation before the balance `$inc`, with a rollback of the reserved
+transaction row when `debit()` hits insufficient balance). Nothing further to fix.
 
 ## Entry point
 - Page: `apps/customer-web/src/app/(authenticated)/wallet/page.tsx` (`'use client'`)

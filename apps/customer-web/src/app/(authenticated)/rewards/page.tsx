@@ -34,6 +34,7 @@ interface RewardsData {
   tier: string;
   nextTier: string | null;
   pointsToNextTier: number;
+  currentTierMin: number;
   transactions: RewardsTransaction[];
   catalog: RewardsCatalogItem[];
 }
@@ -85,7 +86,15 @@ export default function RewardsPage() {
 
   const load = useCallback(async () => {
     if (!ready) {
-      return { balance: 0, tier: 'Moon', nextTier: null, pointsToNextTier: 0, transactions: [], catalog: [] } as RewardsData;
+      return {
+        balance: 0,
+        tier: 'Moon',
+        nextTier: null,
+        pointsToNextTier: 0,
+        currentTierMin: 0,
+        transactions: [],
+        catalog: [],
+      } as RewardsData;
     }
     const [meRes, catalogRes] = await Promise.all([
       api.get<Omit<RewardsData, 'catalog'>>('/rewards/me'),
@@ -123,9 +132,13 @@ export default function RewardsPage() {
   const tier = data?.tier ?? 'Moon';
   const nextTier = data?.nextTier ?? null;
   const pointsToNextTier = data?.pointsToNextTier ?? 0;
+  const currentTierMin = data?.currentTierMin ?? 0;
   const transactions = data?.transactions ?? [];
   const catalog = data?.catalog ?? [];
-  const progress = nextTier ? Math.min(1, Math.max(0, balance / (balance + pointsToNextTier))) : 1;
+  const nextTierMin = balance + pointsToNextTier;
+  const progress = nextTier
+    ? Math.min(1, Math.max(0, (balance - currentTierMin) / (nextTierMin - currentTierMin)))
+    : 1;
 
   return (
     <PageShell>

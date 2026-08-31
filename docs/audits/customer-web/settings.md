@@ -1,6 +1,30 @@
 # Audit: Customer-web — Settings
 
-Date: 2026-07-23
+Date: 2026-07-23 (updated 2026-08-31 — new notification-preferences section added, no longer purely local-only)
+
+**2026-08-31 update:** the page now also has a backend-synced section (`notifPrefs`,
+`settings/page.tsx:57-58,80-86,88-106`) that didn't exist at the original audit — "Push
+notifications" / "Email notifications" toggles, `PATCH /customers/me` with
+`{ notificationPreferences: { push, email } }`. Traced this new flow end-to-end since it's a
+"wire it up" check, not just a re-read:
+- `CustomersService.updateProfile` (`customers.service.ts:62-67`) persists `notificationPreferences`
+  onto the `Customer` document, defaulting each field to its previous/`true` value when omitted.
+- `CustomerOrderNotificationService.getPreferences` (`push/customer-order-notification.service.ts:29-38`)
+  reads it back on every order event/status notification (`notifyOrderEvent`/`notifyOrderStatus`),
+  defaulting to `true` if the customer has no document/field yet — matches the frontend's own
+  `{ push: true, email: true }` fallback on a failed `GET /customers/me`.
+- `push: preferences.push` is passed through as `sendPush` into `NotificationDispatchService.dispatch`,
+  which (`notification-dispatch.service.ts:40`) skips only the push-channel send when `sendPush ===
+  false`, still recording the in-app notification either way — correct: disabling "push
+  notifications" shouldn't also silence the in-app notification bell.
+- `email: preferences.email` gates `sendOrderEmail` (`customer-order-notification.service.ts:80-82`),
+  itself internally gated to `EMAIL_EVENTS` (`paymentConfirmed`/`dispatched`/`delivered`) — a customer
+  who turns email off doesn't get any of the three order-lifecycle emails.
+
+Both toggles are fully wired, no dead setting. The pre-existing `emphasizeOrderUpdates` (orders list
+ring highlight) and `showBranchDistanceHints` (booking wizard distance labels) localStorage settings
+were re-checked and remain correctly consumed at their documented call sites
+(`orders/page.tsx:66,70`, `booking-wizard.tsx:90,94`) — no regression.
 
 ## Entry point
 - Page: `apps/customer-web/src/app/(authenticated)/settings/page.tsx` (`'use client'`)
@@ -24,7 +48,8 @@ Not applicable — no backend involved. Settings are stored under `localStorage`
 ## Mutations
 | Action | Destructive? | Confirmed? | Double-submit guard? | Failure visible? |
 |---|---|---|---|---|
-| Toggle a setting | no | n/a | n/a — synchronous `localStorage` write, no request to race | n/a — cannot fail (aside from a `localStorage` quota/availability edge case already handled defensively by `loadCustomerSettings`'s try/catch fallback to defaults) |
+| Toggle a local setting (`emphasizeOrderUpdates`/`showBranchDistanceHints`) | no | n/a | n/a — synchronous `localStorage` write, no request to race | n/a — cannot fail (aside from a `localStorage` quota/availability edge case already handled defensively by `loadCustomerSettings`'s try/catch fallback to defaults) |
+| Toggle push/email notification preference | no | n/a | yes — `disabled={notifSaving}` on both toggles (`settings/page.tsx:147,155`) | yes — reverts the optimistic update to the pre-call value on a failed `PATCH` (`settings/page.tsx:101-102`); no visible error message on failure though, just a silent revert (same low-priority pattern already noted, not fixed, for favorite-toggle in `booking-checkout-orders.md` Finding 2) |
 
 ## Authorization
 No role-scoped access — settings are purely local to the browser/device, not synced to any account-scoped backend record. Not applicable.

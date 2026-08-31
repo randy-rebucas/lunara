@@ -1,6 +1,16 @@
 # Audit: Customer-Web — Auth, Onboarding, Profile & Settings
 
-Date: 2026-08-30
+Date: 2026-08-30 (re-verified 2026-08-31 — Finding 1 had regressed, re-fixed; see note below)
+
+**2026-08-31 re-verification note:** re-reading `packages/hooks/src/auth-provider.tsx` fresh found
+that Finding 1's fix (a `role !== UserRole.CUSTOMER` check in `verifyEmail`) was **no longer present**
+in current source — `verifyEmail` (`auth-provider.tsx:264-276`) persisted any successful
+`/auth/verify-email` response unconditionally again, while `login`/`loginWithOtp` right above it
+still correctly had the check. Re-applied the identical fix (`auth-provider.tsx:272-274`). Root
+cause of the regression wasn't investigated (no git-blame trace run as part of this audit pass) —
+flagging that this specific file/check is worth a lightweight regression test (assert `verifyEmail`
+rejects a non-customer role) given it's now been lost once already. `packages/hooks` `tsc --noEmit`
+passes clean after the re-fix.
 
 This is a combined verification/consolidation pass over an area that already has five
 per-page audits from the 2026-07-23/2026-08-23 series: `login.md`, `signup.md`,
@@ -182,6 +192,8 @@ previously confirmed clean, re-checked not re-discovered):
    this shared hook function), so no cross-app regression surface; the page's existing
    `.catch` already renders the thrown message into its "Link expired or invalid" panel, so
    no page-level change was needed. `packages/hooks` `tsc --noEmit` passes clean.
+   **[REGRESSED, RE-FIXED 2026-08-31]** — see the note at the top of this doc; the check was
+   found missing again on re-verification and has been re-applied.
 
 2. **No auth-response endpoint (login, register, verify-email, refresh) ever returns
    `passwordHash` or a raw verification/OTP token to the client — checked directly against

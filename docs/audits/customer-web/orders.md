@@ -1,6 +1,16 @@
 # Audit: Customer-web — Orders (list + detail + sub-pages)
 
-Date: 2026-07-23
+Date: 2026-07-23 (re-verified 2026-08-31, plus 2026-08-30 end-to-end pass — see [booking-checkout-orders.md](booking-checkout-orders.md))
+
+**2026-08-31 re-verification:** re-read `orders/[id]/page.tsx`'s verify/sign handlers,
+`OrdersService.cancelByCustomer`/`findOne`/`rescheduleByCustomer`'s ownership checks
+(`orders.service.ts:364,451,625`), and `TrackingGateway.handleJoinOrder`'s customer-ownership guard
+(`realtime/tracking.gateway.ts:95-100`) fresh against current source. Finding #1 (verify/sign
+missing busy-guard) is confirmed still fixed (`verifying`/`signing` state present,
+`orders/[id]/page.tsx:178-179,725-726,743-744`). All ownership/authorization checks remain in
+place, unchanged. No regressions, no new findings from this module's own list/detail/sub-page
+surface (the separate `booking-checkout-orders.md` pass below covers the wider
+booking→checkout→order-detail flow and its own Finding 1, also re-confirmed fixed).
 
 ## Entry point
 - Page: `apps/customer-web/src/app/(authenticated)/orders/page.tsx` (`'use client'`) — order list with infinite scroll
