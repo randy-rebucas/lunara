@@ -57,13 +57,6 @@ interface BranchProfile {
   manager: { id: string; email?: string; phone?: string } | null;
   partner: { id: string; email?: string; phone?: string } | null;
   staff: { id: string; email?: string; phone?: string }[];
-  machines: {
-    id: string;
-    label: string;
-    machineType: string;
-    status: string;
-    capacityKg: number;
-  }[];
   capacity: {
     activeOrders: number;
     maxActiveOrders: number;
@@ -1134,24 +1127,6 @@ export function BranchesBoard() {
                         </button>
                       </div>
                     </div>
-
-                    {profile.machines.length > 0 ? (
-                      <div>
-                        <p className="dc-label">Machines ({profile.machines.length})</p>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {profile.machines.map((m) => (
-                            <span
-                              key={m.id}
-                              className={
-                                m.status === 'active' ? 'badge-accent' : 'badge-warning'
-                              }
-                            >
-                              {m.label} · {m.machineType} · {m.capacityKg}kg
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
 
                     <div className="rounded-lg border border-border/60 p-3 text-sm">
                       <p className="dc-label">Performance (30d)</p>

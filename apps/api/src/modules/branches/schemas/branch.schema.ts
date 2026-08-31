@@ -83,24 +83,6 @@ export class BranchHoliday {
   type?: 'closed' | 'open';
 }
 
-@Schema({ _id: false })
-class BranchMachine {
-  @Prop({ required: true })
-  id!: string;
-
-  @Prop({ required: true })
-  label!: string;
-
-  @Prop({ required: true, enum: ['washer', 'dryer', 'folder', 'press', 'other'] })
-  machineType!: string;
-
-  @Prop({ default: 'active', enum: ['active', 'maintenance', 'offline'] })
-  status!: string;
-
-  @Prop({ default: 8 })
-  capacityKg!: number;
-}
-
 export { BranchPricingMode };
 
 @Schema({ _id: false })
@@ -259,9 +241,6 @@ export class Branch {
 
   @Prop({ default: 15 })
   serviceRadiusKm!: number;
-
-  @Prop({ type: [BranchMachine], default: [] })
-  machines!: BranchMachine[];
 
   @Prop({ default: true })
   isActive!: boolean;

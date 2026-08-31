@@ -1,4 +1,3 @@
-import { Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
@@ -10,26 +9,7 @@ import {
   IsString,
   Max,
   Min,
-  ValidateNested,
 } from 'class-validator';
-
-class BranchMachineDto {
-  @IsString()
-  id!: string;
-
-  @IsString()
-  label!: string;
-
-  @IsEnum(['washer', 'dryer', 'folder', 'press', 'other'])
-  machineType!: string;
-
-  @IsEnum(['active', 'maintenance', 'offline'])
-  status!: string;
-
-  @IsNumber()
-  @Min(1)
-  capacityKg!: number;
-}
 
 export class UpdateBranchDto {
   @IsOptional()
@@ -103,12 +83,6 @@ export class UpdateBranchDto {
   @Min(0)
   @Max(1)
   commissionRate?: number;
-
-  @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => BranchMachineDto)
-  machines?: BranchMachineDto[];
 
   @IsOptional()
   @IsNumber()

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { Building2, Layers, MapPin, ShieldCheck, Users } from 'lucide-react';
+import { Building2, MapPin, ShieldCheck, Users } from 'lucide-react';
 import { appConfig } from '@lunara/config';
 import { resolveApiV1BaseUrl } from '@lunara/hooks';
 import { resolveMediaUrl } from '@lunara/utils';
@@ -132,26 +132,6 @@ export default async function ServiceAreaDetailPage({
         <div className="grid gap-10 lg:grid-cols-[1fr_320px]">
           {/* Main column */}
           <div className="min-w-0 space-y-10">
-            {branch.machines && branch.machines.length > 0 ? (
-              <div>
-                <MarketingSectionIcon icon={Layers} title="Machines & services" />
-                <div className="card mt-4">
-                  <div className="card-body">
-                    <ul className="flex flex-wrap gap-2">
-                      {branch.machines.map((machine, index) => (
-                        <li
-                          key={`${machine.label}-${index}`}
-                          className="rounded-full bg-surface-muted px-3 py-1.5 text-sm text-slate-700 ring-1 ring-border/60"
-                        >
-                          {machine.label} · {machine.machineType}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
             {hasStaff ? (
               <div>
                 <MarketingSectionIcon icon={Users} title="Meet the team" />

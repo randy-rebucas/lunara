@@ -1346,27 +1346,52 @@ export class PartnerOperationsService {
     if (!item || !branchIds.has(item.branchId?.toString())) {
       throw new NotFoundException('Inventory item not found');
     }
+    const wasLow = item.quantity <= item.lowStockThreshold;
     if (dto.quantity != null) item.quantity = dto.quantity;
     if (dto.lowStockThreshold != null) item.lowStockThreshold = dto.lowStockThreshold;
     if (dto.usagePerOrder != null) item.usagePerOrder = dto.usagePerOrder;
     if (dto.usagePerKg != null) item.usagePerKg = dto.usagePerKg;
     await item.save();
+    if (!wasLow && item.quantity <= item.lowStockThreshold) {
+      void this.partnerOrderNotifications
+        .notifyLowStock(item.branchId.toString(), {
+          name: item.name,
+          quantity: item.quantity,
+          unit: item.unit,
+        })
+        .catch(() => {});
+    }
     return { success: true, data: this.formatInventoryItem(item) };
   }
 
   /** Auto-deducts consumable stock (detergent/bags/etc.) for one completed order — called once
    * from ShopReceivingService.confirmItems, which already guards against being run twice for the
-   * same order. Items with usagePerOrder/usagePerKg both 0 (the default) are left untouched. */
+   * same order. Items with usagePerOrder/usagePerKg both 0 (the default) are left untouched.
+   * No-ops entirely when the shop has turned inventory tracking off. */
   async deductInventoryForOrder(branchId: Types.ObjectId, verifiedWeightKg: number) {
+    const branch = await this.branchModel.findById(branchId).select('portalSettings').lean();
+    if (branch?.portalSettings?.inventoryEnabled === false) return;
+
     const items = await this.inventoryModel.find({
       branchId,
       $or: [{ usagePerOrder: { $gt: 0 } }, { usagePerKg: { $gt: 0 } }],
     });
     await Promise.all(
       items.map((item) => {
+        const wasLow = item.quantity <= item.lowStockThreshold;
         const used = item.usagePerOrder + item.usagePerKg * verifiedWeightKg;
         item.quantity = Math.max(0, item.quantity - used);
-        return item.save();
+        return item.save().then(() => {
+          if (!wasLow && item.quantity <= item.lowStockThreshold) {
+            return this.partnerOrderNotifications
+              .notifyLowStock(branchId.toString(), {
+                name: item.name,
+                quantity: item.quantity,
+                unit: item.unit,
+              })
+              .catch(() => {});
+          }
+        });
       }),
     );
   }

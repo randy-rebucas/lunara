@@ -97,7 +97,7 @@ export class User {
   @Prop({ type: Types.ObjectId })
   sourceApplicationId?: Types.ObjectId;
 
-  /** Staff-only: when true, this staff account can edit shop settings (hours, machines,
+  /** Staff-only: when true, this staff account can edit shop settings (hours,
    * pricing, etc.) in addition to normal order-processing actions. Ignored for PARTNER/ADMIN,
    * who always have full access. Defaults to view-only. */
   @Prop({ default: false })

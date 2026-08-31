@@ -22,13 +22,6 @@ const TERMINAL_ORDER_STATUSES = [
   OrderStatus.REFUNDED,
 ];
 
-const DEFAULT_MACHINES = [
-  { id: 'w1', label: 'Washer 1', machineType: 'washer', status: 'active', capacityKg: 15 },
-  { id: 'w2', label: 'Washer 2', machineType: 'washer', status: 'active', capacityKg: 15 },
-  { id: 'd1', label: 'Dryer 1', machineType: 'dryer', status: 'active', capacityKg: 20 },
-  { id: 'f1', label: 'Folding station', machineType: 'folder', status: 'active', capacityKg: 10 },
-];
-
 const HQ_SEED = {
   code: 'HQ-01',
   name: 'Lunara HQ',
@@ -80,7 +73,6 @@ export class BranchManagementService {
         dailyQuotaOrders: 0,
         dailyQuotaWeightKg: 0,
         serviceRadiusKm: 0,
-        machines: [],
         isActive: true,
         location: { type: 'Point', coordinates: HQ_SEED.coordinates },
       });
@@ -110,7 +102,6 @@ export class BranchManagementService {
       if (!shop.managerUserId) updates.managerUserId = partner._id;
       if (!shop.dailyQuotaOrders) updates.dailyQuotaOrders = shop.maxActiveOrders ?? 25;
       if (!shop.dailyQuotaWeightKg) updates.dailyQuotaWeightKg = shop.maxWeightCapacityKg ?? 200;
-      if (!shop.machines?.length) updates.machines = DEFAULT_MACHINES;
       if (Object.keys(updates).length > 0) {
         await this.branchModel.updateOne({ _id: shop._id }, { $set: updates });
       }
@@ -267,7 +258,6 @@ export class BranchManagementService {
           email: s.email,
           phone: s.phone,
         })),
-        machines: branch.machines ?? [],
         capacity: {
           activeOrders,
           maxActiveOrders: branch.maxActiveOrders,
@@ -328,7 +318,6 @@ export class BranchManagementService {
       dailyQuotaWeightKg: dto.dailyQuotaWeightKg ?? 200,
       serviceRadiusKm: dto.serviceRadiusKm ?? 12,
       ...(dto.commissionRate !== undefined ? { commissionRate: dto.commissionRate } : {}),
-      machines: DEFAULT_MACHINES,
       isActive: true,
       location: { type: 'Point', coordinates: dto.coordinates },
       // New shops start dry cleaning fully unconfigured — the partner opts garments in one by
@@ -407,7 +396,6 @@ export class BranchManagementService {
     }
     if (dto.serviceRadiusKm !== undefined) branch.serviceRadiusKm = dto.serviceRadiusKm;
     if (dto.isActive !== undefined) branch.isActive = dto.isActive;
-    if (dto.machines !== undefined) branch.machines = dto.machines;
     if (dto.commissionRate !== undefined) branch.commissionRate = dto.commissionRate;
     if (dto.line1 !== undefined) branch.line1 = dto.line1;
     if (dto.city !== undefined) branch.city = dto.city;
@@ -619,7 +607,6 @@ export class BranchManagementService {
         dailyQuotaOrders: b.maxActiveOrders,
         dailyQuotaWeightKg: b.maxWeightCapacityKg,
         serviceRadiusKm: b.serviceRadiusKm,
-        machines: DEFAULT_MACHINES,
         isActive: true,
         location: { type: 'Point', coordinates: b.coordinates },
       });

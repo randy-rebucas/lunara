@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { UserRole } from '@lunara/types';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
+import { Branch, BranchDocument, PartnerPortalSettings } from '../branches/schemas/branch.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { NotificationDispatchService } from './notification-dispatch.service';
@@ -17,6 +18,20 @@ import {
 } from './partner-notification.constants';
 
 const DEDUPE_MS = 45_000;
+const LOW_STOCK_DEDUPE_MS = 12 * 60 * 60 * 1000;
+
+/** Only these events/statuses correspond to a Preferences toggle — everything else stays always-on. */
+const EVENT_NOTIFY_FLAG: Record<string, keyof PartnerPortalSettings> = {
+  shopAssigned: 'notifyNewOrders',
+  inTransitToShop: 'notifyPickupArriving',
+  awaitingDeliveryDispatch: 'notifyReadyForDelivery',
+};
+
+const STATUS_NOTIFY_FLAG: Record<string, keyof PartnerPortalSettings> = {
+  shop_assigned: 'notifyNewOrders',
+  in_transit_to_shop: 'notifyPickupArriving',
+  ready_for_delivery: 'notifyReadyForDelivery',
+};
 
 @Injectable()
 export class PartnerOrderNotificationService {
@@ -30,6 +45,7 @@ export class PartnerOrderNotificationService {
   constructor(
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+    @InjectModel(Branch.name) private readonly branchModel: Model<BranchDocument>,
     private readonly notificationDispatch: NotificationDispatchService,
     @Inject(forwardRef(() => TrackingGateway))
     private readonly trackingGateway: TrackingGateway,
@@ -48,6 +64,9 @@ export class PartnerOrderNotificationService {
 
     const order = await this.resolveOrder(orderId);
     if (!order?.partnerId && !order?.branchId) return;
+
+    const flag = EVENT_NOTIFY_FLAG[event];
+    if (flag && !(await this.branchAllowsNotification(order.branchId, flag))) return;
 
     const title = partnerOrderEventTitle(event);
     const body =
@@ -74,6 +93,9 @@ export class PartnerOrderNotificationService {
 
     const order = await this.resolveOrder(orderId);
     if (!order?.partnerId && !order?.branchId) return;
+
+    const statusFlag = STATUS_NOTIFY_FLAG[status];
+    if (statusFlag && !(await this.branchAllowsNotification(order.branchId, statusFlag))) return;
 
     const title = partnerOrderStatusTitle(status);
     const body = `Order ${orderId.slice(-6).toUpperCase()} is now ${status.replace(/_/g, ' ')}.`;
@@ -116,6 +138,62 @@ export class PartnerOrderNotificationService {
       orderId,
       event: 'deliveryRequested',
     });
+  }
+
+  /** Fires once when an inventory item newly crosses at/below its restock threshold. Callers are
+   * responsible for only invoking this on the transition (not on every write while already low). */
+  async notifyLowStock(
+    branchId: string,
+    item: { name: string; quantity: number; unit: string },
+  ) {
+    const branch = await this.branchModel
+      .findById(branchId)
+      .select('partnerUserId portalSettings')
+      .lean();
+    if (!branch) return;
+    if (branch.portalSettings?.notifyLowStock === false) return;
+
+    const dedupeKey = `lowstock:${branchId}:${item.name}`;
+    if (this.isDuplicate(dedupeKey, LOW_STOCK_DEDUPE_MS)) return;
+
+    const recipientIds = await this.resolveRecipientUserIds(
+      branch.partnerUserId?.toString(),
+      branchId,
+    );
+    if (recipientIds.length === 0) return;
+
+    const title = 'Low stock alert';
+    const body = `${item.name} is at ${item.quantity} ${item.unit} — below your restock threshold.`;
+    const data = {
+      category: 'system' as const,
+      type: 'low_stock',
+      branchId,
+    };
+
+    for (const userId of recipientIds) {
+      try {
+        await this.notificationDispatch.dispatch({
+          userId,
+          title,
+          body,
+          channelId: 'partner_orders',
+          data,
+        });
+        this.trackingGateway.emitPartnerNotification(userId, { title, body, ...data });
+      } catch (err) {
+        this.logger.warn(`Low-stock notification failed for ${userId}: ${err}`);
+      }
+    }
+    this.trackingGateway.emitPartnerNotificationToBranch(branchId, { title, body, ...data });
+  }
+
+  private async branchAllowsNotification(
+    branchId: string | undefined,
+    flag: keyof PartnerPortalSettings,
+  ): Promise<boolean> {
+    if (!branchId) return true;
+    const branch = await this.branchModel.findById(branchId).select('portalSettings').lean();
+    return branch?.portalSettings?.[flag] !== false;
   }
 
   private async dispatchToPortalRecipients(
@@ -267,14 +345,17 @@ export class PartnerOrderNotificationService {
     return { orderId, ...snapshot };
   }
 
-  private isDuplicate(key: string) {
+  /** `recent` stores each key's own expiry timestamp (not a shared window) so mixing short-window
+   * (order event) and long-window (low-stock) dedupe keys can't cause one caller's eviction sweep
+   * to prematurely clear another caller's still-live key. */
+  private isDuplicate(key: string, windowMs = DEDUPE_MS) {
     const now = Date.now();
-    const prev = this.recent.get(key);
-    if (prev && now - prev < DEDUPE_MS) return true;
-    this.recent.set(key, now);
+    const expiresAt = this.recent.get(key);
+    if (expiresAt && now < expiresAt) return true;
+    this.recent.set(key, now + windowMs);
     if (this.recent.size > 500) {
-      for (const [k, ts] of this.recent) {
-        if (now - ts > DEDUPE_MS * 2) this.recent.delete(k);
+      for (const [k, exp] of this.recent) {
+        if (now > exp) this.recent.delete(k);
       }
     }
     return false;

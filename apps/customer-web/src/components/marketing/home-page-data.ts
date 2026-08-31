@@ -140,11 +140,6 @@ export const SERVICE_AREAS = [
   },
 ] as const;
 
-export interface ServiceAreaMachine {
-  label: string;
-  machineType: string;
-}
-
 export interface ServiceAreaPerson {
   displayName?: string;
   avatarUrl?: string;
@@ -165,7 +160,6 @@ export interface ServiceArea {
   area: string;
   radiusKm: number;
   logoUrl?: string;
-  machines?: ServiceAreaMachine[];
   owner?: ServiceAreaPerson | null;
   staff?: ServiceAreaPerson[];
   branches?: ServiceAreaSibling[];
@@ -181,7 +175,6 @@ type PublicBranchApiShape = {
   province: string;
   radiusKm?: number;
   logoUrl?: string;
-  machines?: ServiceAreaMachine[];
   owner?: ServiceAreaPerson | null;
   staff?: ServiceAreaPerson[];
   branches?: ServiceAreaSibling[];
@@ -199,7 +192,6 @@ function toServiceArea(branch: PublicBranchApiShape): ServiceArea {
     area: `${branch.city}, ${branch.province}`,
     radiusKm: branch.radiusKm ?? 10,
     logoUrl: branch.logoUrl,
-    machines: branch.machines,
     owner: branch.owner,
     staff: branch.staff,
     branches: branch.branches,

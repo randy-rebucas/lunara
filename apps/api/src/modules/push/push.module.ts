@@ -1,6 +1,7 @@
 import { Global, Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
+import { Branch, BranchSchema } from '../branches/schemas/branch.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { Notification, NotificationSchema } from '../reviews/schemas/notification.schema';
 import { Rider, RiderSchema } from '../riders/schemas/rider.schema';
@@ -28,6 +29,7 @@ import {
       { name: Notification.name, schema: NotificationSchema },
       { name: Rider.name, schema: RiderSchema },
       { name: Order.name, schema: OrderSchema },
+      { name: Branch.name, schema: BranchSchema },
       { name: User.name, schema: UserSchema },
       { name: Customer.name, schema: CustomerSchema },
     ]),

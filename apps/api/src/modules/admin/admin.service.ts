@@ -1706,7 +1706,6 @@ export class AdminService {
       dailyQuotaOrders: 0,
       dailyQuotaWeightKg: 0,
       serviceRadiusKm: 0,
-      machines: [],
       isActive: true,
       location: { type: 'Point', coordinates: dto.coordinates },
     });
@@ -1727,13 +1726,6 @@ export class AdminService {
     const adminObjectId = new Types.ObjectId(adminUserId);
     const parentId = hq._id;
 
-    const DEFAULT_MACHINES = [
-      { id: 'w1', label: 'Washer 1', machineType: 'washer', status: 'active', capacityKg: 15 },
-      { id: 'w2', label: 'Washer 2', machineType: 'washer', status: 'active', capacityKg: 15 },
-      { id: 'd1', label: 'Dryer 1', machineType: 'dryer', status: 'active', capacityKg: 20 },
-      { id: 'f1', label: 'Folding station', machineType: 'folder', status: 'active', capacityKg: 10 },
-    ];
-
     const branch = await this.branchModel.create({
       code: dto.code,
       name: dto.name,
@@ -1750,7 +1742,6 @@ export class AdminService {
       dailyQuotaWeightKg: 200,
       serviceRadiusKm: dto.serviceRadiusKm ?? 12,
       commissionRate: dto.commissionRate ?? 0.20,
-      machines: DEFAULT_MACHINES,
       isActive: true,
       location: { type: 'Point', coordinates: dto.coordinates },
     });

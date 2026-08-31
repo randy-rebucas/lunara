@@ -43,7 +43,6 @@ import {
   BranchCustomAddon,
   BranchCustomAddonDocument,
 } from './schemas/branch-custom-addon.schema';
-import { CreateBranchMachineDto, UpdateBranchMachineDto } from './dto/branch-machine.dto';
 import { CreateBranchCustomServiceDto } from './dto/create-branch-custom-service.dto';
 import { UpdateBranchCustomServiceDto } from './dto/update-branch-custom-service.dto';
 import { CreateBranchCustomAddonDto } from './dto/create-branch-custom-addon.dto';
@@ -751,53 +750,6 @@ export class BranchesService {
 
   // ── Machines (embedded on the branch; managed by the owning partner) ─────
 
-  async listMachines(branchId: string) {
-    const branch = await this.branchModel.findById(branchId).select('machines');
-    if (!branch) throw new NotFoundException('Branch not found');
-    return { success: true, data: branch.machines ?? [] };
-  }
-
-  async addMachine(branchId: string, dto: CreateBranchMachineDto) {
-    const branch = await this.branchModel.findById(branchId);
-    if (!branch) throw new NotFoundException('Branch not found');
-    const machine = {
-      id: `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-      label: dto.label.trim(),
-      machineType: dto.machineType,
-      status: dto.status ?? 'active',
-      capacityKg: dto.capacityKg ?? 8,
-    };
-    branch.machines.push(machine);
-    await branch.save();
-    return { success: true, data: machine };
-  }
-
-  async updateMachine(branchId: string, machineId: string, dto: UpdateBranchMachineDto) {
-    const branch = await this.branchModel.findById(branchId);
-    if (!branch) throw new NotFoundException('Branch not found');
-    const machine = branch.machines.find((m) => m.id === machineId);
-    if (!machine) throw new NotFoundException('Machine not found');
-    if (dto.label !== undefined) machine.label = dto.label.trim();
-    if (dto.machineType !== undefined) machine.machineType = dto.machineType;
-    if (dto.status !== undefined) machine.status = dto.status;
-    if (dto.capacityKg !== undefined) machine.capacityKg = dto.capacityKg;
-    branch.markModified('machines');
-    await branch.save();
-    return { success: true, data: machine };
-  }
-
-  async removeMachine(branchId: string, machineId: string) {
-    const branch = await this.branchModel.findById(branchId);
-    if (!branch) throw new NotFoundException('Branch not found');
-    const remaining = branch.machines.filter((m) => m.id !== machineId);
-    if (remaining.length === branch.machines.length) {
-      throw new NotFoundException('Machine not found');
-    }
-    branch.machines = remaining;
-    await branch.save();
-    return { success: true };
-  }
-
   /** Throws if the branch isn't owned by this partner user — guards partner-facing pricing writes/reads. */
   assertBranchOwnedByPartner(branch: BranchDocument, partnerUserId: string) {
     if (branch.partnerUserId.toString() !== partnerUserId) {
@@ -1199,7 +1151,7 @@ export class BranchesService {
     await this.ensureSeeded();
     const branches = await this.branchModel
       .find(this.operationalBranchFilter())
-      .select('name city province serviceRadiusKm logoUrl machines partnerUserId isMainShop')
+      .select('name city province serviceRadiusKm logoUrl partnerUserId isMainShop')
       .sort({ name: 1 });
     const ownerProfiles = await this.userProfileModel
       .find({ userId: { $in: branches.map((b) => b.partnerUserId) } })
@@ -1228,7 +1180,7 @@ export class BranchesService {
     }
     const branch = await this.branchModel
       .findOne({ _id: id, ...this.operationalBranchFilter() })
-      .select('name city province serviceRadiusKm logoUrl machines partnerUserId');
+      .select('name city province serviceRadiusKm logoUrl partnerUserId');
     if (!branch) {
       throw new NotFoundException('Branch not found');
     }
@@ -1283,10 +1235,6 @@ export class BranchesService {
       province: b.province,
       radiusKm: b.serviceRadiusKm,
       logoUrl: b.logoUrl,
-      machines: (b.machines ?? []).map((m) => ({
-        label: m.label,
-        machineType: m.machineType,
-      })),
     };
   }
 
@@ -2078,7 +2026,6 @@ export class BranchesService {
       maxWeightCapacityKg: capacityKg,
       dailyQuotaOrders: branch.dailyQuotaOrders,
       dailyQuotaWeightKg: branch.dailyQuotaWeightKg,
-      machineCount: branch.machines?.length ?? 0,
       currentLoadKg,
       serviceRadiusKm: branch.serviceRadiusKm,
       activeOrders,
