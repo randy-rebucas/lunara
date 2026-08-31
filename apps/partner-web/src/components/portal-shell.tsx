@@ -102,7 +102,7 @@ const partnerNavGroups: NavGroup[] = [
     label: 'Operations',
     items: [
       { href: '/staff', label: 'Staff', icon: Icons.staff },
-      { href: '/branches', label: 'Branches', icon: Icons.branches, soon: true },
+      { href: '/branches', label: 'Branches', icon: Icons.branches },
       {
         href: '/inventory',
         label: 'Inventory',

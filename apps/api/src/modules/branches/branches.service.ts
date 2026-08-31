@@ -48,6 +48,8 @@ import { UpdateBranchCustomServiceDto } from './dto/update-branch-custom-service
 import { CreateBranchCustomAddonDto } from './dto/create-branch-custom-addon.dto';
 import { UpdateBranchCustomAddonDto } from './dto/update-branch-custom-addon.dto';
 import { UpdateBranchHiddenCatalogDto } from './dto/update-branch-hidden-catalog.dto';
+import { CreateOwnBranchDto } from './dto/create-own-branch.dto';
+import { UpdateOwnBranchDto } from './dto/update-own-branch.dto';
 
 export const CUSTOM_ADDON_ID_PREFIX = 'custom:';
 
@@ -757,11 +759,12 @@ export class BranchesService {
     }
   }
 
-  /** All shops a partner owns — for the partner-web branch selector when editing pricing. */
+  /** All shops a partner owns — for the partner-web branch selector when editing pricing, and for
+   * the Branches management page. */
   async listBranchesForPartner(partnerUserId: string) {
     const branches = await this.branchModel
       .find({ partnerUserId: new Types.ObjectId(partnerUserId) })
-      .select('code name branchType city')
+      .select('code name branchType city line1 province isActive isMainShop maxActiveOrders serviceRadiusKm logoUrl location')
       .sort({ name: 1 });
     return {
       success: true,
@@ -771,6 +774,15 @@ export class BranchesService {
         name: b.name,
         branchType: b.branchType,
         city: b.city,
+        line1: b.line1,
+        province: b.province,
+        isActive: b.isActive,
+        isMainShop: b.isMainShop,
+        maxActiveOrders: b.maxActiveOrders,
+        serviceRadiusKm: b.serviceRadiusKm,
+        logoUrl: b.logoUrl,
+        latitude: b.location?.coordinates?.[1],
+        longitude: b.location?.coordinates?.[0],
       })),
     };
   }
@@ -781,6 +793,118 @@ export class BranchesService {
     if (!branch) throw new NotFoundException('Branch not found');
     this.assertBranchOwnedByPartner(branch, partnerUserId);
     return branch;
+  }
+
+  /** Generates a unique branch code from the shop name (partner self-service flow doesn't ask the
+   * partner to pick one, unlike the admin-created-branch flow). Retries on the unique-index
+   * collision, mirroring createCustomAddon's slug-collision handling below. */
+  private async generateUniqueBranchCode(name: string): Promise<string> {
+    const base = name
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 20) || 'BRANCH';
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
+      const candidate = `${base}-${suffix}`;
+      const exists = await this.branchModel.exists({ code: candidate });
+      if (!exists) return candidate;
+    }
+    throw new BadRequestException('Could not generate a unique branch code, please try again');
+  }
+
+  /** Partner self-service branch creation — mirrors BranchManagementService.createBranch's
+   * defaults/first-branch-is-main-shop rule, but auto-derives code/branchType/partnerUserId/
+   * managerUserId instead of taking them from the (admin-only) request body. */
+  async createBranchForPartner(partnerUserId: string, dto: CreateOwnBranchDto) {
+    const code = await this.generateUniqueBranchCode(dto.name);
+    const coordinates = dto.coordinates ?? resolveCoordinates(dto.city);
+
+    const hasMainShop = await this.branchModel.exists({
+      partnerUserId: new Types.ObjectId(partnerUserId),
+      isMainShop: true,
+      isActive: true,
+    });
+
+    const branch = await this.branchModel.create({
+      code,
+      name: dto.name,
+      branchType: 'partner_shop',
+      line1: dto.line1,
+      city: dto.city,
+      province: dto.province,
+      partnerUserId: new Types.ObjectId(partnerUserId),
+      managerUserId: new Types.ObjectId(partnerUserId),
+      isMainShop: !hasMainShop,
+      maxActiveOrders: dto.maxActiveOrders ?? 20,
+      maxWeightCapacityKg: dto.maxWeightCapacityKg ?? 200,
+      dailyQuotaOrders: dto.dailyQuotaOrders ?? 25,
+      dailyQuotaWeightKg: dto.dailyQuotaWeightKg ?? 200,
+      serviceRadiusKm: dto.serviceRadiusKm ?? 12,
+      isActive: true,
+      location: { type: 'Point', coordinates },
+      // New shops start dry cleaning fully unconfigured — the partner opts garments in one by one.
+      hiddenGarmentItemIds: GARMENT_CATALOG.map((g) => g.id),
+    });
+
+    return {
+      success: true,
+      data: { branchId: branch._id.toString(), code: branch.code, name: branch.name },
+    };
+  }
+
+  /** Partner self-service branch update — restricted to the fields a partner may change
+   * themselves (name/address/capacity/active). Reuses BranchManagementService.updateBranch's
+   * guard against deactivating a branch with orders still in progress. */
+  async updateBranchForPartner(branchId: string, partnerUserId: string, dto: UpdateOwnBranchDto) {
+    const branch = await this.getOwnBranchOrThrow(branchId, partnerUserId);
+
+    if (dto.isActive === false && branch.isActive) {
+      const activeOrderCount = await this.orderModel.countDocuments({
+        branchId: branch._id,
+        status: { $in: CAPACITY_STATUSES },
+      });
+      if (activeOrderCount > 0) {
+        throw new BadRequestException(
+          `Cannot deactivate: ${activeOrderCount} order(s) still in progress at this branch`,
+        );
+      }
+    }
+
+    if (dto.name !== undefined) branch.name = dto.name;
+    if (dto.line1 !== undefined) branch.line1 = dto.line1;
+    if (dto.city !== undefined) branch.city = dto.city;
+    if (dto.province !== undefined) branch.province = dto.province;
+    if (dto.coordinates !== undefined) {
+      branch.location = { type: 'Point', coordinates: dto.coordinates };
+    }
+    if (dto.maxActiveOrders !== undefined) branch.maxActiveOrders = dto.maxActiveOrders;
+    if (dto.maxWeightCapacityKg !== undefined) branch.maxWeightCapacityKg = dto.maxWeightCapacityKg;
+    if (dto.dailyQuotaOrders !== undefined) branch.dailyQuotaOrders = dto.dailyQuotaOrders;
+    if (dto.dailyQuotaWeightKg !== undefined) branch.dailyQuotaWeightKg = dto.dailyQuotaWeightKg;
+    if (dto.serviceRadiusKm !== undefined) branch.serviceRadiusKm = dto.serviceRadiusKm;
+    if (dto.isActive !== undefined) branch.isActive = dto.isActive;
+
+    await branch.save();
+    return {
+      success: true,
+      data: {
+        _id: branch._id.toString(),
+        code: branch.code,
+        name: branch.name,
+        branchType: branch.branchType,
+        city: branch.city,
+        line1: branch.line1,
+        province: branch.province,
+        isActive: branch.isActive,
+        isMainShop: branch.isMainShop,
+        maxActiveOrders: branch.maxActiveOrders,
+        serviceRadiusKm: branch.serviceRadiusKm,
+        logoUrl: branch.logoUrl,
+        latitude: branch.location?.coordinates?.[1],
+        longitude: branch.location?.coordinates?.[0],
+      },
+    };
   }
 
   /** Active partner shops near an address, each with its own marked-up prices, for the customer shop-selection step.

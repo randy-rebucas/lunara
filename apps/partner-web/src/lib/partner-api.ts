@@ -161,6 +161,62 @@ export async function getOwnProfile(): Promise<PartnerOwnProfile> {
   return partnerFetch<PartnerOwnProfile>('/partner/profile');
 }
 
+export interface PartnerBranch {
+  _id: string;
+  code: string;
+  name: string;
+  branchType: string;
+  city: string;
+  line1: string;
+  province: string;
+  isActive: boolean;
+  isMainShop: boolean;
+  maxActiveOrders: number;
+  serviceRadiusKm: number;
+  logoUrl?: string;
+  latitude?: number;
+  longitude?: number;
+}
+
+export async function listOwnBranches(): Promise<PartnerBranch[]> {
+  return partnerFetch<PartnerBranch[]>('/partner/branches');
+}
+
+export interface CreateOwnBranchInput {
+  name: string;
+  line1: string;
+  city: string;
+  province: string;
+  coordinates?: [number, number];
+  maxActiveOrders?: number;
+  serviceRadiusKm?: number;
+}
+
+export async function createOwnBranch(input: CreateOwnBranchInput): Promise<{ branchId: string; code: string; name: string }> {
+  return partnerFetch('/partner/branches', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export interface UpdateOwnBranchInput {
+  name?: string;
+  line1?: string;
+  city?: string;
+  province?: string;
+  coordinates?: [number, number];
+  maxActiveOrders?: number;
+  serviceRadiusKm?: number;
+  isActive?: boolean;
+}
+
+export async function updateOwnBranch(branchId: string, input: UpdateOwnBranchInput): Promise<PartnerBranch> {
+  return partnerFetch<PartnerBranch>(`/partner/branches/${branchId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
 /** Tokenizes a card directly against PayMongo's API from the browser using the publishable
  * key — raw card details never touch our own server, only the resulting Payment Method id
  * does (sent on to attachPaymentMethod below). */

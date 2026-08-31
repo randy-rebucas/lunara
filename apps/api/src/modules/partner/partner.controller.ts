@@ -39,6 +39,8 @@ import { UpdateBranchCustomServiceDto } from '../branches/dto/update-branch-cust
 import { CreateBranchCustomAddonDto } from '../branches/dto/create-branch-custom-addon.dto';
 import { UpdateBranchCustomAddonDto } from '../branches/dto/update-branch-custom-addon.dto';
 import { UpdateBranchHiddenCatalogDto } from '../branches/dto/update-branch-hidden-catalog.dto';
+import { CreateOwnBranchDto } from '../branches/dto/create-own-branch.dto';
+import { UpdateOwnBranchDto } from '../branches/dto/update-own-branch.dto';
 import { AssignStaffDto } from './dto/assign-staff.dto';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { AssignStaffBranchDto } from './dto/assign-staff-branch.dto';
@@ -157,6 +159,22 @@ export class PartnerController {
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   listOwnBranches(@Req() req: { user: { sub: string } }) {
     return this.branchesService.listBranchesForPartner(req.user.sub);
+  }
+
+  @Post('branches')
+  @Roles(UserRole.PARTNER)
+  createOwnBranch(@Req() req: { user: { sub: string } }, @Body() dto: CreateOwnBranchDto) {
+    return this.branchesService.createBranchForPartner(req.user.sub, dto);
+  }
+
+  @Patch('branches/:id')
+  @Roles(UserRole.PARTNER)
+  updateOwnBranch(
+    @Req() req: { user: { sub: string } },
+    @Param('id') id: string,
+    @Body() dto: UpdateOwnBranchDto,
+  ) {
+    return this.branchesService.updateBranchForPartner(id, req.user.sub, dto);
   }
 
   @Get('branches/:id/pricing')
