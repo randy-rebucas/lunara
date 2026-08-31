@@ -1,144 +1,35 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useState } from 'react';
-import type { ReactNode } from 'react';
+import { Fragment, useState } from 'react';
 import { BookingType } from '@lunara/types';
-import { GARMENT_CATALOG, getGarmentCategories, SHOP_PRICE_MARKUP_MULTIPLIER } from '@lunara/utils';
+import { GARMENT_CATALOG, getGarmentCategories } from '@lunara/utils';
 import { AuthLoading } from '../../components/auth-loading';
 import { DataPageStatus } from '../../components/data-page-status';
 import { PageHeader } from '../../components/ui/page-header';
 import { useRequirePartner } from '../../hooks/use-protected-page';
 import { partnerFetch } from '../../lib/partner-api';
-import { usePartnerQuery } from '../../lib/use-partner-query';
+import type { PricingMode, ShopAddonPrice } from '../../lib/use-shop-pricing';
+import { useShopPricing } from '../../lib/use-shop-pricing';
 
-interface BranchOption {
-  _id: string;
-  code: string;
-  name: string;
-  branchType: string;
-  city: string;
-}
-
-type PricingMode = 'flat_bag' | 'per_kg' | 'per_load' | 'per_piece' | 'per_pair' | 'per_item' | 'fixed';
-
-interface ShopServicePrice {
-  type: string;
-  label: string;
-  category?: string;
-  basePricePerKg: number;
-  basePricePerLoad?: number;
-  basePricePerPiece?: number;
-  basePricePerPair?: number;
-  basePricePerItem?: number;
-  fixedPrice?: number;
-  pricingUnit?: PricingMode;
-  customerPricePerKg: number;
-  isCustom?: boolean;
-  customServiceId?: string;
-}
-
-interface ShopAddonPrice {
-  slug: string;
-  label: string;
-  category?: string;
-  basePrice: number;
-  basePricePerKg?: number;
-  basePricePerLoad?: number;
-  basePricePerPiece?: number;
-  basePricePerPair?: number;
-  basePricePerItem?: number;
-  fixedPrice?: number;
-  pricingUnit?: PricingMode;
-  /** Global-catalog-only — not partner-configurable, unlike pricingUnit. */
-  isPercentOfService?: boolean;
-  customerPrice: number;
-  isCustom?: boolean;
-  customAddonId?: string;
-  applicableServiceTypes?: string[];
-  allowsQuantity?: boolean;
-  maxQuantity?: number;
-  /** Units of this add-on bundled free into the service — only quantity beyond this is billed. */
-  includedQuantity?: number;
-}
-
-interface ShopGarmentItem {
-  id: string;
-  category: string;
-  label: string;
-  price: number;
-}
-
-interface ShopPricing {
-  pricingMode: PricingMode;
-  kgPerLoad: number;
-  services: ShopServicePrice[];
-  addons: ShopAddonPrice[];
-  garmentCatalog: ShopGarmentItem[];
-  hiddenServiceTypes: string[];
-  hiddenAddonSlugs: string[];
-  hiddenGarmentItemIds: string[];
-}
-
-const MARKUP_MULTIPLIER = SHOP_PRICE_MARKUP_MULTIPLIER;
-
-const PRICING_MODE_OPTIONS: { value: PricingMode; label: string; description: string }[] = [
-  {
-    value: 'flat_bag',
-    label: 'Flat bag pricing',
-    description: 'Platform-wide flat price by bag size — not partner-configurable.',
-  },
-  {
-    value: 'per_kg',
-    label: 'Per kilo',
-    description: 'You set a price per kg. Customers get an estimate; final price is confirmed once you weigh the laundry.',
-  },
-  {
-    value: 'per_load',
-    label: 'Per load',
-    description: 'You set a price per machine load. Customers get an estimate; final price is confirmed once you weigh the laundry.',
-  },
-  {
-    value: 'per_piece',
-    label: 'Per piece',
-    description: 'You set a price per item/piece. Customers get an estimate; final price is confirmed once you count the pieces.',
-  },
-  {
-    value: 'per_pair',
-    label: 'Per pair',
-    description: 'You set a price per pair (e.g. shoes). Customers get an estimate; final price is confirmed once you count the pairs.',
-  },
-  {
-    value: 'per_item',
-    label: 'Per item',
-    description: 'You set a price per item. Customers get an estimate; final price is confirmed once you count the items.',
-  },
-  {
-    value: 'fixed',
-    label: 'Fixed price',
-    description: 'One flat price regardless of quantity — the customer sees this exact price, no estimate.',
-  },
+const PRICING_MODE_OPTIONS: { value: PricingMode; label: string }[] = [
+  { value: 'per_kg', label: 'Per kilo' },
+  { value: 'per_load', label: 'Per load' },
+  { value: 'per_piece', label: 'Per piece' },
+  { value: 'per_pair', label: 'Per pair' },
+  { value: 'per_item', label: 'Per item' },
+  { value: 'fixed', label: 'Fixed price' },
 ];
 
-/** Maps a pricing unit to the ShopServicePrice/ShopAddonPrice field it bills from. */
-const RATE_FIELD_BY_MODE = {
-  per_kg: 'basePricePerKg',
+/** Custom services use the legacy `pricePerKg` field name for their per-kg rate (see
+ * create-branch-custom-service.dto.ts), unlike branch service/addon pricing's `basePricePerKg`. */
+const CUSTOM_SERVICE_RATE_FIELD_BY_MODE: Partial<Record<PricingMode, string>> = {
+  per_kg: 'pricePerKg',
   per_load: 'basePricePerLoad',
   per_piece: 'basePricePerPiece',
   per_pair: 'basePricePerPair',
   per_item: 'basePricePerItem',
   fixed: 'fixedPrice',
-} as const satisfies Partial<Record<PricingMode, keyof ShopServicePrice & keyof ShopAddonPrice>>;
-
-/** Custom services aren't flat-bag priced (see resolveCustomServicePricing on the API side, which
- * defaults an unset unit to per-kilo) — exclude that option from the "add custom service" form. */
-const NEW_SERVICE_UNIT_OPTIONS = PRICING_MODE_OPTIONS.filter((opt) => opt.value !== 'flat_bag');
-
-/** Custom services use the legacy `pricePerKg` field name for their per-kg rate (see
- * create-branch-custom-service.dto.ts), unlike branch service/addon pricing's `basePricePerKg`. */
-const CUSTOM_SERVICE_RATE_FIELD_BY_MODE = {
-  ...RATE_FIELD_BY_MODE,
-  per_kg: 'pricePerKg',
-} as const;
+};
 
 const BOOKING_TYPE_LABELS: Record<string, string> = {
   [BookingType.WASH_FOLD]: 'Wash & Fold',
@@ -166,10 +57,6 @@ const BOOKING_TYPE_LABELS: Record<string, string> = {
   [BookingType.ECO_FRIENDLY_WASH]: 'Eco-Friendly Wash',
   [BookingType.HYPOALLERGENIC_WASH]: 'Hypoallergenic Wash',
 };
-
-function formatPeso(n: number) {
-  return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
-}
 
 const SERVICE_CATEGORY_LABELS: Record<string, string> = {
   core_laundry: 'Core Laundry',
@@ -207,7 +94,7 @@ function RightDrawer({
   open: boolean;
   onClose: () => void;
   title: string;
-  children: ReactNode;
+  children: React.ReactNode;
 }) {
   return (
     <div className={`fixed inset-0 z-50 ${open ? '' : 'pointer-events-none'}`} aria-hidden={!open}>
@@ -239,57 +126,28 @@ function RightDrawer({
   );
 }
 
-type PricingTab = 'services' | 'addons' | 'garments' | 'machine';
+type CatalogTab = 'services' | 'addons' | 'garments';
 
 export default function ServicesPage() {
   const { ready } = useRequirePartner();
-
-  const loadBranches = useCallback(async () => {
-    return partnerFetch<BranchOption[]>('/partner/branches');
-  }, []);
   const {
-    data: branches,
-    loading: branchesLoading,
-    error: branchesError,
-    reload: reloadBranches,
-  } = usePartnerQuery(loadBranches, []);
+    branches,
+    branchesLoading,
+    branchesError,
+    reloadBranches,
+    selectedBranchId,
+    setSelectedBranchId,
+    pricing,
+    pricingLoading,
+    pricingError,
+    reloadPricing,
+  } = useShopPricing();
 
-  const [selectedBranchId, setSelectedBranchId] = useState('');
-  useEffect(() => {
-    if (!selectedBranchId && branches && branches.length > 0) {
-      setSelectedBranchId(branches[0]._id);
-    }
-  }, [branches, selectedBranchId]);
-
-  const loadPricing = useCallback(async () => {
-    if (!selectedBranchId) return null;
-    return partnerFetch<ShopPricing>(`/partner/branches/${selectedBranchId}/pricing`);
-  }, [selectedBranchId]);
-  const {
-    data: pricing,
-    loading: pricingLoading,
-    error: pricingError,
-    reload: reloadPricing,
-  } = usePartnerQuery(loadPricing, [selectedBranchId]);
-
-  // Keyed by rate field name (basePricePerKg, basePricePerLoad, basePricePerPiece, basePricePerPair,
-  // basePricePerItem, fixedPrice) -> serviceType -> string value. flat_bag has no editable rate.
-  const [serviceRates, setServiceRates] = useState<Record<string, Record<string, string>>>({});
-  const [serviceUnits, setServiceUnits] = useState<Record<string, PricingMode>>({});
-  const [kgPerLoad, setKgPerLoad] = useState('8');
-  const [addonPrices, setAddonPrices] = useState<Record<string, string>>({});
-  const [addonRates, setAddonRates] = useState<Record<string, Record<string, string>>>({});
-  const [addonUnits, setAddonUnits] = useState<Record<string, PricingMode>>({});
-  const [addonServiceTypes, setAddonServiceTypes] = useState<Record<string, string[]>>({});
-  const [addonIncludedQty, setAddonIncludedQty] = useState<Record<string, string>>({});
-  const [hiddenServiceTypes, setHiddenServiceTypes] = useState<string[]>([]);
-  const [hiddenAddonSlugs, setHiddenAddonSlugs] = useState<string[]>([]);
-  const [hiddenGarmentItemIds, setHiddenGarmentItemIds] = useState<string[]>([]);
-  const [garmentPrices, setGarmentPrices] = useState<Record<string, string>>({});
+  const [hiddenBusy, setHiddenBusy] = useState(false);
+  const [rowError, setRowError] = useState('');
+  const [activeTab, setActiveTab] = useState<CatalogTab>('services');
+  const [expandedAddonsFor, setExpandedAddonsFor] = useState<string | null>(null);
   const [collapsedGarmentCategories, setCollapsedGarmentCategories] = useState<Set<string>>(new Set());
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [saveError, setSaveError] = useState('');
 
   const [newService, setNewService] = useState({
     baseBookingType: BookingType.WASH_FOLD as string,
@@ -313,163 +171,84 @@ export default function ServicesPage() {
   const [addingAddon, setAddingAddon] = useState(false);
   const [showAddonForm, setShowAddonForm] = useState(false);
 
-  const [rowError, setRowError] = useState('');
-  const [expandedAddonsFor, setExpandedAddonsFor] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<PricingTab>('services');
-
-  useEffect(() => {
-    if (activeTab === 'garments' && hiddenServiceTypes.includes(BookingType.DRY_CLEANING)) {
-      setActiveTab('services');
-    }
-  }, [activeTab, hiddenServiceTypes]);
-
-  useEffect(() => {
-    if (!pricing) return;
-    const rateFields = Object.values(RATE_FIELD_BY_MODE);
-    setServiceRates(
-      Object.fromEntries(
-        rateFields.map((field) => [
-          field,
-          Object.fromEntries(
-            pricing.services.map((s) => [s.type, s[field] != null ? String(s[field]) : '']),
-          ),
-        ]),
-      ),
-    );
-    setAddonPrices(
-      Object.fromEntries(pricing.addons.map((a) => [a.slug, String(a.basePrice)])),
-    );
-    setAddonRates(
-      Object.fromEntries(
-        rateFields.map((field) => [
-          field,
-          Object.fromEntries(
-            pricing.addons.map((a) => [a.slug, a[field] != null ? String(a[field]) : '']),
-          ),
-        ]),
-      ),
-    );
-    setAddonUnits(
-      Object.fromEntries(pricing.addons.map((a) => [a.slug, a.pricingUnit ?? 'flat_bag'])),
-    );
-    setAddonServiceTypes(
-      Object.fromEntries(pricing.addons.map((a) => [a.slug, a.applicableServiceTypes ?? []])),
-    );
-    setAddonIncludedQty(
-      Object.fromEntries(pricing.addons.map((a) => [a.slug, String(a.includedQuantity ?? 0)])),
-    );
-    setKgPerLoad(String(pricing.kgPerLoad));
-    setHiddenServiceTypes(pricing.hiddenServiceTypes);
-    setHiddenAddonSlugs(pricing.hiddenAddonSlugs);
-    const catalog = pricing.garmentCatalog ?? GARMENT_CATALOG;
-    setHiddenGarmentItemIds(pricing.hiddenGarmentItemIds);
-    setCollapsedGarmentCategories(new Set(getGarmentCategories(catalog)));
-    setGarmentPrices(Object.fromEntries(catalog.map((g) => [g.id, String(g.price)])));
-    setServiceUnits(
-      Object.fromEntries(pricing.services.map((s) => [s.type, s.pricingUnit ?? 'flat_bag'])),
-    );
-  }, [pricing]);
-
-  async function save() {
+  async function toggleHiddenService(type: string, hide: boolean) {
     if (!selectedBranchId || !pricing) return;
-    setSaving(true);
-    setSaveError('');
+    const next = hide
+      ? [...pricing.hiddenServiceTypes, type]
+      : pricing.hiddenServiceTypes.filter((t) => t !== type);
+    setHiddenBusy(true);
+    setRowError('');
     try {
-      await Promise.all([
-        partnerFetch(`/partner/branches/${selectedBranchId}/pricing`, {
-          method: 'PATCH',
-          body: JSON.stringify({
-            servicePricing: pricing.services
-              .filter((s) => !s.isCustom)
-              .map((s) => {
-                const rates = Object.fromEntries(
-                  Object.entries(RATE_FIELD_BY_MODE).map(([, field]) => {
-                    const raw = serviceRates[field]?.[s.type];
-                    return [field, raw !== '' && raw != null ? Number(raw) : undefined];
-                  }),
-                );
-                return {
-                  serviceType: s.type,
-                  ...rates,
-                  pricingUnit: serviceUnits[s.type] ?? 'flat_bag',
-                };
-              }),
-            kgPerLoad: kgPerLoad !== '' ? Number(kgPerLoad) : undefined,
-          }),
-        }),
-        partnerFetch(`/partner/branches/${selectedBranchId}/addon-pricing`, {
-          method: 'PATCH',
-          body: JSON.stringify({
-            addonPricing: pricing.addons
-              .filter((a) => !a.isCustom && !a.isPercentOfService)
-              .map((a) => {
-                const rates = Object.fromEntries(
-                  Object.entries(RATE_FIELD_BY_MODE).map(([, field]) => {
-                    const raw = addonRates[field]?.[a.slug];
-                    return [field, raw !== '' && raw != null ? Number(raw) : undefined];
-                  }),
-                );
-                return {
-                  addonSlug: a.slug,
-                  basePrice: Number(addonPrices[a.slug] ?? a.basePrice),
-                  ...rates,
-                  pricingUnit: addonUnits[a.slug] ?? 'flat_bag',
-                  applicableServiceTypes: addonServiceTypes[a.slug] ?? [],
-                  includedQuantity: Number(addonIncludedQty[a.slug] ?? 0),
-                };
-              }),
-          }),
-        }),
-        partnerFetch(`/partner/branches/${selectedBranchId}/hidden-catalog`, {
-          method: 'PATCH',
-          body: JSON.stringify({
-            hiddenServiceTypes,
-            hiddenAddonSlugs,
-            hiddenGarmentItemIds,
-            garmentPricing: (pricing.garmentCatalog ?? GARMENT_CATALOG)
-              .filter((g) => garmentPrices[g.id] !== '' && garmentPrices[g.id] != null)
-              .map((g) => ({ garmentId: g.id, price: Number(garmentPrices[g.id]) })),
-          }),
-        }),
-      ]);
-      setSaved(true);
-      window.setTimeout(() => setSaved(false), 2000);
+      await partnerFetch(`/partner/branches/${selectedBranchId}/hidden-catalog`, {
+        method: 'PATCH',
+        body: JSON.stringify({ hiddenServiceTypes: next }),
+      });
       await reloadPricing();
     } catch (e) {
-      setSaveError(e instanceof Error ? e.message : 'Failed to save pricing');
+      setRowError(e instanceof Error ? e.message : 'Failed to update service');
     } finally {
-      setSaving(false);
+      setHiddenBusy(false);
     }
   }
 
-  function toggleHiddenService(type: string, hide: boolean) {
-    setHiddenServiceTypes((prev) =>
-      hide ? [...prev, type] : prev.filter((t) => t !== type),
-    );
+  async function toggleHiddenAddon(slug: string, hide: boolean) {
+    if (!selectedBranchId || !pricing) return;
+    const next = hide
+      ? [...pricing.hiddenAddonSlugs, slug]
+      : pricing.hiddenAddonSlugs.filter((s) => s !== slug);
+    setHiddenBusy(true);
+    setRowError('');
+    try {
+      await partnerFetch(`/partner/branches/${selectedBranchId}/hidden-catalog`, {
+        method: 'PATCH',
+        body: JSON.stringify({ hiddenAddonSlugs: next }),
+      });
+      await reloadPricing();
+    } catch (e) {
+      setRowError(e instanceof Error ? e.message : 'Failed to update add-on');
+    } finally {
+      setHiddenBusy(false);
+    }
   }
 
-  function toggleHiddenAddon(slug: string, hide: boolean) {
-    setHiddenAddonSlugs((prev) =>
-      hide ? [...prev, slug] : prev.filter((s) => s !== slug),
-    );
+  async function toggleHiddenGarment(garmentId: string, hide: boolean) {
+    if (!selectedBranchId || !pricing) return;
+    const next = hide
+      ? [...pricing.hiddenGarmentItemIds, garmentId]
+      : pricing.hiddenGarmentItemIds.filter((id) => id !== garmentId);
+    setHiddenBusy(true);
+    setRowError('');
+    try {
+      await partnerFetch(`/partner/branches/${selectedBranchId}/hidden-catalog`, {
+        method: 'PATCH',
+        body: JSON.stringify({ hiddenGarmentItemIds: next }),
+      });
+      await reloadPricing();
+    } catch (e) {
+      setRowError(e instanceof Error ? e.message : 'Failed to update garment');
+    } finally {
+      setHiddenBusy(false);
+    }
   }
 
-  function toggleHiddenGarment(garmentId: string, hide: boolean) {
-    setHiddenGarmentItemIds((prev) =>
-      hide ? [...prev, garmentId] : prev.filter((id) => id !== garmentId),
-    );
-  }
-
-  function setGarmentPrice(garmentId: string, value: string) {
-    setGarmentPrices((prev) => ({ ...prev, [garmentId]: value }));
-  }
-
-  function toggleGarmentCategory(garmentIds: string[], offerAll: boolean) {
-    setHiddenGarmentItemIds((prev) =>
-      offerAll
-        ? prev.filter((id) => !garmentIds.includes(id))
-        : [...new Set([...prev, ...garmentIds])],
-    );
+  async function toggleGarmentCategory(garmentIds: string[], offerAll: boolean) {
+    if (!selectedBranchId || !pricing) return;
+    const next = offerAll
+      ? pricing.hiddenGarmentItemIds.filter((id) => !garmentIds.includes(id))
+      : [...new Set([...pricing.hiddenGarmentItemIds, ...garmentIds])];
+    setHiddenBusy(true);
+    setRowError('');
+    try {
+      await partnerFetch(`/partner/branches/${selectedBranchId}/hidden-catalog`, {
+        method: 'PATCH',
+        body: JSON.stringify({ hiddenGarmentItemIds: next }),
+      });
+      await reloadPricing();
+    } catch (e) {
+      setRowError(e instanceof Error ? e.message : 'Failed to update garments');
+    } finally {
+      setHiddenBusy(false);
+    }
   }
 
   function toggleCollapsedGarmentCategory(category: string) {
@@ -485,10 +264,7 @@ export default function ServicesPage() {
     setRowError('');
     setAddingService(true);
     try {
-      const rateField =
-        CUSTOM_SERVICE_RATE_FIELD_BY_MODE[
-          newService.pricingUnit as keyof typeof CUSTOM_SERVICE_RATE_FIELD_BY_MODE
-        ] ?? 'pricePerKg';
+      const field = CUSTOM_SERVICE_RATE_FIELD_BY_MODE[newService.pricingUnit] ?? 'pricePerKg';
       await partnerFetch(`/partner/branches/${selectedBranchId}/custom-services`, {
         method: 'POST',
         body: JSON.stringify({
@@ -496,7 +272,7 @@ export default function ServicesPage() {
           label: newService.label.trim(),
           description: newService.description.trim(),
           pricingUnit: newService.pricingUnit,
-          [rateField]: Number(newService.rate),
+          [field]: Number(newService.rate),
         }),
       });
       setNewService({
@@ -562,22 +338,6 @@ export default function ServicesPage() {
     }
   }
 
-  async function toggleAddonForService(addon: ShopAddonPrice, serviceType: string, offer: boolean) {
-    if (!addon.customAddonId) return;
-    const current = addon.applicableServiceTypes ?? [];
-    const next = offer ? [...current, serviceType] : current.filter((t) => t !== serviceType);
-    setRowError('');
-    try {
-      await partnerFetch(`/partner/branches/${selectedBranchId}/custom-addons/${addon.customAddonId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ applicableServiceTypes: next }),
-      });
-      await reloadPricing();
-    } catch (e) {
-      setRowError(e instanceof Error ? e.message : 'Failed to update add-on');
-    }
-  }
-
   async function deleteAddon(customAddonId: string) {
     if (!window.confirm('Delete this custom add-on? This cannot be undone.')) return;
     setRowError('');
@@ -591,13 +351,82 @@ export default function ServicesPage() {
     }
   }
 
+  async function toggleAddonForService(addon: ShopAddonPrice, serviceType: string, offer: boolean) {
+    setRowError('');
+    const current = addon.applicableServiceTypes ?? [];
+    const next = offer ? [...current, serviceType] : current.filter((t) => t !== serviceType);
+    try {
+      if (addon.customAddonId) {
+        await partnerFetch(`/partner/branches/${selectedBranchId}/custom-addons/${addon.customAddonId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ applicableServiceTypes: next }),
+        });
+      } else {
+        await partnerFetch(`/partner/branches/${selectedBranchId}/addon-pricing`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            addonPricing: [
+              {
+                addonSlug: addon.slug,
+                basePrice: addon.basePrice,
+                basePricePerKg: addon.basePricePerKg,
+                basePricePerLoad: addon.basePricePerLoad,
+                basePricePerPiece: addon.basePricePerPiece,
+                basePricePerPair: addon.basePricePerPair,
+                basePricePerItem: addon.basePricePerItem,
+                fixedPrice: addon.fixedPrice,
+                pricingUnit: addon.pricingUnit ?? 'flat_bag',
+                applicableServiceTypes: next,
+                includedQuantity: addon.includedQuantity ?? 0,
+              },
+            ],
+          }),
+        });
+      }
+      await reloadPricing();
+    } catch (e) {
+      setRowError(e instanceof Error ? e.message : 'Failed to update add-on');
+    }
+  }
+
+  async function updateAddonIncludedQty(addon: ShopAddonPrice, includedQuantity: number) {
+    if (!addon.customAddonId) {
+      setRowError('');
+      try {
+        await partnerFetch(`/partner/branches/${selectedBranchId}/addon-pricing`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            addonPricing: [
+              {
+                addonSlug: addon.slug,
+                basePrice: addon.basePrice,
+                basePricePerKg: addon.basePricePerKg,
+                basePricePerLoad: addon.basePricePerLoad,
+                basePricePerPiece: addon.basePricePerPiece,
+                basePricePerPair: addon.basePricePerPair,
+                basePricePerItem: addon.basePricePerItem,
+                fixedPrice: addon.fixedPrice,
+                pricingUnit: addon.pricingUnit ?? 'flat_bag',
+                applicableServiceTypes: addon.applicableServiceTypes ?? [],
+                includedQuantity,
+              },
+            ],
+          }),
+        });
+        await reloadPricing();
+      } catch (e) {
+        setRowError(e instanceof Error ? e.message : 'Failed to update add-on');
+      }
+    }
+  }
+
   if (!ready) return <AuthLoading message="Loading services…" />;
 
   return (
     <div>
       <PageHeader
-        title="Services & pricing"
-        description="Set your own price per service and add-on, hide what you don't offer, or add your own custom items. Customers pay your price plus Lunara's markup."
+        title="Services"
+        description="Choose which services, add-ons, and garments you offer. Set prices for them on the Pricing page."
       />
 
       <div className="mt-4">
@@ -636,7 +465,7 @@ export default function ServicesPage() {
         <DataPageStatus
           loading={pricingLoading}
           error={pricingError}
-          loadingMessage="Loading pricing…"
+          loadingMessage="Loading services…"
           onRetry={reloadPricing}
         />
       </div>
@@ -661,11 +490,10 @@ export default function ServicesPage() {
               [
                 { id: 'services', label: 'Services' },
                 { id: 'addons', label: 'Add-ons' },
-                ...(!hiddenServiceTypes.includes(BookingType.DRY_CLEANING)
+                ...(!pricing.hiddenServiceTypes.includes(BookingType.DRY_CLEANING)
                   ? [{ id: 'garments' as const, label: 'Dry cleaning garments' }]
                   : []),
-                { id: 'machine', label: 'Machine load' },
-              ] satisfies { id: PricingTab; label: string }[]
+              ] satisfies { id: CatalogTab; label: string }[]
             ).map((tab) => (
               <button
                 key={tab.id}
@@ -682,263 +510,168 @@ export default function ServicesPage() {
             ))}
           </div>
 
-          {activeTab === 'machine' && (
-          <div className="section-panel mt-4 overflow-hidden">
-            <div className="border-b border-border px-4 py-3">
-              <h2 className="text-sm font-semibold text-slate-900">Machine load capacity</h2>
-              <p className="mt-0.5 text-xs text-muted">
-                Used to estimate machine loads for per-load pricing (e.g. 7 or 8 kg per load).
-              </p>
-              <label className="mt-3 block max-w-[10rem]">
-                <span className="text-xs font-medium text-slate-700">Kg per machine load</span>
-                <input
-                  type="number"
-                  min={1}
-                  step={1}
-                  className="input-field mt-1 w-full"
-                  value={kgPerLoad}
-                  onChange={(e) => setKgPerLoad(e.target.value)}
-                />
-              </label>
-            </div>
-          </div>
-          )}
-
           {activeTab === 'services' && (
-          <div className="section-panel mt-4 overflow-hidden">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <h2 className="text-sm font-semibold text-slate-900">Services</h2>
-              <button
-                type="button"
-                className="btn-outline btn-sm"
-                onClick={() => setShowServiceForm(true)}
-              >
-                Add custom service
-              </button>
-            </div>
-
-            <p className="border-b border-border bg-surface-subtle px-4 py-2 text-xs text-muted">
-              Set the billing unit per service — mix per-kilo, per-load, per-piece, and flat-bag freely across your services.
-            </p>
-
-            <RightDrawer
-              open={showServiceForm}
-              onClose={() => setShowServiceForm(false)}
-              title="Add custom service"
-            >
-              <div className="grid gap-3">
-                <div>
-                  <label className="form-label">Anchor to existing service type</label>
-                  <select
-                    className="input-field"
-                    value={newService.baseBookingType}
-                    onChange={(e) =>
-                      setNewService((s) => ({ ...s, baseBookingType: e.target.value }))
-                    }
-                  >
-                    {Object.values(BookingType).map((t) => (
-                      <option key={t} value={t}>
-                        {BOOKING_TYPE_LABELS[t] ?? t}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="form-label">Your label</label>
-                  <input
-                    className="input-field"
-                    value={newService.label}
-                    onChange={(e) => setNewService((s) => ({ ...s, label: e.target.value }))}
-                    placeholder="e.g. Express Comforter Wash"
-                  />
-                </div>
-                <div>
-                  <label className="form-label">Description</label>
-                  <input
-                    className="input-field"
-                    value={newService.description}
-                    onChange={(e) =>
-                      setNewService((s) => ({ ...s, description: e.target.value }))
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="form-label">Billing unit</label>
-                  <select
-                    className="input-field"
-                    value={newService.pricingUnit}
-                    onChange={(e) =>
-                      setNewService((s) => ({ ...s, pricingUnit: e.target.value as PricingMode }))
-                    }
-                  >
-                    {NEW_SERVICE_UNIT_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="form-label">Your price</label>
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.5"
-                    className="input-field"
-                    value={newService.rate}
-                    onChange={(e) => setNewService((s) => ({ ...s, rate: e.target.value }))}
-                  />
-                </div>
-              </div>
-              <div className="mt-4">
+            <div className="section-panel mt-4 overflow-hidden">
+              <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                <h2 className="text-sm font-semibold text-slate-900">Services</h2>
                 <button
                   type="button"
-                  className="btn-primary btn-sm w-full"
-                  disabled={addingService || !newService.label || !newService.rate}
-                  onClick={() => void createService()}
+                  className="btn-outline btn-sm"
+                  onClick={() => setShowServiceForm(true)}
                 >
-                  {addingService ? 'Adding…' : 'Add service'}
+                  Add custom service
                 </button>
               </div>
-            </RightDrawer>
 
-            <div className="overflow-x-auto">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Service</th>
-                    <th>Category</th>
-                    <th>Unit</th>
-                    <th>Your price</th>
-                    <th>Customer pays</th>
-                    <th>Add-ons</th>
-                    <th>Offer</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pricing.services.map((s) => {
-                    const key = s.customServiceId ?? s.type;
-                    const offerableAddons = pricing.addons.filter((a) => !a.isPercentOfService);
-                    const addonsCell = (
-                      <td>
-                        {offerableAddons.length > 0 ? (
-                          <button
-                            type="button"
-                            className="btn-outline btn-sm"
-                            onClick={() => setExpandedAddonsFor(key)}
-                          >
-                            Add-ons
-                          </button>
-                        ) : (
-                          <span className="text-xs text-muted">—</span>
-                        )}
-                      </td>
-                    );
-                    if (s.isCustom) {
-                      const customUnit = s.pricingUnit ?? 'per_kg';
-                      const customRateField = RATE_FIELD_BY_MODE[customUnit as keyof typeof RATE_FIELD_BY_MODE];
-                      const customRate = customRateField ? (s[customRateField] ?? 0) : s.basePricePerKg;
+              <RightDrawer
+                open={showServiceForm}
+                onClose={() => setShowServiceForm(false)}
+                title="Add custom service"
+              >
+                <div className="grid gap-3">
+                  <div>
+                    <label className="form-label">Anchor to existing service type</label>
+                    <select
+                      className="input-field"
+                      value={newService.baseBookingType}
+                      onChange={(e) =>
+                        setNewService((s) => ({ ...s, baseBookingType: e.target.value }))
+                      }
+                    >
+                      {Object.values(BookingType).map((t) => (
+                        <option key={t} value={t}>
+                          {BOOKING_TYPE_LABELS[t] ?? t}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label">Your label</label>
+                    <input
+                      className="input-field"
+                      value={newService.label}
+                      onChange={(e) => setNewService((s) => ({ ...s, label: e.target.value }))}
+                      placeholder="e.g. Express Comforter Wash"
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">Description</label>
+                    <input
+                      className="input-field"
+                      value={newService.description}
+                      onChange={(e) =>
+                        setNewService((s) => ({ ...s, description: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">Billing unit</label>
+                    <select
+                      className="input-field"
+                      value={newService.pricingUnit}
+                      onChange={(e) =>
+                        setNewService((s) => ({ ...s, pricingUnit: e.target.value as PricingMode }))
+                      }
+                    >
+                      {PRICING_MODE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label">Starting price</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.5"
+                      className="input-field"
+                      value={newService.rate}
+                      onChange={(e) => setNewService((s) => ({ ...s, rate: e.target.value }))}
+                    />
+                    <p className="mt-1 text-xs text-muted">You can fine-tune this later on the Pricing page.</p>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <button
+                    type="button"
+                    className="btn-primary btn-sm w-full"
+                    disabled={addingService || !newService.label || !newService.rate}
+                    onClick={() => void createService()}
+                  >
+                    {addingService ? 'Adding…' : 'Add service'}
+                  </button>
+                </div>
+              </RightDrawer>
+
+              <div className="overflow-x-auto">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Service</th>
+                      <th>Category</th>
+                      <th>Add-ons</th>
+                      <th>Offer</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pricing.services.map((s) => {
+                      const key = s.customServiceId ?? s.type;
+                      const offerableAddons = pricing.addons.filter((a) => !a.isPercentOfService);
+                      const isHiddenLocal = pricing.hiddenServiceTypes.includes(s.type);
                       return (
                         <Fragment key={key}>
                           <tr>
                             <td className="font-medium text-slate-900">
-                              {s.label} <span className="badge-accent ml-1 text-xs">Custom</span>
+                              {s.label}
+                              {s.isCustom && <span className="badge-accent ml-1 text-xs">Custom</span>}
                             </td>
                             <td className="text-muted">
                               <span className="badge-neutral text-xs">{serviceCategoryLabel(s.category)}</span>
                             </td>
-                            <td className="text-muted">
-                              {PRICING_MODE_OPTIONS.find((opt) => opt.value === customUnit)?.label ?? customUnit}
-                            </td>
-                            <td className="text-muted">{formatPeso(customRate)}</td>
-                            <td className="text-muted">{formatPeso(s.customerPricePerKg)}</td>
-                            {addonsCell}
                             <td>
-                              <button
-                                type="button"
-                                className="btn-outline btn-sm"
-                                onClick={() => void deleteService(s.customServiceId!)}
-                              >
-                                Delete
-                              </button>
+                              {offerableAddons.length > 0 ? (
+                                <button
+                                  type="button"
+                                  className="btn-outline btn-sm"
+                                  onClick={() => setExpandedAddonsFor(key)}
+                                >
+                                  Add-ons
+                                </button>
+                              ) : (
+                                <span className="text-xs text-muted">—</span>
+                              )}
+                            </td>
+                            <td>
+                              {s.isCustom ? (
+                                <button
+                                  type="button"
+                                  className="btn-outline btn-sm"
+                                  onClick={() => void deleteService(s.customServiceId!)}
+                                >
+                                  Delete
+                                </button>
+                              ) : (
+                                <label className="flex items-center gap-2 text-xs text-muted">
+                                  <input
+                                    type="checkbox"
+                                    disabled={hiddenBusy}
+                                    checked={!isHiddenLocal}
+                                    onChange={(e) => void toggleHiddenService(s.type, !e.target.checked)}
+                                  />
+                                  {isHiddenLocal ? 'Hidden' : 'Offered'}
+                                </label>
+                              )}
                             </td>
                           </tr>
                         </Fragment>
                       );
-                    }
-                    const unit = serviceUnits[s.type] ?? 'flat_bag';
-                    const rateField = unit === 'flat_bag' ? undefined : RATE_FIELD_BY_MODE[unit];
-                    const base = rateField ? Number(serviceRates[rateField]?.[s.type] ?? 0) : 0;
-                    const isHiddenLocal = hiddenServiceTypes.includes(s.type);
-                    return (
-                      <Fragment key={key}>
-                        <tr>
-                        <td className="font-medium text-slate-900">{s.label}</td>
-                        <td className="text-muted">
-                          <span className="badge-neutral text-xs">{serviceCategoryLabel(s.category)}</span>
-                        </td>
-                        <td>
-                          <select
-                            className="input-field w-32"
-                            value={unit}
-                            onChange={(e) =>
-                              setServiceUnits((p) => ({ ...p, [s.type]: e.target.value as PricingMode }))
-                            }
-                          >
-                            {PRICING_MODE_OPTIONS.map((opt) => (
-                              <option key={opt.value} value={opt.value}>
-                                {opt.label}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td>
-                          {!rateField ? (
-                            <span className="text-xs text-muted">
-                              Platform-wide flat pricing — not partner-configurable
-                            </span>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-muted">₱</span>
-                              <input
-                                type="number"
-                                min={0}
-                                step="0.5"
-                                className="input-field w-28"
-                                value={serviceRates[rateField]?.[s.type] ?? ''}
-                                onChange={(e) => {
-                                  const value = e.target.value;
-                                  setServiceRates((p) => ({
-                                    ...p,
-                                    [rateField]: { ...p[rateField], [s.type]: value },
-                                  }));
-                                }}
-                              />
-                            </div>
-                          )}
-                        </td>
-                        <td className="text-muted">
-                          {!rateField ? '—' : formatPeso(base * MARKUP_MULTIPLIER)}
-                        </td>
-                        {addonsCell}
-                        <td>
-                          <label className="flex items-center gap-2 text-xs text-muted">
-                            <input
-                              type="checkbox"
-                              checked={!isHiddenLocal}
-                              onChange={(e) => toggleHiddenService(s.type, !e.target.checked)}
-                            />
-                            {isHiddenLocal ? 'Hidden' : 'Offered'}
-                          </label>
-                        </td>
-                        </tr>
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
           )}
 
           {expandedAddonsFor && (() => {
@@ -959,15 +692,17 @@ export default function ServicesPage() {
                   <h3 className="text-lg font-semibold text-slate-900">
                     Add-ons for {modalService.label}
                   </h3>
-                  <p className="mt-1 text-xs text-muted">
-                    Custom add-ons save instantly. Standard add-ons need &quot;Save pricing&quot; below.
-                  </p>
+                  <p className="mt-1 text-xs text-muted">Changes save instantly.</p>
                   <div className="mt-4 flex flex-col gap-2">
                     {offerableAddons.map((a) => {
                       const key2 = a.customAddonId ?? a.slug;
-                      const offered = a.isCustom
-                        ? !!a.applicableServiceTypes?.includes(modalService.type)
-                        : !!addonServiceTypes[a.slug]?.includes(modalService.type);
+                      const offered = !!a.applicableServiceTypes?.includes(modalService.type);
+                      const showIncludedQty =
+                        !a.isCustom &&
+                        offered &&
+                        ['flat_bag', 'fixed', 'per_piece', 'per_pair', 'per_item'].includes(
+                          a.pricingUnit ?? 'flat_bag',
+                        );
                       return (
                         <div
                           key={key2}
@@ -978,56 +713,37 @@ export default function ServicesPage() {
                               type="checkbox"
                               checked={offered}
                               onChange={(e) =>
-                                a.isCustom
-                                  ? void toggleAddonForService(a, modalService.type, e.target.checked)
-                                  : setAddonServiceTypes((prev) => {
-                                      const current = prev[a.slug] ?? [];
-                                      const next = e.target.checked
-                                        ? [...current, modalService.type]
-                                        : current.filter((t) => t !== modalService.type);
-                                      return { ...prev, [a.slug]: next };
-                                    })
+                                void toggleAddonForService(a, modalService.type, e.target.checked)
                               }
                             />
                             {a.label}
-                            {!a.isCustom && <span className="text-muted">*</span>}
                           </label>
-                          {!a.isCustom &&
-                          offered &&
-                          ['flat_bag', 'fixed', 'per_piece', 'per_pair', 'per_item'].includes(
-                            addonUnits[a.slug] ?? a.pricingUnit ?? 'flat_bag',
-                          ) ? (
+                          {showIncludedQty && (
                             <label className="flex items-center gap-1.5 text-xs text-muted">
                               Included qty
                               <input
                                 type="number"
                                 min={0}
-                                max={a.allowsQuantity ? (a.maxQuantity ?? 5) : 1}
+                                max={a.maxQuantity ?? 5}
                                 step={1}
                                 className="input-field w-16"
-                                value={addonIncludedQty[a.slug] ?? '0'}
-                                onChange={(e) =>
-                                  setAddonIncludedQty((p) => ({ ...p, [a.slug]: e.target.value }))
-                                }
+                                defaultValue={a.includedQuantity ?? 0}
+                                onBlur={(e) => void updateAddonIncludedQty(a, Number(e.target.value) || 0)}
                                 title="How many units of this add-on come free with the service — customers are only charged beyond this."
                               />
                             </label>
-                          ) : null}
+                          )}
                         </div>
                       );
                     })}
                   </div>
-                  {saveError && <p className="mt-3 text-sm text-destructive">{saveError}</p>}
                   <div className="mt-6 flex items-center justify-end gap-3">
                     <button
                       type="button"
                       className="btn-primary"
-                      disabled={saving}
-                      onClick={() =>
-                        void save().then(() => setExpandedAddonsFor(null))
-                      }
+                      onClick={() => setExpandedAddonsFor(null)}
                     >
-                      {saving ? 'Saving…' : 'Done'}
+                      Done
                     </button>
                   </div>
                 </div>
@@ -1036,309 +752,205 @@ export default function ServicesPage() {
           })()}
 
           {activeTab === 'addons' && (
-          <div className="section-panel mt-4 overflow-hidden">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <h2 className="text-sm font-semibold text-slate-900">Add-ons</h2>
-              <button
-                type="button"
-                className="btn-outline btn-sm"
-                onClick={() => setShowAddonForm(true)}
-              >
-                Add custom add-on
-              </button>
-            </div>
-
-            <RightDrawer
-              open={showAddonForm}
-              onClose={() => setShowAddonForm(false)}
-              title="Add custom add-on"
-            >
-              <div className="grid gap-3">
-                <div>
-                  <label className="form-label">Slug (lowercase, hyphens)</label>
-                  <input
-                    className="input-field"
-                    value={newAddon.slug}
-                    onChange={(e) => setNewAddon((a) => ({ ...a, slug: e.target.value }))}
-                    placeholder="e.g. fabric-softener"
-                  />
-                </div>
-                <div>
-                  <label className="form-label">Label</label>
-                  <input
-                    className="input-field"
-                    value={newAddon.label}
-                    onChange={(e) => setNewAddon((a) => ({ ...a, label: e.target.value }))}
-                    placeholder="e.g. Fabric Softener"
-                  />
-                </div>
-                <div>
-                  <label className="form-label">Description</label>
-                  <input
-                    className="input-field"
-                    value={newAddon.description}
-                    onChange={(e) => setNewAddon((a) => ({ ...a, description: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="form-label">Your price</label>
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.5"
-                    className="input-field"
-                    value={newAddon.price}
-                    onChange={(e) => setNewAddon((a) => ({ ...a, price: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="form-label">
-                    Only offer with{' '}
-                    <span className="font-normal text-muted">(pick at least one service)</span>
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {[...new Map(pricing.services.map((s) => [s.type, s])).values()].map((s) => {
-                      const type = s.type;
-                      const checked = newAddon.applicableServiceTypes.includes(type);
-                      return (
-                        <label
-                          key={type}
-                          className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(e) =>
-                              setNewAddon((a) => ({
-                                ...a,
-                                applicableServiceTypes: e.target.checked
-                                  ? [...a.applicableServiceTypes, type]
-                                  : a.applicableServiceTypes.filter((t) => t !== type),
-                              }))
-                            }
-                          />
-                          {BOOKING_TYPE_LABELS[type] ?? s.label}
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <label className="flex items-center gap-1.5 text-xs text-muted">
-                    <input
-                      type="checkbox"
-                      checked={newAddon.allowsQuantity}
-                      onChange={(e) =>
-                        setNewAddon((a) => ({ ...a, allowsQuantity: e.target.checked }))
-                      }
-                    />
-                    Let customers pick a quantity
-                  </label>
-                  {newAddon.allowsQuantity && (
-                    <label className="flex items-center gap-1.5 text-xs text-muted">
-                      Max
-                      <input
-                        type="number"
-                        min={1}
-                        step={1}
-                        className="input-field w-16"
-                        value={newAddon.maxQuantity}
-                        onChange={(e) =>
-                          setNewAddon((a) => ({ ...a, maxQuantity: e.target.value }))
-                        }
-                      />
-                    </label>
-                  )}
-                </div>
-              </div>
-              <div className="mt-4">
+            <div className="section-panel mt-4 overflow-hidden">
+              <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                <h2 className="text-sm font-semibold text-slate-900">Add-ons</h2>
                 <button
                   type="button"
-                  className="btn-primary btn-sm w-full"
-                  disabled={
-                    addingAddon ||
-                    !newAddon.slug ||
-                    !newAddon.label ||
-                    !newAddon.price ||
-                    newAddon.applicableServiceTypes.length === 0
-                  }
-                  onClick={() => void createAddon()}
+                  className="btn-outline btn-sm"
+                  onClick={() => setShowAddonForm(true)}
                 >
-                  {addingAddon ? 'Adding…' : 'Add add-on'}
+                  Add custom add-on
                 </button>
               </div>
-            </RightDrawer>
 
-            <div className="overflow-x-auto">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Add-on</th>
-                    <th>Category</th>
-                    <th>Unit</th>
-                    <th>Your price</th>
-                    <th>Customer pays</th>
-                    <th>Included in package</th>
-                    <th>Offer</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pricing.addons.map((a) => {
-                    const key = a.customAddonId ?? a.slug;
-                    if (a.isCustom) {
+              <RightDrawer
+                open={showAddonForm}
+                onClose={() => setShowAddonForm(false)}
+                title="Add custom add-on"
+              >
+                <div className="grid gap-3">
+                  <div>
+                    <label className="form-label">Slug (lowercase, hyphens)</label>
+                    <input
+                      className="input-field"
+                      value={newAddon.slug}
+                      onChange={(e) => setNewAddon((a) => ({ ...a, slug: e.target.value }))}
+                      placeholder="e.g. fabric-softener"
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">Label</label>
+                    <input
+                      className="input-field"
+                      value={newAddon.label}
+                      onChange={(e) => setNewAddon((a) => ({ ...a, label: e.target.value }))}
+                      placeholder="e.g. Fabric Softener"
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">Description</label>
+                    <input
+                      className="input-field"
+                      value={newAddon.description}
+                      onChange={(e) => setNewAddon((a) => ({ ...a, description: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">Starting price</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.5"
+                      className="input-field"
+                      value={newAddon.price}
+                      onChange={(e) => setNewAddon((a) => ({ ...a, price: e.target.value }))}
+                    />
+                    <p className="mt-1 text-xs text-muted">You can fine-tune this later on the Pricing page.</p>
+                  </div>
+                  <div>
+                    <label className="form-label">
+                      Only offer with{' '}
+                      <span className="font-normal text-muted">(pick at least one service)</span>
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {[...new Map(pricing.services.map((s) => [s.type, s])).values()].map((s) => {
+                        const type = s.type;
+                        const checked = newAddon.applicableServiceTypes.includes(type);
+                        return (
+                          <label
+                            key={type}
+                            className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) =>
+                                setNewAddon((a) => ({
+                                  ...a,
+                                  applicableServiceTypes: e.target.checked
+                                    ? [...a.applicableServiceTypes, type]
+                                    : a.applicableServiceTypes.filter((t) => t !== type),
+                                }))
+                              }
+                            />
+                            {BOOKING_TYPE_LABELS[type] ?? s.label}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-1.5 text-xs text-muted">
+                      <input
+                        type="checkbox"
+                        checked={newAddon.allowsQuantity}
+                        onChange={(e) =>
+                          setNewAddon((a) => ({ ...a, allowsQuantity: e.target.checked }))
+                        }
+                      />
+                      Let customers pick a quantity
+                    </label>
+                    {newAddon.allowsQuantity && (
+                      <label className="flex items-center gap-1.5 text-xs text-muted">
+                        Max
+                        <input
+                          type="number"
+                          min={1}
+                          step={1}
+                          className="input-field w-16"
+                          value={newAddon.maxQuantity}
+                          onChange={(e) =>
+                            setNewAddon((a) => ({ ...a, maxQuantity: e.target.value }))
+                          }
+                        />
+                      </label>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <button
+                    type="button"
+                    className="btn-primary btn-sm w-full"
+                    disabled={
+                      addingAddon ||
+                      !newAddon.slug ||
+                      !newAddon.label ||
+                      !newAddon.price ||
+                      newAddon.applicableServiceTypes.length === 0
+                    }
+                    onClick={() => void createAddon()}
+                  >
+                    {addingAddon ? 'Adding…' : 'Add add-on'}
+                  </button>
+                </div>
+              </RightDrawer>
+
+              <div className="overflow-x-auto">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Add-on</th>
+                      <th>Category</th>
+                      <th>Offer</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pricing.addons.map((a) => {
+                      const key = a.customAddonId ?? a.slug;
+                      const isHiddenLocal = pricing.hiddenAddonSlugs.includes(a.slug);
                       return (
                         <tr key={key}>
                           <td className="font-medium text-slate-900">
-                            {a.label} <span className="badge-accent ml-1 text-xs">Custom</span>
-                            {!!a.applicableServiceTypes?.length && (
+                            {a.label}
+                            {a.isCustom && <span className="badge-accent ml-1 text-xs">Custom</span>}
+                            {a.isPercentOfService && (
                               <span className="mt-1 block text-xs font-normal text-muted">
-                                Only with:{' '}
-                                {a.applicableServiceTypes
-                                  .map((t) => BOOKING_TYPE_LABELS[t] ?? t)
-                                  .join(', ')}
+                                Percent-of-service add-on, not partner-configurable pricing.
                               </span>
                             )}
                           </td>
                           <td className="text-muted">
                             <span className="badge-neutral text-xs">{addonCategoryLabel(a.category)}</span>
                           </td>
-                          <td className="text-muted">Flat</td>
-                          <td className="text-muted">{formatPeso(a.basePrice)}</td>
-                          <td className="text-muted">{formatPeso(a.customerPrice)}</td>
-                          <td className="text-muted">—</td>
                           <td>
-                            <button
-                              type="button"
-                              className="btn-outline btn-sm"
-                              onClick={() => void deleteAddon(a.customAddonId!)}
-                            >
-                              Delete
-                            </button>
+                            {a.isCustom ? (
+                              <button
+                                type="button"
+                                className="btn-outline btn-sm"
+                                onClick={() => void deleteAddon(a.customAddonId!)}
+                              >
+                                Delete
+                              </button>
+                            ) : (
+                              <label className="flex items-center gap-2 text-xs text-muted">
+                                <input
+                                  type="checkbox"
+                                  disabled={hiddenBusy}
+                                  checked={!isHiddenLocal}
+                                  onChange={(e) => void toggleHiddenAddon(a.slug, !e.target.checked)}
+                                />
+                                {isHiddenLocal ? 'Hidden' : 'Offered'}
+                              </label>
+                            )}
                           </td>
                         </tr>
                       );
-                    }
-                    if (a.isPercentOfService) {
-                      return (
-                        <tr key={key}>
-                          <td className="font-medium text-slate-900">{a.label}</td>
-                          <td className="text-muted">
-                            <span className="badge-neutral text-xs">{addonCategoryLabel(a.category)}</span>
-                          </td>
-                          <td className="text-muted">% of service</td>
-                          <td className="text-muted">
-                            +{a.basePrice}% <span className="text-xs">(not partner-configurable)</span>
-                          </td>
-                          <td className="text-muted">+{a.customerPrice}%</td>
-                          <td className="text-muted">—</td>
-                          <td>
-                            <label className="flex items-center gap-2 text-xs text-muted">
-                              <input
-                                type="checkbox"
-                                checked={!hiddenAddonSlugs.includes(a.slug)}
-                                onChange={(e) => toggleHiddenAddon(a.slug, !e.target.checked)}
-                              />
-                              {hiddenAddonSlugs.includes(a.slug) ? 'Hidden' : 'Offered'}
-                            </label>
-                          </td>
-                        </tr>
-                      );
-                    }
-                    const unit = addonUnits[a.slug] ?? 'flat_bag';
-                    const rateField = unit === 'flat_bag' ? undefined : RATE_FIELD_BY_MODE[unit];
-                    const base = rateField
-                      ? Number(addonRates[rateField]?.[a.slug] ?? 0)
-                      : Number(addonPrices[a.slug] ?? 0);
-                    const isHiddenLocal = hiddenAddonSlugs.includes(a.slug);
-                    return (
-                      <tr key={key}>
-                        <td className="font-medium text-slate-900">{a.label}</td>
-                        <td className="text-muted">
-                          <span className="badge-neutral text-xs">{addonCategoryLabel(a.category)}</span>
-                        </td>
-                        <td>
-                          <select
-                            className="input-field w-32"
-                            value={unit}
-                            onChange={(e) =>
-                              setAddonUnits((p) => ({ ...p, [a.slug]: e.target.value as PricingMode }))
-                            }
-                          >
-                            {PRICING_MODE_OPTIONS.map((opt) => (
-                              <option key={opt.value} value={opt.value}>
-                                {opt.value === 'flat_bag' ? 'Flat' : opt.label}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm text-muted">₱</span>
-                            <input
-                              type="number"
-                              min={0}
-                              step="0.5"
-                              className="input-field w-28"
-                              value={rateField ? (addonRates[rateField]?.[a.slug] ?? '') : (addonPrices[a.slug] ?? '')}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                if (rateField) {
-                                  setAddonRates((p) => ({
-                                    ...p,
-                                    [rateField]: { ...p[rateField], [a.slug]: value },
-                                  }));
-                                } else {
-                                  setAddonPrices((p) => ({ ...p, [a.slug]: value }));
-                                }
-                              }}
-                            />
-                          </div>
-                        </td>
-                        <td className="text-muted">{formatPeso(base * MARKUP_MULTIPLIER)}</td>
-                        <td>
-                          {a.allowsQuantity ? (
-                            <input
-                              type="number"
-                              min={0}
-                              max={a.maxQuantity ?? 5}
-                              step={1}
-                              className="input-field w-20"
-                              value={addonIncludedQty[a.slug] ?? '0'}
-                              onChange={(e) =>
-                                setAddonIncludedQty((p) => ({ ...p, [a.slug]: e.target.value }))
-                              }
-                              title="How many units of this add-on come free with the service — customers are only charged beyond this."
-                            />
-                          ) : (
-                            <span className="text-muted">—</span>
-                          )}
-                        </td>
-                        <td>
-                          <label className="flex items-center gap-2 text-xs text-muted">
-                            <input
-                              type="checkbox"
-                              checked={!isHiddenLocal}
-                              onChange={(e) => toggleHiddenAddon(a.slug, !e.target.checked)}
-                            />
-                            {isHiddenLocal ? 'Hidden' : 'Offered'}
-                          </label>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
           )}
 
-          {activeTab === 'garments' && !hiddenServiceTypes.includes(BookingType.DRY_CLEANING) && (
+          {activeTab === 'garments' && !pricing.hiddenServiceTypes.includes(BookingType.DRY_CLEANING) && (
             <div className="section-panel mt-4 overflow-hidden">
               <div className="border-b border-border px-4 py-3">
                 <h2 className="text-sm font-semibold text-slate-900">Dry cleaning garments</h2>
                 <p className="mt-1 text-xs text-muted">
                   Choose which garment types you actually dry clean. Customers booking Dry Cleaning at
-                  your shop will only be able to select garments you offer here.
+                  your shop will only be able to select garments you offer here. Set prices for them on
+                  the Pricing page.
                 </p>
               </div>
 
@@ -1348,7 +960,9 @@ export default function ServicesPage() {
                     (g) => g.category === category,
                   );
                   const garmentIds = garments.map((g) => g.id);
-                  const offeredCount = garmentIds.filter((id) => !hiddenGarmentItemIds.includes(id)).length;
+                  const offeredCount = garmentIds.filter(
+                    (id) => !pricing.hiddenGarmentItemIds.includes(id),
+                  ).length;
                   const collapsed = collapsedGarmentCategories.has(category);
                   return (
                     <div key={category} className="p-4">
@@ -1367,14 +981,16 @@ export default function ServicesPage() {
                           <button
                             type="button"
                             className="btn-outline btn-sm"
-                            onClick={() => toggleGarmentCategory(garmentIds, true)}
+                            disabled={hiddenBusy}
+                            onClick={() => void toggleGarmentCategory(garmentIds, true)}
                           >
                             Offer all
                           </button>
                           <button
                             type="button"
                             className="btn-outline btn-sm"
-                            onClick={() => toggleGarmentCategory(garmentIds, false)}
+                            disabled={hiddenBusy}
+                            onClick={() => void toggleGarmentCategory(garmentIds, false)}
                           >
                             Hide all
                           </button>
@@ -1383,31 +999,20 @@ export default function ServicesPage() {
                       {!collapsed && (
                         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                           {garments.map((g) => {
-                            const isHiddenLocal = hiddenGarmentItemIds.includes(g.id);
+                            const isHiddenLocal = pricing.hiddenGarmentItemIds.includes(g.id);
                             return (
-                              <div
+                              <label
                                 key={g.id}
                                 className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs text-muted"
                               >
-                                <label className="flex flex-1 items-center gap-2">
-                                  <input
-                                    type="checkbox"
-                                    checked={!isHiddenLocal}
-                                    onChange={(e) => toggleHiddenGarment(g.id, !e.target.checked)}
-                                  />
-                                  <span className="flex-1 text-slate-900">{g.label}</span>
-                                </label>
-                                <span>₱</span>
                                 <input
-                                  type="number"
-                                  min={0}
-                                  step="0.01"
-                                  disabled={isHiddenLocal}
-                                  className="input-field w-20 py-1 text-xs disabled:opacity-50"
-                                  value={garmentPrices[g.id] ?? String(g.price)}
-                                  onChange={(e) => setGarmentPrice(g.id, e.target.value)}
+                                  type="checkbox"
+                                  disabled={hiddenBusy}
+                                  checked={!isHiddenLocal}
+                                  onChange={(e) => void toggleHiddenGarment(g.id, !e.target.checked)}
                                 />
-                              </div>
+                                <span className="flex-1 text-slate-900">{g.label}</span>
+                              </label>
                             );
                           })}
                         </div>
@@ -1418,19 +1023,6 @@ export default function ServicesPage() {
               </div>
             </div>
           )}
-
-          {saveError && <p className="mt-3 text-sm text-destructive">{saveError}</p>}
-          <div className="mt-4 flex items-center gap-3">
-            <button
-              type="button"
-              className="btn-primary btn-sm"
-              disabled={saving}
-              onClick={() => void save()}
-            >
-              {saving ? 'Saving…' : 'Save pricing'}
-            </button>
-            {saved && <span className="badge-accent text-xs">Saved</span>}
-          </div>
         </>
       )}
     </div>

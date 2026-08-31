@@ -94,7 +94,7 @@ const partnerNavGroups: NavGroup[] = [
       },
       { href: '/customers', label: 'Customers', icon: Icons.customers },
       { href: '/services', label: 'Services', icon: Icons.services },
-      { href: '/pricing', label: 'Pricing', icon: Icons.pricing, soon: true },
+      { href: '/pricing', label: 'Pricing', icon: Icons.pricing },
       { href: '/pickup-delivery', label: 'Pickup & Delivery', icon: Icons.pickup, soon: true },
     ],
   },
