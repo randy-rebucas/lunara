@@ -275,16 +275,22 @@ function UnitField({
   );
 }
 
+// Matches the backend's UpdateAppVersionSettingsDto pattern — dotted numeric segments only,
+// since compareVersions (packages/utils/src/version.ts) silently parses anything else as 0.
+const VERSION_PATTERN = /^\d+(\.\d+)*$/;
+
 function TextField({
   label,
   placeholder,
   value,
   onChange,
+  error,
 }: {
   label: string;
   placeholder?: string;
   value: string;
   onChange: (value: string) => void;
+  error?: string;
 }) {
   return (
     <label className="block">
@@ -292,10 +298,11 @@ function TextField({
       <input
         type="text"
         placeholder={placeholder}
-        className="input-field mt-1.5"
+        className={`input-field mt-1.5 ${error ? 'ring-1 ring-red-400' : ''}`}
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
+      {error ? <span className="mt-1 block text-xs text-red-600">{error}</span> : null}
     </label>
   );
 }
@@ -368,8 +375,15 @@ export default function AdminSettingsPage() {
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState('');
 
+  const appVersionValid = !appVersion || [
+    appVersion.customerMinAppVersion,
+    appVersion.customerLatestAppVersion,
+    appVersion.riderMinAppVersion,
+    appVersion.riderLatestAppVersion,
+  ].every((v) => VERSION_PATTERN.test(v));
+
   async function saveAll() {
-    if (!dirty.any) return;
+    if (!dirty.any || !appVersionValid) return;
     setSaving(true);
     setSaveError('');
     try {
@@ -477,7 +491,7 @@ export default function AdminSettingsPage() {
             <button
               type="button"
               className="btn-primary btn-sm"
-              disabled={saving || !dirty.any}
+              disabled={saving || !dirty.any || !appVersionValid}
               onClick={() => void saveAll()}
             >
               {saving ? 'Saving…' : 'Save changes'}
@@ -843,12 +857,14 @@ export default function AdminSettingsPage() {
                       placeholder="0.0.0"
                       value={appVersion.customerMinAppVersion}
                       onChange={(customerMinAppVersion) => setAppVersion({ ...appVersion, customerMinAppVersion })}
+                      error={VERSION_PATTERN.test(appVersion.customerMinAppVersion) ? undefined : 'Must be a dotted numeric version, e.g. 1.2.10'}
                     />
                     <TextField
                       label="Latest version"
                       placeholder="1.1.5"
                       value={appVersion.customerLatestAppVersion}
                       onChange={(customerLatestAppVersion) => setAppVersion({ ...appVersion, customerLatestAppVersion })}
+                      error={VERSION_PATTERN.test(appVersion.customerLatestAppVersion) ? undefined : 'Must be a dotted numeric version, e.g. 1.2.10'}
                     />
                     <TextField
                       label="iOS App Store URL"
@@ -875,12 +891,14 @@ export default function AdminSettingsPage() {
                       placeholder="0.0.0"
                       value={appVersion.riderMinAppVersion}
                       onChange={(riderMinAppVersion) => setAppVersion({ ...appVersion, riderMinAppVersion })}
+                      error={VERSION_PATTERN.test(appVersion.riderMinAppVersion) ? undefined : 'Must be a dotted numeric version, e.g. 1.2.10'}
                     />
                     <TextField
                       label="Latest version"
                       placeholder="1.1.5"
                       value={appVersion.riderLatestAppVersion}
                       onChange={(riderLatestAppVersion) => setAppVersion({ ...appVersion, riderLatestAppVersion })}
+                      error={VERSION_PATTERN.test(appVersion.riderLatestAppVersion) ? undefined : 'Must be a dotted numeric version, e.g. 1.2.10'}
                     />
                     <TextField
                       label="iOS App Store URL"

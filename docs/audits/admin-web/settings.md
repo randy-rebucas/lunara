@@ -1,6 +1,10 @@
 # Audit: Admin-web — Settings
 
-Date: 2026-07-23
+Date: 2026-07-23 (re-audited 2026-09-01)
+
+**2026-09-01 re-audit:** page/backend otherwise unchanged since 2026-07-23.
+Fixed Finding 2 (app-version format validation) this pass — Finding 1 remains
+a deliberate open product/UX call.
 
 ## Entry point
 - Page: `apps/admin-web/src/app/settings/page.tsx`
@@ -111,7 +115,8 @@ All four `/admin/settings/*` routes and `/admin/maintenance/status` are guarded 
 
 1. Right-rail "Settings summary" card reflects locally-edited (possibly unsaved) values, not the last-saved server state — `deliveryFee`/`riderFees`/`automationsOn`/`appVersion` in the summary (`page.tsx:857-878`) read the same `useState` slices the form inputs write to, not `data.deliveryFee` etc. If an admin edits the delivery fee and never clicks Save, the summary silently shows the unsaved number as if it were live, with no visual distinction from the "Unsaved changes" badge sitting a few lines up in the header. Low severity (the badge is directly above), left unfixed — deciding whether the summary should show live-editing state or committed state is a product/UX call, not a code bug.
 
-2. App-version text fields (`customerMinAppVersion`, `riderMinAppVersion`, etc.) have no format validation, client or server (`UpdateAppVersionSettingsDto` only applies `@IsString()`, `apps/api/src/modules/settings/dto/update-app-version-settings.dto.ts`). `compareVersions` (`packages/utils/src/version.ts`) silently treats any non-numeric segment as `0` via `parseInt(p, 10) || 0`, so a typo'd minimum version (e.g. "1.2.x") would silently behave as "0.0.0" — disabling update enforcement instead of erroring. Left unfixed: adding a semver-shaped regex validator is a product decision (what format to require) rather than a clear bug fix in scope for this pass.
+2. App-version text fields (`customerMinAppVersion`, `riderMinAppVersion`, etc.) had no format validation, client or server (`UpdateAppVersionSettingsDto` only applied `@IsString()`, `apps/api/src/modules/settings/dto/update-app-version-settings.dto.ts`). `compareVersions` (`packages/utils/src/version.ts`) silently treats any non-numeric segment as `0` via `parseInt(p, 10) || 0`, so a typo'd minimum version (e.g. "1.2.x") would silently behave as "0.0.0" — disabling update enforcement instead of erroring.
+   **Fix:** the required format wasn't actually ambiguous — the UI's own placeholders (`0.0.0`, `1.1.5`) and `compareVersions`' dotted-numeric-segment parsing already implied it. Added `@Matches(/^\d+(\.\d+)*$/)` to the four version fields (min/latest for customer/rider) in `UpdateAppVersionSettingsDto`, and mirrored the same pattern client-side in `apps/admin-web/src/app/settings/page.tsx`: `TextField` gained an `error` prop rendering inline validation text, the four version inputs pass it, and `saveAll`/the Save button are now also gated on `appVersionValid` (all four fields matching the pattern) in addition to the existing `dirty.any` check. Store-URL fields were left as plain `@IsString()` — no evidence of an intended format to validate against. Typechecked clean on both `apps/api` and `apps/admin-web`.
 
 No authorization or data-flow mismatch issues found — every field the four settings endpoints and `/admin/maintenance/status` return is read and rendered, request DTOs validate the same numeric bounds the UI enforces (`serviceRadiusKm` 1–50 both in `update-branch.dto.ts:87-91` and the input's `min/max`; fee fields `@Min(0)` both server and client).
 

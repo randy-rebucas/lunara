@@ -19,13 +19,16 @@
 
   /* Console — the dark instrument chrome (shell, nav, header). Content
      surfaces stay bright for daylight-desk legibility on dense tables. */
-  --color-console: #0a0f1c;
-  --color-console-raised: #0f1526;
+  --color-console: #0a0e21;
+  --color-console-raised: #0e1330;
   --color-console-line: rgb(148 163 199 / 0.14);
   --color-console-fg: #e7ebf5;
   --color-console-muted: #8592ad;
-  --color-signal: #35e0b8;
-  --color-signal-dim: rgb(53 224 184 / 0.14);
+  --color-signal: #22d3ee;
+  --color-signal-dim: rgb(34 211 238 / 0.14);
+
+  /* Territory / fleet map overlays (pickup legs, radius + polygon boundaries) */
+  --color-map-pickup: #4338ca;
 }
 
 @layer base {
@@ -57,9 +60,9 @@
   .admin-bg {
     background-color: var(--color-surface-muted);
     background-image:
-      radial-gradient(circle at 10% 90%, rgb(79 70 229 / 0.04) 0%, transparent 45%),
-      radial-gradient(circle at 90% 10%, rgb(6 182 212 / 0.05) 0%, transparent 45%),
-      radial-gradient(circle at 50% 50%, rgb(34 197 94 / 0.02) 0%, transparent 50%);
+      radial-gradient(circle at 10% 90%, rgb(67 56 202 / 0.05) 0%, transparent 45%),
+      radial-gradient(circle at 90% 10%, rgb(37 99 235 / 0.05) 0%, transparent 45%),
+      radial-gradient(circle at 50% 50%, rgb(34 211 238 / 0.03) 0%, transparent 50%);
   }
 
   /* ── Console chrome — instrument-panel shell (sidebar + header) ─────────── */

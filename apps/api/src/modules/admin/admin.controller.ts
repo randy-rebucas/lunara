@@ -42,7 +42,6 @@ import { AdminOperationsService } from './admin-operations.service';
 import { AdminDispatchService } from './admin-dispatch.service';
 import { RiderSosService } from '../sos/rider-sos.service';
 import { RidersService } from '../riders/riders.service';
-import { RiderNotificationService } from '../riders/rider-notification.service';
 import { RiderWalletService } from '../riders/rider-wallet.service';
 import { ReviewWithdrawalDto } from '../riders/dto/rider-wallet.dto';
 import { CreatePartnerDto } from './dto/create-partner.dto';
@@ -52,7 +51,6 @@ import { CreateSetupBranchDto } from './dto/create-setup-branch.dto';
 import { SetShopActiveDto } from './dto/set-shop-active.dto';
 import { UpdatePartnerProfileDto } from './dto/update-partner-profile.dto';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
-import { RiderAnnouncementDto } from './dto/rider-announcement.dto';
 import { BroadcastDto } from './dto/broadcast.dto';
 import { UpdatePromotionDto } from './dto/update-promotion.dto';
 import { ReviewPromotionDto } from './dto/review-promotion.dto';
@@ -86,7 +84,6 @@ export class AdminController {
     private readonly adminDispatchService: AdminDispatchService,
     private readonly riderSosService: RiderSosService,
     private readonly ridersService: RidersService,
-    private readonly riderNotificationService: RiderNotificationService,
     private readonly riderWalletService: RiderWalletService,
     private readonly partnerOperationsService: PartnerOperationsService,
     private readonly cloudinaryStorageService: CloudinaryStorageService,
@@ -272,16 +269,6 @@ export class AdminController {
   @Get('riders/:userId/profile')
   getRiderProfile(@Param('userId') userId: string) {
     return this.ridersService.getRiderProfileForAdmin(userId);
-  }
-
-  @Post('riders/announcement')
-  broadcastRiderAnnouncement(@Body() dto: RiderAnnouncementDto) {
-    return this.riderNotificationService
-      .broadcastPlatformAnnouncement(dto.body, dto.title, dto.userIds)
-      .then((count) => ({
-        success: true,
-        data: { sent: count },
-      }));
   }
 
   @Get('shops')

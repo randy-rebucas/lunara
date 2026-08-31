@@ -12,7 +12,7 @@ const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? '';
 
 export const LEG_COLORS: Record<string, string> = {
   idle: '#22c55e',
-  pickup: '#4f46e5',
+  pickup: 'var(--color-map-pickup)',
   delivery: '#f97316',
 };
 

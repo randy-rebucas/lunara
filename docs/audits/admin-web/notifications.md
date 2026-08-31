@@ -1,6 +1,13 @@
 # Audit: Admin-web — Notifications (push broadcast)
 
-Date: 2026-07-23
+Date: 2026-07-23 (re-audited 2026-09-01)
+
+**2026-09-01 re-audit:** page and backend match the 2026-07-23 trace exactly —
+no drift in `notifications-board.tsx`, the three prior fixes (validated
+`BroadcastDto`, batched `sendEachForMulticast`, send confirmation dialog) are
+all still in place and unchanged. One new finding surfaced (Finding 4) from a
+sibling endpoint discovered while re-tracing `admin.controller.ts`'s broadcast
+routes.
 
 ## Entry point
 - Page: `apps/admin-web/src/app/notifications/page.tsx` -> `NotificationsBoard` (`apps/admin-web/src/components/datacenter/notifications-board.tsx`)
@@ -101,6 +108,32 @@ capability, not a privilege-escalation vector) — no `[authz]` findings.
    **Fix:** added a `window.confirm` stating the audience label and the exact
    device-reach count before calling the send endpoint
    (`notifications-board.tsx`).
+
+4. **A second, entirely separate admin announcement endpoint exists and is dead code — no frontend anywhere in the monorepo calls it.**
+   `POST /admin/riders/announcement` (`admin.controller.ts:277-285`,
+   `broadcastRiderAnnouncement`) takes a `RiderAnnouncementDto`
+   (`dto/rider-announcement.dto.ts`) with `title`/`body`/optional `userIds`,
+   and calls `RiderNotificationService.broadcastPlatformAnnouncement`
+   (`rider-notification.service.ts`) — a targeted-or-broadcast rider push path
+   distinct from the audited `/admin/broadcast` flow (it supports targeting
+   specific rider `userIds`, which `/admin/broadcast` cannot). A repo-wide
+   grep for `riders/announcement` / `broadcastRiderAnnouncement` /
+   `broadcastPlatformAnnouncement` finds no caller in admin-web, partner-web,
+   customer-web, or ai-agents — only the controller and the service that
+   implements it. Impact: dead, unreachable admin capability (targeted rider
+   announcements) that duplicates part of what this page already does, with
+   no way for an admin to actually invoke it today.
+   **Fix:** removed as dead code (per product decision 2026-09-01) — deleted
+   the `POST /admin/riders/announcement` route and its `RiderAnnouncementDto`
+   import/constructor injection of `RiderNotificationService` from
+   `admin.controller.ts`, deleted `dto/rider-announcement.dto.ts`, and removed
+   the now-unused `notifyPlatformAnnouncement`/`broadcastPlatformAnnouncement`
+   methods (and the now-unused `riderModel`/`Rider`/`RiderDocument`
+   injection/import they were the sole users of) from
+   `rider-notification.service.ts`. `RIDER_NOTIFICATION_TITLES`/`_TYPES`
+   `PLATFORM_ANNOUNCEMENT` constants were left in place since
+   `rider-notification.test.ts` still references them directly. Typechecked
+   clean.
 
 ## Unused/dead fields
 None — every field on `AudienceCounts`/`BroadcastHistoryItem` is read

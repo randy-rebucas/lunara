@@ -7,7 +7,6 @@ import { NotificationDispatchService } from '../push/notification-dispatch.servi
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { Notification, NotificationDocument } from '../reviews/schemas/notification.schema';
-import { Rider, RiderDocument } from './schemas/rider.schema';
 import {
   inferRiderNotificationCategory,
   RIDER_NOTIFICATION_CATEGORY,
@@ -24,7 +23,6 @@ export class RiderNotificationService {
   constructor(
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(Notification.name) private notificationModel: Model<NotificationDocument>,
-    @InjectModel(Rider.name) private riderModel: Model<RiderDocument>,
     private notificationDispatch: NotificationDispatchService,
     private trackingGateway: TrackingGateway,
   ) {}
@@ -127,31 +125,6 @@ export class RiderNotificationService {
     };
 
     await this.dispatch(riderUserId, title, body, data, 'pickup_overdue');
-  }
-
-  async notifyPlatformAnnouncement(
-    riderUserId: string,
-    body: string,
-    title: string = RIDER_NOTIFICATION_TITLES.PLATFORM_ANNOUNCEMENT,
-  ) {
-    const data = {
-      category: RIDER_NOTIFICATION_CATEGORY.SYSTEM,
-      type: RIDER_NOTIFICATION_TYPES.PLATFORM_ANNOUNCEMENT,
-    };
-
-    await this.dispatch(riderUserId, title, body, data, 'platform_announcement');
-  }
-
-  async broadcastPlatformAnnouncement(body: string, title?: string, userIds?: string[]) {
-    const riders = userIds?.length
-      ? await this.riderModel.find({ userId: { $in: userIds.map((id) => new Types.ObjectId(id)) } })
-      : await this.riderModel.find().select('userId');
-
-    for (const rider of riders) {
-      await this.notifyPlatformAnnouncement(rider.userId.toString(), body, title);
-    }
-
-    return riders.length;
   }
 
   async syncOverduePickupReminders(riderUserId: string) {

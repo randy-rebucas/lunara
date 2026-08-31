@@ -22,6 +22,8 @@ interface SubscriptionRow {
   cardBrand?: string;
   cardLast4?: string;
   adminNote?: string;
+  promotionCode?: string;
+  promotionFreeMonthsRemaining?: number;
 }
 
 const STATUS_BADGE: Record<SubscriptionStatus, string> = {
@@ -156,8 +158,111 @@ function RecordPaymentModal({
   );
 }
 
+function ApplyPromoModal({
+  subscription,
+  onClose,
+  onSaved,
+}: {
+  subscription: SubscriptionRow;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [code, setCode] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleApply() {
+    if (!code.trim()) {
+      setError('Enter a promo code');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await adminFetch(`/admin/billing/subscriptions/${subscription.partnerId}/promotion`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: code.trim() }),
+      });
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to apply promo code');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRemove() {
+    setSaving(true);
+    setError(null);
+    try {
+      await adminFetch(`/admin/billing/subscriptions/${subscription.partnerId}/promotion`, {
+        method: 'DELETE',
+      });
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove promo code');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
+        <div className="dc-panel-header flex items-center justify-between">
+          <h2 className="font-semibold text-slate-900">Apply promo code</h2>
+          <button type="button" onClick={onClose} className="text-lg leading-none text-muted hover:text-slate-700">✕</button>
+        </div>
+        <div className="space-y-3 p-4">
+          <p className="text-sm text-muted">
+            {subscription.partnerEmail ?? subscription.partnerId} — {subscription.planName ?? 'plan'}
+          </p>
+          {subscription.promotionCode ? (
+            <div className="rounded-lg border border-border bg-slate-50 px-3 py-2.5 text-sm">
+              <span className="font-medium text-slate-900">Currently on {subscription.promotionCode}</span>
+              {subscription.promotionFreeMonthsRemaining != null && (
+                <span className="mt-0.5 block text-xs text-muted">
+                  {subscription.promotionFreeMonthsRemaining} free month
+                  {subscription.promotionFreeMonthsRemaining !== 1 ? 's' : ''} remaining
+                </span>
+              )}
+            </div>
+          ) : null}
+          <div>
+            <label className="form-label">Promo code</label>
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              placeholder="e.g. FOUNDING12"
+              className="input-field w-full"
+            />
+          </div>
+          {error && <div className="alert-error">{error}</div>}
+          <div className="flex items-center justify-between gap-2 pt-1">
+            {subscription.promotionCode ? (
+              <button type="button" disabled={saving} className="btn-outline btn-sm text-rose-600" onClick={handleRemove}>
+                Remove current promo
+              </button>
+            ) : <span />}
+            <div className="flex gap-2">
+              <button type="button" onClick={onClose} className="btn-outline btn-sm">Cancel</button>
+              <button type="button" disabled={saving} className="btn-primary btn-sm disabled:opacity-50" onClick={handleApply}>
+                {saving ? 'Saving…' : 'Apply'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PartnerSubscriptionsPage() {
   const [payingSubscription, setPayingSubscription] = useState<SubscriptionRow | null>(null);
+  const [promoSubscription, setPromoSubscription] = useState<SubscriptionRow | null>(null);
   const [filter, setFilter] = useState<'all' | 'attention'>('all');
 
   const loadSubscriptions = useCallback(() => adminFetch<SubscriptionRow[]>('/admin/billing/subscriptions'), []);
@@ -219,6 +324,7 @@ export default function PartnerSubscriptionsPage() {
                   <th>Partner</th>
                   <th>Plan</th>
                   <th>Status</th>
+                  <th>Promo</th>
                   <th>Period end</th>
                   <th className="text-right">Price</th>
                   <th>Payment method</th>
@@ -236,6 +342,20 @@ export default function PartnerSubscriptionsPage() {
                     <td>
                       <span className={STATUS_BADGE[s.status]}>{STATUS_LABEL[s.status]}</span>
                     </td>
+                    <td className="text-sm">
+                      {s.promotionCode ? (
+                        <>
+                          <span className="badge-accent">{s.promotionCode}</span>
+                          {s.promotionFreeMonthsRemaining != null && (
+                            <span className="mt-0.5 block text-xs text-muted">
+                              {s.promotionFreeMonthsRemaining} mo left
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-muted">—</span>
+                      )}
+                    </td>
                     <td className="text-sm text-muted">{formatDate(s.currentPeriodEnd)}</td>
                     <td className="text-right text-sm text-slate-900">{formatPeso(s.priceSnapshot)}</td>
                     <td className="text-sm text-muted">
@@ -244,6 +364,9 @@ export default function PartnerSubscriptionsPage() {
                         : 'None on file'}
                     </td>
                     <td className="whitespace-nowrap text-right">
+                      <button type="button" className="btn-outline btn-sm mr-1.5" onClick={() => setPromoSubscription(s)}>
+                        Promo
+                      </button>
                       <button type="button" className="btn-primary btn-sm" onClick={() => setPayingSubscription(s)}>
                         Record payment
                       </button>
@@ -260,6 +383,14 @@ export default function PartnerSubscriptionsPage() {
         <RecordPaymentModal
           subscription={payingSubscription}
           onClose={() => setPayingSubscription(null)}
+          onSaved={reload}
+        />
+      )}
+
+      {promoSubscription && (
+        <ApplyPromoModal
+          subscription={promoSubscription}
+          onClose={() => setPromoSubscription(null)}
           onSaved={reload}
         />
       )}

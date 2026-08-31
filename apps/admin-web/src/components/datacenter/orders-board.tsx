@@ -218,6 +218,14 @@ function RailRow({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+function CloseIcon() {
+  return (
+    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  );
+}
+
 function RailSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="border-t border-border/60 px-5 py-4 first:border-0">
@@ -537,12 +545,22 @@ export function OrdersBoard() {
                     <tbody>
                       {filteredItems.map((o) => {
                         const isSelected = selectedId === o._id;
+                        const toggleSelected = () =>
+                          setSelectedId((prev) => (prev === o._id ? null : o._id));
                         return (
                           <tr
                             key={o._id}
-                            onClick={() => setSelectedId((prev) => (prev === o._id ? null : o._id))}
+                            onClick={toggleSelected}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                toggleSelected();
+                              }
+                            }}
+                            tabIndex={0}
+                            role="button"
                             aria-selected={isSelected}
-                            className={`cursor-pointer ${isSelected ? 'bg-primary/5 hover:bg-primary/5' : ''}`}
+                            className={`cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary ${isSelected ? 'bg-primary/5 hover:bg-primary/5' : ''}`}
                           >
                             <td>
                               <span className="link-primary text-code font-semibold">
@@ -658,11 +676,11 @@ export function OrdersBoard() {
                     </div>
                     <button
                       type="button"
-                      className="btn-ghost btn-sm"
+                      className="btn-ghost btn-sm !px-2"
                       aria-label="Close detail panel"
                       onClick={() => setSelectedId(null)}
                     >
-                      ✕
+                      <CloseIcon />
                     </button>
                   </div>
 

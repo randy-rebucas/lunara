@@ -2,6 +2,8 @@
 @import '@lunara/ui/globals.css';
 
 @theme {
+  --color-primary: var(--lunara-primary, #4f46e5);
+  --color-secondary: var(--lunara-secondary, #06b6d4);
   --color-surface: #12142c;
   --color-surface-muted: #0a0c1e;
   --color-border: rgba(255, 255, 255, 0.1);

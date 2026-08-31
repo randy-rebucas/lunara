@@ -116,7 +116,7 @@ const icons = {
   revenue: <Icon d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />,
   shops: <Icon d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />,
   riders: <Icon d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />,
-  dispatch: <Icon d="M13 10V3L4 14h7v7l9-11h-7z" className="h-5 w-5" />,
+  dispatch: <Icon d="M13 10V3L4 14h7v7l9-11h-7z" />,
   partner: <Icon d="M12 6v6m0 0v6m0-6h6m-6 0H6" />,
   announce: <Icon d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />,
   promo: <Icon d="M9 4H6a2 2 0 00-2 2v3l7.586 7.586a2 2 0 002.828 0l4.586-4.586a2 2 0 000-2.828L11.414 4H9z" d2="M7 8h.01" />,
@@ -400,7 +400,7 @@ export function OperationsCenterBoard() {
               label="Completed (7d)"
               value={data.week.completed.toLocaleString()}
               icon={icons.completed}
-              tone="amber"
+              tone="accent"
               href="/orders?status=completed"
               delta={data.deltas.completed}
               sub="vs last week"
@@ -418,7 +418,7 @@ export function OperationsCenterBoard() {
               label="Laundry partners"
               value={data.counts.partners.toLocaleString()}
               icon={icons.shops}
-              tone="accent"
+              tone="amber"
               href="/partners"
               sub={`${data.counts.activePromos} active promos`}
             />

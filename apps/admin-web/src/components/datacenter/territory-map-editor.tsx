@@ -17,6 +17,9 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 're
 
 const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? '';
 
+/** Matches --color-map-pickup in globals.css; Google Maps overlay options don't understand CSS vars. */
+const MAP_PICKUP_COLOR = '#4338ca';
+
 export type LngLat = [number, number];
 
 interface RadiusOverlayProps {
@@ -39,9 +42,9 @@ function RadiusOverlay({ center, radiusKm, onChange }: RadiusOverlayProps) {
       radius: radiusKm * 1000,
       editable: true,
       draggable: false,
-      strokeColor: '#4f46e5',
+      strokeColor: MAP_PICKUP_COLOR,
       strokeWeight: 2,
-      fillColor: '#4f46e5',
+      fillColor: MAP_PICKUP_COLOR,
       fillOpacity: 0.12,
     });
     circleRef.current = circle;
@@ -146,9 +149,9 @@ const PolygonOverlay = forwardRef<PolygonDrawHandle, PolygonOverlayProps>(functi
         paths: ring,
         editable: true,
         draggable: true,
-        strokeColor: '#4f46e5',
+        strokeColor: MAP_PICKUP_COLOR,
         strokeWeight: 2,
-        fillColor: '#4f46e5',
+        fillColor: MAP_PICKUP_COLOR,
         fillOpacity: 0.12,
       });
       polygonRef.current = polygon;
@@ -176,9 +179,9 @@ const PolygonOverlay = forwardRef<PolygonDrawHandle, PolygonOverlayProps>(functi
       editable: false,
       draggable: false,
       clickable: false,
-      strokeColor: '#4f46e5',
+      strokeColor: MAP_PICKUP_COLOR,
       strokeWeight: 2,
-      fillColor: '#4f46e5',
+      fillColor: MAP_PICKUP_COLOR,
       fillOpacity: 0.12,
     });
     tracePolygonRef.current = trace;

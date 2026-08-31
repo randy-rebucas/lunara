@@ -21,10 +21,11 @@ One row per module audited with the `audit-module` skill. Findings counts are
 | Login | [login.md](login.md) | 2026-07-23 | 2 / 1 |
 | Maintenance | [maintenance.md](maintenance.md) | 2026-07-23 | 1 / 2 |
 | Messages | [messages.md](messages.md) | 2026-07-23 | 0 / 5 |
-| Notifications | [notifications.md](notifications.md) | 2026-07-23 | 0 / 3 |
+| Notifications | [notifications.md](notifications.md) | 2026-09-01 (re-audited) | 0 / 4 |
 | Orders | [orders.md](orders.md) | 2026-07-22 | 0 / 2 |
 | Overview | [overview.md](overview.md) | 2026-07-22 | 0 / 2 |
 | Partner branding | [partner-branding.md](partner-branding.md) | 2026-07-23 (re-audited) | 1 / 5 |
+| Partner invoices | [partner-invoices.md](partner-invoices.md) | 2026-09-01 | 0 / 3 |
 | Partner onboarding | [partner-onboarding.md](partner-onboarding.md) | 2026-07-23 | 0 / 0 |
 | Partners | [partners.md](partners.md) | 2026-07-23 | 0 / 2 |
 | Partner settlements | [partner-settlements.md](partner-settlements.md) | 2026-07-23 | 0 / 1 |
@@ -39,7 +40,7 @@ One row per module audited with the `audit-module` skill. Findings counts are
 | Riders | [riders.md](riders.md) | 2026-07-22 | 0 / 1 |
 | Service areas | [service-areas.md](service-areas.md) | 2026-07-23 | 0 / 3 |
 | Services | [services.md](services.md) | 2026-07-22 | 0 / 1 |
-| Settings | [settings.md](settings.md) | 2026-07-23 | 2 / 0 |
+| Settings | [settings.md](settings.md) | 2026-09-01 (re-audited) | 1 / 1 |
 | Setup | [setup.md](setup.md) | 2026-07-23 | 0 / 1 |
 | Support | [support.md](support.md) | 2026-07-23 | 0 / 1 |
 | Users | [users.md](users.md) | 2026-07-22 | 0 / 2 |

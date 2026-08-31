@@ -85,15 +85,13 @@ const nav: NavItem[] = [
   { href: '/control-tower', label: 'Control tower', icon: Icons.controlTower },
   { href: '/quality-alerts', label: 'Quality alerts', icon: Icons.qualityAlerts },
 
-  // Accounts: everyone → the fleet → inbound applicants
+  // Accounts: everyone → the fleet
   { section: 'People' },
   { href: '/users',        label: 'Users',        icon: Icons.users },
-  { href: '/applications', label: 'Applications', icon: Icons.applications },
 
   // Physical network → the catalog it sells → shop-floor tooling
   { section: 'Network' },
   { href: '/branches',     label: 'Branches',     icon: Icons.branches },
-  { href: '/categories',   label: 'Categories',   icon: Icons.categories },
   { href: '/services',     label: 'Services',     icon: Icons.services },
   { href: '/addons',       label: 'Add-ons',      icon: Icons.addons },
   { href: '/laundry-tags', label: 'Laundry tags', icon: Icons.laundryTags },
