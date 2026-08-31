@@ -29,6 +29,8 @@ import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
 import { LedgerModule } from '../ledger/ledger.module';
 import { LaundryTagsModule } from '../laundry-tags/laundry-tags.module';
 import { PromotionsModule } from '../promotions/promotions.module';
+import { BillingModule } from '../billing/billing.module';
+import { PushModule } from '../push/push.module';
 
 @Module({
   imports: [
@@ -54,6 +56,8 @@ import { PromotionsModule } from '../promotions/promotions.module';
     BranchesModule,
     LaundryTagsModule,
     PromotionsModule,
+    BillingModule,
+    PushModule,
   ],
   controllers: [PartnerController],
   providers: [

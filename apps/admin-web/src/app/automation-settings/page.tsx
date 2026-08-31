@@ -11,6 +11,9 @@ interface AutomationSettings {
   autoAssignPickupRider: boolean;
   autoAssignDeliveryRider: boolean;
   autoGenerateInvoices: boolean;
+  autoDunningEnabled: boolean;
+  billingGracePeriodDays: number;
+  billingSuspendAfterGraceDays: number;
   autoApproveRefunds: boolean;
   autoApproveRefundsThreshold: number;
   autoApproveWithdrawals: boolean;
@@ -201,6 +204,40 @@ export default function AutomationSettingsPage() {
                   patch({ autoApproveWithdrawalsThreshold }),
               }}
             />
+          </SectionPanel>
+
+          <SectionPanel title="Billing" description="Subscription dunning — overdue invoices, grace period, and suspension.">
+            <AutomationToggle
+              id="auto-dunning"
+              label="Auto-escalate overdue subscriptions"
+              description="Automatically move an overdue subscription through past due → grace period → suspended on the schedule below, retrying a saved card at each step. Off means status changes only happen via manual admin action."
+              checked={form.autoDunningEnabled}
+              onChange={(autoDunningEnabled) => patch({ autoDunningEnabled })}
+            />
+            <div className="flex flex-wrap gap-4 px-6 py-4 sm:px-8">
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium text-slate-900">Grace period (days)</span>
+                <input
+                  type="number"
+                  min={1}
+                  className="input-field w-32"
+                  value={form.billingGracePeriodDays}
+                  onChange={(e) => patch({ billingGracePeriodDays: Number(e.target.value) })}
+                />
+                <span className="text-xs text-muted">Days overdue before past due becomes grace period.</span>
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium text-slate-900">Suspend after grace (days)</span>
+                <input
+                  type="number"
+                  min={0}
+                  className="input-field w-32"
+                  value={form.billingSuspendAfterGraceDays}
+                  onChange={(e) => patch({ billingSuspendAfterGraceDays: Number(e.target.value) })}
+                />
+                <span className="text-xs text-muted">Additional days in grace period before suspension.</span>
+              </label>
+            </div>
           </SectionPanel>
 
           <SectionPanel

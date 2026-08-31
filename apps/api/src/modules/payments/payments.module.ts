@@ -8,6 +8,7 @@ import { PaymongoService } from './paymongo.service';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 import { Payment, PaymentSchema } from './schemas/payment.schema';
+import { WebhookEvent, WebhookEventSchema } from './schemas/webhook-event.schema';
 import { LedgerModule } from '../ledger/ledger.module';
 import { SettingsModule } from '../settings/settings.module';
 import { AuditLogModule } from '../audit/audit-log.module';
@@ -19,6 +20,7 @@ import { User, UserSchema } from '../users/schemas/user.schema';
       { name: Payment.name, schema: PaymentSchema },
       { name: Order.name, schema: OrderSchema },
       { name: User.name, schema: UserSchema },
+      { name: WebhookEvent.name, schema: WebhookEventSchema },
     ]),
     WalletsModule,
     RealtimeModule,

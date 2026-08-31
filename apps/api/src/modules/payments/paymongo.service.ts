@@ -215,10 +215,13 @@ export class PaymongoService {
     type: string;
     metadata: Record<string, string>;
     paymongoPaymentId?: string;
+    eventId?: string;
   } | null {
     try {
       const payload = JSON.parse(rawBody.toString('utf8')) as {
         data?: {
+          id?: string; // the webhook event's own resource id — distinct from the nested
+          // payment/session resource id extracted below as paymongoPaymentId.
           attributes?: {
             type?: string;
             data?: {
@@ -236,6 +239,7 @@ export class PaymongoService {
       };
 
       const type = payload.data?.attributes?.type ?? '';
+      const eventId = payload.data?.id;
       const inner = payload.data?.attributes?.data?.attributes;
       const metadata = inner?.metadata ?? {};
 
@@ -256,11 +260,11 @@ export class PaymongoService {
       if (!paymongoPaymentId && payload.data?.attributes?.data?.id) {
         const resource = payload.data.attributes.data;
         if (resource.id?.startsWith('pay_')) {
-          return { type, metadata, paymongoPaymentId: resource.id };
+          return { type, metadata, paymongoPaymentId: resource.id, eventId };
         }
       }
 
-      return { type, metadata, paymongoPaymentId };
+      return { type, metadata, paymongoPaymentId, eventId };
     } catch {
       return null;
     }
@@ -268,5 +272,98 @@ export class PaymongoService {
 
   isPaidWebhookEvent(type: string): boolean {
     return type === 'checkout_session.payment.paid' || type === 'payment.paid';
+  }
+
+  /** Looks up a saved Payment Method (e.g. a card attached earlier via the client-side
+   * tokenization flow) — used to validate it exists and is a card before saving its id on a
+   * Subscription, and to surface brand/last4 for display. */
+  async getPaymentMethod(id: string): Promise<{ id: string; type: string; brand?: string; last4?: string }> {
+    const res = await fetch(`${PAYMONGO_API}/payment_methods/${id}`, {
+      headers: { Authorization: this.authHeader() },
+    });
+
+    const json = (await res.json()) as {
+      data?: { id: string; attributes: { type: string; details?: { brand?: string; last4?: string } } };
+      errors?: { detail: string }[];
+    };
+
+    if (!res.ok || !json.data) {
+      const detail = json.errors?.map((e) => e.detail).join('; ') || 'Payment method not found';
+      throw new Error(detail);
+    }
+
+    return {
+      id: json.data.id,
+      type: json.data.attributes.type,
+      brand: json.data.attributes.details?.brand,
+      last4: json.data.attributes.details?.last4,
+    };
+  }
+
+  /** Creates a Payment Intent for an unattended (server-initiated) card charge. */
+  async createPaymentIntent(
+    amountPhp: number,
+    description: string,
+    metadata: Record<string, string>,
+  ): Promise<{ id: string }> {
+    const body = {
+      data: {
+        attributes: {
+          amount: this.toCentavos(amountPhp),
+          currency: 'PHP',
+          description,
+          payment_method_allowed: ['card'],
+          capture_type: 'automatic',
+          metadata,
+        },
+      },
+    };
+
+    const res = await fetch(`${PAYMONGO_API}/payment_intents`, {
+      method: 'POST',
+      headers: { Authorization: this.authHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    const json = (await res.json()) as {
+      data?: { id: string };
+      errors?: { detail: string }[];
+    };
+
+    if (!res.ok || !json.data) {
+      const detail = json.errors?.map((e) => e.detail).join('; ') || 'PayMongo payment intent creation failed';
+      this.logger.error(`PayMongo payment intent failed: ${detail}`);
+      throw new Error(detail);
+    }
+
+    return { id: json.data.id };
+  }
+
+  /** Attaches a saved Payment Method to a Payment Intent and attempts to charge it
+   * immediately, server-side, with no customer interaction. Only 'succeeded' represents a
+   * completed unattended charge — 'awaiting_next_action' means the card requires 3D Secure
+   * (which needs a browser redirect this flow can't provide) and must be treated as a failed
+   * auto-charge attempt by the caller, not retried here. */
+  async attachPaymentIntent(paymentIntentId: string, paymentMethodId: string): Promise<{ id: string; status: string }> {
+    const body = { data: { attributes: { payment_method: paymentMethodId } } };
+
+    const res = await fetch(`${PAYMONGO_API}/payment_intents/${paymentIntentId}/attach`, {
+      method: 'POST',
+      headers: { Authorization: this.authHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    const json = (await res.json()) as {
+      data?: { id: string; attributes: { status: string } };
+      errors?: { detail: string }[];
+    };
+
+    if (!res.ok || !json.data) {
+      const detail = json.errors?.map((e) => e.detail).join('; ') || 'PayMongo payment intent attach failed';
+      this.logger.warn(`PayMongo payment intent attach failed: ${detail}`);
+      throw new Error(detail);
+    }
+
+    return { id: json.data.id, status: json.data.attributes.status };
   }
 }

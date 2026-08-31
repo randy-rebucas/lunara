@@ -331,6 +331,67 @@ export class LedgerService {
     };
   }
 
+  /** Actually-recognized subscription-fee revenue per month, for the admin billing metrics
+   * dashboard — distinct from SubscriptionService.getMetrics' point-in-time projected MRR. Only
+   * the revenue-recognition posting from createInvoice (sourceType 'subscription_fee') counts
+   * here, same as how getAccountingOverview treats 'platform_revenue' generally — it reflects
+   * fees billed, not necessarily yet collected (an unpaid pending invoice still posts this). */
+  async getSubscriptionRevenueTrend(months = 6): Promise<{ month: string; revenue: number }[]> {
+    const since = new Date();
+    since.setMonth(since.getMonth() - (months - 1));
+    since.setDate(1);
+    since.setHours(0, 0, 0, 0);
+
+    const monthlyAgg = await this.entryModel.aggregate<{ _id: { year: number; month: number }; revenue: number }>([
+      {
+        $match: {
+          createdAt: { $gte: since },
+          accountType: 'platform_revenue',
+          sourceType: 'subscription_fee',
+          direction: 'credit',
+        },
+      },
+      {
+        $group: {
+          _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } },
+          revenue: { $sum: '$amount' },
+        },
+      },
+    ]);
+
+    const monthKey = (y: number, m: number) => `${y}-${String(m).padStart(2, '0')}`;
+    const buckets = new Map<string, number>();
+    for (let i = 0; i < months; i++) {
+      const d = new Date(since);
+      d.setMonth(d.getMonth() + i);
+      buckets.set(monthKey(d.getFullYear(), d.getMonth() + 1), 0);
+    }
+    for (const row of monthlyAgg) {
+      const key = monthKey(row._id.year, row._id.month);
+      if (buckets.has(key)) buckets.set(key, row.revenue);
+    }
+
+    return [...buckets.entries()].map(([month, revenue]) => ({ month, revenue }));
+  }
+
+  /** All-time sum of subscription_fee ledger postings vs. the sum of subscriptionFeeDue across
+   * every PartnerInvoice — should always be ~0 given createInvoice posts the ledger entry
+   * unconditionally whenever subscriptionFeeDue > 0. A nonzero drift is a canary for a future
+   * regression (e.g. a code path that posts to the ledger without going through createInvoice,
+   * or vice versa), not an expected value. */
+  async getSubscriptionFeeDrift() {
+    const [ledgerAgg] = await this.entryModel.aggregate<{ total: number }>([
+      { $match: { accountType: 'platform_revenue', sourceType: 'subscription_fee', direction: 'credit' } },
+      { $group: { _id: null, total: { $sum: '$amount' } } },
+    ]);
+    const [invoiceAgg] = await this.invoiceModel.aggregate<{ total: number }>([
+      { $group: { _id: null, total: { $sum: '$subscriptionFeeDue' } } },
+    ]);
+    const ledgerTotal = ledgerAgg?.total ?? 0;
+    const invoiceTotal = invoiceAgg?.total ?? 0;
+    return { ledgerTotal, invoiceTotal, drift: ledgerTotal - invoiceTotal };
+  }
+
   /** Sum of credits minus debits per account, for reconciliation against PartnerSettlement/RiderWithdrawal totals. */
   async getTrialBalance() {
     const rows = await this.entryModel.aggregate<{

@@ -49,19 +49,21 @@ export class User {
   @Prop()
   ownerName?: string;
 
-  /** Partner-only: subscription tier for the shop's partner portal access. */
+  /** @deprecated Superseded by billing.Subscription (see apps/api/src/modules/billing) —
+   * read-only, retained for the migrate-billing-subscriptions.ts backfill and as a fallback
+   * until it's confirmed no other code still reads these. Do not write to these fields. */
   @Prop({ enum: ['trial', 'basic', 'starter', 'professional'] })
   subscriptionPlan?: 'trial' | 'basic' | 'starter' | 'professional';
 
-  /** Partner-only: monthly price (PHP) for the current subscriptionPlan. */
+  /** @deprecated See subscriptionPlan above — superseded by Subscription.priceSnapshot. */
   @Prop()
   planPrice?: number;
 
-  /** Partner-only: next renewal date for a paid plan. */
+  /** @deprecated See subscriptionPlan above — superseded by Subscription.currentPeriodEnd. */
   @Prop()
   planRenewsAt?: Date;
 
-  /** Partner-only: trial expiry date, set when subscriptionPlan is 'trial'. */
+  /** @deprecated See subscriptionPlan above — superseded by Subscription.trialEndsAt. */
   @Prop()
   trialEndsAt?: Date;
 

@@ -10,7 +10,18 @@ import { DataPageStatus } from '../../components/data-page-status';
 import { Card, CardBody, SectionPanel } from '../../components/ui/card';
 import { PageHeader } from '../../components/ui/page-header';
 import { useProtectedPage } from '../../hooks/use-protected-page';
-import { isPartnerRole, partnerFetch, removeShopLogo, uploadShopLogo } from '../../lib/partner-api';
+import {
+  attachPaymentMethod,
+  createPaymongoCardPaymentMethod,
+  getPaymentMethod,
+  isPartnerRole,
+  partnerFetch,
+  redeemPromoCode,
+  removePaymentMethod,
+  removeShopLogo,
+  uploadShopLogo,
+} from '../../lib/partner-api';
+import type { PartnerPaymentMethodInfo } from '../../lib/partner-api';
 import type {
   BranchHoliday,
   DayOperatingHours,
@@ -88,6 +99,222 @@ const TABS: { id: Tab; label: string }[] = [
 function formatSubscriptionDate(d?: string) {
   if (!d) return '—';
   return new Date(d).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+// ── Payment method (auto-charge) ────────────────────────────────────────────
+function PaymentMethodPanel({ canEdit }: { canEdit: boolean }) {
+  const [info, setInfo] = useState<PartnerPaymentMethodInfo | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [cardNumber, setCardNumber] = useState('');
+  const [expMonth, setExpMonth] = useState('');
+  const [expYear, setExpYear] = useState('');
+  const [cvc, setCvc] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const load = useCallback(async () => {
+    if (!isPartnerRole()) return;
+    setLoading(true);
+    try {
+      setInfo(await getPaymentMethod());
+    } catch {
+      // No subscription yet or endpoint unavailable — treat as "no card on file".
+      setInfo({ onFile: false });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function handleSaveCard() {
+    setSaving(true);
+    setError('');
+    try {
+      const methodId = await createPaymongoCardPaymentMethod({
+        cardNumber,
+        expMonth: Number(expMonth),
+        expYear: Number(expYear),
+        cvc,
+      });
+      await attachPaymentMethod(methodId);
+      toast.success('Card saved for auto-charge');
+      setShowForm(false);
+      setCardNumber('');
+      setExpMonth('');
+      setExpYear('');
+      setCvc('');
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save card');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRemove() {
+    setSaving(true);
+    try {
+      await removePaymentMethod();
+      toast.success('Card removed');
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to remove card');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!isPartnerRole()) return null;
+
+  return (
+    <div className="border-t border-border/60 px-6 py-4 sm:px-8">
+      <p className="text-sm font-medium text-slate-900">Payment method</p>
+      <p className="mt-0.5 text-xs text-muted">
+        Save a card to have your subscription fee charged automatically each period instead of
+        settling it manually via bank transfer/GCash.
+      </p>
+
+      {loading ? (
+        <p className="mt-3 text-sm text-muted">Loading…</p>
+      ) : info?.onFile ? (
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-border bg-slate-50 px-3 py-2.5">
+          <span className="text-sm text-slate-900">
+            {info.brand ? `${info.brand.toUpperCase()} ` : ''}•••• {info.last4 ?? '····'}
+          </span>
+          {canEdit && (
+            <button type="button" disabled={saving} className="btn-outline btn-sm" onClick={() => void handleRemove()}>
+              {saving ? '…' : 'Remove'}
+            </button>
+          )}
+        </div>
+      ) : !canEdit ? (
+        <p className="mt-3 text-sm text-muted">No card on file.</p>
+      ) : !showForm ? (
+        <button type="button" className="btn-outline btn-sm mt-3" onClick={() => setShowForm(true)}>
+          + Add card
+        </button>
+      ) : (
+        <div className="mt-3 space-y-2.5 rounded-lg border border-border p-3.5">
+          <input
+            value={cardNumber}
+            onChange={(e) => setCardNumber(e.target.value)}
+            placeholder="Card number"
+            className="input-field w-full"
+            inputMode="numeric"
+          />
+          <div className="grid grid-cols-3 gap-2">
+            <input
+              value={expMonth}
+              onChange={(e) => setExpMonth(e.target.value)}
+              placeholder="MM"
+              className="input-field w-full"
+              inputMode="numeric"
+            />
+            <input
+              value={expYear}
+              onChange={(e) => setExpYear(e.target.value)}
+              placeholder="YYYY"
+              className="input-field w-full"
+              inputMode="numeric"
+            />
+            <input
+              value={cvc}
+              onChange={(e) => setCvc(e.target.value)}
+              placeholder="CVC"
+              className="input-field w-full"
+              inputMode="numeric"
+            />
+          </div>
+          {error && <div className="alert-error">{error}</div>}
+          <div className="flex justify-end gap-2">
+            <button type="button" className="btn-outline btn-sm" onClick={() => setShowForm(false)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={saving || !cardNumber || !expMonth || !expYear || !cvc}
+              className="btn-primary btn-sm disabled:opacity-50"
+              onClick={() => void handleSaveCard()}
+            >
+              {saving ? 'Saving…' : 'Save card'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Promo code ───────────────────────────────────────────────────────────────
+function PromoCodePanel({
+  canEdit,
+  activeCode,
+  freeMonthsRemaining,
+  onRedeemed,
+}: {
+  canEdit: boolean;
+  activeCode?: string;
+  freeMonthsRemaining?: number;
+  onRedeemed: () => void;
+}) {
+  const [code, setCode] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleRedeem() {
+    setSaving(true);
+    setError('');
+    try {
+      await redeemPromoCode(code.trim());
+      toast.success('Promo code applied');
+      setCode('');
+      onRedeemed();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to redeem promo code');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!canEdit) return null;
+
+  return (
+    <div className="border-t border-border/60 px-6 py-4 sm:px-8">
+      {activeCode ? (
+        <p className="text-sm text-slate-900">
+          <span className="badge-accent mr-2">{activeCode}</span>
+          {freeMonthsRemaining != null
+            ? `applied — ${freeMonthsRemaining} free month${freeMonthsRemaining !== 1 ? 's' : ''} remaining`
+            : 'applied'}
+        </p>
+      ) : (
+        <>
+          <p className="text-sm font-medium text-slate-900">Have a promo code?</p>
+          <div className="mt-2 flex gap-2">
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              placeholder="e.g. FOUNDING6"
+              className="input-field w-full max-w-[220px] font-mono"
+            />
+            <button
+              type="button"
+              disabled={saving || !code.trim()}
+              className="btn-outline btn-sm disabled:opacity-50"
+              onClick={() => void handleRedeem()}
+            >
+              {saving ? 'Applying…' : 'Apply'}
+            </button>
+          </div>
+          {error && <p className="mt-1.5 text-xs text-destructive">{error}</p>}
+        </>
+      )}
+    </div>
+  );
 }
 
 // ── Machines ───────────────────────────────────────────────────────────────
@@ -446,10 +673,12 @@ function PartnerSettingsContent() {
     if (!isPartnerRole()) return Promise.resolve(null);
     return partnerFetch<PartnerSubscriptionInfo>('/partner/subscription');
   }, []);
-  const { data: subscription, loading: subscriptionLoading, error: subscriptionError } = usePartnerQuery(
-    loadSubscription,
-    [ready],
-  );
+  const {
+    data: subscription,
+    loading: subscriptionLoading,
+    error: subscriptionError,
+    reload: reloadSubscription,
+  } = usePartnerQuery(loadSubscription, [ready]);
 
   async function saveSettings(patch: Partial<PartnerPortalSettings>, successMessage = 'Settings saved') {
     if (!data?.canEdit) return;
@@ -1055,8 +1284,22 @@ function PartnerSettingsContent() {
                 {subscription && subscription.subscriptionPlan !== 'trial' ? (
                   <p className="border-t border-border/60 px-6 py-3 text-xs text-muted sm:px-8">
                     Billed automatically alongside your weekly invoice once the renewal date is reached.
+                    {subscription.paymentMethodOnFile
+                      ? ' Your saved card is charged automatically — no action needed.'
+                      : ' Add a card below to have this charged automatically instead of settling manually.'}
                   </p>
                 ) : null}
+                {subscription && subscription.subscriptionPlan !== 'trial' && (
+                  <PaymentMethodPanel canEdit={canEdit} />
+                )}
+                {subscription && subscription.subscriptionPlan !== 'trial' && (
+                  <PromoCodePanel
+                    canEdit={canEdit}
+                    activeCode={subscription.promotionCode}
+                    freeMonthsRemaining={subscription.promotionFreeMonthsRemaining}
+                    onRedeemed={() => void reloadSubscription()}
+                  />
+                )}
               </SectionPanel>
             )}
           </div>

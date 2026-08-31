@@ -48,6 +48,19 @@ export class PlatformSettings {
   @Prop({ default: false })
   autoGenerateInvoices!: boolean;
 
+  /** Auto-run the subscription dunning sweep (past_due -> grace_period -> suspended,
+   * with saved-card retry at each step) instead of requiring manual admin status changes. */
+  @Prop({ default: true })
+  autoDunningEnabled!: boolean;
+
+  /** Days after a subscription invoice's dueDate before past_due escalates to grace_period. */
+  @Prop({ default: 7 })
+  billingGracePeriodDays!: number;
+
+  /** Additional days after entering grace_period before escalating to suspended. */
+  @Prop({ default: 3 })
+  billingSuspendAfterGraceDays!: number;
+
   /** Auto-approve/reject refund requests under autoApproveRefundsThreshold with clean evidence. */
   @Prop({ default: false })
   autoApproveRefunds!: boolean;

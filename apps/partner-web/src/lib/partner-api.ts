@@ -161,6 +161,74 @@ export async function getOwnProfile(): Promise<PartnerOwnProfile> {
   return partnerFetch<PartnerOwnProfile>('/partner/profile');
 }
 
+/** Tokenizes a card directly against PayMongo's API from the browser using the publishable
+ * key — raw card details never touch our own server, only the resulting Payment Method id
+ * does (sent on to attachPaymentMethod below). */
+export async function createPaymongoCardPaymentMethod(card: {
+  cardNumber: string;
+  expMonth: number;
+  expYear: number;
+  cvc: string;
+}): Promise<string> {
+  const publicKey = process.env.NEXT_PUBLIC_PAYMONGO_PUBLIC_KEY;
+  if (!publicKey) throw new Error('Card payments are not configured for this environment');
+
+  const res = await fetch('https://api.paymongo.com/v1/payment_methods', {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${btoa(`${publicKey}:`)}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      data: {
+        attributes: {
+          type: 'card',
+          details: {
+            card_number: card.cardNumber.replace(/\s+/g, ''),
+            exp_month: card.expMonth,
+            exp_year: card.expYear,
+            cvc: card.cvc,
+          },
+        },
+      },
+    }),
+  });
+  const json = await res.json();
+  if (!res.ok || !json.data?.id) {
+    const detail = json.errors?.map((e: { detail: string }) => e.detail).join('; ') || 'Card was rejected';
+    throw new Error(detail);
+  }
+  return json.data.id as string;
+}
+
+export interface PartnerPaymentMethodInfo {
+  onFile: boolean;
+  brand?: string;
+  last4?: string;
+}
+
+export async function getPaymentMethod(): Promise<PartnerPaymentMethodInfo> {
+  return partnerFetch<PartnerPaymentMethodInfo>('/partner/billing/payment-method');
+}
+
+export async function attachPaymentMethod(paymongoPaymentMethodId: string): Promise<void> {
+  await partnerFetch('/partner/billing/payment-method', {
+    method: 'POST',
+    body: JSON.stringify({ paymongoPaymentMethodId }),
+  });
+}
+
+export async function removePaymentMethod(): Promise<void> {
+  await partnerFetch('/partner/billing/payment-method', { method: 'DELETE' });
+}
+
+export async function redeemPromoCode(code: string): Promise<void> {
+  await partnerFetch('/partner/billing/promotion', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  });
+}
+
 export async function updateOwnProfile(displayName: string): Promise<PartnerOwnProfile> {
   return partnerFetch<PartnerOwnProfile>('/partner/profile', {
     method: 'PATCH',

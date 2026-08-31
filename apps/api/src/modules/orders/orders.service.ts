@@ -35,6 +35,7 @@ import { assertOrderPortalAccess, resolvePortalBranchId } from '../partner/partn
 import { Address, AddressDocument } from '../addresses/schemas/address.schema';
 import { Rider, RiderDocument } from '../riders/schemas/rider.schema';
 import { Order, OrderDocument } from './schemas/order.schema';
+import { EntitlementService } from '../billing/entitlement.service';
 
 export interface BookingOrderItem {
   serviceType: BookingType;
@@ -93,6 +94,7 @@ export class OrdersService {
     private ledgerService: LedgerService,
     private laundryTagsService: LaundryTagsService,
     private rewardsService: RewardsService,
+    private entitlementService: EntitlementService,
   ) {}
 
   private readonly COMPLETED_ORDER_STATUSES = [OrderStatus.COMPLETED, OrderStatus.DELIVERED];
@@ -244,6 +246,10 @@ export class OrdersService {
   }
 
   async createFromBooking(customerId: string, payload: BookingOrderPayload) {
+    if (payload.partnerId) {
+      await this.entitlementService.assertNotSuspended(payload.partnerId);
+    }
+
     const order = await this.orderModel.create({
       customerId: new Types.ObjectId(customerId),
       partnerId: payload.partnerId ? new Types.ObjectId(payload.partnerId) : undefined,

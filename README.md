@@ -392,7 +392,7 @@ OTP login: requires Twilio env vars on the API (`TWILIO_ACCOUNT_SID`, `TWILIO_AU
 
 ## Documentation
 
-See [`docs/`](./docs/) for architecture, database schemas, API reference, and development roadmap. **PayMongo setup (GCash, Maya, card, wallet top-up):** [docs/PAYMENTS_PAYMONGO.md](./docs/PAYMENTS_PAYMONGO.md). Mobile app setup, dispatch notifications, and screen reference are in [Mobile Apps](#mobile-apps) above. **User journeys (role-by-role flows):** [docs/USER_JOURNEYS.md](./docs/USER_JOURNEYS.md). **Manual test cases:** [docs/TEST_CASES.md](./docs/TEST_CASES.md).
+See [`docs/`](./docs/) for architecture, database schemas, API reference, and development roadmap. **PayMongo setup (GCash, Maya, card, wallet top-up):** [docs/PAYMENTS_PAYMONGO.md](./docs/PAYMENTS_PAYMONGO.md). **Partner subscription billing (plans, invoicing, auto-charge, dunning, promo codes):** [docs/SUBSCRIPTION_BILLING.md](./docs/SUBSCRIPTION_BILLING.md). Mobile app setup, dispatch notifications, and screen reference are in [Mobile Apps](#mobile-apps) above. **User journeys (role-by-role flows):** [docs/USER_JOURNEYS.md](./docs/USER_JOURNEYS.md). **Manual test cases:** [docs/TEST_CASES.md](./docs/TEST_CASES.md).
 
 **Feature work:** When adding or changing features, wire them across every relevant app (API, admin-web, partner-web, customer-web, customer-mobile, rider-mobile) and add a summary under [`docs/features/`](./docs/features/). See [`docs/FEATURE_WIRING.md`](./docs/FEATURE_WIRING.md).
 

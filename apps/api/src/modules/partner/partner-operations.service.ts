@@ -36,6 +36,11 @@ import {
 } from './schemas/partner-invoice.schema';
 import { PartnerInvoicePdfService } from './partner-invoice-pdf.service';
 import { EmailService } from '../../common/email/email.service';
+import { SubscriptionService } from '../billing/subscription.service';
+import { PlanService } from '../billing/plan.service';
+import { EntitlementService } from '../billing/entitlement.service';
+import { NotificationDispatchService } from '../push/notification-dispatch.service';
+import { SubscriptionDocument } from '../billing/schemas/subscription.schema';
 import {
   Branch,
   BranchDocument,
@@ -122,6 +127,10 @@ export class PartnerOperationsService {
     private ledgerService: LedgerService,
     private invoicePdfService: PartnerInvoicePdfService,
     private emailService: EmailService,
+    private subscriptionService: SubscriptionService,
+    private planService: PlanService,
+    private entitlementService: EntitlementService,
+    private notificationDispatchService: NotificationDispatchService,
   ) {}
 
   /** Concurrency-safe sequential invoice number (INV-<year>-<seq>), backed by a `counters`
@@ -331,22 +340,47 @@ export class PartnerOperationsService {
   }
 
   /** Whether this partner's flat platform subscription fee is due to be billed right now —
-   * trial partners are never charged, and a paid partner is only charged once per renewal
-   * cycle (planRenewsAt unset counts as due, so a newly-upgraded partner is billed on the very
-   * next invoice run rather than waiting up to a month). */
-  private computeDueSubscriptionFee(partner: UserDocument): number {
-    if (!partner.subscriptionPlan || partner.subscriptionPlan === 'trial') return 0;
-    if (!partner.planPrice || partner.planPrice <= 0) return 0;
-    const due = !partner.planRenewsAt || partner.planRenewsAt.getTime() <= Date.now();
-    return due ? partner.planPrice : 0;
+   * trial/cancelled/expired subscriptions are never charged, and a paid partner is only
+   * charged once per renewal cycle (currentPeriodEnd in the past counts as due). Reads the
+   * billing.Subscription record (see BillingModule) rather than the deprecated
+   * User.subscriptionPlan/planPrice/planRenewsAt fields it superseded. */
+  /** Whether this subscription's billing cycle has ended and needs processing — independent of
+   * the resulting fee amount, since a free-months promo can discount that to ₱0 while the cycle
+   * (and its period-advance/promo-countdown) still needs to happen. */
+  private isCycleDue(subscription: SubscriptionDocument | null): boolean {
+    if (!subscription) return false;
+    if (subscription.status === 'trialing' || subscription.status === 'cancelled' || subscription.status === 'expired') {
+      return false;
+    }
+    if (!subscription.priceSnapshot || subscription.priceSnapshot <= 0) return false;
+    return subscription.currentPeriodEnd.getTime() <= Date.now();
+  }
+
+  private computeDueSubscriptionFee(subscription: SubscriptionDocument | null): number {
+    if (!subscription || !this.isCycleDue(subscription)) return 0;
+    return this.applyPromotionDiscount(subscription, subscription.priceSnapshot);
+  }
+
+  private applyPromotionDiscount(subscription: SubscriptionDocument, amount: number): number {
+    if (subscription.promotionDiscountType === 'free_months' && (subscription.promotionFreeMonthsRemaining ?? 0) > 0) {
+      return 0;
+    }
+    if (subscription.promotionDiscountType === 'percentage') {
+      return Math.max(0, Math.round(amount * (1 - (subscription.promotionDiscountValue ?? 0) / 100)));
+    }
+    if (subscription.promotionDiscountType === 'fixed') {
+      return Math.max(0, amount - (subscription.promotionDiscountValue ?? 0));
+    }
+    return amount;
   }
 
   /** Used by the weekly invoicing sweep to decide whether a partner with no uninvoiced orders
-   * still needs a subscription-only invoice this cycle. */
+   * still needs a subscription-only invoice this cycle — true whenever the cycle is due, even
+   * if a promo discounts the resulting fee to ₱0 (the cycle still needs to advance and the
+   * promo's free-months counter still needs to count down). */
   async isSubscriptionFeeDue(partnerId: string): Promise<boolean> {
-    const partner = await this.userModel.findById(partnerId);
-    if (!partner) return false;
-    return this.computeDueSubscriptionFee(partner) > 0;
+    const subscription = await this.subscriptionService.findByPartnerId(partnerId);
+    return this.isCycleDue(subscription);
   }
 
   async ensureInventorySeeded(branchId: Types.ObjectId) {
@@ -1052,6 +1086,18 @@ export class PartnerOperationsService {
     const branchId = dto.branchId
       ? await this.resolveOwnedBranchId(userId, role, dto.branchId)
       : await this.resolvePartnerBranchId(userId, role);
+
+    // Suspended partners can't add staff. A staff-with-permission acting on behalf of a
+    // partner is resolved to the owning partner's id via the branch; the partner themself is
+    // already that id.
+    const ownerPartnerId =
+      role === UserRole.PARTNER
+        ? userId
+        : branchId
+          ? (await this.branchModel.findById(branchId).select('partnerUserId').lean())?.partnerUserId?.toString()
+          : undefined;
+    if (ownerPartnerId) await this.entitlementService.assertNotSuspended(ownerPartnerId);
+
     const email = dto.email.trim().toLowerCase();
     const phone = dto.phone?.trim();
 
@@ -1653,19 +1699,44 @@ export class PartnerOperationsService {
     return { success: true, data: { partnerId, receivableBalance } };
   }
 
+  /** Response shape must stay compatible with PartnerSubscriptionInfo (packages/types) — the
+   * partner-web "Plan" settings tab reads this directly and predates the billing.Subscription
+   * model, so this maps the new Plan/Subscription records onto that same shape rather than
+   * introducing a parallel endpoint. */
   async getSubscriptionInfo(partnerId: string) {
-    const partner = await this.userModel
-      .findById(partnerId)
-      .select('subscriptionPlan planPrice planRenewsAt trialEndsAt')
-      .lean();
-    if (!partner) throw new NotFoundException('Partner not found');
+    const KNOWN_PLAN_KEYS = ['trial', 'basic', 'starter', 'professional'] as const;
+    const subscription = await this.subscriptionService.findByPartnerId(partnerId);
+    if (!subscription) {
+      return {
+        success: true,
+        data: {
+          subscriptionPlan: 'trial' as const,
+          planPrice: 0,
+          planRenewsAt: undefined,
+          trialEndsAt: undefined,
+          paymentMethodOnFile: false,
+          cardBrand: undefined,
+          cardLast4: undefined,
+          promotionCode: undefined,
+          promotionFreeMonthsRemaining: undefined,
+        },
+      };
+    }
+    const plan = await this.planService.findById(subscription.planId);
+    const planKey = (plan && (KNOWN_PLAN_KEYS as readonly string[]).includes(plan.key) ? plan.key : 'trial') as
+      (typeof KNOWN_PLAN_KEYS)[number];
     return {
       success: true,
       data: {
-        subscriptionPlan: partner.subscriptionPlan ?? 'trial',
-        planPrice: partner.planPrice ?? 0,
-        planRenewsAt: partner.planRenewsAt,
-        trialEndsAt: partner.trialEndsAt,
+        subscriptionPlan: planKey,
+        planPrice: subscription.priceSnapshot ?? 0,
+        planRenewsAt: subscription.status === 'trialing' ? undefined : subscription.currentPeriodEnd,
+        trialEndsAt: subscription.trialEndsAt,
+        paymentMethodOnFile: subscription.paymentMethodOnFile,
+        cardBrand: subscription.cardBrand,
+        cardLast4: subscription.cardLast4,
+        promotionCode: subscription.promotionCode,
+        promotionFreeMonthsRemaining: subscription.promotionFreeMonthsRemaining,
       },
     };
   }
@@ -1795,9 +1866,14 @@ export class PartnerOperationsService {
   ) {
     const partner = await this.userModel.findById(partnerId);
     if (!partner) throw new NotFoundException('Partner not found');
-    const subscriptionFeeDue = this.computeDueSubscriptionFee(partner);
+    const subscription = await this.subscriptionService.findByPartnerId(partnerId);
+    const cycleDue = this.isCycleDue(subscription);
+    const subscriptionFeeDue = this.computeDueSubscriptionFee(subscription);
+    const subscriptionPlanLabel = subscription
+      ? (await this.planService.findById(subscription.planId))?.key ?? 'unknown'
+      : 'trial';
 
-    if ((!dto.orderIds || dto.orderIds.length === 0) && subscriptionFeeDue === 0) {
+    if ((!dto.orderIds || dto.orderIds.length === 0) && !cycleDue) {
       throw new BadRequestException('At least one order must be selected');
     }
 
@@ -1961,13 +2037,11 @@ export class PartnerOperationsService {
       throw err;
     }
 
-    // Advance the partner's renewal date now that the fee has actually been billed, so the next
-    // invoice run doesn't charge it again until the next cycle is due.
-    if (subscriptionFeeDue > 0) {
-      const nextRenewal = new Date(partner.planRenewsAt ?? new Date());
-      nextRenewal.setMonth(nextRenewal.getMonth() + 1);
-      partner.planRenewsAt = nextRenewal;
-      await partner.save();
+    // Advance the subscription's billing period now that this cycle has been billed (even a
+    // promo-discounted ₱0 fee still counts — the promo's free-months counter only decrements
+    // here), so the next invoice run doesn't charge it again until the next cycle is due.
+    if (cycleDue && subscription) {
+      await this.subscriptionService.advancePeriod(subscription._id as Types.ObjectId);
     }
 
     // Mark the recovered credit as no longer outstanding on the invoices it came from — after
@@ -2016,16 +2090,40 @@ export class PartnerOperationsService {
             accountType: 'partner_receivable',
             direction: 'debit',
             amount: subscriptionFeeDue,
-            description: `${partner.subscriptionPlan} plan subscription fee billed to partner ${partnerId} via invoice ${invoiceNumber}`,
+            description: `${subscriptionPlanLabel} plan subscription fee billed to partner ${partnerId} via invoice ${invoiceNumber}`,
           },
           {
             accountType: 'platform_revenue',
             direction: 'credit',
             amount: subscriptionFeeDue,
-            description: `${partner.subscriptionPlan} plan subscription fee revenue from partner ${partnerId} via invoice ${invoiceNumber}`,
+            description: `${subscriptionPlanLabel} plan subscription fee revenue from partner ${partnerId} via invoice ${invoiceNumber}`,
           },
         ],
       );
+    }
+
+    // If this is a subscription-fee-only invoice (no bundled commission/rider cost) and the
+    // partner has a saved card, attempt to auto-charge it — on success the invoice is marked
+    // paid immediately via the same path an admin uses for a manual bank/GCash settlement.
+    // Any failure (no card, decline, 3DS required, PayMongo error) leaves the invoice pending,
+    // identical to today's fully-manual behavior.
+    if (
+      subscriptionFeeDue > 0 &&
+      dto.orderIds.length === 0 &&
+      subscription?.paymentMethodOnFile &&
+      subscription.provider === 'paymongo'
+    ) {
+      const charge = await this.subscriptionService.attemptAutoCharge(
+        subscription,
+        subscriptionFeeDue,
+        `${subscriptionPlanLabel} plan subscription — invoice ${invoiceNumber}`,
+      );
+      if (charge.success) {
+        await this.markInvoicePaid(adminUserId, invoice._id.toString(), {
+          paymentReference: charge.providerReference,
+          note: 'Auto-charged via saved card',
+        });
+      }
     }
 
     // Auto-email the PDF invoice to the partner — never fails invoice creation itself.
@@ -2115,6 +2213,22 @@ export class PartnerOperationsService {
           },
         ],
       );
+    }
+
+    // If this payment resolves a subscription fee that had pushed the partner into dunning,
+    // reactivate them immediately — covers both the admin manual-pay button and the dunning
+    // cron's own successful retry charge (which also calls this method).
+    if (invoice.subscriptionFeeDue > 0) {
+      const subscription = await this.subscriptionService.findByPartnerId(invoice.partnerId.toString());
+      if (subscription && ['past_due', 'grace_period', 'suspended'].includes(subscription.status)) {
+        await this.subscriptionService.transitionStatus(subscription, 'active');
+        await this.notificationDispatchService.dispatch({
+          userId: invoice.partnerId.toString(),
+          title: 'Subscription reactivated',
+          body: `Your payment for invoice ${invoice.invoiceNumber} was received — your account is fully active again.`,
+          data: { type: 'billing_reactivated', subscriptionId: (subscription._id as Types.ObjectId).toString() },
+        });
+      }
     }
 
     return { success: true, data: this.formatInvoice(invoice) };

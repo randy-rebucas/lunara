@@ -92,6 +92,14 @@ export interface PartnerSubscriptionInfo {
   planPrice: number;
   planRenewsAt?: string;
   trialEndsAt?: string;
+  /** True once a card is saved for auto-charge — see billing.Subscription.paymentMethodOnFile. */
+  paymentMethodOnFile?: boolean;
+  cardBrand?: string;
+  cardLast4?: string;
+  /** Active billing promo code, if any — see billing.Subscription.promotionCode. */
+  promotionCode?: string;
+  /** Only set for a 'free_months' promo — remaining billing cycles at ₱0 before it reverts to full price. */
+  promotionFreeMonthsRemaining?: number;
 }
 
 export interface PartnerDashboardShop {

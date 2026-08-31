@@ -19,6 +19,20 @@ export class UpdateAutomationSettingsDto {
 
   @IsOptional()
   @IsBoolean()
+  autoDunningEnabled?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  billingGracePeriodDays?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  billingSuspendAfterGraceDays?: number;
+
+  @IsOptional()
+  @IsBoolean()
   autoApproveRefunds?: boolean;
 
   @IsOptional()

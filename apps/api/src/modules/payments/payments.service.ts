@@ -16,6 +16,7 @@ import { TrackingGateway } from '../realtime/tracking.gateway';
 import { WalletsService } from '../wallets/wallets.service';
 import { PaymongoService } from './paymongo.service';
 import { Payment, PaymentDocument } from './schemas/payment.schema';
+import { WebhookEvent, WebhookEventDocument } from './schemas/webhook-event.schema';
 import { LedgerService } from '../ledger/ledger.service';
 import { SettingsService } from '../settings/settings.service';
 import { AuditLogService } from '../audit/audit-log.service';
@@ -30,6 +31,7 @@ export class PaymentsService {
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(WebhookEvent.name) private webhookEventModel: Model<WebhookEventDocument>,
     private walletsService: WalletsService,
     private trackingGateway: TrackingGateway,
     private paymongo: PaymongoService,
@@ -425,7 +427,57 @@ export class PaymentsService {
     }
 
     const event = this.paymongo.parseWebhookEvent(rawBody);
-    if (!event || !this.paymongo.isPaidWebhookEvent(event.type)) {
+    if (!event) {
+      return { success: true, data: { ignored: true } };
+    }
+
+    // Idempotency claim: insert a uniquely-indexed marker before doing any side-effecting work.
+    // A redelivery of the same event id hits the unique index and no-ops here instead of
+    // reprocessing (same pattern as LedgerTransactionMarker). Older/malformed payloads without
+    // an event id fall through unprotected rather than blocking processing on a missing field.
+    let eventDoc: WebhookEventDocument | null = null;
+    if (event.eventId) {
+      try {
+        eventDoc = await this.webhookEventModel.create({
+          provider: 'paymongo',
+          eventId: event.eventId,
+          eventType: event.type,
+          payload: JSON.parse(rawBody.toString('utf8')),
+        });
+      } catch (err) {
+        if (this.isDuplicateKeyError(err)) {
+          return { success: true, data: { ignored: true, alreadyProcessed: true } };
+        }
+        throw err;
+      }
+    }
+
+    try {
+      const result = await this.processPaymongoWebhookEvent(event);
+      if (eventDoc) {
+        eventDoc.processed = true;
+        eventDoc.processedAt = new Date();
+        await eventDoc.save();
+      }
+      return result;
+    } catch (err) {
+      if (eventDoc) {
+        eventDoc.processingError = err instanceof Error ? err.message : 'Unknown error';
+        await eventDoc.save();
+      }
+      throw err;
+    }
+  }
+
+  /** The original handlePaymongoWebhook body, unchanged — only order/wallet-topup Payment
+   * webhooks are handled here. Extracted so the idempotency claim above can wrap it without
+   * touching this logic. */
+  private async processPaymongoWebhookEvent(event: {
+    type: string;
+    metadata: Record<string, string>;
+    paymongoPaymentId?: string;
+  }) {
+    if (!this.paymongo.isPaidWebhookEvent(event.type)) {
       return { success: true, data: { ignored: true } };
     }
 
@@ -448,6 +500,22 @@ export class PaymentsService {
     await this.fulfillPayment(payment, event.paymongoPaymentId);
     const refreshed = await this.paymentModel.findById(paymentId);
     return { success: true, data: this.serializePayment(refreshed!) };
+  }
+
+  /** Processed/failed/unprocessed webhook delivery counts in the given window, for the admin
+   * billing reconciliation panel — surfaces silent webhook failures. */
+  async getWebhookEventStats(days = 30) {
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const [total, processed, failed] = await Promise.all([
+      this.webhookEventModel.countDocuments({ createdAt: { $gte: since } }),
+      this.webhookEventModel.countDocuments({ createdAt: { $gte: since }, processed: true }),
+      this.webhookEventModel.countDocuments({
+        createdAt: { $gte: since },
+        processed: false,
+        processingError: { $exists: true, $ne: null },
+      }),
+    ]);
+    return { total, processed, failed, unprocessed: total - processed - failed };
   }
 
   private async startPaymongoCheckout(

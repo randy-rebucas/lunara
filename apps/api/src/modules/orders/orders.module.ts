@@ -13,6 +13,7 @@ import { PromotionsModule } from '../promotions/promotions.module';
 import { LedgerModule } from '../ledger/ledger.module';
 import { LaundryTagsModule } from '../laundry-tags/laundry-tags.module';
 import { RewardsModule } from '../rewards/rewards.module';
+import { BillingModule } from '../billing/billing.module';
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 import { Order, OrderSchema } from './schemas/order.schema';
@@ -35,6 +36,7 @@ import { Order, OrderSchema } from './schemas/order.schema';
     LedgerModule,
     LaundryTagsModule,
     RewardsModule,
+    BillingModule,
   ],
   controllers: [OrdersController],
   providers: [OrdersService],

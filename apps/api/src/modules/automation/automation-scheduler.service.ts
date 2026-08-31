@@ -1,18 +1,24 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { OrderStatus, UserRole } from '@lunara/types';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { Branch, BranchDocument } from '../branches/schemas/branch.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { Rider, RiderDocument } from '../riders/schemas/rider.schema';
+import { PartnerInvoice, PartnerInvoiceDocument } from '../partner/schemas/partner-invoice.schema';
 import { SettingsService } from '../settings/settings.service';
 import { RiderAssignmentService } from '../riders/rider-assignment.service';
 import { PartnerOperationsService } from '../partner/partner-operations.service';
 import { AuditLogService } from '../audit/audit-log.service';
 import { EmailService } from '../../common/email/email.service';
 import { TwilioSmsService } from '../../common/sms/twilio-sms.service';
+import { SubscriptionService } from '../billing/subscription.service';
+import { SubscriptionStatus } from '../billing/schemas/subscription.schema';
+import { NotificationDispatchService } from '../push/notification-dispatch.service';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const COMPLETED_STATUSES = [OrderStatus.DELIVERED, OrderStatus.COMPLETED];
 
@@ -30,12 +36,15 @@ export class AutomationSchedulerService {
     @InjectModel(Branch.name) private branchModel: Model<BranchDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Rider.name) private riderModel: Model<RiderDocument>,
+    @InjectModel(PartnerInvoice.name) private invoiceModel: Model<PartnerInvoiceDocument>,
     private settingsService: SettingsService,
     private riderAssignmentService: RiderAssignmentService,
     private partnerOperationsService: PartnerOperationsService,
     private auditLogService: AuditLogService,
     private emailService: EmailService,
     private twilioSmsService: TwilioSmsService,
+    private subscriptionService: SubscriptionService,
+    private notificationDispatchService: NotificationDispatchService,
   ) {}
 
   private async recordAutomationAction(action: string, path: string, requestBody: unknown) {
@@ -144,6 +153,106 @@ export class AutomationSchedulerService {
         );
       } catch (err) {
         this.logger.warn(`Auto-invoicing skipped for branch ${branch._id}: ${(err as Error).message}`);
+      }
+    }
+  }
+
+  private static readonly DUNNING_NOTICES: Record<
+    Extract<SubscriptionStatus, 'past_due' | 'grace_period' | 'suspended'>,
+    { title: string; body: (invoiceNumber: string) => string }
+  > = {
+    past_due: {
+      title: 'Payment past due',
+      body: (n) => `Your subscription invoice ${n} is past due. Please settle it to avoid a service interruption.`,
+    },
+    grace_period: {
+      title: 'Account in grace period',
+      body: (n) => `Invoice ${n} is still unpaid. Your account will be suspended soon if it isn't settled.`,
+    },
+    suspended: {
+      title: 'Account suspended',
+      body: (n) => `Invoice ${n} remains unpaid. New orders and staff are on hold until it's settled.`,
+    },
+  };
+
+  /** Daily dunning sweep: escalates overdue subscription invoices through
+   * past_due -> grace_period -> suspended, retrying a saved-card auto-charge at each step
+   * before advancing the stage. Never lets one partner's failure abort the sweep. */
+  @Cron(CronExpression.EVERY_DAY_AT_2AM)
+  async sweepDunning() {
+    if (!(await this.settingsService.isAutomationEnabled('autoDunningEnabled'))) return;
+    const { gracePeriodDays, suspendAfterGraceDays } = await this.settingsService.getDunningConfig();
+
+    const overdueInvoices = await this.invoiceModel.find({
+      status: 'pending',
+      subscriptionFeeDue: { $gt: 0 },
+      dueDate: { $lt: new Date() },
+    });
+
+    const now = Date.now();
+    for (const invoice of overdueInvoices) {
+      const partnerId = invoice.partnerId.toString();
+      try {
+        const subscription = await this.subscriptionService.findByPartnerId(partnerId);
+        if (!subscription) continue;
+        if (subscription.status === 'cancelled' || subscription.status === 'expired') continue;
+
+        const daysOverdue = (now - (invoice.dueDate ?? invoice.createdAt).getTime()) / DAY_MS;
+
+        // Retry the saved card once per day while past_due/grace_period, before evaluating
+        // whether to advance the dunning stage further.
+        const alreadyAttemptedToday =
+          subscription.lastDunningAttemptAt &&
+          now - subscription.lastDunningAttemptAt.getTime() < DAY_MS;
+        if (
+          !alreadyAttemptedToday &&
+          (subscription.status === 'past_due' || subscription.status === 'grace_period') &&
+          subscription.paymentMethodOnFile
+        ) {
+          subscription.lastDunningAttemptAt = new Date();
+          await subscription.save();
+          const charge = await this.subscriptionService.attemptAutoCharge(
+            subscription,
+            invoice.subscriptionFeeDue,
+            `Subscription dunning retry — invoice ${invoice.invoiceNumber}`,
+          );
+          if (charge.success) {
+            const systemAdmin = await this.userModel.findOne({ role: UserRole.ADMIN });
+            if (systemAdmin) {
+              await this.partnerOperationsService.markInvoicePaid(systemAdmin._id.toString(), invoice._id.toString(), {
+                paymentReference: charge.providerReference,
+                note: 'Auto-charged via saved card (dunning retry)',
+              });
+            }
+            continue; // markInvoicePaid already reactivates the subscription + notifies
+          }
+        }
+
+        let nextStatus: 'past_due' | 'grace_period' | 'suspended' | null = null;
+        if (subscription.status === 'active' && daysOverdue >= 0) {
+          nextStatus = 'past_due';
+        } else if (subscription.status === 'past_due' && daysOverdue >= gracePeriodDays) {
+          nextStatus = 'grace_period';
+        } else if (subscription.status === 'grace_period' && daysOverdue >= gracePeriodDays + suspendAfterGraceDays) {
+          nextStatus = 'suspended';
+        }
+        if (!nextStatus) continue;
+
+        await this.subscriptionService.transitionStatus(subscription, nextStatus);
+        const notice = AutomationSchedulerService.DUNNING_NOTICES[nextStatus];
+        await this.notificationDispatchService.dispatch({
+          userId: partnerId,
+          title: notice.title,
+          body: notice.body(invoice.invoiceNumber),
+          data: { type: `billing_${nextStatus}`, subscriptionId: (subscription._id as Types.ObjectId).toString() },
+        });
+        await this.recordAutomationAction(
+          'automation.subscription.status_transitioned',
+          `/admin/billing/subscriptions/${partnerId}`,
+          { partnerId, invoiceId: invoice._id.toString(), newStatus: nextStatus, daysOverdue: Math.floor(daysOverdue) },
+        );
+      } catch (err) {
+        this.logger.warn(`Dunning sweep skipped for partner ${partnerId}: ${(err as Error).message}`);
       }
     }
   }

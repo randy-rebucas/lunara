@@ -127,6 +127,9 @@ export class SettingsService {
       autoAssignPickupRider: settings.autoAssignPickupRider,
       autoAssignDeliveryRider: settings.autoAssignDeliveryRider,
       autoGenerateInvoices: settings.autoGenerateInvoices,
+      autoDunningEnabled: settings.autoDunningEnabled,
+      billingGracePeriodDays: settings.billingGracePeriodDays,
+      billingSuspendAfterGraceDays: settings.billingSuspendAfterGraceDays,
       autoApproveRefunds: settings.autoApproveRefunds,
       autoApproveRefundsThreshold: settings.autoApproveRefundsThreshold,
       autoApproveWithdrawals: settings.autoApproveWithdrawals,
@@ -211,6 +214,7 @@ export class SettingsService {
       | 'autoAssignPickupRider'
       | 'autoAssignDeliveryRider'
       | 'autoGenerateInvoices'
+      | 'autoDunningEnabled'
       | 'autoApproveRefunds'
       | 'autoApproveWithdrawals',
   ) {
@@ -223,6 +227,16 @@ export class SettingsService {
     const settings = await this.getOrCreateSettings();
     const thresholdKey = `${key}Threshold` as 'autoApproveRefundsThreshold' | 'autoApproveWithdrawalsThreshold';
     return { enabled: Boolean(settings[key]), threshold: settings[thresholdKey] };
+  }
+
+  /** Dunning schedule for the subscription auto-suspend sweep — see
+   * AutomationSchedulerService.sweepDunning. */
+  async getDunningConfig(): Promise<{ gracePeriodDays: number; suspendAfterGraceDays: number }> {
+    const settings = await this.getOrCreateSettings();
+    return {
+      gracePeriodDays: settings.billingGracePeriodDays,
+      suspendAfterGraceDays: settings.billingSuspendAfterGraceDays,
+    };
   }
 
   /** Admin contact email used for real-time event notices (new order/application/ticket/message).
