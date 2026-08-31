@@ -343,7 +343,7 @@ export function WizardActions({
   const primaryDisabled = isConfirmStep ? loading : stepping || !canProceed;
 
   return (
-    <div className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 -mx-4 mt-8 border-t border-border/20 bg-surface-muted/95 px-4 py-4 backdrop-blur-sm sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0">
+    <div className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] z-50 -mx-4 mt-8 border-t border-border/20 bg-surface-muted/95 px-4 py-4 backdrop-blur-sm sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0">
       <div className="panel space-y-4">
         {activeQuote && !isConfirmStep && step !== 'review' && (
           <div className="rounded-lg bg-slate-50 px-4 py-3">
