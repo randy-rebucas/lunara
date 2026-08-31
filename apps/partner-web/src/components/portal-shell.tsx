@@ -95,7 +95,7 @@ const partnerNavGroups: NavGroup[] = [
       { href: '/customers', label: 'Customers', icon: Icons.customers },
       { href: '/services', label: 'Services', icon: Icons.services },
       { href: '/pricing', label: 'Pricing', icon: Icons.pricing },
-      { href: '/pickup-delivery', label: 'Pickup & Delivery', icon: Icons.pickup, soon: true },
+      { href: '/pickup-delivery', label: 'Pickup & Delivery', icon: Icons.pickup },
     ],
   },
   {
@@ -119,11 +119,11 @@ const partnerNavGroups: NavGroup[] = [
     items: [
       { href: '/revenue', label: 'Revenue', icon: Icons.revenue },
       { href: '/invoices', label: 'Invoices', icon: Icons.invoices },
-      { href: '/accounting/income', label: 'Income', icon: Icons.accounting, soon: true },
-      { href: '/accounting/expenses', label: 'Expenses', icon: Icons.accounting, soon: true },
-      { href: '/accounting/transactions', label: 'Transactions', icon: Icons.accounting, soon: true },
-      { href: '/accounting/accounts', label: 'Accounts', icon: Icons.accounting, soon: true },
-      { href: '/accounting/profit-loss', label: 'Profit & Loss', icon: Icons.accounting, soon: true },
+      { href: '/accounting/income', label: 'Income', icon: Icons.accounting },
+      { href: '/accounting/expenses', label: 'Expenses', icon: Icons.accounting },
+      { href: '/accounting/transactions', label: 'Transactions', icon: Icons.accounting },
+      { href: '/accounting/accounts', label: 'Accounts', icon: Icons.accounting },
+      { href: '/accounting/profit-loss', label: 'Profit & Loss', icon: Icons.accounting },
       { href: '/reports', label: 'Reports', icon: Icons.reports },
     ],
   },
@@ -131,8 +131,8 @@ const partnerNavGroups: NavGroup[] = [
     label: 'Marketing',
     items: [
       { href: '/promotions', label: 'Promotions', icon: Icons.promotions },
-      { href: '/marketing/loyalty', label: 'Loyalty', icon: Icons.marketing, soon: true },
-      { href: '/marketing/campaigns', label: 'Campaigns', icon: Icons.marketing, soon: true },
+      { href: '/marketing/loyalty', label: 'Loyalty', icon: Icons.marketing },
+      { href: '/marketing/campaigns', label: 'Campaigns', icon: Icons.marketing },
     ],
   },
   {
@@ -145,7 +145,7 @@ const partnerNavGroups: NavGroup[] = [
   {
     label: 'More',
     items: [
-      { href: '/ai-assistant', label: 'AI Assistant', icon: Icons.ai, soon: true },
+      { href: '/ai-assistant', label: 'AI Assistant', icon: Icons.ai },
       { href: '/settings', label: 'Settings', icon: Icons.settings },
     ],
   },
@@ -169,6 +169,36 @@ function isActive(pathname: string, href: string) {
   return pathname === href || (href !== '/' && pathname.startsWith(`${href}/`));
 }
 
+function hasActiveChild(pathname: string, item: NavItem) {
+  return Boolean(item.children?.some((child) => isActive(pathname, child.href)));
+}
+
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+    </svg>
+  );
+}
+
+const COLLAPSED_GROUPS_STORAGE_KEY = 'partner-portal-collapsed-nav-groups';
+
+function loadCollapsedGroups(): Record<string, boolean> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(COLLAPSED_GROUPS_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+  } catch {
+    return {};
+  }
+}
+
 function SidebarNav({
   groups,
   onNavigate,
@@ -178,52 +208,111 @@ function SidebarNav({
 }) {
   const pathname = usePathname();
 
+  // Sub-menus (items with children): open by default, but collapsed once the user closes them,
+  // unless the active route lives inside — then force it open so the current page stays visible.
+  const [collapsedItems, setCollapsedItems] = useState<Record<string, boolean>>({});
+  function toggleItem(href: string) {
+    setCollapsedItems((prev) => ({ ...prev, [href]: !prev[href] }));
+  }
+
+  // Groups: collapsed state persists across visits via localStorage, since these are more like
+  // section headers the user picks once and leaves alone.
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    setCollapsedGroups(loadCollapsedGroups());
+  }, []);
+  function toggleGroup(label: string) {
+    setCollapsedGroups((prev) => {
+      const next = { ...prev, [label]: !prev[label] };
+      try {
+        window.localStorage.setItem(COLLAPSED_GROUPS_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // ignore storage failures (private browsing, quota, etc.)
+      }
+      return next;
+    });
+  }
+
   return (
     <nav className="space-y-4">
-      {groups.map((group) => (
-        <div key={group.label}>
-          <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            {group.label}
-          </p>
-          <div className="space-y-1">
-            {group.items.map((item) => (
-              <div key={item.href}>
-                <Link
-                  href={item.href}
-                  onClick={onNavigate}
-                  className={`flex items-center gap-3 ${isActive(pathname, item.href) ? 'nav-link-active' : 'nav-link'}`}
-                >
-                  {item.icon}
-                  <span className="flex-1">{item.label}</span>
-                  {item.soon && (
-                    <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                      Soon
-                    </span>
-                  )}
-                </Link>
-                {item.children && (
-                  <div className="ml-[30px] space-y-0.5 border-l border-border/60 pl-3">
-                    {item.children.map((child) => (
-                      <Link
-                        key={child.href}
-                        href={child.href}
-                        onClick={onNavigate}
-                        className={`block rounded-lg px-2 py-1.5 text-sm ${
-                          isActive(pathname, child.href)
-                            ? 'font-medium text-primary'
-                            : 'text-muted hover:text-slate-700'
-                        }`}
-                      >
-                        {child.label}
-                      </Link>
-                    ))}
-                  </div>
-                )}
+      {groups.map((group) => {
+        const groupActive = group.items.some(
+          (item) => isActive(pathname, item.href) || hasActiveChild(pathname, item),
+        );
+        const groupOpen = !collapsedGroups[group.label] || groupActive;
+
+        return (
+          <div key={group.label}>
+            <button
+              type="button"
+              onClick={() => toggleGroup(group.label)}
+              className="mb-1 flex w-full items-center justify-between px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+            >
+              {group.label}
+              <Chevron open={groupOpen} />
+            </button>
+            {groupOpen && (
+              <div className="space-y-1">
+                {group.items.map((item) => {
+                  const itemActive = isActive(pathname, item.href) || hasActiveChild(pathname, item);
+                  const itemOpen = item.children
+                    ? !collapsedItems[item.href] || hasActiveChild(pathname, item)
+                    : false;
+
+                  return (
+                    <div key={item.href}>
+                      <div className="flex items-center">
+                        <Link
+                          href={item.href}
+                          onClick={onNavigate}
+                          className={`flex flex-1 items-center gap-3 ${itemActive ? 'nav-link-active' : 'nav-link'}`}
+                        >
+                          {item.icon}
+                          <span className="flex-1">{item.label}</span>
+                          {item.soon && (
+                            <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                              Soon
+                            </span>
+                          )}
+                        </Link>
+                        {item.children && (
+                          <button
+                            type="button"
+                            onClick={() => toggleItem(item.href)}
+                            aria-expanded={itemOpen}
+                            aria-label={`${itemOpen ? 'Collapse' : 'Expand'} ${item.label}`}
+                            className="rounded-lg p-2 text-muted hover:bg-slate-100"
+                          >
+                            <Chevron open={itemOpen} />
+                          </button>
+                        )}
+                      </div>
+                      {item.children && itemOpen && (
+                        <div className="ml-[30px] space-y-0.5 border-l border-border/60 pl-3">
+                          {item.children.map((child) => (
+                            <Link
+                              key={child.href}
+                              href={child.href}
+                              onClick={onNavigate}
+                              className={`block rounded-lg px-2 py-1.5 text-sm ${
+                                isActive(pathname, child.href)
+                                  ? 'font-medium text-primary'
+                                  : 'text-muted hover:text-slate-700'
+                              }`}
+                            >
+                              {child.label}
+                            </Link>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            ))}
+            )}
           </div>
-        </div>
-      ))}
+        );
+      })}
     </nav>
   );
 }

@@ -3,5 +3,5 @@ export function getAnthropicApiKey(): string | undefined {
 }
 
 export function getAnthropicModel(): string {
-  return process.env.ANTHROPIC_MODEL?.trim() || 'claude-sonnet-4-5';
+  return process.env.ANTHROPIC_MODEL?.trim() || 'claude-sonnet-5';
 }

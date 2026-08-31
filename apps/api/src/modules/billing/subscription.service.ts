@@ -26,8 +26,38 @@ export class SubscriptionService {
     return this.subscriptionModel.findOne({ partnerId: new Types.ObjectId(partnerId) });
   }
 
+  /** Joins each subscription with its partner's email/phone so the admin billing UI can show a
+   * human-readable list without a separate per-row lookup. */
   async list() {
-    return this.subscriptionModel.find().sort({ createdAt: -1 }).lean();
+    return this.subscriptionModel.aggregate([
+      { $sort: { createdAt: -1 } },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'partnerId',
+          foreignField: '_id',
+          as: 'partner',
+        },
+      },
+      { $unwind: { path: '$partner', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'plans',
+          localField: 'planId',
+          foreignField: '_id',
+          as: 'plan',
+        },
+      },
+      { $unwind: { path: '$plan', preserveNullAndEmptyArrays: true } },
+      {
+        $addFields: {
+          partnerEmail: '$partner.email',
+          partnerPhone: '$partner.phone',
+          planName: '$plan.name',
+        },
+      },
+      { $project: { partner: 0, plan: 0 } },
+    ]);
   }
 
   /** Subscriptions whose billing cycle ended more than `days` ago but are still in a status

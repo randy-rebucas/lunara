@@ -18,6 +18,13 @@ function normalizePortalSettings(raw?: Partial<PartnerPortalSettings> | null): P
   return { ...DEFAULT_PARTNER_PORTAL_SETTINGS, ...(raw ?? {}) };
 }
 
+/** Strips the raw AI API key before sending settings to the client — only whether one is set
+ * is exposed, never the key itself. */
+function sanitizeSettingsForClient(settings: PartnerPortalSettings) {
+  const { aiApiKey, ...rest } = settings;
+  return { ...rest, aiApiKeyConfigured: Boolean(aiApiKey?.trim()) };
+}
+
 @Injectable()
 export class PartnerSettingsService {
   constructor(
@@ -85,7 +92,7 @@ export class PartnerSettingsService {
   async getSettings(userId: string, role: UserRole) {
     const branch = await this.resolveBranch(userId, role);
     const canEdit = await this.resolveCanEdit(userId, role);
-    const settings = normalizePortalSettings(branch.toObject().portalSettings);
+    const settings = sanitizeSettingsForClient(normalizePortalSettings(branch.toObject().portalSettings));
     return {
       success: true,
       data: {
@@ -147,7 +154,7 @@ export class PartnerSettingsService {
       success: true,
       data: {
         branch: await this.formatBranch(branch),
-        settings: normalizePortalSettings(branch.toObject().portalSettings),
+        settings: sanitizeSettingsForClient(normalizePortalSettings(branch.toObject().portalSettings)),
         canEdit: true,
       },
     };

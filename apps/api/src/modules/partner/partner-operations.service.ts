@@ -2259,6 +2259,67 @@ export class PartnerOperationsService {
     return { success: true, data: this.formatInvoice(invoice) };
   }
 
+  /** Admin records a subscription payment received outside the normal invoice cycle (e.g. a
+   * suspended/past-due partner pays to reactivate before their next weekly invoice would bill
+   * them) — advances the billing period by one month and reactivates the subscription
+   * immediately, mirroring what markInvoicePaid does when a subscription-fee invoice is settled,
+   * but without requiring a pending invoice to exist first. */
+  async recordSubscriptionPayment(
+    adminUserId: string,
+    partnerId: string,
+    dto: { amountPhp: number; paymentReference?: string; note?: string },
+  ) {
+    const subscription = await this.subscriptionService.findByPartnerId(partnerId);
+    if (!subscription) throw new NotFoundException('Subscription not found for this partner');
+
+    const wasDunning = ['past_due', 'grace_period', 'suspended'].includes(subscription.status);
+
+    // advancePeriod loads/saves its own document instance, so re-fetch before transitionStatus
+    // rather than reusing the now-stale `subscription` handle above — saving that stale instance
+    // would otherwise report (though not actually persist, since currentPeriodEnd was never
+    // marked modified on it) an out-of-date currentPeriodEnd back to the caller.
+    await this.subscriptionService.advancePeriod(subscription._id as Types.ObjectId);
+    const refreshed = await this.subscriptionService.findByPartnerId(partnerId);
+    if (!refreshed) throw new NotFoundException('Subscription not found for this partner');
+    const { subscription: updated } = await this.subscriptionService.transitionStatus(refreshed, 'active');
+    if (dto.note) {
+      updated.adminNote = updated.adminNote ? `${updated.adminNote}\n${dto.note}` : dto.note;
+      await updated.save();
+    }
+
+    const subscriptionId = (updated._id as Types.ObjectId).toString();
+    await this.ledgerService.post(
+      `manual-subscription-payment:${subscriptionId}:${Date.now()}`,
+      'subscription_fee',
+      subscriptionId,
+      [
+        {
+          accountType: 'platform_cash',
+          direction: 'debit',
+          amount: dto.amountPhp,
+          description: `Cash received directly from partner ${partnerId} for subscription fee${dto.paymentReference ? ` (ref ${dto.paymentReference})` : ''} — recorded by admin ${adminUserId}`,
+        },
+        {
+          accountType: 'platform_revenue',
+          direction: 'credit',
+          amount: dto.amountPhp,
+          description: `Subscription fee revenue from partner ${partnerId} (manual payment, no invoice)`,
+        },
+      ],
+    );
+
+    if (wasDunning) {
+      await this.notificationDispatchService.dispatch({
+        userId: partnerId,
+        title: 'Subscription reactivated',
+        body: 'Your payment was recorded — your account is fully active again.',
+        data: { type: 'billing_reactivated', subscriptionId },
+      });
+    }
+
+    return { success: true, data: updated };
+  }
+
   /** Regenerates the invoice PDF on demand (no storage — cheap and deterministic from the
    * invoice + its claimed orders) for partner-web/admin-web download buttons. */
   async downloadInvoicePdf(userId: string, role: UserRole, invoiceId: string): Promise<{ buffer: Buffer; filename: string }> {

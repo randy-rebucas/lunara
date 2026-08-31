@@ -56,6 +56,9 @@ export interface PartnerPortalSettings {
   allowStaffToRequestDelivery: boolean;
   requireWeightVerificationOnReceive: boolean;
   inventoryEnabled: boolean;
+  /** True when this shop has its own AI Assistant API key configured — the key itself is never
+   * sent to the client, only whether one is set. */
+  aiApiKeyConfigured: boolean;
 }
 
 export interface PartnerShopBranchSummary {

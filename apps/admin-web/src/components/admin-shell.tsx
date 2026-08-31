@@ -103,6 +103,7 @@ const nav: NavItem[] = [
   { href: '/partners',             label: 'Partners',    icon: Icons.shops },
   { href: '/partners/branding',    label: 'Branding',    icon: Icons.branding },
   { href: '/partners/invoices', label: 'Invoices', icon: Icons.invoices },
+  { href: '/partners/subscriptions', label: 'Subscriptions', icon: Icons.plans },
   { href: '/partners/plans',    label: 'Plans',    icon: Icons.plans },
   { href: '/partners/promo-codes', label: 'Promo codes', icon: Icons.promoCodes },
 

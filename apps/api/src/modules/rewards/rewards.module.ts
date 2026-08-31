@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Customer, CustomerSchema } from '../customers/schemas/customer.schema';
 import { CustomerPromo, CustomerPromoSchema } from '../promotions/schemas/customer-promo.schema';
+import { UserProfile, UserProfileSchema } from '../users/schemas/user-profile.schema';
 import { PointsTransaction, PointsTransactionSchema } from './schemas/points-transaction.schema';
 import { RewardsService } from './rewards.service';
 import { RewardsController } from './rewards.controller';
@@ -12,6 +13,7 @@ import { RewardsController } from './rewards.controller';
       { name: Customer.name, schema: CustomerSchema },
       { name: CustomerPromo.name, schema: CustomerPromoSchema },
       { name: PointsTransaction.name, schema: PointsTransactionSchema },
+      { name: UserProfile.name, schema: UserProfileSchema },
     ]),
   ],
   controllers: [RewardsController],

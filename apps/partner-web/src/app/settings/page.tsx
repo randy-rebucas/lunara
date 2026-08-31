@@ -316,6 +316,87 @@ function PromoCodePanel({
   );
 }
 
+function AiApiKeyPanel({
+  canEdit,
+  configured,
+  saving,
+  onSave,
+  onClear,
+}: {
+  canEdit: boolean;
+  configured: boolean;
+  saving: boolean;
+  onSave: (key: string) => Promise<void>;
+  onClear: () => Promise<void>;
+}) {
+  const [key, setKey] = useState('');
+  const [editing, setEditing] = useState(false);
+
+  if (!canEdit) return null;
+
+  return (
+    <div className="border-t border-border/60 px-6 py-4 sm:px-8">
+      <p className="text-sm font-medium text-slate-900">Your own AI API key</p>
+      <p className="mt-0.5 text-sm text-muted">
+        Optional. When set, the AI Assistant uses your own Anthropic API key and billing instead of
+        Lunara&apos;s shared key.
+      </p>
+
+      {configured && !editing ? (
+        <div className="mt-2 flex items-center gap-2">
+          <span className="badge-accent font-mono">•••• configured</span>
+          <button type="button" className="btn-outline btn-sm" onClick={() => setEditing(true)}>
+            Replace
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            className="btn-outline btn-sm disabled:opacity-50"
+            onClick={() => void onClear()}
+          >
+            Remove
+          </button>
+        </div>
+      ) : (
+        <div className="mt-2 flex gap-2">
+          <input
+            type="password"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            placeholder="sk-ant-…"
+            autoComplete="off"
+            className="input-field w-full max-w-[320px] font-mono"
+          />
+          <button
+            type="button"
+            disabled={saving || !key.trim()}
+            className="btn-outline btn-sm disabled:opacity-50"
+            onClick={async () => {
+              await onSave(key.trim());
+              setKey('');
+              setEditing(false);
+            }}
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+          {configured && (
+            <button
+              type="button"
+              className="btn-outline btn-sm"
+              onClick={() => {
+                setEditing(false);
+                setKey('');
+              }}
+            >
+              Cancel
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Display order Mon–Sun; each entry's `dayIndex` maps back to `OperatingHours` (JS `Date.getDay()`). */
 const WEEKDAY_ROWS: { dayIndex: number; label: string }[] = [
   { dayIndex: 1, label: 'Monday' },
@@ -357,7 +438,10 @@ function PartnerSettingsContent() {
     reload: reloadSubscription,
   } = usePartnerQuery(loadSubscription, [ready]);
 
-  async function saveSettings(patch: Partial<PartnerPortalSettings>, successMessage = 'Settings saved') {
+  async function saveSettings(
+    patch: Partial<PartnerPortalSettings> & { aiApiKey?: string },
+    successMessage = 'Settings saved',
+  ) {
     if (!data?.canEdit) return;
     setSaving(true);
     try {
@@ -906,6 +990,19 @@ function PartnerSettingsContent() {
                     checked={settings.inventoryEnabled}
                     disabled={!canEdit || saving}
                     onChange={(v) => updateSetting('inventoryEnabled', v)}
+                  />
+                </SectionPanel>
+
+                <SectionPanel
+                  title="AI Assistant"
+                  description="Bring your own Anthropic API key for the AI Assistant, billed to your own account."
+                >
+                  <AiApiKeyPanel
+                    canEdit={canEdit}
+                    configured={settings.aiApiKeyConfigured}
+                    saving={saving}
+                    onSave={(key) => saveSettings({ aiApiKey: key }, 'AI API key saved')}
+                    onClear={() => saveSettings({ aiApiKey: '' }, 'AI API key removed')}
                   />
                 </SectionPanel>
 

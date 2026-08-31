@@ -22,7 +22,9 @@ const GUEST_MESSAGE_THROTTLE = { default: { limit: 8, ttl: 60_000 } };
 const ESCALATE_THROTTLE = { default: { limit: 5, ttl: 60_000 } };
 
 function audienceFor(role: UserRole): PersonaAudience {
-  return role === UserRole.CUSTOMER ? 'customer' : 'staff';
+  if (role === UserRole.CUSTOMER) return 'customer';
+  if (role === UserRole.PARTNER) return 'partner';
+  return 'staff';
 }
 
 @Controller('ai-agents')
@@ -68,21 +70,21 @@ export class AiAgentsController {
 
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.STAFF, UserRole.ADMIN, UserRole.CUSTOMER)
+  @Roles(UserRole.STAFF, UserRole.ADMIN, UserRole.CUSTOMER, UserRole.PARTNER)
   listAgents(@Req() req: { user: { role: UserRole } }) {
     return this.aiAgentsService.listAgents(audienceFor(req.user.role));
   }
 
   @Get(':agentId/prompt-library')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.STAFF, UserRole.ADMIN, UserRole.CUSTOMER)
+  @Roles(UserRole.STAFF, UserRole.ADMIN, UserRole.CUSTOMER, UserRole.PARTNER)
   getPromptLibrary(@Req() req: { user: { role: UserRole } }, @Param('agentId') agentId: string) {
     return this.aiAgentsService.getPromptLibrary(agentId, audienceFor(req.user.role));
   }
 
   @Get(':agentId/conversations')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.STAFF, UserRole.ADMIN, UserRole.CUSTOMER)
+  @Roles(UserRole.STAFF, UserRole.ADMIN, UserRole.CUSTOMER, UserRole.PARTNER)
   listConversations(
     @Req() req: { user: { sub: string; role: UserRole } },
     @Param('agentId') agentId: string,
@@ -92,7 +94,7 @@ export class AiAgentsController {
 
   @Get('conversations/:conversationId/messages')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.STAFF, UserRole.ADMIN, UserRole.CUSTOMER)
+  @Roles(UserRole.STAFF, UserRole.ADMIN, UserRole.CUSTOMER, UserRole.PARTNER)
   getMessages(
     @Req() req: { user: { sub: string; role: UserRole } },
     @Param('conversationId') conversationId: string,
@@ -102,7 +104,7 @@ export class AiAgentsController {
 
   @Post(':agentId/messages')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.STAFF, UserRole.ADMIN, UserRole.CUSTOMER)
+  @Roles(UserRole.STAFF, UserRole.ADMIN, UserRole.CUSTOMER, UserRole.PARTNER)
   @Throttle(SEND_MESSAGE_THROTTLE)
   sendMessage(
     @Req() req: { user: { sub: string; role: UserRole } },

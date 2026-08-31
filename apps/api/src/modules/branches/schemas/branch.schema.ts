@@ -38,6 +38,11 @@ export class PartnerPortalSettings {
   /** Whether this shop tracks supply inventory; shops that don't sell products can disable this */
   @Prop({ default: true })
   inventoryEnabled!: boolean;
+
+  /** Partner-supplied Anthropic API key used for the AI Assistant instead of the shared platform
+   * key. Never returned to the client as plaintext — see PartnerSettingsService.sanitizeSettingsForClient. */
+  @Prop()
+  aiApiKey?: string;
 }
 
 export const DEFAULT_PARTNER_PORTAL_SETTINGS: PartnerPortalSettings = {

@@ -102,7 +102,11 @@ export class OrdersService {
   private async awardPointsForCompletedOrder(order: OrderDocument) {
     const customerId = order.customerId.toString();
 
-    await this.rewardsService.creditForOrderCompletion(order._id.toString(), customerId);
+    await this.rewardsService.creditForOrderCompletion(
+      order._id.toString(),
+      customerId,
+      order.branchId?.toString(),
+    );
 
     const priorCompletedOrders = await this.orderModel.countDocuments({
       customerId: order.customerId,

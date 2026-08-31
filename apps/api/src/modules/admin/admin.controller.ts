@@ -64,6 +64,7 @@ import { CloudinaryStorageService } from '../../common/storage/cloudinary-storag
 import { PartnerOperationsService } from '../partner/partner-operations.service';
 import { CreateInvoiceDto } from '../partner/dto/create-invoice.dto';
 import { MarkInvoicePaidDto } from '../partner/dto/mark-invoice-paid.dto';
+import { RecordSubscriptionPaymentDto } from '../partner/dto/record-subscription-payment.dto';
 import { PushNotificationService } from '../push/push-notification.service';
 import { ServiceAreasService } from '../service-areas/service-areas.service';
 import { CreateServiceAreaDto, UpdateServiceAreaDto } from '../service-areas/dto/service-area.dto';
@@ -336,6 +337,18 @@ export class AdminController {
   @Get('partners/:partnerId/uninvoiced-orders')
   getUninvoicedOrders(@Param('partnerId') partnerId: string) {
     return this.partnerOperationsService.getUninvoicedOrders(partnerId);
+  }
+
+  /** Records a subscription payment received outside the invoice cycle (bank transfer/GCash
+   * settled directly with the partner) — renews the billing period and reactivates the
+   * subscription immediately, without needing a pending invoice first. */
+  @Post('partners/:partnerId/subscription/record-payment')
+  recordSubscriptionPayment(
+    @Param('partnerId') partnerId: string,
+    @Req() req: { user: { sub: string } },
+    @Body() dto: RecordSubscriptionPaymentDto,
+  ) {
+    return this.partnerOperationsService.recordSubscriptionPayment(req.user.sub, partnerId, dto);
   }
 
   @Post('partners/:partnerId/invoices')

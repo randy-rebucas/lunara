@@ -23,6 +23,7 @@ import { AiToolRegistry } from './tools/registry';
 import { EmailService } from '../../common/email/email.service';
 import { SupportService } from '../support/support.service';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import { Branch, BranchDocument } from '../branches/schemas/branch.schema';
 
 const HISTORY_WINDOW = 20;
 const MAX_TOKENS = 1024;
@@ -30,17 +31,53 @@ const MAX_TOOL_ROUNDS = 4;
 const NO_ANSWER_FALLBACK =
   "I wasn't able to finish that lookup — try rephrasing, or ask a simpler question.";
 
-let anthropicClient: Anthropic | null = null;
+// Memoized by API key so the shared platform key still reuses one client, while each partner's
+// own key (see Branch.portalSettings.aiApiKey) gets its own.
+const anthropicClients = new Map<string, Anthropic>();
 
-function getAnthropicClient(): Anthropic {
-  const apiKey = getAnthropicApiKey();
-  if (!apiKey) {
-    throw new BadRequestException('AI agents are not configured — ANTHROPIC_API_KEY is missing');
+function getAnthropicClientFor(apiKey: string): Anthropic {
+  let client = anthropicClients.get(apiKey);
+  if (!client) {
+    client = new Anthropic({ apiKey });
+    anthropicClients.set(apiKey, client);
   }
-  if (!anthropicClient) {
-    anthropicClient = new Anthropic({ apiKey });
+  return client;
+}
+
+/** Turns an Anthropic SDK error (or anything else thrown from the chat loop) into a message
+ * that's safe and useful to show a partner/customer — never the raw SDK/HTTP error text, which
+ * can be a JSON blob or expose internal detail. */
+function describeAiError(err: unknown): string {
+  if (err instanceof Anthropic.APIError) {
+    // A 400 whose body says the *model* wasn't found/supported is a server-side config problem
+    // (e.g. a stale/misspelled ANTHROPIC_MODEL), not something rephrasing the message can fix —
+    // surface that distinctly so it doesn't get mistaken for a bad user request.
+    const errorType = (err.error as { error?: { type?: string; message?: string } } | undefined)?.error;
+    if (err.status === 400 && (errorType?.type === 'not_found_error' || /\bmodel\b/i.test(errorType?.message ?? ''))) {
+      return "The AI assistant is misconfigured (unknown model) — please let support know.";
+    }
+    switch (err.status) {
+      case 401:
+        return "That AI API key isn't valid — double-check it under Settings and save it again.";
+      case 403:
+        return "That AI API key doesn't have permission for this request — check its plan/permissions.";
+      case 429:
+        return "The AI assistant is getting a lot of requests right now — please wait a moment and try again.";
+      case 400:
+        return "That request couldn't be processed — try rephrasing your message.";
+      case 500:
+      case 502:
+      case 503:
+      case 529:
+        return 'The AI service is temporarily unavailable — please try again in a moment.';
+      default:
+        return "The AI assistant couldn't complete that request — please try again.";
+    }
   }
-  return anthropicClient;
+  if (err instanceof Anthropic.APIConnectionError) {
+    return "Couldn't reach the AI service — please check your connection and try again.";
+  }
+  return "The AI assistant couldn't complete that request — please try again.";
 }
 
 @Injectable()
@@ -50,10 +87,26 @@ export class AiAgentsService {
     @InjectModel(AiMessage.name) private messageModel: Model<AiMessageDocument>,
     @InjectModel(AiGuestUsage.name) private guestUsageModel: Model<AiGuestUsageDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Branch.name) private branchModel: Model<BranchDocument>,
     private toolRegistry: AiToolRegistry,
     private emailService: EmailService,
     private supportService: SupportService,
   ) {}
+
+  /** Partners can configure their own Anthropic API key under Settings — use it if set, falling
+   * back to the shared platform key. Only real UserRole.PARTNER accounts get this (not staff
+   * logged into a partner's portal), matching who can actually see/edit that setting. */
+  private async resolveApiKey(userId: string, role: UserRole): Promise<string | undefined> {
+    if (role === UserRole.PARTNER) {
+      const branch = await this.branchModel
+        .findOne({ partnerUserId: new Types.ObjectId(userId) })
+        .select('portalSettings.aiApiKey')
+        .lean();
+      const ownKey = branch?.portalSettings?.aiApiKey?.trim();
+      if (ownKey) return ownKey;
+    }
+    return getAnthropicApiKey();
+  }
 
   listAgents(audience: PersonaAudience) {
     return { success: true, data: listPersonaSummaries(audience) };
@@ -129,7 +182,11 @@ export class AiAgentsService {
     const model = getAnthropicModel();
     let replyText: string;
     try {
-      const client = getAnthropicClient();
+      const apiKey = await this.resolveApiKey(userId, role);
+      if (!apiKey) {
+        throw new BadRequestException('AI agents are not configured — ANTHROPIC_API_KEY is missing');
+      }
+      const client = getAnthropicClientFor(apiKey);
       const tools = this.toolRegistry.getToolsForPersona(persona.id);
       const ctx = { userId, role, audience, personaId: persona.id };
 
@@ -189,9 +246,8 @@ export class AiAgentsService {
       if (!replyText) replyText = NO_ANSWER_FALLBACK;
     } catch (err) {
       await this.messageModel.deleteOne({ _id: userMessage._id });
-      throw new BadRequestException(
-        err instanceof Error ? `AI request failed: ${err.message}` : 'AI request failed',
-      );
+      if (err instanceof BadRequestException) throw err;
+      throw new BadRequestException(describeAiError(err));
     }
 
     const assistantMessage = await this.messageModel.create({
@@ -229,7 +285,11 @@ export class AiAgentsService {
     const model = getAnthropicModel();
     let replyText: string;
     try {
-      const client = getAnthropicClient();
+      const apiKey = getAnthropicApiKey();
+      if (!apiKey) {
+        throw new BadRequestException('AI agents are not configured — ANTHROPIC_API_KEY is missing');
+      }
+      const client = getAnthropicClientFor(apiKey);
       const tools = this.toolRegistry.getGuestToolsForPersona(persona.id);
       const ctx = { userId: '', audience: 'guest' as const, personaId: persona.id };
 
@@ -281,9 +341,8 @@ export class AiAgentsService {
 
       if (!replyText) replyText = NO_ANSWER_FALLBACK;
     } catch (err) {
-      throw new BadRequestException(
-        err instanceof Error ? `AI request failed: ${err.message}` : 'AI request failed',
-      );
+      if (err instanceof BadRequestException) throw err;
+      throw new BadRequestException(describeAiError(err));
     }
 
     const today = new Date().toISOString().slice(0, 10);

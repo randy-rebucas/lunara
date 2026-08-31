@@ -27,6 +27,7 @@ import { RewardsService } from '../../rewards/rewards.service';
 import { ReviewsService } from '../../reviews/reviews.service';
 import { SupportService } from '../../support/support.service';
 import { BookingService } from '../../booking/booking.service';
+import { PartnerOperationsService } from '../../partner/partner-operations.service';
 import { ApiSurfaceService } from './api-surface.service';
 import { buildOrderTools } from './orders.tools';
 import { buildRiderTools } from './riders.tools';
@@ -57,6 +58,7 @@ import { buildSupportTools } from './support.tools';
 import { buildBookingTools } from './booking.tools';
 import { buildApiSurfaceTools } from './api-surface.tools';
 import { buildGuestTools } from './guest.tools';
+import { buildPartnerAssistantTools } from './partner.tools';
 import { ToolCtx, ToolSpec } from './types';
 
 @Injectable()
@@ -93,6 +95,7 @@ export class AiToolRegistry {
     support: SupportService,
     booking: BookingService,
     apiSurface: ApiSurfaceService,
+    partnerOperations: PartnerOperationsService,
   ) {
     this.specs = [
       ...buildOrderTools(orders),
@@ -124,6 +127,7 @@ export class AiToolRegistry {
       ...buildBookingTools(booking),
       ...buildApiSurfaceTools(apiSurface),
       ...buildGuestTools(branches),
+      ...buildPartnerAssistantTools(partnerOperations, branches),
     ];
   }
 

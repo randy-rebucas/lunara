@@ -5,6 +5,7 @@ import { AiConversation, AiConversationSchema } from './schemas/ai-conversation.
 import { AiMessage, AiMessageSchema } from './schemas/ai-message.schema';
 import { AiGuestUsage, AiGuestUsageSchema } from './schemas/ai-guest-usage.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
+import { Branch, BranchSchema } from '../branches/schemas/branch.schema';
 import { AiAgentsController } from './ai-agents.controller';
 import { AiAgentsService } from './ai-agents.service';
 import { AiToolRegistry } from './tools/registry';
@@ -33,6 +34,7 @@ import { ReviewsModule } from '../reviews/reviews.module';
 import { SupportModule } from '../support/support.module';
 import { BookingModule } from '../booking/booking.module';
 import { BranchesModule } from '../branches/branches.module';
+import { PartnerModule } from '../partner/partner.module';
 
 @Module({
   imports: [
@@ -41,6 +43,7 @@ import { BranchesModule } from '../branches/branches.module';
       { name: AiMessage.name, schema: AiMessageSchema },
       { name: AiGuestUsage.name, schema: AiGuestUsageSchema },
       { name: User.name, schema: UserSchema },
+      { name: Branch.name, schema: BranchSchema },
     ]),
     OrdersModule,
     RidersModule,
@@ -66,6 +69,7 @@ import { BranchesModule } from '../branches/branches.module';
     SupportModule,
     BookingModule,
     BranchesModule,
+    PartnerModule,
     DiscoveryModule,
   ],
   controllers: [AiAgentsController],

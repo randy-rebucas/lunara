@@ -82,6 +82,12 @@ export class UpdatePartnerSettingsDto {
   @IsBoolean()
   requireWeightVerificationOnReceive?: boolean;
 
+  /** Partner's own Anthropic API key for the AI Assistant. Pass an empty string to clear it and
+   * fall back to the shared platform key. */
+  @IsOptional()
+  @IsString()
+  aiApiKey?: string;
+
   /** Weekly schedule, length 7, index = JS `Date.getDay()` (0 = Sunday … 6 = Saturday). */
   @IsOptional()
   @IsArray()

@@ -217,6 +217,76 @@ export async function updateOwnBranch(branchId: string, input: UpdateOwnBranchIn
   });
 }
 
+export interface BranchLoyaltyStats {
+  totalPointsEarned: number;
+  ordersCounted: number;
+  uniqueCustomers: number;
+  topCustomers: { userId: string; displayName: string; avatarUrl?: string; points: number }[];
+  recentActivity: { createdAt: string; amount: number; description: string; customerName: string }[];
+}
+
+export async function getBranchLoyaltyStats(branchId: string): Promise<BranchLoyaltyStats> {
+  return partnerFetch<BranchLoyaltyStats>(`/partner/branches/${branchId}/loyalty-stats`);
+}
+
+export interface PartnerCampaign {
+  _id: string;
+  title: string;
+  body: string;
+  recipientCount: number;
+  sentCount: number;
+  createdAt: string;
+}
+
+export async function listCampaigns(): Promise<PartnerCampaign[]> {
+  return partnerFetch<PartnerCampaign[]>('/partner/campaigns');
+}
+
+export async function sendCampaign(input: { title: string; body: string }): Promise<{ recipientCount: number; sentCount: number }> {
+  return partnerFetch('/partner/campaigns', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export interface PartnerExpense {
+  _id: string;
+  category: string;
+  amount: number;
+  date: string;
+  note?: string;
+  createdAt: string;
+}
+
+export interface ExpenseInput {
+  category: string;
+  amount: number;
+  date: string;
+  note?: string;
+}
+
+export async function listExpenses(): Promise<PartnerExpense[]> {
+  return partnerFetch<PartnerExpense[]>('/partner/expenses');
+}
+
+export async function createExpense(input: ExpenseInput): Promise<PartnerExpense> {
+  return partnerFetch<PartnerExpense>('/partner/expenses', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateExpense(expenseId: string, input: Partial<ExpenseInput>): Promise<PartnerExpense> {
+  return partnerFetch<PartnerExpense>(`/partner/expenses/${expenseId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteExpense(expenseId: string): Promise<void> {
+  await partnerFetch(`/partner/expenses/${expenseId}`, { method: 'DELETE' });
+}
+
 /** Tokenizes a card directly against PayMongo's API from the browser using the publishable
  * key — raw card details never touch our own server, only the resulting Payment Method id
  * does (sent on to attachPaymentMethod below). */

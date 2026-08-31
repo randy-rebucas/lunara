@@ -32,6 +32,12 @@ import { LaundryService, LaundryServiceDocument } from '../catalog/schemas/laund
 import { LaundryAddon, LaundryAddonDocument } from '../catalog/schemas/laundry-addon.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { BranchesService } from '../branches/branches.service';
+import { RewardsService } from '../rewards/rewards.service';
+import { PartnerCampaignsService } from './partner-campaigns.service';
+import { SendCampaignDto } from './dto/send-campaign.dto';
+import { PartnerExpensesService } from './partner-expenses.service';
+import { CreateExpenseDto } from './dto/create-expense.dto';
+import { UpdateExpenseDto } from './dto/update-expense.dto';
 import { UpdateBranchPricingDto, UpdateBranchPricingModeDto } from '../branches/dto/update-branch-pricing.dto';
 import { UpdateBranchAddonPricingDto } from '../branches/dto/update-branch-addon-pricing.dto';
 import { CreateBranchCustomServiceDto } from '../branches/dto/create-branch-custom-service.dto';
@@ -109,6 +115,9 @@ export class PartnerController {
     private readonly customerModel: Model<CustomerDocument>,
     private readonly cloudinaryStorageService: CloudinaryStorageService,
     private readonly branchesService: BranchesService,
+    private readonly rewardsService: RewardsService,
+    private readonly campaignsService: PartnerCampaignsService,
+    private readonly expensesService: PartnerExpensesService,
     private readonly promotionsService: PromotionsService,
     private readonly shelfService: ShelfService,
   ) {}
@@ -175,6 +184,13 @@ export class PartnerController {
     @Body() dto: UpdateOwnBranchDto,
   ) {
     return this.branchesService.updateBranchForPartner(id, req.user.sub, dto);
+  }
+
+  @Get('branches/:id/loyalty-stats')
+  @Roles(UserRole.PARTNER)
+  async getOwnBranchLoyaltyStats(@Req() req: { user: { sub: string } }, @Param('id') id: string) {
+    await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
+    return this.rewardsService.getLoyaltyStatsForBranch(id);
   }
 
   @Get('branches/:id/pricing')
@@ -900,6 +916,46 @@ export class PartnerController {
       .sort({ sortOrder: 1 })
       .lean();
     return { success: true, data: addons };
+  }
+
+  @Get('campaigns')
+  @Roles(UserRole.PARTNER)
+  listOwnCampaigns(@Req() req: { user: { sub: string } }) {
+    return this.campaignsService.listCampaigns(req.user.sub);
+  }
+
+  @Post('campaigns')
+  @Roles(UserRole.PARTNER)
+  sendOwnCampaign(@Req() req: { user: { sub: string } }, @Body() dto: SendCampaignDto) {
+    return this.campaignsService.sendCampaign(req.user.sub, dto);
+  }
+
+  @Get('expenses')
+  @Roles(UserRole.PARTNER)
+  listOwnExpenses(@Req() req: { user: { sub: string } }) {
+    return this.expensesService.listExpenses(req.user.sub);
+  }
+
+  @Post('expenses')
+  @Roles(UserRole.PARTNER)
+  createOwnExpense(@Req() req: { user: { sub: string } }, @Body() dto: CreateExpenseDto) {
+    return this.expensesService.createExpense(req.user.sub, dto);
+  }
+
+  @Patch('expenses/:id')
+  @Roles(UserRole.PARTNER)
+  updateOwnExpense(
+    @Req() req: { user: { sub: string } },
+    @Param('id') id: string,
+    @Body() dto: UpdateExpenseDto,
+  ) {
+    return this.expensesService.updateExpense(req.user.sub, id, dto);
+  }
+
+  @Delete('expenses/:id')
+  @Roles(UserRole.PARTNER)
+  deleteOwnExpense(@Req() req: { user: { sub: string } }, @Param('id') id: string) {
+    return this.expensesService.deleteExpense(req.user.sub, id);
   }
 
   @Get('customers')

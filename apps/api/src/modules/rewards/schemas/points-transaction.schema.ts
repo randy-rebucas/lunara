@@ -23,6 +23,11 @@ export class PointsTransaction {
   @Prop({ required: true, enum: ['order', 'referral', 'redemption'] })
   sourceType!: 'order' | 'referral' | 'redemption';
 
+  /** The shop the earning order was placed at (order-sourced credits only) — lets a partner see
+   * how much loyalty activity the platform-wide program is generating at their own shop. */
+  @Prop({ type: Types.ObjectId, index: true })
+  branchId?: Types.ObjectId;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

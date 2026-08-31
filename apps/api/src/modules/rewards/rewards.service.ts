@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
 import { CustomerPromo, CustomerPromoDocument } from '../promotions/schemas/customer-promo.schema';
+import { UserProfile, UserProfileDocument } from '../users/schemas/user-profile.schema';
 import { PointsTransaction, PointsTransactionDocument } from './schemas/points-transaction.schema';
 import {
   POINTS_PER_COMPLETED_ORDER,
@@ -21,6 +22,8 @@ export class RewardsService {
     @InjectModel(CustomerPromo.name) private customerPromoModel: Model<CustomerPromoDocument>,
     @InjectModel(PointsTransaction.name)
     private pointsTransactionModel: Model<PointsTransactionDocument>,
+    @InjectModel(UserProfile.name)
+    private userProfileModel: Model<UserProfileDocument>,
   ) {}
 
   private isDuplicateKeyError(err: unknown): boolean {
@@ -47,6 +50,7 @@ export class RewardsService {
     reference: string,
     description: string,
     sourceType: 'order' | 'referral' | 'redemption',
+    branchId?: string,
   ) {
     const userObjectId = new Types.ObjectId(userId);
 
@@ -58,6 +62,7 @@ export class RewardsService {
         reference,
         description,
         sourceType,
+        branchId: branchId ? new Types.ObjectId(branchId) : undefined,
       });
     } catch (err) {
       if (this.isDuplicateKeyError(err)) return;
@@ -70,13 +75,14 @@ export class RewardsService {
     );
   }
 
-  async creditForOrderCompletion(orderId: string, customerId: string) {
+  async creditForOrderCompletion(orderId: string, customerId: string, branchId?: string) {
     await this.creditPoints(
       customerId,
       POINTS_PER_COMPLETED_ORDER,
       `order-complete-${orderId}`,
       `Earned from completed order`,
       'order',
+      branchId,
     );
   }
 
@@ -123,6 +129,84 @@ export class RewardsService {
       data: {
         referredCount,
         pointsEarned: pointsEarned[0]?.total ?? 0,
+      },
+    };
+  }
+
+  /** Read-only insights for a partner's own shop into the platform-wide loyalty program — how many
+   * points customers have earned from completed orders at this specific branch, and who's earning
+   * them. Ownership of `branchId` is validated by the caller (PartnerController), not here. */
+  async getLoyaltyStatsForBranch(branchId: string) {
+    const branchObjectId = new Types.ObjectId(branchId);
+    const match = { branchId: branchObjectId, sourceType: 'order' as const, type: 'credit' as const };
+
+    const [summary] = await this.pointsTransactionModel.aggregate<{
+      totalPointsEarned: number;
+      ordersCounted: number;
+      uniqueCustomers: number;
+    }>([
+      { $match: match },
+      {
+        $group: {
+          _id: null,
+          totalPointsEarned: { $sum: '$amount' },
+          ordersCounted: { $sum: 1 },
+          uniqueCustomers: { $addToSet: '$userId' },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          totalPointsEarned: 1,
+          ordersCounted: 1,
+          uniqueCustomers: { $size: '$uniqueCustomers' },
+        },
+      },
+    ]);
+
+    const topCustomerTotals = await this.pointsTransactionModel.aggregate<{
+      _id: Types.ObjectId;
+      points: number;
+    }>([
+      { $match: match },
+      { $group: { _id: '$userId', points: { $sum: '$amount' } } },
+      { $sort: { points: -1 } },
+      { $limit: 10 },
+    ]);
+
+    const recent = await this.pointsTransactionModel
+      .find(match)
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .lean();
+
+    const profileUserIds = [
+      ...new Set([...topCustomerTotals.map((t) => t._id.toString()), ...recent.map((r) => r.userId.toString())]),
+    ];
+    const profiles = await this.userProfileModel
+      .find({ userId: { $in: profileUserIds.map((id) => new Types.ObjectId(id)) } })
+      .select('userId displayName avatarUrl')
+      .lean();
+    const profileByUserId = new Map(profiles.map((p) => [p.userId.toString(), p]));
+
+    return {
+      success: true,
+      data: {
+        totalPointsEarned: summary?.totalPointsEarned ?? 0,
+        ordersCounted: summary?.ordersCounted ?? 0,
+        uniqueCustomers: summary?.uniqueCustomers ?? 0,
+        topCustomers: topCustomerTotals.map((t) => ({
+          userId: t._id.toString(),
+          displayName: profileByUserId.get(t._id.toString())?.displayName ?? 'Customer',
+          avatarUrl: profileByUserId.get(t._id.toString())?.avatarUrl,
+          points: t.points,
+        })),
+        recentActivity: recent.map((r) => ({
+          createdAt: r.createdAt,
+          amount: r.amount,
+          description: r.description,
+          customerName: profileByUserId.get(r.userId.toString())?.displayName ?? 'Customer',
+        })),
       },
     };
   }

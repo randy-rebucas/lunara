@@ -23,6 +23,7 @@ import { PartnerInvoicePdfService } from './partner-invoice-pdf.service';
 import { Notification, NotificationSchema } from '../reviews/schemas/notification.schema';
 import { Branch, BranchSchema } from '../branches/schemas/branch.schema';
 import { BranchesModule } from '../branches/branches.module';
+import { RewardsModule } from '../rewards/rewards.module';
 import { PartnerSettingsService } from './partner-settings.service';
 import { PartnerProfileService } from './partner-profile.service';
 import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
@@ -31,6 +32,10 @@ import { LaundryTagsModule } from '../laundry-tags/laundry-tags.module';
 import { PromotionsModule } from '../promotions/promotions.module';
 import { BillingModule } from '../billing/billing.module';
 import { PushModule } from '../push/push.module';
+import { PartnerCampaign, PartnerCampaignSchema } from './schemas/partner-campaign.schema';
+import { PartnerCampaignsService } from './partner-campaigns.service';
+import { PartnerExpense, PartnerExpenseSchema } from './schemas/partner-expense.schema';
+import { PartnerExpensesService } from './partner-expenses.service';
 
 @Module({
   imports: [
@@ -49,11 +54,14 @@ import { PushModule } from '../push/push.module';
       { name: LaundryAddon.name, schema: LaundryAddonSchema },
       { name: UserProfile.name, schema: UserProfileSchema },
       { name: Rider.name, schema: RiderSchema },
+      { name: PartnerCampaign.name, schema: PartnerCampaignSchema },
+      { name: PartnerExpense.name, schema: PartnerExpenseSchema },
     ]),
     RealtimeModule,
     RidersModule,
     LedgerModule,
     BranchesModule,
+    RewardsModule,
     LaundryTagsModule,
     PromotionsModule,
     BillingModule,
@@ -69,6 +77,8 @@ import { PushModule } from '../push/push.module';
     PartnerProfileService,
     ShelfService,
     PartnerInvoicePdfService,
+    PartnerCampaignsService,
+    PartnerExpensesService,
   ],
   exports: [ProcessingService, PartnerOperationsService, ShopReceivingService],
 })
