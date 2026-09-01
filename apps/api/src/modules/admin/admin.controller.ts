@@ -58,7 +58,7 @@ import { RecordChargebackDto } from './dto/record-chargeback.dto';
 import { UpdateLaundryAddonDto } from './dto/update-laundry-addon.dto';
 import { UpdateLaundryServiceDto } from './dto/update-laundry-service.dto';
 import { CatalogService } from '../catalog/catalog.service';
-import { CloudinaryStorageService } from '../../common/storage/cloudinary-storage.service';
+import { LocalStorageService } from '../../common/storage/local-storage.service';
 import { PartnerOperationsService } from '../partner/partner-operations.service';
 import { CreateInvoiceDto } from '../partner/dto/create-invoice.dto';
 import { MarkInvoicePaidDto } from '../partner/dto/mark-invoice-paid.dto';
@@ -86,7 +86,7 @@ export class AdminController {
     private readonly ridersService: RidersService,
     private readonly riderWalletService: RiderWalletService,
     private readonly partnerOperationsService: PartnerOperationsService,
-    private readonly cloudinaryStorageService: CloudinaryStorageService,
+    private readonly storageService: LocalStorageService,
     private readonly pushService: PushNotificationService,
     private readonly serviceAreasService: ServiceAreasService,
     private readonly ordersService: OrdersService,
@@ -731,7 +731,7 @@ export class AdminController {
   ) {
     if (!file) throw new BadRequestException('No file uploaded');
     const previousImageUrl = (await this.catalogService.getAddonById(id))?.imageUrl;
-    const result = await this.cloudinaryStorageService.uploadBuffer(
+    const result = await this.storageService.uploadBuffer(
       file.buffer,
       'lunara/catalog-addons',
       `addon-${id}`,
@@ -740,7 +740,7 @@ export class AdminController {
     );
     const data = await this.catalogService.updateAddon(id, { imageUrl: result.secure_url });
     if (previousImageUrl && previousImageUrl !== result.secure_url) {
-      await this.cloudinaryStorageService.deleteFile('lunara/catalog-addons', previousImageUrl);
+      await this.storageService.deleteFile('lunara/catalog-addons', previousImageUrl);
     }
     return { success: true, data };
   }

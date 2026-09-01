@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { CloudinaryStorageService } from '../../common/storage/cloudinary-storage.service';
+import { LocalStorageService } from '../../common/storage/local-storage.service';
 import { riderApplicationDocumentPublicPath } from '../../common/uploads/upload-paths';
 import { CreateRiderApplicationDto } from './dto/create-rider-application.dto';
 import {
@@ -22,7 +22,7 @@ export class RiderApplicationsService {
   constructor(
     @InjectModel(RiderApplication.name)
     private readonly riderApplicationModel: Model<RiderApplicationDocument>,
-    private readonly cloudinaryStorageService: CloudinaryStorageService,
+    private readonly storageService: LocalStorageService,
   ) {}
 
   async create(dto: CreateRiderApplicationDto, files: Record<string, Express.Multer.File[]>) {
@@ -54,7 +54,7 @@ export class RiderApplicationsService {
     for (const type of RIDER_APPLICATION_DOCUMENT_TYPES) {
       const file = files[type][0];
       const publicId = `${application._id.toString()}-${type}-${Date.now()}`;
-      const result = await this.cloudinaryStorageService.uploadPrivateBuffer(
+      const result = await this.storageService.uploadPrivateBuffer(
         file.buffer,
         UPLOAD_FOLDER,
         publicId,

@@ -19,7 +19,7 @@ import { UserRole } from '@lunara/types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import { CloudinaryStorageService } from '../../common/storage/cloudinary-storage.service';
+import { LocalStorageService } from '../../common/storage/local-storage.service';
 import { MessagingService } from './messaging.service';
 import { SendMessageDto } from './dto/send-message.dto';
 
@@ -49,7 +49,7 @@ const attachmentUploadOptions = {
 export class MessagingController {
   constructor(
     private readonly messaging: MessagingService,
-    private readonly cloudinaryStorageService: CloudinaryStorageService,
+    private readonly storageService: LocalStorageService,
   ) {}
 
   @Get()
@@ -110,7 +110,7 @@ export class MessagingController {
   @UseInterceptors(FileInterceptor('file', attachmentUploadOptions))
   async uploadAttachment(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('No file provided');
-    const result = await this.cloudinaryStorageService.uploadBuffer(
+    const result = await this.storageService.uploadBuffer(
       file.buffer,
       'lunara/message-attachments',
       undefined,
@@ -146,7 +146,7 @@ export class MessagingController {
 export class AdminMessagingController {
   constructor(
     private readonly messaging: MessagingService,
-    private readonly cloudinaryStorageService: CloudinaryStorageService,
+    private readonly storageService: LocalStorageService,
   ) {}
 
   @Get()
@@ -197,7 +197,7 @@ export class AdminMessagingController {
   @UseInterceptors(FileInterceptor('file', attachmentUploadOptions))
   async uploadAttachment(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('No file provided');
-    const result = await this.cloudinaryStorageService.uploadBuffer(
+    const result = await this.storageService.uploadBuffer(
       file.buffer,
       'lunara/message-attachments',
       undefined,

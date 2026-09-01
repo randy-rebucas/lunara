@@ -9,6 +9,7 @@ export interface AppNotification {
     orderId?: string;
     refundId?: string;
     status?: string;
+    photoUrl?: string;
   };
 }
 

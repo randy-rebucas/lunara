@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, type Href } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   formatNotificationTime,
   notificationIconName,
@@ -8,6 +8,7 @@ import {
   resolveNotificationRoute,
   type AppNotification,
 } from '../lib/notification-types';
+import { resolveMediaUrl } from '../lib/media-url';
 import { colors, radius, spacing, typography } from '../theme';
 
 interface NotificationListItemProps {
@@ -28,6 +29,7 @@ export function NotificationListItem({
   const router = useRouter();
   const icon = notificationIconName(notification.data?.type, Boolean(notification.data?.orderId));
   const route = resolveNotificationRoute(notification);
+  const photoUrl = resolveMediaUrl(notification.data?.photoUrl);
 
   async function handlePress() {
     if (!notification.read) {
@@ -68,6 +70,7 @@ export function NotificationListItem({
         <Text style={styles.body} numberOfLines={compact ? 2 : 4}>
           {notification.body}
         </Text>
+        {photoUrl ? <Image source={{ uri: photoUrl }} style={styles.photo} /> : null}
         <Text style={styles.time}>{formatNotificationTime(notification.createdAt)}</Text>
         {route ? (
           <Text style={styles.action}>
@@ -140,6 +143,13 @@ const styles = StyleSheet.create({
   body: {
     ...typography.bodySm,
     marginTop: spacing.xs,
+  },
+  photo: {
+    width: '100%',
+    height: 120,
+    borderRadius: radius.md,
+    marginTop: spacing.sm,
+    backgroundColor: colors.surfaceMuted,
   },
   time: {
     ...typography.caption,

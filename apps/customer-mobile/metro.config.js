@@ -22,7 +22,7 @@ config.resolver.blockList = [
 config.resolver.extraNodeModules = {
   react: path.join(monorepoRoot, 'node_modules/react'),
   'react-native': path.join(monorepoRoot, 'node_modules/react-native'),
-  'react-native-svg': path.join(projectRoot, 'node_modules/react-native-svg'),
+  'react-native-svg': path.join(monorepoRoot, 'node_modules/react-native-svg'),
   '@lunara/brand': path.join(monorepoRoot, 'packages/brand'),
   '@lunara/config': path.join(monorepoRoot, 'packages/config'),
   '@lunara/types': path.join(monorepoRoot, 'packages/types'),

@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { CloudinaryStorageService } from '../../common/storage/cloudinary-storage.service';
+import { LocalStorageService } from '../../common/storage/local-storage.service';
 import { EmailService } from '../../common/email/email.service';
 import { SettingsService } from '../settings/settings.service';
 import { partnerApplicationDocumentPublicPath } from '../../common/uploads/upload-paths';
@@ -26,7 +26,7 @@ export class PartnerApplicationsService {
   constructor(
     @InjectModel(PartnerApplication.name)
     private readonly partnerApplicationModel: Model<PartnerApplicationDocument>,
-    private readonly cloudinaryStorageService: CloudinaryStorageService,
+    private readonly storageService: LocalStorageService,
     private readonly emailService: EmailService,
     private readonly settingsService: SettingsService,
   ) {}
@@ -55,7 +55,7 @@ export class PartnerApplicationsService {
     for (const type of PARTNER_APPLICATION_DOCUMENT_TYPES) {
       const file = files[type][0];
       const publicId = `${application._id.toString()}-${type}-${Date.now()}`;
-      const result = await this.cloudinaryStorageService.uploadPrivateBuffer(
+      const result = await this.storageService.uploadPrivateBuffer(
         file.buffer,
         UPLOAD_FOLDER,
         publicId,

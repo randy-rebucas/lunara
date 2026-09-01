@@ -1,17 +1,17 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { CloudinaryStorageService } from '../../common/storage/cloudinary-storage.service';
+import { LocalStorageService } from '../../common/storage/local-storage.service';
 import { BlogPost, BlogPostDocument } from './schemas/blog-post.schema';
 import { CreateBlogPostDto, UpdateBlogPostDto } from './dto/blog-post.dto';
 
-const BLOG_CLOUDINARY_FOLDER = 'lunara/blog';
+const BLOG_UPLOAD_FOLDER = 'lunara/blog';
 
 @Injectable()
 export class BlogService {
   constructor(
     @InjectModel(BlogPost.name) private blogPostModel: Model<BlogPostDocument>,
-    private readonly cloudinaryStorageService: CloudinaryStorageService,
+    private readonly storageService: LocalStorageService,
   ) {}
 
   async adminList() {
@@ -25,9 +25,9 @@ export class BlogService {
 
     let coverImageUrl: string | undefined;
     if (file) {
-      const result = await this.cloudinaryStorageService.uploadBuffer(
+      const result = await this.storageService.uploadBuffer(
         file.buffer,
-        BLOG_CLOUDINARY_FOLDER,
+        BLOG_UPLOAD_FOLDER,
         `${Date.now()}`,
         'image',
         file.mimetype,
@@ -75,9 +75,9 @@ export class BlogService {
     if (!post) throw new NotFoundException('Post not found');
 
     const previousImageUrl = post.coverImageUrl;
-    const result = await this.cloudinaryStorageService.uploadBuffer(
+    const result = await this.storageService.uploadBuffer(
       file.buffer,
-      BLOG_CLOUDINARY_FOLDER,
+      BLOG_UPLOAD_FOLDER,
       `${post._id.toString()}-${Date.now()}`,
       'image',
       file.mimetype,
@@ -85,7 +85,7 @@ export class BlogService {
     post.coverImageUrl = result.secure_url;
     await post.save();
     if (previousImageUrl) {
-      await this.cloudinaryStorageService.deleteFile(BLOG_CLOUDINARY_FOLDER, previousImageUrl);
+      await this.storageService.deleteFile(BLOG_UPLOAD_FOLDER, previousImageUrl);
     }
     return { success: true, data: post };
   }
@@ -95,7 +95,7 @@ export class BlogService {
     if (!post) throw new NotFoundException('Post not found');
     await post.deleteOne();
     if (post.coverImageUrl) {
-      await this.cloudinaryStorageService.deleteFile(BLOG_CLOUDINARY_FOLDER, post.coverImageUrl);
+      await this.storageService.deleteFile(BLOG_UPLOAD_FOLDER, post.coverImageUrl);
     }
     return { success: true, data: { deleted: true } };
   }

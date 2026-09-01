@@ -10,7 +10,7 @@ import {
   PartnerPortalSettings,
 } from '../branches/schemas/branch.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
-import { CloudinaryStorageService } from '../../common/storage/cloudinary-storage.service';
+import { LocalStorageService } from '../../common/storage/local-storage.service';
 import { resolvePortalBranchId } from './partner-access';
 import { UpdatePartnerSettingsDto } from './dto/update-partner-settings.dto';
 
@@ -30,7 +30,7 @@ export class PartnerSettingsService {
   constructor(
     @InjectModel(Branch.name) private readonly branchModel: Model<BranchDocument>,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
-    private readonly cloudinaryStorageService: CloudinaryStorageService,
+    private readonly storageService: LocalStorageService,
   ) {}
 
   private async resolveBranch(userId: string, role: UserRole): Promise<BranchDocument> {
@@ -170,7 +170,7 @@ export class PartnerSettingsService {
     }
 
     const previousLogoUrl = branch.logoUrl;
-    const result = await this.cloudinaryStorageService.uploadBuffer(
+    const result = await this.storageService.uploadBuffer(
       file.buffer,
       'lunara/branch-logos',
       `${branch._id.toString()}-${Date.now()}`,
@@ -179,7 +179,7 @@ export class PartnerSettingsService {
     );
     branch.logoUrl = result.secure_url;
     await branch.save();
-    await this.cloudinaryStorageService.deleteFile('lunara/branch-logos', previousLogoUrl);
+    await this.storageService.deleteFile('lunara/branch-logos', previousLogoUrl);
 
     return {
       success: true,
@@ -199,7 +199,7 @@ export class PartnerSettingsService {
     const previousLogoUrl = branch.logoUrl;
     branch.logoUrl = undefined;
     await branch.save();
-    await this.cloudinaryStorageService.deleteFile('lunara/branch-logos', previousLogoUrl);
+    await this.storageService.deleteFile('lunara/branch-logos', previousLogoUrl);
 
     return {
       success: true,

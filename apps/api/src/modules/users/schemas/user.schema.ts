@@ -41,7 +41,7 @@ export class User {
   @Prop()
   department?: string;
 
-  /** Profile photo URL — Cloudinary secure_url, or unset to fall back to initials. */
+  /** Profile photo URL — served from local uploads storage, or unset to fall back to initials. */
   @Prop()
   photoUrl?: string;
 

@@ -18,7 +18,7 @@ import { UserRole } from '@lunara/types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import { CloudinaryStorageService } from '../../common/storage/cloudinary-storage.service';
+import { LocalStorageService } from '../../common/storage/local-storage.service';
 import { userPhotoUploadOptions } from './user-photo-upload.options';
 import { UsersService, UserImportRow } from './users.service';
 
@@ -27,7 +27,7 @@ import { UsersService, UserImportRow } from './users.service';
 export class UsersController {
   constructor(
     private readonly usersService: UsersService,
-    private readonly cloudinaryStorageService: CloudinaryStorageService,
+    private readonly storageService: LocalStorageService,
   ) {}
 
   @Get('me')
@@ -64,7 +64,7 @@ export class UsersController {
   @UseInterceptors(FileInterceptor('photo', userPhotoUploadOptions))
   async uploadPhoto(@Param('id') id: string, @UploadedFile() file?: Express.Multer.File) {
     if (!file) throw new BadRequestException('Photo image is required');
-    const result = await this.cloudinaryStorageService.uploadBuffer(
+    const result = await this.storageService.uploadBuffer(
       file.buffer,
       'lunara/user-photos',
       `${id}-${Date.now()}`,
@@ -72,7 +72,7 @@ export class UsersController {
       file.mimetype,
     );
     const { previousUrl, ...response } = await this.usersService.setPhoto(id, result.secure_url);
-    await this.cloudinaryStorageService.deleteFile('lunara/user-photos', previousUrl);
+    await this.storageService.deleteFile('lunara/user-photos', previousUrl);
     return response;
   }
 

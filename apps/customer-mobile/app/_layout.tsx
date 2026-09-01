@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Stack, useRouter, useSegments } from 'expo-router';
 
@@ -11,6 +11,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthLoadingScreen } from '../src/components/auth-loading';
 
 import { ForceUpdateScreen } from '../src/components/force-update-screen';
+
+import { IntroSlider } from '../src/components/intro-slider';
 
 import { CustomerTrackingSync } from '../src/components/customer-tracking-sync';
 
@@ -27,6 +29,8 @@ import {
   redirectAfterAuth,
 
 } from '../src/lib/onboarding';
+
+import { hasSeenIntro } from '../src/lib/intro-slider';
 
 import { useAuthStore } from '../src/store/auth';
 
@@ -102,6 +106,8 @@ export default function RootLayout() {
 
   const { checking: checkingVersion, updateRequired, storeUrl } = useAppVersionGate();
 
+  const [showIntro, setShowIntro] = useState(false);
+
   function handleHeaderBack() {
     if (router.canGoBack()) {
       router.back();
@@ -166,9 +172,21 @@ export default function RootLayout() {
 
         .then((status) => {
 
-          if (cancelled || status.isComplete) return;
+          if (cancelled) return;
 
-          router.replace(getOnboardingPath(status));
+          if (!status.isComplete) {
+
+            router.replace(getOnboardingPath(status));
+
+            return;
+
+          }
+
+          hasSeenIntro().then((seen) => {
+
+            if (!cancelled && !seen) setShowIntro(true);
+
+          });
 
         })
 
@@ -546,6 +564,8 @@ export default function RootLayout() {
         />
 
       </Stack>
+
+      {showIntro ? <IntroSlider onDone={() => setShowIntro(false)} /> : null}
 
     </SafeAreaProvider>
 

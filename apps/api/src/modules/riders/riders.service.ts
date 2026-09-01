@@ -19,7 +19,7 @@ import {
   type RiderEarningType,
 } from '@lunara/utils';
 import { riderDocumentPublicPath } from '../../common/uploads/upload-paths';
-import { CloudinaryStorageService } from '../../common/storage/cloudinary-storage.service';
+import { LocalStorageService } from '../../common/storage/local-storage.service';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { Address, AddressDocument } from '../addresses/schemas/address.schema';
 import { Branch, BranchDocument } from '../branches/schemas/branch.schema';
@@ -67,7 +67,7 @@ export class RidersService {
     private riderWalletService: RiderWalletService,
     private ledgerService: LedgerService,
     private settingsService: SettingsService,
-    private cloudinaryStorageService: CloudinaryStorageService,
+    private storageService: LocalStorageService,
   ) {}
 
   async listNotifications(userId: string, limit = 20) {
@@ -243,7 +243,7 @@ export class RidersService {
     const previousAvatarUrl = (
       await this.userProfileModel.findOne({ userId: new Types.ObjectId(userId) }).select('avatarUrl').lean()
     )?.avatarUrl;
-    const result = await this.cloudinaryStorageService.uploadBuffer(
+    const result = await this.storageService.uploadBuffer(
       file.buffer,
       'lunara/user-avatars',
       `${userId}-${Date.now()}`,
@@ -255,7 +255,7 @@ export class RidersService {
       { $set: { avatarUrl: result.secure_url } },
       { upsert: true },
     );
-    await this.cloudinaryStorageService.deleteFile('lunara/user-avatars', previousAvatarUrl);
+    await this.storageService.deleteFile('lunara/user-avatars', previousAvatarUrl);
     return this.getMe(userId);
   }
 
@@ -267,7 +267,7 @@ export class RidersService {
       { userId: new Types.ObjectId(userId) },
       { $unset: { avatarUrl: '' } },
     );
-    await this.cloudinaryStorageService.deleteFile('lunara/user-avatars', previousAvatarUrl);
+    await this.storageService.deleteFile('lunara/user-avatars', previousAvatarUrl);
     return this.getMe(userId);
   }
 
@@ -690,7 +690,7 @@ export class RidersService {
     if (previousDocument) {
       // Best-effort cleanup of the superseded file: the new document is already saved and
       // authoritative, so a failure to delete the old blob must not fail this request.
-      await this.cloudinaryStorageService
+      await this.storageService
         .deleteFile('lunara/rider-documents', previousDocument.fileUrl, 'private')
         .catch(() => {});
     }

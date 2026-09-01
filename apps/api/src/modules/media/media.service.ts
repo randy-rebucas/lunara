@@ -2,7 +2,7 @@ import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/commo
 import { InjectModel } from '@nestjs/mongoose';
 import { UserRole } from '@lunara/types';
 import { Model } from 'mongoose';
-import { CloudinaryStorageService } from '../../common/storage/cloudinary-storage.service';
+import { LocalStorageService } from '../../common/storage/local-storage.service';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import {
@@ -36,15 +36,17 @@ export class MediaService {
   constructor(
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
-    private readonly cloudinaryStorageService: CloudinaryStorageService,
+    private readonly storageService: LocalStorageService,
   ) {}
 
-  getSignedUrl(category: MediaCategory, filename: string): string {
+  /** Absolute local path of a private-category file, for the controller to stream directly after
+   * its own access check — local disk has no signed-URL concept, unlike Cloudinary's authenticated
+   * delivery, so callers must serve the file themselves rather than redirect to one. */
+  resolveFilePath(category: MediaCategory, filename: string): string {
     if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
       throw new NotFoundException('File not found');
     }
-    const publicId = `${FOLDER_BY_CATEGORY[category]}/${filename}`;
-    return this.cloudinaryStorageService.getSignedUrl(publicId);
+    return this.storageService.resolvePrivatePath(FOLDER_BY_CATEGORY[category], filename);
   }
 
   async assertAccess(

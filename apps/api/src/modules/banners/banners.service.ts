@@ -1,17 +1,17 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { CloudinaryStorageService } from '../../common/storage/cloudinary-storage.service';
+import { LocalStorageService } from '../../common/storage/local-storage.service';
 import { Banner, BannerDocument } from './schemas/banner.schema';
 import { CreateBannerDto, UpdateBannerDto } from './dto/banner.dto';
 
-const BANNER_CLOUDINARY_FOLDER = 'lunara/banners';
+const BANNER_UPLOAD_FOLDER = 'lunara/banners';
 
 @Injectable()
 export class BannersService {
   constructor(
     @InjectModel(Banner.name) private bannerModel: Model<BannerDocument>,
-    private readonly cloudinaryStorageService: CloudinaryStorageService,
+    private readonly storageService: LocalStorageService,
   ) {}
 
   async adminList() {
@@ -22,9 +22,9 @@ export class BannersService {
   async create(dto: CreateBannerDto, file?: Express.Multer.File) {
     if (!file) throw new BadRequestException('Banner image is required');
 
-    const result = await this.cloudinaryStorageService.uploadBuffer(
+    const result = await this.storageService.uploadBuffer(
       file.buffer,
-      BANNER_CLOUDINARY_FOLDER,
+      BANNER_UPLOAD_FOLDER,
       `${Date.now()}`,
       'image',
       file.mimetype,
@@ -62,16 +62,16 @@ export class BannersService {
     if (!banner) throw new NotFoundException('Banner not found');
 
     const previousImageUrl = banner.imageUrl;
-    const result = await this.cloudinaryStorageService.uploadBuffer(
+    const result = await this.storageService.uploadBuffer(
       file.buffer,
-      BANNER_CLOUDINARY_FOLDER,
+      BANNER_UPLOAD_FOLDER,
       `${banner._id.toString()}-${Date.now()}`,
       'image',
       file.mimetype,
     );
     banner.imageUrl = result.secure_url;
     await banner.save();
-    await this.cloudinaryStorageService.deleteFile(BANNER_CLOUDINARY_FOLDER, previousImageUrl);
+    await this.storageService.deleteFile(BANNER_UPLOAD_FOLDER, previousImageUrl);
     return { success: true, data: banner };
   }
 
@@ -79,7 +79,7 @@ export class BannersService {
     const banner = await this.bannerModel.findById(id);
     if (!banner) throw new NotFoundException('Banner not found');
     await banner.deleteOne();
-    await this.cloudinaryStorageService.deleteFile(BANNER_CLOUDINARY_FOLDER, banner.imageUrl);
+    await this.storageService.deleteFile(BANNER_UPLOAD_FOLDER, banner.imageUrl);
     return { success: true, data: { deleted: true } };
   }
 

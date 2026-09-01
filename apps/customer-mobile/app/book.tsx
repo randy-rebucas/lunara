@@ -2127,7 +2127,11 @@ export default function BookScreen() {
               shopPricingMode !== BranchPricingMode.PER_PAIR &&
               shopPricingMode !== BranchPricingMode.PER_ITEM &&
               form.addonIds.some((id) => {
-                const unit = addons.find((a) => a.id === id)?.pricingUnit;
+                const addon = addons.find((a) => a.id === id);
+                // An add-on with its own quantity stepper bills from that stepper, not the
+                // order's piece count — see combineServiceQuotes in packages/utils/src/booking.ts.
+                if (addon?.allowsQuantity) return false;
+                const unit = addon?.pricingUnit;
                 return (
                   unit === BranchPricingMode.PER_PIECE ||
                   unit === BranchPricingMode.PER_PAIR ||

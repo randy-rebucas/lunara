@@ -71,6 +71,7 @@ export class CustomerOrderNotificationService {
           orderId,
           event,
           status: typeof payload.status === 'string' ? payload.status : undefined,
+          photoUrl: typeof payload.photoUrl === 'string' ? payload.photoUrl : undefined,
         },
       });
     } catch (err) {

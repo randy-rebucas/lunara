@@ -16,7 +16,9 @@ export class MediaController {
     @Res() res: Response,
   ) {
     await this.mediaService.assertAccess('rider-documents', filename, req.user);
-    res.redirect(this.mediaService.getSignedUrl('rider-documents', filename));
+    res.sendFile(this.mediaService.resolveFilePath('rider-documents', filename), (err) => {
+      if (err && !res.headersSent) res.status(404).json({ message: 'File not found' });
+    });
   }
 
   @Get('task-photos/:filename')
@@ -26,7 +28,9 @@ export class MediaController {
     @Res() res: Response,
   ) {
     await this.mediaService.assertAccess('task-photos', filename, req.user);
-    res.redirect(this.mediaService.getSignedUrl('task-photos', filename));
+    res.sendFile(this.mediaService.resolveFilePath('task-photos', filename), (err) => {
+      if (err && !res.headersSent) res.status(404).json({ message: 'File not found' });
+    });
   }
 
   @Get('remittance-proofs/:filename')
@@ -36,7 +40,9 @@ export class MediaController {
     @Res() res: Response,
   ) {
     await this.mediaService.assertAccess('remittance-proofs', filename, req.user);
-    res.redirect(this.mediaService.getSignedUrl('remittance-proofs', filename));
+    res.sendFile(this.mediaService.resolveFilePath('remittance-proofs', filename), (err) => {
+      if (err && !res.headersSent) res.status(404).json({ message: 'File not found' });
+    });
   }
 
   @Get('rider-application-documents/:filename')
@@ -46,7 +52,9 @@ export class MediaController {
     @Res() res: Response,
   ) {
     await this.mediaService.assertAccess('rider-application-documents', filename, req.user);
-    res.redirect(this.mediaService.getSignedUrl('rider-application-documents', filename));
+    res.sendFile(this.mediaService.resolveFilePath('rider-application-documents', filename), (err) => {
+      if (err && !res.headersSent) res.status(404).json({ message: 'File not found' });
+    });
   }
 
   @Get('partner-application-documents/:filename')
@@ -56,6 +64,8 @@ export class MediaController {
     @Res() res: Response,
   ) {
     await this.mediaService.assertAccess('partner-application-documents', filename, req.user);
-    res.redirect(this.mediaService.getSignedUrl('partner-application-documents', filename));
+    res.sendFile(this.mediaService.resolveFilePath('partner-application-documents', filename), (err) => {
+      if (err && !res.headersSent) res.status(404).json({ message: 'File not found' });
+    });
   }
 }
