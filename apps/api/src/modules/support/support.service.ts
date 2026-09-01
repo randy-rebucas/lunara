@@ -670,9 +670,10 @@ export class SupportService {
   private static readonly RIDER_VISIBLE_NOTE_STAGES = new Set(['submitted']);
 
   serializeTicketForRider(t: SupportTicketDocument) {
-    const { customerId, adminNote, photosReviewedAt, logsReviewedAt, timeline, ...rest } =
+    const { customerId, customerEmail, adminNote, photosReviewedAt, logsReviewedAt, timeline, ...rest } =
       this.serializeTicket(t);
     void customerId;
+    void customerEmail;
     void adminNote;
     void photosReviewedAt;
     void logsReviewedAt;

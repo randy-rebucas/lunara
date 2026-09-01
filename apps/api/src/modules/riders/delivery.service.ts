@@ -552,6 +552,7 @@ export class DeliveryService {
       {
         includeDialablePhone: isAssigned,
         customerAddressId: order.deliveryAddressId,
+        isAssigned,
       },
     );
 

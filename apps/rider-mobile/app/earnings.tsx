@@ -1,12 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import {
-  formatCurrency,
-  RIDER_DELIVERY_PAYOUT,
-  RIDER_PICKUP_PAYOUT,
-  type RiderEarningType,
-} from '@lunara/utils';
+import { formatCurrency, type RiderEarningType } from '@lunara/utils';
 import { DataLoadState } from '../src/components/data-load-state';
 import { EarningTypeBadge } from '../src/components/earning-type-badge';
 import { Screen } from '../src/components/ui/screen';
@@ -143,7 +138,7 @@ function ActivityStat({
 }: {
   count: number;
   label: string;
-  rate: number;
+  rate?: number;
   icon: IoniconName;
   iconBg: string;
   iconColor: string;
@@ -157,7 +152,7 @@ function ActivityStat({
         <Text style={actStyles.count}>{count}</Text>
       </View>
       <Text style={actStyles.label}>{label}</Text>
-      <Text style={actStyles.rate}>₱{rate} per task</Text>
+      {rate !== undefined ? <Text style={actStyles.rate}>₱{rate} per task</Text> : null}
     </View>
   );
 }
@@ -395,7 +390,7 @@ export default function EarningsScreen() {
               <ActivityStat
                 count={data.todayPickups}
                 label="Pickups"
-                rate={RIDER_PICKUP_PAYOUT}
+                rate={data.feeRates?.pickup}
                 icon="arrow-up-circle-outline"
                 iconBg={colors.primaryLight}
                 iconColor={colors.primary}
@@ -403,7 +398,7 @@ export default function EarningsScreen() {
               <ActivityStat
                 count={data.todayDeliveries}
                 label="Deliveries"
-                rate={RIDER_DELIVERY_PAYOUT}
+                rate={data.feeRates?.delivery}
                 icon="arrow-down-circle-outline"
                 iconBg={colors.accentLight}
                 iconColor={colors.accentDark}

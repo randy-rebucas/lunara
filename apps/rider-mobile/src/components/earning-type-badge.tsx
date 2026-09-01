@@ -7,6 +7,7 @@ const EARNING_LABELS: Record<RiderEarningType, string> = {
   delivery: 'Delivery Fee',
   bonus: 'Bonus',
   adjustment: 'Adjustment',
+  wage: 'Wage Payment',
 };
 
 const stylesByType: Record<
@@ -32,6 +33,11 @@ const stylesByType: Record<
     bg: colors.secondaryLight,
     text: colors.slate800,
     border: colors.secondary,
+  },
+  wage: {
+    bg: colors.primaryLight,
+    text: colors.primary,
+    border: colors.primaryBorder,
   },
 };
 

@@ -1,8 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useRiderOperations } from '../../src/context/rider-operations';
+import { DataLoadState } from '../../src/components/data-load-state';
 import { EmptyState } from '../../src/components/ui/empty-state';
 import { Screen } from '../../src/components/ui/screen';
 import { riderFetch } from '../../src/api';
@@ -139,6 +150,8 @@ interface OfferCardShellProps {
   typeBg: string;
   onAccept: () => void;
   onDecline: () => void;
+  acceptDisabled?: boolean;
+  accepting?: boolean;
   children: React.ReactNode;
 }
 
@@ -148,6 +161,8 @@ function OfferCardShell({
   typeBg,
   onAccept,
   onDecline,
+  acceptDisabled,
+  accepting,
   children,
 }: OfferCardShellProps) {
   return (
@@ -164,8 +179,13 @@ function OfferCardShell({
       {children}
       <View style={cardStyles.actions}>
         <Pressable
-          style={({ pressed }) => [cardStyles.declineBtn, pressed && cardStyles.btnPressed]}
+          style={({ pressed }) => [
+            cardStyles.declineBtn,
+            pressed && cardStyles.btnPressed,
+            acceptDisabled && cardStyles.btnDisabled,
+          ]}
           onPress={onDecline}
+          disabled={acceptDisabled}
           accessibilityRole="button"
           accessibilityLabel="Decline"
         >
@@ -173,13 +193,22 @@ function OfferCardShell({
           <Text style={cardStyles.declineBtnText}>Decline</Text>
         </Pressable>
         <Pressable
-          style={({ pressed }) => [cardStyles.acceptBtn, pressed && cardStyles.btnPressed]}
+          style={({ pressed }) => [
+            cardStyles.acceptBtn,
+            pressed && cardStyles.btnPressed,
+            acceptDisabled && cardStyles.btnDisabled,
+          ]}
           onPress={onAccept}
+          disabled={acceptDisabled}
           accessibilityRole="button"
           accessibilityLabel="Accept"
         >
-          <Ionicons name="checkmark-outline" size={16} color="#fff" />
-          <Text style={cardStyles.acceptBtnText}>Accept</Text>
+          {accepting ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Ionicons name="checkmark-outline" size={16} color="#fff" />
+          )}
+          <Text style={cardStyles.acceptBtnText}>{accepting ? 'Accepting…' : 'Accept'}</Text>
         </Pressable>
       </View>
     </View>
@@ -193,11 +222,13 @@ const PickupOfferCard = React.memo(function PickupOfferCard({
   shopName,
   onAccept,
   onDecline,
+  accepting,
 }: {
   item: PickupOffer;
   shopName: string;
   onAccept: () => void;
   onDecline: () => void;
+  accepting?: boolean;
 }) {
   const pickupTime = formatOfferTime(item.scheduledPickupAt);
   return (
@@ -207,6 +238,8 @@ const PickupOfferCard = React.memo(function PickupOfferCard({
       typeBg={colors.primaryLight}
       onAccept={onAccept}
       onDecline={onDecline}
+      acceptDisabled={accepting}
+      accepting={accepting}
     >
       <RouteRow
         fromLabel={item.pickupAddress?.label ?? 'Customer address'}
@@ -437,6 +470,7 @@ const cardStyles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   btnPressed: { opacity: 0.8 },
+  btnDisabled: { opacity: 0.55 },
   cardPressed: { opacity: 0.9 },
 });
 
@@ -453,6 +487,8 @@ export default function TasksScreen() {
   const [filter, setFilter] = useState<TaskListFilter>(initialFilter);
   const [history, setHistory] = useState<TaskHistoryItem[]>([]);
   const [cancelled, setCancelled] = useState<CancelledTaskItem[]>([]);
+  const [archiveLoading, setArchiveLoading] = useState(false);
+  const [archiveError, setArchiveError] = useState('');
   const [dismissedPickup, setDismissedPickup] = useState<Set<string>>(new Set());
   const [dismissedDelivery, setDismissedDelivery] = useState<Set<string>>(new Set());
 
@@ -464,6 +500,7 @@ export default function TasksScreen() {
     online,
     refreshing,
     onRefresh,
+    acceptingOfferId,
     acceptPickupOffer,
     previewDeliveryQueue,
     openTask,
@@ -483,20 +520,30 @@ export default function TasksScreen() {
 
   const loadArchived = useCallback(async () => {
     if (filter === 'completed') {
+      setArchiveLoading(true);
+      setArchiveError('');
       try {
         const data = await riderFetch<TaskHistoryItem[]>('/riders/tasks/history?limit=30');
         setHistory(data);
-      } catch {
+      } catch (e) {
         setHistory([]);
+        setArchiveError(e instanceof Error ? e.message : 'Could not load completed tasks');
+      } finally {
+        setArchiveLoading(false);
       }
       return;
     }
     if (filter === 'cancelled') {
+      setArchiveLoading(true);
+      setArchiveError('');
       try {
         const data = await riderFetch<CancelledTaskItem[]>('/riders/tasks/cancelled?limit=30');
         setCancelled(data);
-      } catch {
+      } catch (e) {
         setCancelled([]);
+        setArchiveError(e instanceof Error ? e.message : 'Could not load cancelled tasks');
+      } finally {
+        setArchiveLoading(false);
       }
     }
   }, [filter]);
@@ -544,6 +591,7 @@ export default function TasksScreen() {
         <PickupOfferCard
           item={row.item}
           shopName={shopName}
+          accepting={acceptingOfferId === row.item._id}
           onAccept={() => void acceptPickupOffer(row.item._id)}
           onDecline={() => setDismissedPickup((s) => new Set([...s, row.item._id]))}
         />
@@ -581,7 +629,7 @@ export default function TasksScreen() {
           bookingType={formatBookingType(item.bookingType)}
           statusLabel={riderTaskStatusLabel(item.status)}
           branchName={item.branchName}
-          onPress={() => openTask(item._id, item.status)}
+          onPress={() => openTask(item._id, item.status, item.leg)}
         />
       );
     }
@@ -597,13 +645,13 @@ export default function TasksScreen() {
           bookingType={formatBookingType(item.bookingType)}
           statusLabel="Cancelled"
           branchName={item.branchName}
-          onPress={() => openTask(item._id, item.status)}
+          onPress={() => openTask(item._id, item.status, item.leg)}
         />
       );
     }
 
     return null;
-  }, [shopName, acceptPickupOffer, previewDeliveryQueue, openTask]);
+  }, [shopName, acceptPickupOffer, previewDeliveryQueue, openTask, acceptingOfferId]);
 
   const showOfflineGate = !online && filter !== 'completed' && filter !== 'cancelled';
 
@@ -660,14 +708,24 @@ export default function TasksScreen() {
     </>
   );
 
-  const listEmpty = showOfflineGate ? (
-    <EmptyState title="Start your shift" message={taskListEmptyMessage(filter, online)} />
-  ) : (
-    <EmptyState
-      title={`No ${TASK_LIST_FILTERS.find((f) => f.id === filter)?.label ?? ''} tasks`}
-      message={taskListEmptyMessage(filter, online)}
-    />
-  );
+  const isArchiveFilter = filter === 'completed' || filter === 'cancelled';
+
+  const listEmpty =
+    isArchiveFilter && (archiveLoading || archiveError) ? (
+      <DataLoadState
+        loading={archiveLoading}
+        error={archiveError}
+        loadingMessage={filter === 'completed' ? 'Loading completed tasks…' : 'Loading cancelled tasks…'}
+        onRetry={loadArchived}
+      />
+    ) : showOfflineGate ? (
+      <EmptyState title="Start your shift" message={taskListEmptyMessage(filter, online)} />
+    ) : (
+      <EmptyState
+        title={`No ${TASK_LIST_FILTERS.find((f) => f.id === filter)?.label ?? ''} tasks`}
+        message={taskListEmptyMessage(filter, online)}
+      />
+    );
 
   return (
     <Screen inTab contentStyle={{ paddingBottom: 0 }}>

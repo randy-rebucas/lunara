@@ -38,6 +38,26 @@ function formatAddressLine(
   };
 }
 
+function maskName(name?: string) {
+  if (!name) return undefined;
+  const [first, ...rest] = name.trim().split(/\s+/);
+  const lastInitial = rest.length ? `${rest[rest.length - 1][0]}.` : '';
+  return [first, lastInitial].filter(Boolean).join(' ');
+}
+
+function maskAddressLine(
+  addr: Pick<AddressDocument, 'line1' | 'line2' | 'city' | 'province' | 'latitude' | 'longitude'>,
+) {
+  return {
+    line1: undefined,
+    line2: undefined,
+    city: addr.city,
+    province: addr.province,
+    latitude: undefined,
+    longitude: undefined,
+  };
+}
+
 export async function buildRiderTaskDetails(
   order: OrderDocument,
   deps: {
@@ -49,6 +69,10 @@ export async function buildRiderTaskDetails(
   options: {
     includeDialablePhone: boolean;
     customerAddressId: string;
+    /** Full customer name and street-level address are only for a rider actually
+     * assigned to this task — a rider still just browsing the offer only needs
+     * enough to judge the job (first name, city/province), not full PII. */
+    isAssigned: boolean;
   },
 ) {
   const [customer, user, branch, customerAddress] = await Promise.all([
@@ -58,9 +82,10 @@ export async function buildRiderTaskDetails(
     deps.addressModel.findById(options.customerAddressId),
   ]);
 
-  const customerName = customer
+  const fullCustomerName = customer
     ? `${customer.firstName} ${customer.lastName}`.trim()
     : customerAddress?.label;
+  const customerName = options.isAssigned ? fullCustomerName : maskName(fullCustomerName);
 
   let shopLocation: {
     name: string;
@@ -112,6 +137,10 @@ export async function buildRiderTaskDetails(
     shopLocation,
     shopPhone: options.includeDialablePhone ? shopPhone : undefined,
     shopPhoneMasked: maskPhone(shopPhone),
-    customerAddress: customerAddress ? formatAddressLine(customerAddress) : null,
+    customerAddress: customerAddress
+      ? options.isAssigned
+        ? formatAddressLine(customerAddress)
+        : maskAddressLine(customerAddress)
+      : null,
   };
 }

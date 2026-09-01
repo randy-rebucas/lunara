@@ -28,7 +28,7 @@ const FILTERS: { key: FilterKey; label: string; icon: IoniconName }[] = [
 const Separator = () => <View style={styles.separator} />;
 
 export default function NotificationsScreen() {
-  const { setUnreadCount } = useRiderOperations();
+  const { setUnreadCount, notificationsVersion } = useRiderOperations();
   const { items, loading, refreshing, error, refresh, markRead, load, unreadCount } =
     useNotifications(50);
   const [filter, setFilter] = useState<FilterKey>('all');
@@ -42,6 +42,14 @@ export default function NotificationsScreen() {
       refresh();
     }, [refresh]),
   );
+
+  // A dispatch-pushed notification (new assignment, rider alert) arrived while this screen was
+  // already open — refetch so the list isn't stale until the rider backgrounds/refocuses the tab.
+  useEffect(() => {
+    if (notificationsVersion === 0) return;
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notificationsVersion]);
 
   const filteredItems = useMemo(() => {
     if (filter === 'all') return items;

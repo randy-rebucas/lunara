@@ -172,6 +172,15 @@ export default function PerformanceScreen() {
   const ratingDisplay = rating != null ? `${rating.toFixed(1)} / 5` : '—';
   const ratedCount = data?.ratedDeliveries ?? 0;
 
+  // The backend reports 100% for a zero-denominator rate (e.g. a brand-new rider with no
+  // completed/cancelled tasks yet, or no assignments offered yet) so "no data" doesn't read as
+  // a failing score — but showing that 100% at face value here would misleadingly look like an
+  // earned rate. Fall back to "—" client-side using the counts we already have.
+  const hasCompletionData = (data?.completedTasks ?? 0) + (data?.cancelledTasks ?? 0) > 0;
+  const completionRateDisplay = hasCompletionData ? `${data?.completionRate ?? 0}%` : '—';
+  const hasAssignmentData = (data?.totalAssignments ?? 0) > 0;
+  const acceptanceRateDisplay = hasAssignmentData ? `${data?.acceptanceRate ?? 0}%` : '—';
+
   return (
     <Screen
       inStack
@@ -194,7 +203,7 @@ export default function PerformanceScreen() {
           icon="checkmark-circle-outline"
           iconBg={colors.accentLight}
           iconColor={colors.accentDark}
-          value={`${data?.completionRate ?? 0}%`}
+          value={completionRateDisplay}
           valueColor={colors.accentDark}
           label="Completion rate"
         />
@@ -202,7 +211,7 @@ export default function PerformanceScreen() {
           icon="hand-right-outline"
           iconBg={colors.primaryLight}
           iconColor={colors.primary}
-          value={`${data?.acceptanceRate ?? 0}%`}
+          value={acceptanceRateDisplay}
           valueColor={colors.primary}
           label="Acceptance rate"
         />

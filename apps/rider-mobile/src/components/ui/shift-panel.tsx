@@ -20,6 +20,7 @@ function formatDuration(minutes: number): string {
 interface ShiftPanelProps {
   shiftStatus: ShiftStatus;
   canGoOnline?: boolean;
+  busy?: boolean;
   complianceHint?: string;
   onGoOnline: () => void;
   onGoOffline: () => void;
@@ -30,6 +31,7 @@ interface ShiftPanelProps {
 export function ShiftPanel({
   shiftStatus,
   canGoOnline = true,
+  busy = false,
   complianceHint,
   onGoOnline,
   onGoOffline,
@@ -85,8 +87,9 @@ export function ShiftPanel({
         </View>
         {online ? (
           <Pressable
-            style={styles.goOfflineBtn}
+            style={[styles.goOfflineBtn, busy && styles.actionBtnDisabled]}
             onPress={onGoOffline}
+            disabled={busy}
             accessibilityRole="button"
             accessibilityLabel="Go offline"
           >
@@ -118,6 +121,7 @@ export function ShiftPanel({
           <Pressable
             style={styles.actionBtn}
             onPress={onStartBreak}
+            disabled={busy}
             accessibilityRole="button"
             accessibilityLabel="Take a break"
           >
@@ -128,6 +132,7 @@ export function ShiftPanel({
           <Pressable
             style={styles.actionBtn}
             onPress={onGoOffline}
+            disabled={busy}
             accessibilityRole="button"
             accessibilityLabel="End shift"
           >
@@ -140,6 +145,7 @@ export function ShiftPanel({
           <Pressable
             style={styles.actionBtn}
             onPress={onEndBreak}
+            disabled={busy}
             accessibilityRole="button"
             accessibilityLabel="Resume shift"
           >
@@ -150,6 +156,7 @@ export function ShiftPanel({
           <Pressable
             style={styles.actionBtn}
             onPress={onGoOffline}
+            disabled={busy}
             accessibilityRole="button"
             accessibilityLabel="End shift"
           >
@@ -159,9 +166,9 @@ export function ShiftPanel({
         </View>
       ) : (
         <Pressable
-          style={[styles.startBtn, !canGoOnline && styles.startBtnDisabled]}
+          style={[styles.startBtn, (!canGoOnline || busy) && styles.startBtnDisabled]}
           onPress={onGoOnline}
-          disabled={!canGoOnline}
+          disabled={!canGoOnline || busy}
           accessibilityRole="button"
           accessibilityLabel="Start shift"
         >
@@ -207,6 +214,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: colors.primary,
+  },
+  actionBtnDisabled: {
+    opacity: 0.5,
   },
 
   // ── Hint ──

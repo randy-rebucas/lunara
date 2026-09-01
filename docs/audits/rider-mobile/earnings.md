@@ -1,6 +1,6 @@
 # Audit: Rider-mobile — Earnings (history + breakdown)
 
-Date: 2026-07-24
+Date: 2026-07-24 (updated 2026-09-02 — employee/contractor earnings gap fixed, see Finding 2)
 
 ## Entry point
 - Page: `apps/rider-mobile/app/earnings.tsx`
@@ -25,7 +25,7 @@ Same endpoint already traced in [home.md](home.md) Data flow (`weekEarnings`/`mo
 | Card | Fields consumed | Notes |
 |---|---|---|
 | Period grid (4 tiles: Today/Week/Month/Lifetime) | `todayEarnings`, `weekEarnings`, `monthEarnings`, `lifetimeEarnings` | same shape as the home dashboard's earnings grid ([home.md](home.md) Cards table) but sourced entirely from this one endpoint here, vs. home's grid which splits across `/riders/me` (today/lifetime) and `/riders/earnings` (week/month) — two different screens showing the same four numbers via two different fetch compositions. Not a bug (both ultimately read the same `rider.totalEarnings`/`todayEarnings` fields), just worth knowing if the two ever need to be reconciled. |
-| Today's activity (2 stats) | `todayPickups`, `todayDeliveries`, hardcoded `RIDER_PICKUP_PAYOUT`/`RIDER_DELIVERY_PAYOUT` (shared constants from `@lunara/utils`) | the "per task" rate shown is a flat constant, not the rider's actual computed average or the backend's per-task payout logic — if per-task payout ever varies (surge pricing, distance-based pay, promos), this label would silently misrepresent actual earnings without the constant being updated; flagged as a fidelity note, not a bug, since the constant is presumably still the flat rate in effect |
+| Today's activity (2 stats) | `todayPickups`, `todayDeliveries`, `feeRates.pickup`/`feeRates.delivery` (from `/riders/earnings` response, omitted for employee riders) | previously hardcoded `RIDER_PICKUP_PAYOUT`/`RIDER_DELIVERY_PAYOUT` constants regardless of employment type — see Finding 2 |
 | Earnings breakdown (list) | `recentEarnings[]` → `item.type`, `item.orderId`/`item.note`, `item.earnedAt`, `item.amount` | reference label falls back `orderId → note → 'Manual credit'`; date formatted locally — no dead fields here, every field is used |
 
 ## Mutations
@@ -38,6 +38,9 @@ Single endpoint, correctly scoped to `req.user.sub` throughout the service and i
 
 1. **Dead empty `<View>` rendered above the breakdown list — `[fixed]`.** `data.recentEarnings.length > 0 ? <View style={styles.breakdownCard} /> : null` (`earnings.tsx:358-360`, pre-fix) rendered a childless `View` styled with `breakdownCard`'s border/shadow/background whenever there was at least one earning entry — a visible empty bordered sliver appearing between the error banner and the first real breakdown row, with no content and no apparent purpose (each `EarningRow` already renders inside its own `breakdownCard`-styled wrapper via `renderEarningItem`). Almost certainly a leftover from an earlier layout where the list wasn't yet split into per-row cards.
    **Fix:** removed the dead `View` — `apps/rider-mobile/app/earnings.tsx` (list header, after the error banner). Verified no other consumer of this exact JSX block exists (it's page-local, not a shared component), so nothing else was affected.
+
+2. **Employee riders were shown a misleading flat per-task rate, and `wage`-type earnings rendered a blank badge — `[fixed]`.** The backend already enforces a real employee/independent-contractor split for earnings crediting (`riders.service.ts`: employees are paid via manual `wage` credits, never per-task fees), but this screen didn't know about it: `ActivityStat` always rendered `₱{RIDER_PICKUP_PAYOUT} per task` / `₱{RIDER_DELIVERY_PAYOUT} per task` regardless of employment type (misleading for employees, who never actually earn that), and `EarningTypeBadge`'s `EARNING_LABELS`/`stylesByType` maps had no entry for `'wage'`, so a wage-credit row (which only appears for employees) rendered `undefined` as its label.
+   **Fix:** `RidersService.getEarnings` (`riders.service.ts:779-820`) now returns `employmentType` and `feeRates` (fee rates only populated for non-employee, platform-pooled riders — same rule already used in `serializeMePayload`). `earnings.tsx`'s `ActivityStat` rate prop is now optional and sourced from `data.feeRates`, so employees simply see no per-task rate line. `earning-type-badge.tsx` gained a `wage: 'Wage Payment'` label and style entry. `EarningsData` (`rider-types.ts`) updated to include `'wage'` in the recent-earnings type union plus the new `employmentType`/`feeRates` fields.
 
 ## Unused/dead fields
 - `EarningsData.totalEarnings` is fetched but never read by this screen (only `lifetimeEarnings` is used, `earnings.tsx:321`) — and per the backend trace above, `totalEarnings` and `lifetimeEarnings` are set to the exact same value (`rider.totalEarnings`), so this is a genuinely redundant field in the API response, not just an unused-but-meaningful one. Low priority (four extra bytes on the wire, not sensitive), noting rather than fixing since removing a field from a shared response type risks breaking another consumer not checked in this pass (e.g. admin-web's rider profile view, not audited here).

@@ -87,11 +87,12 @@ const earnStyles = StyleSheet.create({
 interface PickupOfferCardProps {
   offer: PickupOffer;
   shopName: string;
+  accepting?: boolean;
   onAccept: () => void;
   onDecline: () => void;
 }
 
-function PickupOfferCard({ offer, shopName, onAccept, onDecline }: PickupOfferCardProps) {
+function PickupOfferCard({ offer, shopName, accepting, onAccept, onDecline }: PickupOfferCardProps) {
   const pickupTime = formatOfferTime(offer.scheduledPickupAt);
   const fromLabel = offer.pickupAddress?.label ?? 'Customer address';
   const fromCity = offer.pickupAddress?.city ?? '';
@@ -131,11 +132,21 @@ function PickupOfferCard({ offer, shopName, onAccept, onDecline }: PickupOfferCa
       ) : null}
 
       <View style={offerStyles.actions}>
-        <Pressable style={offerStyles.declineBtn} onPress={onDecline} accessibilityRole="button">
+        <Pressable
+          style={offerStyles.declineBtn}
+          onPress={onDecline}
+          disabled={accepting}
+          accessibilityRole="button"
+        >
           <Text style={offerStyles.declineBtnText}>Decline</Text>
         </Pressable>
-        <Pressable style={offerStyles.acceptBtn} onPress={onAccept} accessibilityRole="button">
-          <Text style={offerStyles.acceptBtnText}>Accept</Text>
+        <Pressable
+          style={[offerStyles.acceptBtn, accepting && offerStyles.acceptBtnDisabled]}
+          onPress={onAccept}
+          disabled={accepting}
+          accessibilityRole="button"
+        >
+          <Text style={offerStyles.acceptBtnText}>{accepting ? 'Accepting…' : 'Accept'}</Text>
         </Pressable>
       </View>
     </View>
@@ -312,6 +323,9 @@ const offerStyles = StyleSheet.create({
     fontWeight: '700',
     color: '#fff',
   },
+  acceptBtnDisabled: {
+    opacity: 0.6,
+  },
 });
 
 // ── Home screen ───────────────────────────────────────────────────────────────
@@ -323,6 +337,7 @@ export default function HomeScreen() {
     name,
     online,
     shiftStatus,
+    shiftBusy,
     weekEarnings,
     monthEarnings,
     refreshing,
@@ -337,6 +352,7 @@ export default function HomeScreen() {
     locationDenied,
     requestLocationPermission,
     activeAssignment,
+    acceptingOfferId,
     acceptPickupOffer,
     previewDeliveryQueue,
     openTask,
@@ -367,8 +383,13 @@ export default function HomeScreen() {
           <Text style={styles.greetingSub}>Here&apos;s your overview for today.</Text>
         </View>
         <Pressable
-          style={[styles.onlinePill, online ? styles.onlinePillActive : styles.onlinePillOff]}
+          style={[
+            styles.onlinePill,
+            online ? styles.onlinePillActive : styles.onlinePillOff,
+            shiftBusy && styles.onlinePillDisabled,
+          ]}
           onPress={online ? goOffline : goOnline}
+          disabled={shiftBusy}
           accessibilityRole="button"
           accessibilityLabel={online ? 'Go offline' : 'Go online'}
         >
@@ -435,6 +456,7 @@ export default function HomeScreen() {
       <ShiftPanel
         shiftStatus={shiftStatus}
         canGoOnline={Boolean(me?.compliance?.isCompliant)}
+        busy={shiftBusy}
         complianceHint={
           me?.compliance && !me.compliance.isCompliant
             ? 'Complete profile and document verification on the Profile tab before going online.'
@@ -483,6 +505,7 @@ export default function HomeScreen() {
               key={offer._id}
               offer={offer}
               shopName={shopName}
+              accepting={acceptingOfferId === offer._id}
               onAccept={() => acceptPickupOffer(offer._id)}
               onDecline={() => setDismissedPickup((s) => new Set([...s, offer._id]))}
             />
@@ -544,6 +567,9 @@ const styles = StyleSheet.create({
   onlinePillOff: {
     backgroundColor: colors.surfaceMuted,
     borderColor: colors.border,
+  },
+  onlinePillDisabled: {
+    opacity: 0.6,
   },
   onlineDot: {
     width: 8,

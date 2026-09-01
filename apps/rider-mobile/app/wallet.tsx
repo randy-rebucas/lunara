@@ -164,6 +164,7 @@ const sectionStyles = StyleSheet.create({
 function StatusPill({ status, label }: { status: WithdrawalRequest['status']; label: string }) {
   const cfg: Record<string, { bg: string; text: string }> = {
     paid: { bg: colors.accentLight, text: colors.accentDark },
+    approved: { bg: colors.accentLight, text: colors.accentDark },
     pending: { bg: colors.warningBg, text: colors.warning },
     rejected: { bg: '#FEF2F2', text: colors.destructive },
     processing: { bg: colors.primaryLight, text: colors.primary },
@@ -238,8 +239,11 @@ export default function WalletScreen() {
     try {
       const cashData = await riderFetch<CashSummaryData>('/riders/cash-summary');
       setCashSummary(cashData);
-    } catch {
-      setCashSummary({ pendingRemittance: { count: 0, totalCashCollected: 0, totalEarningOffset: 0, totalNetRemittance: 0, items: [] }, recentRemitted: [] });
+    } catch (e) {
+      // Keep any previously-loaded summary on screen (a refresh failure shouldn't make a rider who
+      // still owes cash think they're clear) — only fall back to an empty state on the very first load.
+      setCashSummary((prev) => prev ?? { pendingRemittance: { count: 0, totalCashCollected: 0, totalEarningOffset: 0, totalNetRemittance: 0, items: [] }, recentRemitted: [] });
+      setError((prev) => prev || (e instanceof Error ? e.message : 'Could not load cash summary'));
     }
   }, []);
 
@@ -371,20 +375,32 @@ export default function WalletScreen() {
       Alert.alert('Invalid amount', `Minimum withdrawal is ${formatCurrency(MIN_WITHDRAWAL)}`);
       return;
     }
-    setWithdrawing(true);
-    try {
-      await riderFetch('/riders/wallet/withdraw', {
-        method: 'POST',
-        body: JSON.stringify({ amount }),
-      });
-      setWithdrawAmount('');
-      Alert.alert('Submitted', 'Your withdrawal request is pending admin review.');
-      await load();
-    } catch (e) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Withdrawal failed');
-    } finally {
-      setWithdrawing(false);
-    }
+    Alert.alert(
+      'Confirm withdrawal',
+      `Withdraw ${formatCurrency(amount)} to your ${PAYOUT_OPTIONS.find((o) => o.id === method)?.label ?? 'payout method'} on file?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Withdraw',
+          onPress: async () => {
+            setWithdrawing(true);
+            try {
+              await riderFetch('/riders/wallet/withdraw', {
+                method: 'POST',
+                body: JSON.stringify({ amount }),
+              });
+              setWithdrawAmount('');
+              Alert.alert('Submitted', 'Your withdrawal request is pending admin review.');
+              await load();
+            } catch (e) {
+              Alert.alert('Error', e instanceof Error ? e.message : 'Withdrawal failed');
+            } finally {
+              setWithdrawing(false);
+            }
+          },
+        },
+      ],
+    );
   }
 
   const hasProof = proofImageUri !== null || remittanceTransactionId.trim().length > 0;

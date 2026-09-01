@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import type { RiderCompliance } from '../lib/rider-types';
+import { RIDER_DOCUMENT_TYPES, type RiderCompliance } from '../lib/rider-types';
 import { Card } from './ui/card';
 import { colors, spacing, typography } from '../theme';
 
@@ -12,7 +12,7 @@ export function ComplianceBanner({ compliance }: ComplianceBannerProps) {
   const router = useRouter();
   if (!compliance || compliance.isCompliant) return null;
 
-  const totalDocs = 4;
+  const totalDocs = RIDER_DOCUMENT_TYPES.length;
   const approved = compliance.approvedDocumentCount;
 
   return (

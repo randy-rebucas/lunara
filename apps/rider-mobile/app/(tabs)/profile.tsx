@@ -10,7 +10,7 @@ import { Screen } from '../../src/components/ui/screen';
 import { StatusBadge } from '../../src/components/ui/status-badge';
 import { useTabScreenPadding } from '../../src/hooks/use-tab-bar-height';
 import { pickRiderAvatar } from '../../src/lib/rider-avatar';
-import type { RiderMe } from '../../src/lib/rider-types';
+import { RIDER_DOCUMENT_TYPES, type RiderMe } from '../../src/lib/rider-types';
 import { useAuthStore } from '../../src/store/auth';
 import { colors, radius, shadow, spacing, typography } from '../../src/theme';
 
@@ -315,7 +315,7 @@ export default function ProfileScreen() {
           hint={
             compliance?.isCompliant
               ? 'All documents verified'
-              : `${approvedDocs} of 4 documents approved`
+              : `${approvedDocs} of ${RIDER_DOCUMENT_TYPES.length} documents approved`
           }
           onPress={() => router.push('/documents')}
         />

@@ -1,68 +1,193 @@
-# Audit: Rider-mobile — Profile tab (+ Edit profile sub-page)
+# Audit: Rider-mobile — Profile module
 
-Date: 2026-07-24
+Date: 2026-09-02
 
 ## Entry point
 - Page: `apps/rider-mobile/app/(tabs)/profile.tsx`
-- Component(s): inline `Avatar`, `MenuRow`, `MenuSection` — no page-local fetch, purely reads the shared `RiderOperationsContext` (`me`, `name`, `shiftStatus`, `unreadCount`, `locationDenied`) already audited in [home.md](home.md).
+- Component(s): inline `Avatar`, `MenuRow`, `MenuSection` in the same file; `ComplianceBanner`
+  (`src/components/compliance-banner.tsx`), `LocationPermissionBanner`, `StatusBadge`.
 
 ## Sub-pages
 
 | Sub-page | Linked from | Param passed | Matches sub-page's fetch? |
 |---|---|---|---|
-| `app/profile/edit.tsx` | "Edit profile" row (`profile.tsx:230`) and "Vehicle info" row (`profile.tsx:252`) — both navigate to the same route | none (edits the caller's own profile via JWT identity) | yes, see below |
-| `app/documents.tsx` | "Documents" row (`profile.tsx:243`) | none | out of scope — a full upload/verification feature (4 document types, camera capture, status per doc), not a thin detail view; warrants its own audit doc, not traced here |
-| `app/performance.tsx` | "Performance" row (`profile.tsx:275`) | none | out of scope — separate feature (ratings/completion stats), not traced here |
-| `app/earnings.tsx` | "Earnings history" row (`profile.tsx:284`) | none | out of scope — already noted as a separate deep feature in [home.md](home.md) |
-| `app/wallet.tsx` | "Wallet & withdrawals" row (`profile.tsx:293`) | none | out of scope — separate feature (balance, payout, remittance) |
-| `app/notifications.tsx` | "Notifications" row (`profile.tsx:306`) | none | out of scope — separate feature |
-| `app/support.tsx` | "Help & support" row (`profile.tsx:315`) | none | out of scope — separate feature |
-| `(tabs)/tasks?filter=completed` | "Task history" row (`profile.tsx:264-266`) | `filter=completed` query param | yes — matches the `filterParam` handling already audited in [tasks.md](tasks.md); this row is just a deep-link into that same screen, not a new one |
+| `app/profile/edit.tsx` | "Edit profile" and "Vehicle info" rows, `profile.tsx:307,329`; also `ComplianceBanner`'s "Edit profile" link | none (rider identity from JWT) | yes |
+| `app/documents.tsx` | "Documents" row, `profile.tsx:320`; also `ComplianceBanner`'s "Documents" link | none (rider identity from JWT) | yes |
 
-**Edit profile (`profile/edit.tsx`)**: fetches its own copy of the rider profile via `GET /riders/me` on mount (`profile/edit.tsx:200-221`) rather than seeding its form from the `me` object the Profile tab already had in the shared context — a redundant round trip for data the caller already displayed a second ago. See Findings #1. It has its own independent loading/error/saving state, entirely separate from the shared context's `refreshing`.
+Both sub-pages are full pages with their own fetch/mutation flow (not thin detail panels), so
+they're covered in full here per the "deep sub-page" guidance, since they're tightly coupled to
+the same `RiderMe` payload and small enough to keep in one doc.
+
+### `profile/edit.tsx`
+Re-fetches the entire `RiderMe` payload from `GET /riders/me` on mount (`load()`,
+`edit.tsx:205-228`) rather than accepting the already-loaded `me` from
+`useRiderOperations()` (the parent tab and `profile.tsx` both already hold this data in
+context). This is a redundant round-trip on every "Edit profile" tap — not wrong, but an
+extra request for data the app already had a few hundred ms earlier. Has its own
+loading/error state independent of the parent (`loading`/`error` local state,
+`DataLoadState`), and a **client-side duplicate-phone check is delegated to the backend**
+(`ConflictException` in `RidersService.updateProfile`).
+
+### `documents.tsx`
+Also independently re-fetches `GET /riders/me` (`documents.tsx:359-369`) instead of reusing
+`useRiderOperations().me`. Same redundant-fetch pattern as `edit.tsx`. Has its own
+loading/error/refresh (pull-to-refresh) state, and per-document upload state
+(`uploadingType`) that is independent of the parent context's `refreshing` flag.
 
 ## Data flow
-
 | Call | Method | Path | Frontend type | Backend handler |
 |---|---|---|---|---|
-| Profile tab (no local fetch) | — | — | reads shared `RiderMe` from context | see [home.md](home.md) `GET /riders/me` |
-| Edit profile — load | GET | `/riders/me` | `RiderMe` | `RidersController.getMe` → `RidersService.getMe` (same handler as home/context) |
-| Edit profile — save | PATCH | `/riders/me` | inline body (firstName/lastName/phone/homeAddress/vehicleType/plateNumber/orCrNumber) | `RidersController.updateMe` → `RidersService.updateProfile` |
+| Load profile (tab, edit, documents) | GET | `/riders/me` | `RiderMe` | `RidersController.getMe` → `RidersService.getMe` |
+| Save profile edits | PATCH | `/riders/me` | body: partial `RiderMe` fields | `RidersController.updateMe` → `RidersService.updateProfile` |
+| Upload avatar | POST (multipart) | `/riders/me/avatar` | `RiderMe` | `RidersController.uploadAvatar` → `RidersService.uploadAvatar` |
+| Upload KYC document | POST (multipart) | `/riders/me/documents/:type` | `RiderMe` | `RidersController.uploadDocument` → `RidersService.uploadDocument` |
+| Fetch document/task image | GET | `/uploads/rider-documents/:filename` | n/a (blob, via `AuthenticatedImage`) | `MediaController.getRiderDocument` → `MediaService.assertAccess` |
+
+`riderFetch`/`apiFetch` (`src/store/auth.ts:11-42`) unwrap the `{ success, data }` envelope
+returned by every rider endpoint, so the frontend `RiderMe` type correctly describes the
+unwrapped `data` payload.
 
 ## Backend trace
-`RidersService.updateProfile` (`riders.service.ts:547-589`): loads the rider doc and user doc by `userId` (from JWT, not a param), applies each provided field only if `!== undefined` (safe partial update, no accidental blanking of untouched fields), and for phone changes checks uniqueness (`userModel.findOne({phone, _id:{$ne:user._id}})`) before writing, throwing `ConflictException` on collision. Returns `this.getMe(userId)` so the response is always the freshly recomputed `RiderMe` (compliance gaps included) — the frontend's `refresh()` call after save (`profile/edit.tsx:257`) is technically redundant with what the PATCH response already contains, but harmless since it re-syncs the same context used across every tab.
+`RidersService.getMe` (`riders.service.ts:224-240`) loads/creates the rider doc
+(`findOrCreate`), the linked `User` (`email`, `phone` only, via `.select`), the
+`UserProfile` (`avatarUrl` only), and — only for a platform-pooled, non-employee rider —
+the platform's flat per-leg fee amounts from settings. It calls
+`serializeMePayload` to shape the response, which also runs `isRiderCompliant` to derive
+`compliance` (profile/document gaps, approved count, verification status) inline, and
+`serializeRiderDocuments` (`rider-compliance.ts:152-168`) to always return one entry per
+`RIDER_DOCUMENT_TYPES` (so a never-uploaded doc still renders as `status: undefined` →
+"missing" client-side) rather than only the documents that exist.
 
-One naming subtlety worth recording: the `firstName`/`lastName` shown everywhere in the app as `me.user.firstName`/`lastName` (home greeting, profile hero) are **not** the platform `User` document's name fields — `serializeMePayload` (`riders.service.ts:169-213`) computes `displayFirstName`/`displayLastName` from `rider.firstName`/`rider.lastName` (falling back to the email prefix), and nests them under the `user` key purely for frontend shape convenience. `updateProfile` correctly writes to `rider.firstName`/`lastName`, so this resolves consistently — flagged here only because the naming (`me.user.firstName` looking like it reads the `Users` collection) is a likely source of confusion for a future change, not because anything is currently broken.
+`updateProfile` (`riders.service.ts:612-656`) patches only the fields present in the DTO
+(partial update pattern), trims strings, and — for phone changes — checks for a
+phone collision against other users before applying it, throwing `ConflictException` on
+collision. `uploadAvatar`/`uploadDocument` store the file via `LocalStorageService`
+(memory-buffered multer upload, validated by `ALLOWED_IMAGE_TYPES` mimetype allowlist and
+a size limit set per-endpoint in the controller: avatar 5MB, KYC doc 5MB) and best-effort
+delete the previous file afterward (wrapped in `.catch(() => {})` so a delete failure never
+fails the request).
+
+No N+1s or obvious inefficiencies — `getMe` is a small, fixed number of point reads keyed
+by `userId`.
 
 ## Cards / panels
-
 | Card | Fields consumed | Notes |
 |---|---|---|
-| Compliance banner + location banner | `compliance`, `locationDenied` | reused verbatim from home (see [home.md](home.md)) |
-| Profile hero (avatar, name, contact, status) | `name` (context-derived), `email` (`authUser.email ?? me.user.email`), `phone` (`me.user.phone`), `shiftStatus` | `email` prefers the auth-store's email over the rider payload's — reasonable, since auth identity is the source of truth and `me.user.email` is only a fallback for a slow-loading `me` |
-| Earnings summary (2 tiles) | `me.todayEarnings`, `me.totalEarnings` | same two fields shown again in the home dashboard's grid — duplication across screens is fine (same source of truth, no drift risk since both read the same `me` object) |
-| Account section | `compliance.isCompliant`, `approvedDocs` (`compliance.approvedDocumentCount ?? 0`), `vehicleType` (fallback `'Motorcycle'`), `plateNumber` (fallback `'—'`) | hardcoded `'4'` in the "X of 4 documents approved" hint (`profile.tsx:241`) duplicates the document-count magic number that also lives in `RIDER_DOCUMENT_TYPES` (backend, 4 entries) — if a 5th document type is ever added, this hint silently becomes wrong without a compile-time link between the two. Minor, noting rather than fixing since introducing a shared constant across app/api boundaries is beyond this audit's scope. |
-| Activity section | none beyond navigation | — |
-| More section | `unreadCount` (badge) | reused verbatim from home context |
+| `ComplianceBanner` | `compliance.isCompliant`, `compliance.profileGaps`, `compliance.documentGaps`, `compliance.approvedDocumentCount` | `totalDocs` was hardcoded `4`; now derived from `RIDER_DOCUMENT_TYPES.length` (fixed, see Findings). |
+| `LocationPermissionBanner` | `locationDenied` (context-derived, not from `RiderMe`) | Not part of this payload; from device permission state. |
+| Profile hero (avatar, name, contact, status) | `authUser?.email` / `me.user.email`, `me.user.phone`, `name` (context-derived), `me.avatarUrl`, `shiftStatus` | `Avatar` derives initials client-side from `name`. |
+| Earnings row | `me.todayEarnings`, `me.totalEarnings` | Formatted client-side via `formatCurrency`. |
+| "Edit profile" row | none beyond nav | Static hint text. |
+| "Documents" row | `compliance.isCompliant`, `compliance.approvedDocumentCount` | Hint text hardcoded "of 4 documents approved"; now uses `RIDER_DOCUMENT_TYPES.length` (fixed). |
+| "Vehicle info" row | `me.vehicleType`, `me.plateNumber` | Static fallback `'Motorcycle'` if `vehicleType` missing. |
+| Activity section rows | `me.partnerId` (branches "Wallet & withdrawals" vs "Pay & payouts") | Static icon/link list, not data-driven beyond the partner-id branch. |
+| "Notifications" row | `unreadCount` (context, from `/riders/notifications`, not `RiderMe`) | n/a to this module's fetch. |
+| `edit.tsx` — Rider Information | `data.firstName`/`data.user?.firstName`, `lastName` similarly, `data.user?.email` (read-only field), `data.user?.phone` | Email field is locked/read-only client-side (`editable={false}`) — matches that `updateProfile` never accepts an email field in its DTO. |
+| `edit.tsx` — Home Address | `data.homeAddress.{line1,line2,city,province,postalCode,lat,lng}` | "Use current location" reverse-geocodes client-side via `expo-location` + `reverseGeocodeAddress`, only overwriting fields the geocoder actually returned. |
+| `edit.tsx` — Vehicle Information | `data.vehicleType`, `data.plateNumber`, `data.orCrNumber` | `VEHICLE_ICONS` is a client-side icon map keyed by vehicle type string — must stay in sync with `VEHICLE_TYPES`; falls back to a generic car icon for unknown types, so it degrades safely rather than breaking. |
+| `documents.tsx` — `ProgressBar` | `compliance.approvedDocumentCount`, `RIDER_DOCUMENT_TYPES.length` | Percent computed client-side; already correctly used `RIDER_DOCUMENT_TYPES.length`, unlike the other two hardcoded spots. |
+| `documents.tsx` — `DocCard` (×4) | `doc.status`, `doc.fileUrl`, `doc.rejectionReason` | `STATUS_CONFIG`/`DOC_ICONS` are client-side maps keyed by status/type — must stay in sync with backend's `RiderDocumentStatus`/`RiderDocumentType` unions. Image preview goes through `AuthenticatedImage`, which authenticates the download with the bearer token for any path under `/uploads/rider-documents/`. |
 
 ## Mutations
-
 | Action | Destructive? | Confirmed? | Double-submit guard? | Failure visible? |
 |---|---|---|---|---|
-| Save profile (`profile/edit.tsx`) | no | n/a | yes — button disabled while `saving` (`profile/edit.tsx:438`) | yes — inline error banner + `setError`, doesn't clear on retry until resubmitted |
-| Sign out (`handleLogout`) | soft-destructive (ends session; if on shift, silently goes offline first) | no confirmation dialog | no explicit guard, but logout + navigation is a coarse one-shot action, low risk of a meaningful double-fire | partially — `handleLogout` (`rider-operations.tsx:351-357`) swallows any `goOffline()` failure (`.catch(() => {})`) before logging out; if going offline fails, the rider is logged out from the app while the backend may still show them online/on-shift, with no error shown. This is the same silent-failure family already flagged for `goOffline` itself in [home.md](home.md) Findings #5 — one more caller hitting the same gap. |
+| Save profile (`edit.tsx` `saveProfile`) | no | n/a | yes — `saving` disables the button while in flight | yes — `error` state renders an inline banner; `Alert` on success, `router.back()` only on success |
+| Upload avatar (`profile.tsx` `handleAvatarPress`) | no (replaces previous, old file deleted server-side) | no confirmation, but low-risk/reversible | yes — `avatarUploading` disables the avatar `Pressable` | yes — `Alert.alert('Upload failed', ...)`; state resets in `finally` |
+| Upload/replace KYC document (`documents.tsx` `uploadDocument`) | no (previous doc superseded, not silently discarded — old file best-effort deleted only *after* the new one is saved) | yes — source picker (camera/library) itself acts as an intentional step, and replacing an already-approved doc resets it to `pending` (expected verification behavior, not flagged as an issue) | yes — `uploadingType` disables just that card's button, keyed per document type | yes — `Alert.alert('Upload failed', ...)`; `finally` clears `uploadingType` regardless of outcome |
+
+No delete/deactivate actions exist on this module (sign-out is a session action, not a
+destructive data mutation, and is unconfirmed — consistent with how most mobile apps treat
+sign-out as reversible via re-login).
 
 ## Authorization
-Both `GET`/`PATCH /riders/me` resolve identity from `req.user.sub` (JWT), never a client param — no cross-rider access surface. Phone-uniqueness check on update queries across all users (`_id: {$ne: user._id}`), which is correct and necessary (phone likely doubles as a login/lookup key elsewhere) — no over-broad exposure since it only returns a boolean-shaped conflict, not the other user's data.
+All five endpoints in this module (`GET/PATCH /riders/me`, `POST /riders/me/avatar`,
+`POST /riders/me/documents/:type`, `GET /uploads/rider-documents/:filename`) are guarded by
+`JwtAuthGuard` + `RolesGuard` and `@Roles(UserRole.RIDER)` (controller-level guard,
+route-level role decorator) except the media route, which is JWT-only and instead scopes
+access via `MediaService.assertAccess('rider-documents', filename, req.user)` — i.e.,
+filename alone isn't sufficient, the service checks the requesting user owns the document.
+Every service method keys off `req.user.sub` (the JWT subject) rather than any
+client-supplied id, so there's no param a rider could widen to read/edit another rider's
+profile or documents. No cross-role widening found — `[authz]` clean.
 
 ## Findings
 
-1. **Redundant re-fetch on Edit Profile.** `profile/edit.tsx` fetches `GET /riders/me` fresh on mount (`profile/edit.tsx:200-221`) even though the Profile tab it was just launched from already has an up-to-date `me` object in the shared `RiderOperationsContext`. This means every time a rider taps "Edit profile" or "Vehicle info", there's a guaranteed network round trip (with a full-screen loading spinner, `DataLoadState`) before they see their own already-known data. Left unfixed: seeding the form from `useRiderOperations().me` immediately and only falling back to a fetch if `me` is null would remove the round trip and the loading flash, but this is a UX/perf call (does staleness matter enough here to skip a fresh fetch on an edit form?) rather than a correctness bug — flagging for a product decision rather than changing fetch behavior unilaterally on a form whose whole point is accurate current data.
+1. **PII/internal-data over-exposure**: `serializeRiderDocuments` sent `reviewedBy` (the
+   admin `User` ObjectId who reviewed a KYC document) to the rider client on every
+   `GET /riders/me` call, for all 4 KYC documents. The rider frontend never rendered it
+   (confirmed via grep — the field only appeared in the `RiderKycDocument` type
+   declaration, never read anywhere in `documents.tsx`/`profile.tsx`/`edit.tsx`). An
+   unused, internal admin-identifying field being shipped to every rider on every profile
+   load is a real (if low-severity) over-exposure — it leaks which internal admin account
+   reviewed a document to a party that has no legitimate need to know.
+   **Fix:** removed `reviewedBy` from the object returned by `serializeRiderDocuments`
+   (`apps/api/src/modules/riders/rider-compliance.ts:152-167`) and from the frontend
+   `RiderKycDocument` type (`apps/rider-mobile/src/lib/rider-types.ts:97-104`). This
+   function is only used by the rider-facing `RidersService.getMe` (confirmed via grep —
+   no admin-facing serializer shares it), so no other consumer is affected.
 
-2. **`handleLogout` swallows `goOffline` failures silently.** Same root cause as [home.md](home.md) Findings #5 (`goOffline`/`startBreak`/`endBreak` have no user-facing error path) — here it's additionally wrapped in an explicit `.catch(() => {})` (`rider-operations.tsx:353`), so a rider who signs out while on shift and offline momentarily gets logged out of the app with no indication that the backend might still consider them online. Not re-fixed here since the underlying fix belongs with the Findings #5 entry in home.md (touching the same function) — noting this second call site so a future fix covers both.
+2. Magic number `4` (total KYC document count) was hardcoded independently in two places
+   — `ComplianceBanner`'s `totalDocs = 4` (`src/components/compliance-banner.tsx:15`) and
+   the "Documents" row hint text `` `${approvedDocs} of 4 documents approved` ``
+   (`app/(tabs)/profile.tsx:318`) — while `documents.tsx`'s own `ProgressBar` already
+   correctly derived the same number from `RIDER_DOCUMENT_TYPES.length`. Any future
+   addition/removal of a required KYC document type would silently desync these two
+   spots from the real requirement.
+   **Fix:** both now import `RIDER_DOCUMENT_TYPES` and use `RIDER_DOCUMENT_TYPES.length`
+   (`apps/rider-mobile/src/components/compliance-banner.tsx:1,15`,
+   `apps/rider-mobile/app/(tabs)/profile.tsx:13,318`), matching `documents.tsx`'s existing
+   pattern.
+
+3. Redundant re-fetch: both `profile/edit.tsx` (`load()`, line 205) and `documents.tsx`
+   (`load()`, line 359) independently call `GET /riders/me` on mount instead of seeding
+   from the `me` object `useRiderOperations()` already holds (the same context the parent
+   tab and `ComplianceBanner` read from). This costs one extra round-trip per navigation
+   into either sub-page, and briefly shows the sub-page's own loading spinner even though
+   the data was already in memory a moment earlier.
+   **Left unfixed** — out of scope as a "fix now": reusing the context's `me` would still
+   need to handle the case where it's stale or not yet loaded (e.g. deep-linking directly
+   into `/profile/edit`), which is a small design decision (loading-state fallback logic)
+   rather than a pure bug fix, and both pages already have correct independent
+   loading/error handling as a fallback. Flagging for a follow-up rather than fixing
+   opportunistically here.
+
+4. Two dead fields in the `RiderMe` payload: `fixedWageAmount` and `wageFrequency` are set
+   by `serializeMePayload` (`riders.service.ts:197-198`) on every `GET /riders/me`
+   response but aren't declared in the frontend `RiderMe` type at all (so they're silently
+   dropped/ignored by TypeScript, not read anywhere in this module). Not sensitive (it's
+   the rider's own wage config, not another user's data), just wasted payload.
+   **Left unfixed** — likely intentional payload for a different screen (employment/wage
+   settings) not in scope for this audit; removing them risks breaking a consumer not
+   traced here. Flagging as dead-weight-if-truly-unused rather than removing blind.
 
 ## Unused/dead fields
-None found specific to this module — the Profile tab and Edit-profile sub-page consume all fields of `RiderMe` that are relevant to their surfaces (documents/employment/wage fields are intentionally left to their own dedicated screens — `documents.tsx`, not audited here).
+- `RiderKycDocument.reviewedBy` — unused and sensitive; see Finding 1 (fixed, removed).
+- `RiderMe.fixedWageAmount`, `RiderMe.wageFrequency` — sent by the backend, not in the
+  frontend type, not read by this module; see Finding 4 (left unfixed, likely used
+  elsewhere).
+- `RiderMe.riderId`, `RiderMe.shopLocation` — present in the payload and the frontend
+  type but not read anywhere in `profile.tsx`/`edit.tsx`/`documents.tsx`. Not flagged as a
+  finding: neither is sensitive (an internal-only Mongo id and a fixed shop address used
+  elsewhere in the app, e.g. pickup/delivery navigation), and both are plausibly consumed
+  by other screens sharing the same `RiderMe` fetch — out of scope to chase down here.
 
 ## Loading/error/realtime behavior
-The Profile tab itself has no independent loading state — like [profile.md]'s parent context in home.md, it renders whatever the shared context currently holds and relies on pull-to-refresh (`onRefresh`) for a manual resync; no realtime/socket-driven update specific to this screen beyond what the shared dispatch socket already provides (compliance/earnings changes propagate via the same `refresh()` used everywhere). `profile/edit.tsx` has its own independent loading/error state (`loading`, `error`, `DataLoadState`) that is not shared with any other screen, and correctly distinguishes "still loading" from "failed to load" (`error && !firstName` gate, `profile/edit.tsx:275`) rather than conflating them.
+- `profile.tsx` has no local loading state of its own — it renders whatever
+  `useRiderOperations()` currently holds and relies on pull-to-refresh
+  (`RefreshControl` wired to `refreshing`/`onRefresh` from context) for manual refresh.
+  There's no visible skeleton for the very first load before `me` populates; fields fall
+  back to `'—'`/defaults (e.g. `phone ?? '—'`), which reads acceptably rather than
+  breaking.
+- `edit.tsx` and `documents.tsx` each have their own `loading`/`error` local state backed
+  by the shared `DataLoadState` component (`src/components/data-load-state.tsx`), so both
+  show a loading message on initial fetch and a retry affordance
+  (`onRetry={load}`) on error — consistent with the pattern used elsewhere in the app.
+  `documents.tsx` additionally supports pull-to-refresh.
+  A failed refresh does not wipe previously-shown data in either page — `error` is only
+  used to gate the *initial* load screen (`error && !firstName` for edit, plain `error`
+  for documents-first-load); once data has loaded once, subsequent fetch calls only run
+  through `saveProfile`/`uploadDocument`, which use `Alert.alert` for failures and leave
+  the previously-rendered data in place.
+- No sockets or polling on this module; refresh is manual (pull-to-refresh) or triggered
+  after a successful mutation (`refresh()` from context after avatar/profile/document
+  changes, so the tab's `me` stays in sync with what the sub-page just wrote).

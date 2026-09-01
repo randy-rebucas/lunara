@@ -475,6 +475,7 @@ export class PickupService {
       {
         includeDialablePhone: isAssigned,
         customerAddressId: order.pickupAddressId,
+        isAssigned,
       },
     );
 

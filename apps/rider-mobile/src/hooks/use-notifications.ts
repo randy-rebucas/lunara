@@ -16,7 +16,6 @@ export function useNotifications(limit = 20) {
       setItems(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load notifications');
-      setItems([]);
     } finally {
       setLoading(false);
     }

@@ -100,7 +100,6 @@ export interface RiderKycDocument {
   status?: RiderDocumentStatus;
   uploadedAt?: string;
   reviewedAt?: string;
-  reviewedBy?: string;
   rejectionReason?: string;
 }
 
@@ -168,12 +167,15 @@ export interface EarningsData {
   todayPickups: number;
   todayDeliveries: number;
   recentEarnings: {
-    type: 'pickup' | 'delivery' | 'bonus' | 'adjustment';
+    type: 'pickup' | 'delivery' | 'bonus' | 'adjustment' | 'wage';
     amount: number;
     orderId?: string;
     note?: string;
     earnedAt: string;
   }[];
+  employmentType?: 'employee' | 'independent_contractor';
+  /** Flat per-leg fee rates — only present for a non-employee, platform-pooled rider. */
+  feeRates?: { pickup: number; delivery: number } | null;
 }
 
 export interface RiderPerformanceData {

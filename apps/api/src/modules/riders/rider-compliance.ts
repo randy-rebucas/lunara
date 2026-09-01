@@ -161,7 +161,8 @@ export function serializeRiderDocuments(
       status: doc?.status,
       uploadedAt: doc?.uploadedAt,
       reviewedAt: doc?.reviewedAt,
-      reviewedBy: doc?.reviewedBy,
+      // reviewedBy (the admin user id who reviewed the doc) is intentionally omitted here —
+      // it's internal admin data the rider app never renders and has no reason to see.
       rejectionReason: doc?.rejectionReason,
     };
   });

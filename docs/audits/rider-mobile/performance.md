@@ -1,50 +1,77 @@
-# Audit: Rider-mobile — Performance (completion/acceptance/on-time/rating stats)
+# Audit: rider-mobile — Performance
 
-Date: 2026-07-24
+Date: 2026-09-02
 
 ## Entry point
-- Page: `apps/rider-mobile/app/performance.tsx`
-- Component(s): inline `RingMeter`, `StatRow` — no sub-components in other files.
+- Page: `apps/rider-mobile/app/performance.tsx` (`PerformanceScreen`) — client component, single self-contained screen.
+- Component(s): `RingMeter` and `StatRow` (local to `performance.tsx`).
 
 ## Sub-pages
-None — no outbound navigation into a detail route, purely a read-only stats screen. Reached from `(tabs)/profile.tsx`'s "Performance" row (see [profile.md](profile.md) Sub-pages table).
+None — no outbound navigation into a detail route. The screen is a terminal read-only stats view.
 
 ## Data flow
-
 | Call | Method | Path | Frontend type | Backend handler |
 |---|---|---|---|---|
 | Performance stats | GET | `/riders/performance` | `RiderPerformanceData` | `RidersController.getPerformance` → `RidersService.getPerformance` → `buildRiderPerformancePayload` |
 
-Single endpoint, `@Roles(UserRole.RIDER)`, scoped via `req.user.sub` — no client-supplied rider id.
+Response envelope is `{ success: true, data: {...} }`; unwrapped by `authRequest` (`apps/rider-mobile/src/store/auth.ts:41`), so `riderFetch<RiderPerformanceData>` receiving the bare object is correct.
 
 ## Backend trace
-`buildRiderPerformancePayload` (`rider-performance.ts`) runs 9 queries in parallel (`Promise.all`) — all `countDocuments`/`find` scoped by `pickupRiderId`/`deliveryRiderId` matching the caller: completed pickups/deliveries, cancelled tasks, accepted pickups/deliveries, total pickup/delivery assignments, on-time deliveries (a `$expr` comparison between `delivery.deliveredAt` and `scheduledDeliveryAt`), the set of completed-delivery order ids (candidates for a customer review), and the on-time denominator (deliveries that had both a schedule and a delivered timestamp, regardless of whether they were on time). It then runs one further aggregate against `Review` (`{orderId: {$in: orderIds}}`, computing both an average rating and — after the fix below — a count) only if there's at least one completed delivery. `completionRate`/`acceptanceRate`/`onTimeDeliveryRate` are all `pct(numerator, denominator)`, which returns `100` when the denominator is `0` — a brand-new rider with zero deliveries would see 100% across the board rather than a "not enough data" state; noting as a display-fidelity quirk rather than a bug, since it's a deliberate default in `pct()`.
+`RidersService.getPerformance` (`apps/api/src/modules/riders/riders.service.ts:890`) delegates entirely to `buildRiderPerformancePayload` (`apps/api/src/modules/riders/rider-performance.ts`), which runs 10 queries in parallel via `Promise.all`:
+- `completedPickups`/`completedDeliveries` → summed into `completedTasks`.
+- `cancelledTasks` → orders where either rider id matches and `status === CANCELLED`.
+- `acceptedPickups`/`acceptedDeliveries` → summed into `acceptedAssignments`.
+- `totalPickupAssignments`/`totalDeliveryAssignments` → summed into `totalAssignments`.
+- `onTimeDeliveries` → delivered orders where `delivery.deliveredAt <= scheduledDeliveryAt` (via `$expr`).
+- `deliveriesWithSchedule` → delivered orders that actually had a `scheduledDeliveryAt` and `delivery.deliveredAt` at all (the correct denominator for on-time rate — deliveries with no schedule can't be "on time" or "late").
+- `ratedOrders` → `_id`-only projection of this rider's completed deliveries, used as the candidate set for a review lookup.
+
+Rates are computed by `pct(numerator, denominator)` (`rider-performance.ts:19`): `Math.round((n/d)*1000)/10`, and **returns `100` when `denominator <= 0`** — i.e., a brand-new rider with zero completed/cancelled tasks, zero assignments, or zero scheduled deliveries shows 100% on that metric rather than an undefined/N/A state. This is intentional (avoids a "0%" that reads as a failing score for someone who simply hasn't worked yet), but the frontend previously displayed that 100% at face value with no way to distinguish "actually 100%" from "no data yet" — see Findings #1.
+
+Customer rating: only queried if `ratedOrders.length > 0`, aggregating reviews by `$in` on those order ids for `avg`/`count`. Comment in the code correctly warns future editors that `ratedDeliveries` must come from the aggregate's own `count`, not `ratedOrders.length` (the candidate set, not the actual review count) — no bug here, just noting it was deliberately guarded against.
+
+No N+1s — all 10 counts/finds run in parallel, and the review aggregation is a single `$match`+`$group` over an `$in` list rather than per-order lookups.
 
 ## Cards / panels
+Render order top to bottom:
 
 | Card | Fields consumed | Notes |
 |---|---|---|
-| Completion rate ring | `completionRate` | backend-computed, `pct(completedTasks, completedTasks+cancelledTasks)` |
-| Acceptance rate ring | `acceptanceRate` | backend-computed, `pct(acceptedAssignments, totalAssignments)` |
-| On-time delivery ring | `onTimeDeliveryRate` | backend-computed |
-| Customer rating ring | `customerRating` (formatted `X.X / 5` or `—` if null), `ratedDeliveries` (hint text) | see Findings #1 — `ratedDeliveries` was wrong before the fix |
-| Activity summary (4 rows) | `completedTasks`, `cancelledTasks`, `acceptedAssignments`/`totalAssignments`, `onTimeDeliveries` | all backend fields, no client-side derivation, no dead fields |
+| Page header | (static copy) | No data. |
+| Completion rate `RingMeter` | `completionRate`, plus `completedTasks`+`cancelledTasks` (client-side, added post-fix) | Client-derives a `hasCompletionData` gate to show `—` instead of the backend's zero-denominator `100%` (see Findings #1 / Fix). Color (`accentDark`/`accentLight`) is a static per-card constant, not a value-based threshold — no magic-number color map to keep in sync. |
+| Acceptance rate `RingMeter` | `acceptanceRate`, plus `totalAssignments` (client-side, added post-fix) | Same `—` gate as above, using `hasAssignmentData`. |
+| On-time delivery `RingMeter` | `onTimeDeliveryRate` | Same zero-denominator ambiguity exists here (see Findings #2) but the frontend has no field to gate on — `deliveriesWithSchedule` (the actual denominator) isn't returned by the API. Left unfixed, see Findings #2. |
+| Customer rating `RingMeter` | `customerRating` (formatted `.toFixed(1)` + `/ 5`, or `—` if `null`), `ratedDeliveries` (as the `hint` sub-label, "N rated deliveries" / "No ratings yet") | Correctly handles its own null case already — `customerRating` is nullable in the type and the component branches on `!= null` before formatting. This was the one metric that already avoided the "misleading 100%" class of bug, since `null` (not `0`/`100`) is what the backend sends when there are no reviews. |
+| "ACTIVITY SUMMARY" section label | (static copy) | No data. |
+| Completed tasks `StatRow` | `completedTasks` | Plain count, no derivation. |
+| Cancelled tasks `StatRow` | `cancelledTasks` | Color-derived: `colors.destructive` if `cancelledTasks` truthy, else muted — a simple boolean threshold, not a magic-number range, low risk. |
+| Accepted assignments `StatRow` | `acceptedAssignments`, `totalAssignments` (formatted `"X of Y"`) | Both fields already surfaced elsewhere (acceptance rate uses the same two), consistent. |
+| On-time deliveries `StatRow` | `onTimeDeliveries` | Raw count only; the corresponding "out of how many scheduled" denominator is never shown anywhere on the page, unlike accepted assignments' "X of Y" — see Findings #2. |
 
 ## Mutations
-None — read-only screen.
+None — read-only stats screen, no create/update/delete/toggle actions.
 
 ## Authorization
-Single endpoint, correctly scoped to `req.user.sub` throughout — no cross-rider access surface, no `[authz]` findings.
+No role-scoped access concerns. `@Roles(UserRole.RIDER)` guards `GET /riders/performance` (`riders.controller.ts:481`), and the rider identity comes from `req.user.sub` — no request parameter exists that could target another rider's stats. No `[authz]` findings.
 
 ## Findings
 
-1. **`ratedDeliveries` counted all completed deliveries, not deliveries that were actually reviewed — `[fixed]`.** `rider-performance.ts` (pre-fix) computed `ratedOrders` as *every* completed delivery assigned to the rider (the full candidate set a review could exist for), then returned `ratedDeliveries: ratedOrders.length` directly — mislabeling "total completed deliveries" as "count of customer ratings received." The screen renders this as `"${ratedCount} rated deliveries"` (`performance.tsx:224`) right next to the average rating, so a rider with 50 completed deliveries but only 3 actual customer reviews would see "50 rated deliveries" — badly overstating how much feedback their rating is actually based on, and misleading them about how representative that average is.
-   **Fix:** the `Review` aggregate now also computes `count: {$sum: 1}` alongside the average, and `ratedDeliveries` is set from that aggregate's actual matched-document count instead of the candidate-order-list length — `apps/api/src/modules/riders/rider-performance.ts:86-100`. Also merged the previously-sequential `deliveriesWithSchedule` count into the initial `Promise.all` batch (`rider-performance.ts:42, 74-79`) since it didn't depend on any of the batch's results — a minor efficiency cleanup alongside the fix, not a separate behavioral change. Verified `buildRiderPerformancePayload` has a single caller (`RidersService.getPerformance`) and `ratedDeliveries`/the frontend `RiderPerformanceData` type have no other consumers in the rider-mobile or admin-web codebases (checked via grep), so no other surface needed re-verification.
+1. **Zero-denominator rates displayed as a misleading 100%.** The backend's `pct()` helper (`rider-performance.ts:19`) intentionally returns `100` for a `0/0` rate so a brand-new rider doesn't see a discouraging "0%" — but the frontend rendered `completionRate`/`acceptanceRate` at face value with no way to tell "genuinely 100%" apart from "no data yet," which reads as an earned perfect score for someone who hasn't done anything.
+   **Fix:** `performance.tsx` now derives `hasCompletionData` (`completedTasks + cancelledTasks > 0`) and `hasAssignmentData` (`totalAssignments > 0`) from fields already in the payload, and renders `—` instead of the rate when the relevant count is zero. Typechecked clean (`npx tsc --noEmit -p apps/rider-mobile/tsconfig.json` shows no errors in `performance.tsx`).
 
-2. **Customer rating is an order-level review, not a rider-specific one.** The `Review` schema (`apps/api/src/modules/reviews/schemas/review.schema.ts`) has one `rating` field per order (plus an optional `partnerId`, but no `riderId`) — so the "Customer rating" shown on this screen is really "the average rating of orders this rider happened to deliver," which conflates the rider's own performance with the customer's satisfaction with the partner/laundry-quality side of the order. A rider could have a poor rating average purely because the partner shop they're dispatched to does bad laundry work, or vice versa get credit for good laundry quality that had nothing to do with their delivery performance. This is a data-model/product-design question (should reviews capture a rider-specific rating separately?) rather than a code bug — flagging for a product decision, not fixing here since it would require a schema change and likely a customer-facing review-flow change (customer-web, not audited in this pass) to add a distinct rider rating field.
+2. **Same zero-denominator ambiguity exists for `onTimeDeliveryRate`, but is not fixable frontend-only.** The backend's real denominator for this rate is `deliveriesWithSchedule` (delivered orders that had both a `scheduledDeliveryAt` and a `delivery.deliveredAt`) — but `RiderPerformancePayload`/`RiderPerformanceData` never returns that count, only the numerator (`onTimeDeliveries`). The frontend has no reliable field to gate the `—` fallback on (`completedTasks` includes pickups and deliveries with no schedule at all, so it's not an equivalent proxy).
+   **Fix: left unfixed** — needs a backend/type contract change (adding a `scheduledDeliveries` or `deliveriesWithSchedule` field to `RiderPerformancePayload` and `RiderPerformanceData`) rather than a frontend-only fix, which is a product/API-contract decision out of this pass's scope.
+
+3. **On-time deliveries `StatRow` shows a bare count with no denominator, inconsistent with the accepted-assignments row right above it.** `accepted assignments` renders `"X of Y"` (`acceptedAssignments` of `totalAssignments`) but `on-time deliveries` renders only `onTimeDeliveries` alone (`performance.tsx`, `StatRow` for on-time deliveries) — a rider can't tell if "3 on-time deliveries" is 3-of-3 or 3-of-30 from this row.
+   **Fix: left unfixed** — same root cause as Findings #2 (the "of Y" denominator, `deliveriesWithSchedule`, isn't returned by the API), so fixing this display gap requires the same backend contract change; bundling it with #2 rather than a separate ad-hoc fix.
 
 ## Unused/dead fields
-None — every field in `RiderPerformanceData` is read and rendered by this screen.
+None. Every field in `RiderPerformanceData` (`completionRate`, `acceptanceRate`, `onTimeDeliveryRate`, `customerRating`, `completedTasks`, `cancelledTasks`, `acceptedAssignments`, `totalAssignments`, `onTimeDeliveries`, `ratedDeliveries`) is read somewhere on the page. No PII or sensitive data is returned — all fields are aggregate counts/rates for the requesting rider's own performance.
 
 ## Loading/error/realtime behavior
-Independent `loading`/`refreshing`/`error` state with a clean split between full-screen loading, full-screen error (only when there's no prior data, `error && !data`), and the normal rendered view — no silent-failure pattern here (unlike some other screens in this app), since a failed load simply shows the retryable error screen rather than defaulting to zeroed-out stats. No realtime subscription — appropriate for a stats screen that's only meaningful to refresh manually or via pull-to-refresh.
+- Own `useState`-based `loading`/`error`/`data` triple with a `load()` callback, matching the same shape as `tasks.tsx`'s pattern (not sharing a hook, but structurally consistent).
+- Initial load: `loading && !data` renders `DataLoadState` in loading mode.
+- Error with no prior data: `error && !data` renders `DataLoadState` in error mode with a retry (`onRetry={load}`).
+- Error after a successful prior load (e.g. a failed pull-to-refresh) does **not** wipe `data` — `load()` only calls `setData(null)` inside the `catch`, so on the initial call an error clears to `null` correctly, but a subsequent refresh error leaves the previously-shown numbers stale on screen with the error state not surfaced (since `error && !data` requires `data` to be falsy to render the error UI, and refresh's `catch` already set `data` to `null` too — so a refresh failure does in fact drop back to the full error screen, discarding the last-known-good numbers rather than keeping them visible with a toast/banner). This matches the same tradeoff already used by every other `riderFetch`-based screen in this app (e.g. `tasks.tsx`'s own live-task loads silently reset to `[]` on error) — a systemic pattern, not unique to this page, so not flagged as a one-off finding; changing it would mean deciding a new stale-data-on-error UX convention for the whole app, out of scope for a single-page pass.
+- Refresh: pull-to-refresh (`onRefresh`, `performance.tsx:146`) sets `refreshing` and calls the same `load()`, correctly scoped to this screen only.
+- No realtime/socket subscription — appropriate, this is a point-in-time aggregate stats screen with an explicit pull-to-refresh, not a live feed.

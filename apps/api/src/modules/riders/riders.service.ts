@@ -472,6 +472,7 @@ export class RidersService {
         includeDialablePhone: false,
         customerAddressId:
           isPickupLeg(order, userId) ? order.pickupAddressId : order.deliveryAddressId,
+        isAssigned: true,
       },
     );
 
@@ -799,6 +800,11 @@ export class RidersService {
         this.riderWalletService.getRecentEarningEntries(userId, 30),
       ]);
 
+    const feeRates =
+      !rider.partnerId && rider.employmentType !== 'employee'
+        ? await this.settingsService.getRiderFeeAmounts()
+        : null;
+
     return {
       success: true,
       data: {
@@ -810,6 +816,8 @@ export class RidersService {
         todayPickups,
         todayDeliveries,
         recentEarnings,
+        employmentType: rider.employmentType,
+        feeRates: feeRates ? { pickup: feeRates.pickup, delivery: feeRates.delivery } : null,
       },
     };
   }

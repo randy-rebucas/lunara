@@ -37,11 +37,13 @@ interface RiderOperationsContextValue {
   tasks: Task[];
   activeAssignment: ActiveAssignment | null;
   unreadCount: number;
+  notificationsVersion: number;
   refreshing: boolean;
   locationDenied: boolean;
   name: string;
   online: boolean;
   shiftStatus: ShiftStatus;
+  shiftBusy: boolean;
   weekEarnings: number;
   monthEarnings: number;
   routeProgressIndex: number;
@@ -52,9 +54,10 @@ interface RiderOperationsContextValue {
   goOffline: () => Promise<void>;
   startBreak: () => Promise<void>;
   endBreak: () => Promise<void>;
+  acceptingOfferId: string | null;
   acceptPickupOffer: (orderId: string) => Promise<void>;
   previewDeliveryQueue: (orderId: string) => void;
-  openTask: (orderId: string, status: string) => void;
+  openTask: (orderId: string, status: string, leg?: 'pickup' | 'delivery') => void;
   requestLocationPermission: () => Promise<void>;
   handleLogout: () => Promise<void>;
   setUnreadCount: (count: number) => void;
@@ -78,8 +81,11 @@ export function RiderOperationsProvider({ children }: { children: ReactNode }) {
   const [monthEarnings, setMonthEarnings] = useState(0);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [notificationsVersion, setNotificationsVersion] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [locationDenied, setLocationDenied] = useState(false);
+  const [shiftBusy, setShiftBusy] = useState(false);
+  const [acceptingOfferId, setAcceptingOfferId] = useState<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
 
   const loadMe = useCallback(async () => {
@@ -143,7 +149,10 @@ export function RiderOperationsProvider({ children }: { children: ReactNode }) {
 
   const loadNotifications = useCallback(async () => {
     try {
-      const data = await riderFetch<{ read: boolean }[]>('/riders/notifications');
+      // Same limit as the Notifications screen's own fetch (useNotifications(50)) so the tab
+      // badge and the in-screen unread count never disagree because they sampled a different
+      // page size.
+      const data = await riderFetch<{ read: boolean }[]>('/riders/notifications?limit=50');
       setUnreadCount(data.filter((n) => !n.read).length);
     } catch {
       setUnreadCount(0);
@@ -171,9 +180,17 @@ export function RiderOperationsProvider({ children }: { children: ReactNode }) {
     me?.shiftStatus ?? (me?.isOnline ? 'online' : 'offline');
   const online = shiftStatus === 'online';
 
+  const syncNotifications = useCallback(() => {
+    loadNotifications();
+    // Bumps only on an actual push-worthy event (new assignment / rider notification), not on
+    // every generic refresh() — so a screen that reacts to this (e.g. notifications.tsx) refetches
+    // its list live instead of only on next focus, without thrashing on unrelated refreshes.
+    setNotificationsVersion((v) => v + 1);
+  }, [loadNotifications]);
+
   useRiderDispatchSocket(accessToken, userId, online, taskOrderIds, {
     onRefresh: refresh,
-    onNotificationsSync: loadNotifications,
+    onNotificationsSync: syncNotifications,
     onSocket: (socket) => {
       socketRef.current = socket;
     },
@@ -246,6 +263,7 @@ export function RiderOperationsProvider({ children }: { children: ReactNode }) {
   }
 
   async function goOnline() {
+    if (shiftBusy) return;
     if (!(await isOnline())) {
       Alert.alert('Offline', 'Connect to the internet to start your shift.');
       return;
@@ -278,6 +296,7 @@ export function RiderOperationsProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    setShiftBusy(true);
     try {
       await riderFetch('/riders/online', { method: 'POST' });
       await loadMe();
@@ -285,43 +304,78 @@ export function RiderOperationsProvider({ children }: { children: ReactNode }) {
       Alert.alert('Shift started', 'You are online and ready for assignments.');
     } catch (e) {
       Alert.alert('Cannot go online', e instanceof Error ? e.message : 'Verification incomplete.');
+    } finally {
+      setShiftBusy(false);
     }
   }
 
   async function goOffline() {
+    if (shiftBusy) return;
     if (!(await isOnline())) {
       Alert.alert('Offline', 'Connect to the internet to end your shift.');
       return;
     }
 
-    await riderFetch('/riders/offline', { method: 'POST' });
-    setActiveOrderId(null);
-    await loadMe();
+    setShiftBusy(true);
+    try {
+      await riderFetch('/riders/offline', { method: 'POST' });
+      setActiveOrderId(null);
+      await loadMe();
+    } catch (e) {
+      Alert.alert('Could not go offline', e instanceof Error ? e.message : 'Please try again.');
+    } finally {
+      setShiftBusy(false);
+    }
   }
 
   async function startBreak() {
+    if (shiftBusy) return;
     if (!(await isOnline())) {
       Alert.alert('Offline', 'Connect to the internet to update your shift.');
       return;
     }
-    await riderFetch('/riders/break/start', { method: 'POST' });
-    setActiveOrderId(null);
-    await loadMe();
+    setShiftBusy(true);
+    try {
+      await riderFetch('/riders/break/start', { method: 'POST' });
+      setActiveOrderId(null);
+      await loadMe();
+    } catch (e) {
+      Alert.alert('Could not start break', e instanceof Error ? e.message : 'Please try again.');
+    } finally {
+      setShiftBusy(false);
+    }
   }
 
   async function endBreak() {
+    if (shiftBusy) return;
     if (!(await isOnline())) {
       Alert.alert('Offline', 'Connect to the internet to resume your shift.');
       return;
     }
-    await riderFetch('/riders/break/end', { method: 'POST' });
-    await loadMe();
-    refresh();
-    Alert.alert('Shift resumed', 'You are online and ready for assignments.');
+    setShiftBusy(true);
+    try {
+      await riderFetch('/riders/break/end', { method: 'POST' });
+      await loadMe();
+      refresh();
+      Alert.alert('Shift resumed', 'You are online and ready for assignments.');
+    } catch (e) {
+      Alert.alert('Could not resume shift', e instanceof Error ? e.message : 'Please try again.');
+    } finally {
+      setShiftBusy(false);
+    }
   }
 
   async function acceptPickupOffer(orderId: string) {
-    await riderFetch(`/riders/pickup-offers/${orderId}/accept`, { method: 'POST' });
+    if (acceptingOfferId) return;
+    setAcceptingOfferId(orderId);
+    try {
+      await riderFetch(`/riders/pickup-offers/${orderId}/accept`, { method: 'POST' });
+    } catch (e) {
+      Alert.alert('Could not accept pickup', e instanceof Error ? e.message : 'Please try again.');
+      return;
+    } finally {
+      setAcceptingOfferId(null);
+    }
     setActiveOrderId(orderId);
     router.push(`/pickup/${orderId}`);
   }
@@ -335,8 +389,19 @@ export function RiderOperationsProvider({ children }: { children: ReactNode }) {
     router.push(`/delivery/${orderId}`);
   }
 
-  function openTask(orderId: string, status: string) {
+  function openTask(orderId: string, status: string, leg?: 'pickup' | 'delivery') {
     setActiveOrderId(orderId);
+    // For a terminal task (completed/cancelled, from history or the cancelled list) `status`
+    // no longer reflects which leg was assigned to this rider — `leg` (as returned by the
+    // history/cancelled endpoints) is the reliable signal there and takes priority.
+    if (leg === 'delivery') {
+      router.push(`/delivery/${orderId}`);
+      return;
+    }
+    if (leg === 'pickup') {
+      router.push(`/pickup/${orderId}`);
+      return;
+    }
     if (
       status === 'rider_assigned_delivery' ||
       status === 'ready_for_delivery' ||
@@ -385,11 +450,13 @@ export function RiderOperationsProvider({ children }: { children: ReactNode }) {
     tasks,
     activeAssignment,
     unreadCount,
+    notificationsVersion,
     refreshing,
     locationDenied,
     name,
     online,
     shiftStatus,
+    shiftBusy,
     weekEarnings,
     monthEarnings,
     routeProgressIndex,
@@ -400,6 +467,7 @@ export function RiderOperationsProvider({ children }: { children: ReactNode }) {
     goOffline,
     startBreak,
     endBreak,
+    acceptingOfferId,
     acceptPickupOffer,
     previewDeliveryQueue,
     openTask,
