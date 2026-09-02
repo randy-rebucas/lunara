@@ -112,6 +112,11 @@ EAS handles:
 Wait ~10–20 minutes for the build to finish. You can monitor it at https://expo.dev or in your
 terminal.
 
+**Never copy the keystore password, key alias, or key password into a plaintext file in this
+repo** (including untracked scratch files like `docs/Notes.txt`) — EAS already manages the
+keystore for you. If you need to view or rotate credentials, use `eas credentials` (Android →
+Keystore), which stores them server-side rather than on disk.
+
 ---
 
 ## 5. First submission — manual upload

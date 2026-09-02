@@ -33,4 +33,16 @@ brand actually changes. `partnerId` should match the `partnerId` returned by
 `GET /api/v1/public/branding` for this partner's customer-web domain, since both clients tag
 bookings with the same `x-lunara-partner-id` header for auto-dispatch.
 
-LUNARA_PARTNER_SLUG=3d-laundry-hub npx eas env:create --scope project --name EXPO_PUBLIC_API_URL --value https://lunara-17o7.onrender.com --environment production --visibility plaintext
+## Setting up a new partner's EAS project
+
+Use `.claude/skills/scaffold-partner-brand/setup-eas.mjs` instead of running these by hand — it
+creates the EAS project (`eas project:init`), adds the `preview-<slug>` / `production-<slug>`
+profiles to `apps/customer-mobile/eas.json`, and sets the project's env vars in one step:
+
+```
+node .claude/skills/scaffold-partner-brand/setup-eas.mjs \
+  --slug <slug> --apiUrl <https://partner-api-url> --websiteUrl <https://partner-website-url>
+```
+
+Pass `--dry-run` to preview the changes first. See `.claude/skills/scaffold-partner-brand/SKILL.md`
+for the full onboarding flow (this script, then `generate.mjs`).

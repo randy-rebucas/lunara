@@ -1,0 +1,10 @@
+--slug lunara-development-territory
+--appName Lunara Development Territory
+--displayName Lunara Development Territory
+--partnerId  6a983efd9ffa79c2e5de211d
+--iconPath  /images/partners/lunara-development-territory.png
+--iosBundleId com.lunara.developmentterritory
+--androidPackage com.lunara.developmentterritory 
+--EXPO_PUBLIC_API_URL https://lunara-17o7.onrender.com
+--EXPO_PUBLIC_WEBSITE_URL https://lunara-customer-web.vercel.app
+--easProjectId 1250df42-622a-41c8-a19b-4ed8b9cf59c8

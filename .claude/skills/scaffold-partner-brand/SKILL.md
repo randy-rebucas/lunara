@@ -42,23 +42,37 @@ listing.
 
 1. Gather what's known: `slug` (kebab-case, matches `LUNARA_PARTNER_SLUG`), `appName`,
    `appDisplayName`, `partnerId` (owner User ObjectId from the `Partner` record — created via
-   admin-web or `POST /admin/partners` first if it doesn't exist yet), `easProjectId` (run
-   `LUNARA_PARTNER_SLUG=<slug> eas project:init` from `apps/customer-mobile` first if it doesn't
-   exist yet, per `partner-brands/DEPLOY_PLAY_STORE.md`), a real 1024x1024 `.png` icon file path,
-   brand colors (primary/secondary/accent/background/foreground/muted/border/destructive — reuse
-   `apps/api/src/modules/partners/schemas/partner.schema.ts` defaults for any the user doesn't
-   specify), `iosBundleId`, `androidPackage`. All of `slug`, `appName`, `displayName`,
-   `partnerId`, `easProjectId`, and the icon path are **required** — the generator refuses to run
-   without them. Ask the user for whatever isn't given rather than inventing bundle IDs, a slug,
-   or blank IDs.
-2. Run the generator:
+   admin-web or `POST /admin/partners` first if it doesn't exist yet), a real 1024x1024 `.png`
+   icon file path, brand colors (primary/secondary/accent/background/foreground/muted/border/
+   destructive — reuse `apps/api/src/modules/partners/schemas/partner.schema.ts` defaults for any
+   the user doesn't specify), `iosBundleId`, `androidPackage`, and the partner's API/website URLs
+   (`EXPO_PUBLIC_API_URL` / `EXPO_PUBLIC_WEBSITE_URL`). Ask the user for whatever isn't given
+   rather than inventing bundle IDs, a slug, or blank IDs.
+2. Run the EAS setup script:
+   ```
+   node .claude/skills/scaffold-partner-brand/setup-eas.mjs \
+     --slug <slug> \
+     --apiUrl <https://partner-api-url> \
+     --websiteUrl <https://partner-website-url>
+   ```
+   Pass `--easProjectId <id>` instead if the partner's EAS project already exists (skips
+   `eas project:init`). Use `--dry-run` first to preview the `eas.json` diff and the `eas` CLI
+   commands without executing anything or touching the file, then run it for real once confirmed
+   with the user. It's safe to run twice: the `eas project:init` and `eas.json` steps are skipped
+   if already done. Note the `easProjectId` it prints (or that you already had) for step 3.
+
+   On this first run it will stop after patching `eas.json`, before creating the env vars —
+   `eas env:create` shells out to `expo config`, which evaluates `app.config.js`, and that throws
+   until `partner-brands/<slug>/manifest.json` exists. The script detects this and tells you to
+   come back after step 3 below.
+3. Run the generator with that `easProjectId`:
    ```
    node .claude/skills/scaffold-partner-brand/generate.mjs \
      --slug <slug> \
      --appName "<App Name>" \
      --displayName "<Display Name>" \
      --partnerId <ownerUserObjectId> \
-     --easProjectId <easProjectId> \
+     --easProjectId <easProjectId-from-step-2> \
      --iconPath "<path/to/icon-1024x1024.png>" \
      --iosBundleId <com.partner.customer> \
      --androidPackage <com.partner.customer> \
@@ -69,11 +83,17 @@ listing.
    Omit any color flag to use the `PartnerBrandColors` schema defaults. The script refuses to
    overwrite an existing `partner-brands/<slug>/` directory unless `--force` is passed — check
    with the user before forcing.
-3. After scaffolding, tell the user the remaining manual steps:
+4. Re-run the exact `setup-eas.mjs` command from step 2 now that the manifest exists — the
+   `eas project:init` and `eas.json` steps are no-ops this time, and it will actually run the two
+   `eas env:create` calls for `EXPO_PUBLIC_API_URL` / `EXPO_PUBLIC_WEBSITE_URL`.
+5. After scaffolding, tell the user the remaining manual steps:
    - Replace `adaptive-icon.png`, `splash.png`, and `feature-graphic.png` with real design assets
      at the same filenames/dimensions before shipping to production or a store listing.
    - Upload the same logo (or a web-optimized variant) as the partner's web brand assets via
      admin-web, since those are stored separately in Cloudinary and not derived from this folder.
+   - First Play Store submission is still manual (app creation, listing, screenshots) — see
+     `partner-brands/DEPLOY_PLAY_STORE.md`. Keystore/service-account credentials must go through
+     `eas credentials`, never a plaintext file in the repo.
 
 ## Notes
 

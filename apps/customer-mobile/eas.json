@@ -48,6 +48,18 @@
       "env": {
         "LUNARA_PARTNER_SLUG": "3d-laundry-hub"
       }
+    },
+    "preview-lunara-development-territory": {
+      "extends": "preview",
+      "env": {
+        "LUNARA_PARTNER_SLUG": "lunara-development-territory"
+      }
+    },
+    "production-lunara-development-territory": {
+      "extends": "production",
+      "env": {
+        "LUNARA_PARTNER_SLUG": "lunara-development-territory"
+      }
     }
   },
   "submit": {
