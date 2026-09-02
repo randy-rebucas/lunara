@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "Lunara App Renderer",
+    "slug": "lunara-app-renderer",
+    "version": "0.1.0",
+    "scheme": "lunara-renderer",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "icon": "../../packages/brand/assets/icon.png",
+    "ios": {
+      "bundleIdentifier": "com.lunara.apprenderer",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "com.lunara.apprenderer"
+    },
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": ""
+      }
+    }
+  }
+}

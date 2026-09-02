@@ -43,6 +43,7 @@ const Icons: Record<string, React.ReactNode> = {
   serviceAreas:   <Icon d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" d2="M9.879 9.879a3 3 0 104.242 4.242" />,
   // Partners
   branding:       <Icon d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />,
+  leads:          <Icon d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-4.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a4 4 0 10-4-4" />,
   invoices:       <Icon d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />,
   plans:          <Icon d="M3 10h18M7 15h1m4 0h1M5 6h14a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z" />,
   promoCodes:     <Icon d="M7 7h.01M7 3h5.586a2 2 0 011.414.586l6.414 6.414a2 2 0 010 2.828l-6.586 6.586a2 2 0 01-2.828 0L4.586 12.828A2 2 0 014 11.414V7a4 4 0 014-4z" />,
@@ -100,6 +101,7 @@ const nav: NavItem[] = [
   { section: 'Partners' },
   { href: '/partners',             label: 'Partners',    icon: Icons.shops },
   { href: '/partners/branding',    label: 'Branding',    icon: Icons.branding },
+  { href: '/partners/leads',    label: 'Leads',    icon: Icons.leads },
   { href: '/partners/invoices', label: 'Invoices', icon: Icons.invoices },
   { href: '/partners/subscriptions', label: 'Subscriptions', icon: Icons.plans },
   { href: '/partners/plans',    label: 'Plans',    icon: Icons.plans },

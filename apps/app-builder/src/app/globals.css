@@ -1,0 +1,69 @@
+@import 'tailwindcss';
+@import '@lunara/ui/globals.css';
+
+@theme {
+  --color-primary: #4f46e5;
+  --color-secondary: #06b6d4;
+  --color-accent: #22c55e;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f8fafc;
+  --color-border: #e2e8f0;
+  --color-muted: #64748b;
+  --color-muted-foreground: #94a3b8;
+  --color-destructive: #ef4444;
+  --font-sans: var(--font-inter), 'Inter', system-ui, sans-serif;
+  --shadow-card: 0 1px 3px 0 rgb(15 23 42 / 0.06), 0 1px 2px -1px rgb(15 23 42 / 0.06);
+  --shadow-elevated: 0 4px 6px -1px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.06);
+}
+
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-border);
+  }
+
+  html,
+  body {
+    @apply h-full bg-surface-muted text-slate-900 antialiased;
+  }
+
+  ::selection {
+    @apply bg-primary/15 text-primary;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl bg-surface shadow-[var(--shadow-card)] ring-1 ring-border/60;
+  }
+
+  .card-elevated {
+    @apply rounded-xl bg-surface shadow-[var(--shadow-elevated)] ring-1 ring-border/60;
+  }
+
+  .card-body {
+    @apply p-4;
+  }
+
+  .input-field {
+    @apply w-full rounded-lg bg-surface px-3 py-2 text-sm text-slate-900 ring-1 ring-border/60 transition-shadow placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/25;
+  }
+
+  .form-label {
+    @apply mb-1.5 block text-xs font-medium text-slate-700;
+  }
+
+  .editor-panel-header {
+    @apply flex h-11 shrink-0 items-center gap-2 border-b border-border/60 px-3 text-xs font-semibold uppercase tracking-wide text-muted;
+  }
+
+  .editor-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) transparent;
+  }
+
+  .badge-primary {
+    @apply inline-flex items-center rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary;
+  }
+}

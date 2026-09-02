@@ -14,6 +14,8 @@
     "build:customer-web": "turbo run build --filter=@lunara/customer-web",
     "build:admin-web": "turbo run build --filter=@lunara/admin-web",
     "build:partner-web": "turbo run build --filter=@lunara/partner-web",
+    "build:app-builder": "turbo run build --filter=@lunara/app-builder",
+    "build:app-renderer": "turbo run build --filter=@lunara/app-renderer",
     "build:ai-agents": "turbo run build --filter=@lunara/ai-agents",
     "dev": "turbo run dev",
     "lint": "turbo run lint",

@@ -4,3 +4,4 @@ export * from './auth.js';
 export * from './api.js';
 export * from './partner.js';
 export * from './ai-agents.js';
+export * from './app-config.js';

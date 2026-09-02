@@ -4,6 +4,9 @@ export enum UserRole {
   PARTNER = 'partner',
   STAFF = 'staff',
   ADMIN = 'admin',
+  /** Self-service app-builder account — claimed a white-label app design via
+   *  POST /public/app-configs/claim. Distinct from PARTNER (an operating laundry shop). */
+  BRAND_OWNER = 'brand_owner',
 }
 
 export enum OrderStatus {

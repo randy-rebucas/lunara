@@ -51,6 +51,8 @@ import { AuditLogModule } from './modules/audit/audit-log.module';
 import { LaundryTagsModule } from './modules/laundry-tags/laundry-tags.module';
 import { AiAgentsModule } from './modules/ai-agents/ai-agents.module';
 import { ErrorLogModule } from './modules/error-log/error-log.module';
+import { LeadsModule } from './modules/leads/leads.module';
+import { AppConfigsModule } from './modules/app-configs/app-configs.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 @Module({
@@ -86,6 +88,8 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
     BookingModule,
     PartnerModule,
     PartnersModule,
+    LeadsModule,
+    AppConfigsModule,
     OrdersModule,
     RidersModule,
     RiderApplicationsModule,

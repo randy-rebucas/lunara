@@ -37,6 +37,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'reports:read',
   ],
   [UserRole.ADMIN]: Object.keys(PERMISSIONS) as Permission[],
+  [UserRole.BRAND_OWNER]: [],
 };
 
 export function getPermissionsForRole(role: UserRole): Permission[] {
