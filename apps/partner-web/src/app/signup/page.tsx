@@ -391,14 +391,23 @@ export default function PartnerSignupPage() {
                       </label>
                       <p className="mt-0.5 text-xs text-muted-foreground">PNG, JPEG, or WebP — up to 5MB</p>
                     </div>
-                    <div className="grid gap-6 sm:grid-cols-2 sm:items-start">
-                      <input
-                        id="logo-upload"
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp"
-                        onChange={(e) => handleLogoChange(e.target.files?.[0] ?? null)}
-                        className="input-field file:mr-3 file:rounded-md file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary"
-                      />
+                    <input
+                      id="logo-upload"
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={(e) => handleLogoChange(e.target.files?.[0] ?? null)}
+                      className="input-field file:mr-3 file:rounded-md file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary"
+                    />
+                  </div>
+                )}
+
+                {wantsBranding && (
+                  <div className="mt-6 border-t border-border/60 pt-6">
+                    <label className="text-sm font-medium text-slate-900">Preview</label>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      What your customers will see across the app
+                    </p>
+                    <div className="mt-4">
                       <PhonePreviewMockup logoUrl={logoPreviewUrl} businessName={businessName} />
                     </div>
                   </div>
