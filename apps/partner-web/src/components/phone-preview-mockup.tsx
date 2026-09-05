@@ -208,8 +208,8 @@ function HomeScreen({ logoUrl, shopName }: { logoUrl?: string; shopName: string 
 
 function PhoneFrame({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="w-[168px] shrink-0 snap-center">
-      <div className="rounded-[1.6rem] border-[5px] border-slate-900 bg-slate-900 shadow-xl">
+    <div className="flex flex-col items-center">
+      <div className="w-full max-w-[168px] rounded-[1.6rem] border-[5px] border-slate-900 bg-slate-900 shadow-xl">
         <div className="relative h-[336px] w-full overflow-hidden rounded-[1.3rem] bg-gradient-to-b from-indigo-50 via-white to-white">
           <div className="absolute left-1/2 top-0 z-10 h-3 w-16 -translate-x-1/2 rounded-b-lg bg-slate-900" aria-hidden />
           {children}
@@ -227,21 +227,16 @@ export function PhonePreviewMockup({ logoUrl, businessName }: PhonePreviewMockup
   const shopName = businessName.trim() || 'Your Shop';
 
   return (
-    <div>
-      <div className="flex snap-x gap-3 overflow-x-auto pb-1">
-        <PhoneFrame label="Intro">
-          <IntroScreen logoUrl={logoUrl} shopName={shopName} />
-        </PhoneFrame>
-        <PhoneFrame label="Sign in">
-          <AuthScreen logoUrl={logoUrl} shopName={shopName} />
-        </PhoneFrame>
-        <PhoneFrame label="Home">
-          <HomeScreen logoUrl={logoUrl} shopName={shopName} />
-        </PhoneFrame>
-      </div>
-      <p className="mt-3 text-center text-xs text-muted-foreground">
-        Preview of your branded customer app
-      </p>
+    <div className="grid grid-cols-3 gap-3">
+      <PhoneFrame label="Intro">
+        <IntroScreen logoUrl={logoUrl} shopName={shopName} />
+      </PhoneFrame>
+      <PhoneFrame label="Sign in">
+        <AuthScreen logoUrl={logoUrl} shopName={shopName} />
+      </PhoneFrame>
+      <PhoneFrame label="Home">
+        <HomeScreen logoUrl={logoUrl} shopName={shopName} />
+      </PhoneFrame>
     </div>
   );
 }

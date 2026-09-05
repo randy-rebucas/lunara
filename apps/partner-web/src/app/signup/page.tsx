@@ -403,13 +403,7 @@ export default function PartnerSignupPage() {
 
                 {wantsBranding && (
                   <div className="mt-6 border-t border-border/60 pt-6">
-                    <label className="text-sm font-medium text-slate-900">Preview</label>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      What your customers will see across the app
-                    </p>
-                    <div className="mt-4">
-                      <PhonePreviewMockup logoUrl={logoPreviewUrl} businessName={businessName} />
-                    </div>
+                    <PhonePreviewMockup logoUrl={logoPreviewUrl} businessName={businessName} />
                   </div>
                 )}
 
