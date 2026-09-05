@@ -6,7 +6,6 @@
     "scheme": "lunara",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "icon": "./assets/logo.png",
     "ios": {
       "bundleIdentifier": "com.lunara.customer",
@@ -18,6 +17,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-status-bar",
       [
         "expo-notifications",
         {

@@ -6,8 +6,10 @@ import {
 } from '../lib/notification-types';
 import {
   acquireDevicePushToken,
+  addNotificationReceivedListener,
+  addNotificationResponseListener,
+  getLastNotificationResponse,
   isRemotePushSupported,
-  Notifications,
   registerPushToken,
   unregisterPushToken,
 } from '../lib/push-notifications';
@@ -69,7 +71,7 @@ export function usePushNotifications() {
   useEffect(() => {
     if (!isRemotePushSupported()) return;
 
-    void Notifications.getLastNotificationResponseAsync()
+    void getLastNotificationResponse()
       .then((response) => {
         if (!response) return;
         const data = response.notification.request.content.data as Record<string, unknown>;
@@ -78,13 +80,13 @@ export function usePushNotifications() {
       })
       .catch(() => {});
 
-    const onResponse = Notifications.addNotificationResponseReceivedListener((response) => {
+    const onResponse = addNotificationResponseListener((response) => {
       const data = response.notification.request.content.data as Record<string, unknown>;
       const href = routeFromPushData(data);
       if (href) router.push(href);
     });
 
-    const onReceived = Notifications.addNotificationReceivedListener(() => {
+    const onReceived = addNotificationReceivedListener(() => {
       bumpNotifications();
     });
 

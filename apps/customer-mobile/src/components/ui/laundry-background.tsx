@@ -15,7 +15,7 @@ export function LaundryBackground() {
 
 const styles = StyleSheet.create({
   base: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: colors.surfaceMuted,
   },
   blobPrimary: {

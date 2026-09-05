@@ -214,7 +214,7 @@ export class Branch {
   @Prop()
   postalCode?: string;
 
-  @Prop({ type: Types.ObjectId, required: true, index: true })
+  @Prop({ type: Types.ObjectId, required: true })
   partnerUserId!: Types.ObjectId;
 
   /** The PartnerApplication this branch was onboarded from, if any — same traceability as
@@ -323,7 +323,8 @@ export class Branch {
 
 export const BranchSchema = SchemaFactory.createForClass(Branch);
 BranchSchema.index({ location: '2dsphere' });
+BranchSchema.index({ partnerUserId: 1 });
 BranchSchema.index(
-  { partnerUserId: 1 },
+  { partnerUserId: 1, isMainShop: 1 },
   { unique: true, partialFilterExpression: { isMainShop: true, isActive: true } },
 );

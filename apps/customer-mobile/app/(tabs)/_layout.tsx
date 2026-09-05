@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs, useRouter } from 'expo-router';
-import { Platform } from 'react-native';
+import { Platform, type ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TAB_BAR_CONTENT_HEIGHT } from '../../src/hooks/use-tab-bar-height';
 import { NotificationBell } from '../../src/components/notifications-preview';
@@ -10,8 +10,8 @@ import { colors, spacing } from '../../src/theme';
 type TabIcon = keyof typeof Ionicons.glyphMap;
 
 function tabIcon(name: TabIcon) {
-  return ({ color, size }: { color: string; size: number }) => (
-    <Ionicons name={name} size={size} color={color} />
+  return ({ color, size }: { focused: boolean; color: ColorValue; size: number }) => (
+    <Ionicons name={name} size={size} color={color as string} />
   );
 }
 
@@ -76,7 +76,9 @@ export default function TabsLayout() {
         name="book-tab"
         options={{
           title: '',
-          tabBarButton: BookTabButton,
+          tabBarButton: (props) => (
+            <BookTabButton onPress={props.onPress} accessibilityState={props.accessibilityState} />
+          ),
         }}
         listeners={{
           tabPress: (e) => {

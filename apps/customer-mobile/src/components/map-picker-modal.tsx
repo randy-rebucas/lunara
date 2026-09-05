@@ -85,7 +85,7 @@ export function MapPickerModal({
 
         <View style={styles.mapWrap}>
           <MapView
-            style={StyleSheet.absoluteFillObject}
+            style={StyleSheet.absoluteFill}
             initialRegion={region}
             onRegionChangeComplete={handleRegionChange}
             showsUserLocation
@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
   title: { ...typography.heading, fontSize: 17 },
   mapWrap: { flex: 1 },
   pinWrap: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
   },

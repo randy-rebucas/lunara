@@ -1,6 +1,6 @@
 import { orderEventTitle } from '@lunara/utils';
 import { ORDER_EVENT_MESSAGES } from './order-events';
-import { Notifications } from './push-notifications';
+import { scheduleNotification } from './push-notifications';
 
 export interface DispatchNotificationPayload {
   orderId: string;
@@ -25,7 +25,7 @@ export function dispatchNotificationCopy(payload: DispatchNotificationPayload) {
 
 export async function presentDispatchNotification(payload: DispatchNotificationPayload) {
   const { title, body } = dispatchNotificationCopy(payload);
-  await Notifications.scheduleNotificationAsync({
+  await scheduleNotification({
     content: {
       title,
       body,
