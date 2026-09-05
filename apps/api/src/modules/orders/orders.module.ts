@@ -4,6 +4,7 @@ import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { Address, AddressSchema } from '../addresses/schemas/address.schema';
 import { Rider, RiderSchema } from '../riders/schemas/rider.schema';
+import { Branch, BranchSchema } from '../branches/schemas/branch.schema';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { WalletsModule } from '../wallets/wallets.module';
 import { RidersModule } from '../riders/riders.module';
@@ -26,6 +27,7 @@ import { Order, OrderSchema } from './schemas/order.schema';
       { name: User.name, schema: UserSchema },
       { name: Address.name, schema: AddressSchema },
       { name: Rider.name, schema: RiderSchema },
+      { name: Branch.name, schema: BranchSchema },
     ]),
     RealtimeModule,
     WalletsModule,

@@ -101,6 +101,12 @@ export class Partner {
   @Prop({ default: true })
   isActive!: boolean;
 
+  /** True once this partner has a dedicated database provisioned (set when brandConfig.status
+   * first becomes 'live' or a PartnerTerritory is created — see PartnerProvisioningService).
+   * Regular shop partners without this stay on the shared database. */
+  @Prop({ default: false })
+  hasDedicatedDb!: boolean;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

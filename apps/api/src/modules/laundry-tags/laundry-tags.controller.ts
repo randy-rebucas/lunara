@@ -1,15 +1,17 @@
 import { BadRequestException, Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { UserRole } from '@lunara/types';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentStaffBranchId, CurrentTenantId } from '../../common/decorators/current-tenant.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { TenantGuard } from '../../common/guards/tenant.guard';
 import { LaundryTagsService } from './laundry-tags.service';
 import { CreateTagBatchDto } from './dto/create-batch.dto';
 import { RetireTagDto } from './dto/retire-tag.dto';
 import { QueryTagsDto } from './dto/query-tags.dto';
 
 @Controller('laundry-tags')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, TenantGuard)
 export class LaundryTagsController {
   constructor(private readonly laundryTagsService: LaundryTagsService) {}
 
@@ -25,8 +27,10 @@ export class LaundryTagsController {
   async listTags(
     @Query() query: QueryTagsDto,
     @Req() req: { user: { sub: string; role: UserRole.ADMIN | UserRole.PARTNER | UserRole.STAFF } },
+    @CurrentTenantId() tenantId?: string,
+    @CurrentStaffBranchId() staffBranchId?: string,
   ) {
-    const data = await this.laundryTagsService.listTags(query, req.user);
+    const data = await this.laundryTagsService.listTags(query, req.user, tenantId, staffBranchId);
     return { success: true, data };
   }
 
@@ -35,9 +39,11 @@ export class LaundryTagsController {
   async lookup(
     @Query('code') code: string,
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId?: string,
+    @CurrentStaffBranchId() staffBranchId?: string,
   ) {
     if (!code?.trim()) throw new BadRequestException('code is required');
-    const data = await this.laundryTagsService.lookup(code, req.user);
+    const data = await this.laundryTagsService.lookup(code, req.user, tenantId, staffBranchId);
     return { success: true, data };
   }
 

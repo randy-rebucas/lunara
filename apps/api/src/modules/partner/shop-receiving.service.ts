@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { OrderStatus, UserRole } from '@lunara/types';
 import {
   BranchPricingMode,
@@ -10,7 +10,6 @@ import {
   SHOP_RECEIVING_STEPS,
 } from '@lunara/utils';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
-import { User, UserDocument } from '../users/schemas/user.schema';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { BranchesService } from '../branches/branches.service';
 import { PartnerOperationsService } from './partner-operations.service';
@@ -19,7 +18,7 @@ import {
   ReceiveLaundryDto,
   VerifyShopWeightDto,
 } from './dto/shop-receiving.dto';
-import { assertOrderPortalAccess, resolvePortalBranchId } from './partner-access';
+import { assertOrderPortalAccess } from './partner-access';
 
 const RECEIVING_STATUSES = [
   OrderStatus.IN_TRANSIT_TO_SHOP,
@@ -30,14 +29,19 @@ const RECEIVING_STATUSES = [
 export class ShopReceivingService {
   constructor(
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
-    @InjectModel(User.name) private userModel: Model<UserDocument>,
     private trackingGateway: TrackingGateway,
     private branchesService: BranchesService,
     private partnerOperationsService: PartnerOperationsService,
   ) {}
 
-  async getReceiving(orderId: string, partnerUserId: string, role: UserRole) {
-    const order = await this.getOrderForPartner(orderId, partnerUserId, role);
+  async getReceiving(
+    orderId: string,
+    partnerUserId: string,
+    role: UserRole,
+    tenantId?: string,
+    staffBranchId?: string,
+  ) {
+    const order = await this.getOrderForPartner(orderId, partnerUserId, role, tenantId, staffBranchId);
     return { success: true, data: await this.buildView(order) };
   }
 
@@ -46,8 +50,10 @@ export class ShopReceivingService {
     userId: string,
     role: UserRole,
     dto: ReceiveLaundryDto,
+    tenantId?: string,
+    staffBranchId?: string,
   ) {
-    const order = await this.getOrderForPartner(orderId, userId, role);
+    const order = await this.getOrderForPartner(orderId, userId, role, tenantId, staffBranchId);
     if (order.status !== OrderStatus.IN_TRANSIT_TO_SHOP) {
       throw new BadRequestException(
         `Receive laundry when rider has delivered (status: ${order.status})`,
@@ -81,8 +87,10 @@ export class ShopReceivingService {
     userId: string,
     role: UserRole,
     dto: VerifyShopWeightDto,
+    tenantId?: string,
+    staffBranchId?: string,
   ) {
-    const order = await this.getOrderForPartner(orderId, userId, role);
+    const order = await this.getOrderForPartner(orderId, userId, role, tenantId, staffBranchId);
     if (!RECEIVING_STATUSES.includes(order.status)) {
       throw new BadRequestException('Order is not in shop receiving');
     }
@@ -164,8 +172,10 @@ export class ShopReceivingService {
     userId: string,
     role: UserRole,
     dto: ConfirmShopItemsDto,
+    tenantId?: string,
+    staffBranchId?: string,
   ) {
-    const order = await this.getOrderForPartner(orderId, userId, role);
+    const order = await this.getOrderForPartner(orderId, userId, role, tenantId, staffBranchId);
     if (!order.shopReceiving?.receivedAt) {
       throw new BadRequestException('Receive laundry first');
     }
@@ -230,12 +240,22 @@ export class ShopReceivingService {
     });
   }
 
-  private async getOrderForPartner(orderId: string, userId: string, role: UserRole) {
+  private async getOrderForPartner(
+    orderId: string,
+    userId: string,
+    role: UserRole,
+    _tenantId?: string,
+    staffBranchId?: string,
+  ) {
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
     if (!order.branchId) throw new BadRequestException('Order has no assigned branch');
 
-    const branchId = await resolvePortalBranchId(this.userModel, userId, role);
+    // FLAG: `tenantId` (guard-resolved) is accepted but not passed to assertOrderPortalAccess,
+    // matching original behavior where the PARTNER-role branch check used `userId` directly
+    // (userId === tenantId for PARTNER role, so this is equivalent). Kept as-is per task scope
+    // (assertOrderPortalAccess's own signature/logic is owned by a different task).
+    const branchId = staffBranchId ? new Types.ObjectId(staffBranchId) : undefined;
     assertOrderPortalAccess(order, userId, role, branchId);
 
     return order;

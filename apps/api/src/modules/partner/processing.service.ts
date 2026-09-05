@@ -27,11 +27,7 @@ import {
   loadLatestOrderPaymentsByOrderId,
 } from '../payments/payment-summary';
 import { AdvanceProcessingDto, MoveProcessingStepDto, SetShelfSlotDto } from './dto/processing.dto';
-import {
-  applyStaffBranchFilter,
-  assertOrderPortalAccess,
-  resolvePortalBranchId,
-} from './partner-access';
+import { applyStaffBranchFilter, assertOrderPortalAccess } from './partner-access';
 
 @Injectable()
 export class ProcessingService {
@@ -60,6 +56,7 @@ export class ProcessingService {
     mineOnly?: boolean,
     partnerUserId?: string,
     role?: UserRole,
+    staffBranchId?: string,
   ) {
     const filter: Record<string, unknown> = {
       status: { $in: PARTNER_PROCESSING_QUEUE_STATUSES },
@@ -72,9 +69,12 @@ export class ProcessingService {
     if (role === UserRole.PARTNER && partnerUserId) {
       filter.partnerId = new Types.ObjectId(partnerUserId);
     }
-    if (role === UserRole.STAFF && staffUserId) {
-      const branchId = await resolvePortalBranchId(this.userModel, staffUserId, role);
-      applyStaffBranchFilter(filter, role, branchId);
+    if (role === UserRole.STAFF) {
+      applyStaffBranchFilter(
+        filter,
+        role,
+        staffBranchId ? new Types.ObjectId(staffBranchId) : undefined,
+      );
     }
 
     const items = await this.orderModel
@@ -104,11 +104,21 @@ export class ProcessingService {
     };
   }
 
-  async getOrderProcessing(orderId: string, userId: string, role: UserRole) {
+  async getOrderProcessing(
+    orderId: string,
+    userId: string,
+    role: UserRole,
+    _tenantId?: string,
+    staffBranchId?: string,
+  ) {
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
-    const branchId = await resolvePortalBranchId(this.userModel, userId, role);
-    assertOrderPortalAccess(order, userId, role, branchId);
+    assertOrderPortalAccess(
+      order,
+      userId,
+      role,
+      staffBranchId ? new Types.ObjectId(staffBranchId) : undefined,
+    );
     const [paymentsByOrderId, customer] = await Promise.all([
       loadLatestOrderPaymentsByOrderId(this.paymentModel, [order._id]),
       this.loadCustomerInfo(order.customerId),
@@ -130,12 +140,22 @@ export class ProcessingService {
     };
   }
 
-  async acceptJob(orderId: string, userId: string, role: UserRole) {
+  async acceptJob(
+    orderId: string,
+    userId: string,
+    role: UserRole,
+    _tenantId?: string,
+    staffBranchId?: string,
+  ) {
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
 
-    const branchId = await resolvePortalBranchId(this.userModel, userId, role);
-    assertOrderPortalAccess(order, userId, role, branchId);
+    assertOrderPortalAccess(
+      order,
+      userId,
+      role,
+      staffBranchId ? new Types.ObjectId(staffBranchId) : undefined,
+    );
 
     if (!PARTNER_PROCESSING_QUEUE_STATUSES.includes(order.status)) {
       throw new BadRequestException('Order is not in the processing queue');
@@ -171,12 +191,23 @@ export class ProcessingService {
     return { success: true, data: await this.buildProcessingView(order) };
   }
 
-  async advance(orderId: string, userId: string, role: UserRole, dto: AdvanceProcessingDto) {
+  async advance(
+    orderId: string,
+    userId: string,
+    role: UserRole,
+    _tenantId: string | undefined,
+    staffBranchId: string | undefined,
+    dto: AdvanceProcessingDto,
+  ) {
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
 
-    const branchId = await resolvePortalBranchId(this.userModel, userId, role);
-    assertOrderPortalAccess(order, userId, role, branchId);
+    assertOrderPortalAccess(
+      order,
+      userId,
+      role,
+      staffBranchId ? new Types.ObjectId(staffBranchId) : undefined,
+    );
 
     if (!PARTNER_PROCESSING_QUEUE_STATUSES.includes(order.status)) {
       throw new BadRequestException(`Order status ${order.status} is not in processing queue`);
@@ -262,13 +293,19 @@ export class ProcessingService {
     orderId: string,
     userId: string,
     role: UserRole,
+    _tenantId: string | undefined,
+    staffBranchId: string | undefined,
     dto: MoveProcessingStepDto,
   ) {
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
 
-    const branchId = await resolvePortalBranchId(this.userModel, userId, role);
-    assertOrderPortalAccess(order, userId, role, branchId);
+    assertOrderPortalAccess(
+      order,
+      userId,
+      role,
+      staffBranchId ? new Types.ObjectId(staffBranchId) : undefined,
+    );
 
     if (!order.laundryProcessing) order.laundryProcessing = { completedSteps: [], ironingSkipped: false };
 
@@ -349,12 +386,23 @@ export class ProcessingService {
     return { success: true, data: await this.buildProcessingView(order) };
   }
 
-  async setShelfSlot(orderId: string, userId: string, role: UserRole, dto: SetShelfSlotDto) {
+  async setShelfSlot(
+    orderId: string,
+    userId: string,
+    role: UserRole,
+    _tenantId: string | undefined,
+    staffBranchId: string | undefined,
+    dto: SetShelfSlotDto,
+  ) {
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
 
-    const branchId = await resolvePortalBranchId(this.userModel, userId, role);
-    assertOrderPortalAccess(order, userId, role, branchId);
+    assertOrderPortalAccess(
+      order,
+      userId,
+      role,
+      staffBranchId ? new Types.ObjectId(staffBranchId) : undefined,
+    );
 
     if (!order.laundryProcessing) order.laundryProcessing = { completedSteps: [], ironingSkipped: false };
     order.laundryProcessing.shelfSlot = dto.shelfSlot.trim();
@@ -365,12 +413,22 @@ export class ProcessingService {
     return { success: true, data: await this.buildProcessingView(order) };
   }
 
-  async clearShelfSlot(orderId: string, userId: string, role: UserRole) {
+  async clearShelfSlot(
+    orderId: string,
+    userId: string,
+    role: UserRole,
+    _tenantId?: string,
+    staffBranchId?: string,
+  ) {
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
 
-    const branchId = await resolvePortalBranchId(this.userModel, userId, role);
-    assertOrderPortalAccess(order, userId, role, branchId);
+    assertOrderPortalAccess(
+      order,
+      userId,
+      role,
+      staffBranchId ? new Types.ObjectId(staffBranchId) : undefined,
+    );
 
     if (order.laundryProcessing) {
       order.laundryProcessing.shelfSlot = undefined;
@@ -382,7 +440,13 @@ export class ProcessingService {
     return { success: true, data: await this.buildProcessingView(order) };
   }
 
-  async findOnShelf(query: string, userId: string, role: UserRole) {
+  async findOnShelf(
+    query: string,
+    userId: string,
+    role: UserRole,
+    tenantId?: string,
+    staffBranchId?: string,
+  ) {
     const trimmed = query.trim();
     if (!trimmed) throw new BadRequestException('Search query is required');
 
@@ -395,10 +459,13 @@ export class ProcessingService {
       : { 'laundryProcessing.shelfSlot': new RegExp(`^${escapedForRegex}$`, 'i') };
 
     if (role === UserRole.PARTNER) {
-      filter.partnerId = new Types.ObjectId(userId);
+      filter.partnerId = new Types.ObjectId(tenantId ?? userId);
     } else if (role === UserRole.STAFF) {
-      const branchId = await resolvePortalBranchId(this.userModel, userId, role);
-      applyStaffBranchFilter(filter, role, branchId);
+      applyStaffBranchFilter(
+        filter,
+        role,
+        staffBranchId ? new Types.ObjectId(staffBranchId) : undefined,
+      );
     }
 
     const order = await this.orderModel.findOne(filter).sort({ updatedAt: -1 });
@@ -439,12 +506,18 @@ export class ProcessingService {
     userId: string,
     role: UserRole,
     photoUrl: string,
+    _tenantId?: string,
+    staffBranchId?: string,
   ) {
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
 
-    const branchId = await resolvePortalBranchId(this.userModel, userId, role);
-    assertOrderPortalAccess(order, userId, role, branchId);
+    assertOrderPortalAccess(
+      order,
+      userId,
+      role,
+      staffBranchId ? new Types.ObjectId(staffBranchId) : undefined,
+    );
 
     return { success: true, data: { photoUrl } };
   }

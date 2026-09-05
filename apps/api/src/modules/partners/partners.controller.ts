@@ -1,8 +1,14 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import type { PartnerBrandConfig } from '@lunara/types';
+import { UserRole } from '@lunara/types';
 import { PartnersService } from './partners.service';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentTenantId } from '../../common/decorators/current-tenant.decorator';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { TenantGuard } from '../../common/guards/tenant.guard';
 
-const DEFAULT_BRAND_CONFIG: PartnerBrandConfig = {
+export const DEFAULT_BRAND_CONFIG: PartnerBrandConfig = {
   customDomainVerified: false,
   appDisplayName: 'Lunara',
   colors: {
@@ -26,6 +32,38 @@ export class PartnersController {
   @Get()
   async resolveBranding(@Query('domain') domain?: string) {
     const partner = domain?.trim() ? await this.partnersService.findByDomain(domain.trim()) : null;
+
+    if (!partner) {
+      return {
+        success: true,
+        data: { isDefault: true, partnerId: null, brandConfig: DEFAULT_BRAND_CONFIG },
+      };
+    }
+
+    return {
+      success: true,
+      data: {
+        isDefault: false,
+        partnerId: partner.ownerUserId.toString(),
+        brandConfig: partner.brandConfig,
+      },
+    };
+  }
+}
+
+@Controller('partner/branding')
+@UseGuards(JwtAuthGuard, RolesGuard, TenantGuard)
+export class PartnerBrandingController {
+  constructor(private readonly partnersService: PartnersService) {}
+
+  /**
+   * Authenticated equivalent of GET /public/branding for a logged-in partner-web session.
+   * tenantId is undefined for ADMIN — no brand doc to resolve, so default branding is returned.
+   */
+  @Get('me')
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
+  async getMyBranding(@CurrentTenantId() tenantId?: string) {
+    const partner = tenantId ? await this.partnersService.findByOwnerUserId(tenantId) : null;
 
     if (!partner) {
       return {

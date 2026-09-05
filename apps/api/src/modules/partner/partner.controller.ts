@@ -22,8 +22,10 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { OrderStatus, UserRole } from '@lunara/types';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentTenantId, CurrentStaffBranchId } from '../../common/decorators/current-tenant.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { TenantGuard } from '../../common/guards/tenant.guard';
 import { LocalStorageService } from '../../common/storage/local-storage.service';
 import { taskPhotoPublicPath } from '../../common/uploads/upload-paths';
 import { Types } from 'mongoose';
@@ -93,7 +95,7 @@ const processingPhotoUploadOptions = {
 };
 
 @Controller('partner')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, TenantGuard)
 export class PartnerController {
   constructor(
     private readonly processingService: ProcessingService,
@@ -166,41 +168,44 @@ export class PartnerController {
 
   @Get('branches')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
-  listOwnBranches(@Req() req: { user: { sub: string } }) {
-    return this.branchesService.listBranchesForPartner(req.user.sub);
+  listOwnBranches(@CurrentTenantId() tenantId: string | undefined, @Req() req: { user: { sub: string } }) {
+    // ADMIN's tenantId is undefined (unrestricted) but this endpoint has always fed the admin's
+    // own user id here regardless of role — pre-existing quirk (not a scoping check), preserved
+    // as-is by falling back to req.user.sub when there is no resolved tenant.
+    return this.branchesService.listBranchesForPartner(tenantId ?? req.user.sub);
   }
 
   @Post('branches')
   @Roles(UserRole.PARTNER)
-  createOwnBranch(@Req() req: { user: { sub: string } }, @Body() dto: CreateOwnBranchDto) {
-    return this.branchesService.createBranchForPartner(req.user.sub, dto);
+  createOwnBranch(@CurrentTenantId() tenantId: string, @Body() dto: CreateOwnBranchDto) {
+    return this.branchesService.createBranchForPartner(tenantId, dto);
   }
 
   @Patch('branches/:id')
   @Roles(UserRole.PARTNER)
   updateOwnBranch(
-    @Req() req: { user: { sub: string } },
+    @CurrentTenantId() tenantId: string,
     @Param('id') id: string,
     @Body() dto: UpdateOwnBranchDto,
   ) {
-    return this.branchesService.updateBranchForPartner(id, req.user.sub, dto);
+    return this.branchesService.updateBranchForPartner(id, tenantId, dto);
   }
 
   @Get('branches/:id/loyalty-stats')
   @Roles(UserRole.PARTNER)
-  async getOwnBranchLoyaltyStats(@Req() req: { user: { sub: string } }, @Param('id') id: string) {
-    await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
+  async getOwnBranchLoyaltyStats(@CurrentTenantId() tenantId: string, @Param('id') id: string) {
+    await this.branchesService.getOwnBranchOrThrow(id, tenantId);
     return this.rewardsService.getLoyaltyStatsForBranch(id);
   }
 
   @Get('branches/:id/pricing')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   async getOwnBranchPricing(
-    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
     @Param('id') id: string,
   ) {
-    if (req.user.role !== UserRole.ADMIN) {
-      await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
+    if (tenantId) {
+      await this.branchesService.getOwnBranchOrThrow(id, tenantId);
     }
     return this.branchesService.getShopPricing(id, true);
   }
@@ -208,12 +213,12 @@ export class PartnerController {
   @Patch('branches/:id/pricing')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   async updateOwnBranchPricing(
-    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
     @Param('id') id: string,
     @Body() dto: UpdateBranchPricingDto,
   ) {
-    if (req.user.role !== UserRole.ADMIN) {
-      await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
+    if (tenantId) {
+      await this.branchesService.getOwnBranchOrThrow(id, tenantId);
     }
     return this.branchesService.updateServicePricing(id, dto.servicePricing, dto.kgPerLoad);
   }
@@ -221,12 +226,12 @@ export class PartnerController {
   @Patch('branches/:id/pricing-mode')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   async updateOwnBranchPricingMode(
-    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
     @Param('id') id: string,
     @Body() dto: UpdateBranchPricingModeDto,
   ) {
-    if (req.user.role !== UserRole.ADMIN) {
-      await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
+    if (tenantId) {
+      await this.branchesService.getOwnBranchOrThrow(id, tenantId);
     }
     return this.branchesService.updatePricingMode(id, dto.pricingMode);
   }
@@ -234,12 +239,12 @@ export class PartnerController {
   @Patch('branches/:id/addon-pricing')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   async updateOwnBranchAddonPricing(
-    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
     @Param('id') id: string,
     @Body() dto: UpdateBranchAddonPricingDto,
   ) {
-    if (req.user.role !== UserRole.ADMIN) {
-      await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
+    if (tenantId) {
+      await this.branchesService.getOwnBranchOrThrow(id, tenantId);
     }
     return this.branchesService.updateAddonPricing(id, dto.addonPricing);
   }
@@ -247,12 +252,12 @@ export class PartnerController {
   @Patch('branches/:id/hidden-catalog')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   async updateOwnHiddenCatalog(
-    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
     @Param('id') id: string,
     @Body() dto: UpdateBranchHiddenCatalogDto,
   ) {
-    if (req.user.role !== UserRole.ADMIN) {
-      await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
+    if (tenantId) {
+      await this.branchesService.getOwnBranchOrThrow(id, tenantId);
     }
     return this.branchesService.updateHiddenCatalog(id, dto);
   }
@@ -260,26 +265,29 @@ export class PartnerController {
   @Post('branches/:id/custom-services')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   async createOwnCustomService(
-    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @Req() req: { user: { sub: string } },
     @Param('id') id: string,
     @Body() dto: CreateBranchCustomServiceDto,
   ) {
-    if (req.user.role !== UserRole.ADMIN) {
-      await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
+    if (tenantId) {
+      await this.branchesService.getOwnBranchOrThrow(id, tenantId);
     }
-    return this.branchesService.createCustomService(id, req.user.sub, dto);
+    // partnerUserId stored on the custom service — preserves the pre-existing behavior of
+    // recording the admin's own id here when an ADMIN creates one (tenantId is undefined for ADMIN).
+    return this.branchesService.createCustomService(id, tenantId ?? req.user.sub, dto);
   }
 
   @Patch('branches/:id/custom-services/:serviceId')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   async updateOwnCustomService(
-    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
     @Param('id') id: string,
     @Param('serviceId') serviceId: string,
     @Body() dto: UpdateBranchCustomServiceDto,
   ) {
-    if (req.user.role !== UserRole.ADMIN) {
-      await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
+    if (tenantId) {
+      await this.branchesService.getOwnBranchOrThrow(id, tenantId);
     }
     return this.branchesService.updateCustomService(id, serviceId, dto);
   }
@@ -287,12 +295,12 @@ export class PartnerController {
   @Delete('branches/:id/custom-services/:serviceId')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   async deleteOwnCustomService(
-    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
     @Param('id') id: string,
     @Param('serviceId') serviceId: string,
   ) {
-    if (req.user.role !== UserRole.ADMIN) {
-      await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
+    if (tenantId) {
+      await this.branchesService.getOwnBranchOrThrow(id, tenantId);
     }
     return this.branchesService.deleteCustomService(id, serviceId);
   }
@@ -300,26 +308,29 @@ export class PartnerController {
   @Post('branches/:id/custom-addons')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   async createOwnCustomAddon(
-    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @Req() req: { user: { sub: string } },
     @Param('id') id: string,
     @Body() dto: CreateBranchCustomAddonDto,
   ) {
-    if (req.user.role !== UserRole.ADMIN) {
-      await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
+    if (tenantId) {
+      await this.branchesService.getOwnBranchOrThrow(id, tenantId);
     }
-    return this.branchesService.createCustomAddon(id, req.user.sub, dto);
+    // See createOwnCustomService: preserves the pre-existing admin-id fallback for the stored
+    // partnerUserId field.
+    return this.branchesService.createCustomAddon(id, tenantId ?? req.user.sub, dto);
   }
 
   @Patch('branches/:id/custom-addons/:addonId')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   async updateOwnCustomAddon(
-    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
     @Param('id') id: string,
     @Param('addonId') addonId: string,
     @Body() dto: UpdateBranchCustomAddonDto,
   ) {
-    if (req.user.role !== UserRole.ADMIN) {
-      await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
+    if (tenantId) {
+      await this.branchesService.getOwnBranchOrThrow(id, tenantId);
     }
     return this.branchesService.updateCustomAddon(id, addonId, dto);
   }
@@ -327,29 +338,35 @@ export class PartnerController {
   @Delete('branches/:id/custom-addons/:addonId')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   async deleteOwnCustomAddon(
-    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
     @Param('id') id: string,
     @Param('addonId') addonId: string,
   ) {
-    if (req.user.role !== UserRole.ADMIN) {
-      await this.branchesService.getOwnBranchOrThrow(id, req.user.sub);
+    if (tenantId) {
+      await this.branchesService.getOwnBranchOrThrow(id, tenantId);
     }
     return this.branchesService.deleteCustomAddon(id, addonId);
   }
 
   @Get('settings')
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
-  getSettings(@Req() req: { user: { sub: string; role: UserRole } }) {
-    return this.settingsService.getSettings(req.user.sub, req.user.role);
+  getSettings(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
+  ) {
+    return this.settingsService.getSettings(req.user.sub, req.user.role, tenantId, staffBranchId);
   }
 
   @Patch('settings')
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
   updateSettings(
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
     @Body() dto: UpdatePartnerSettingsDto,
   ) {
-    return this.settingsService.updateSettings(req.user.sub, req.user.role, dto);
+    return this.settingsService.updateSettings(req.user.sub, req.user.role, tenantId, staffBranchId, dto);
   }
 
   @Post('settings/logo')
@@ -357,16 +374,22 @@ export class PartnerController {
   @UseInterceptors(FileInterceptor('logo', processingPhotoUploadOptions))
   async updateLogo(
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
     @UploadedFile() file?: Express.Multer.File,
   ) {
     if (!file) throw new BadRequestException('Logo image is required');
-    return this.settingsService.updateLogo(req.user.sub, req.user.role, file);
+    return this.settingsService.updateLogo(req.user.sub, req.user.role, tenantId, staffBranchId, file);
   }
 
   @Delete('settings/logo')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
-  removeLogo(@Req() req: { user: { sub: string; role: UserRole } }) {
-    return this.settingsService.removeLogo(req.user.sub, req.user.role);
+  removeLogo(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
+  ) {
+    return this.settingsService.removeLogo(req.user.sub, req.user.role, tenantId, staffBranchId);
   }
 
   @Get('profile')
@@ -456,14 +479,22 @@ export class PartnerController {
 
   @Get('dashboard')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
-  getDashboard(@Req() req: { user: { sub: string; role: UserRole } }) {
-    return this.operationsService.getDashboard(req.user.sub, req.user.role);
+  getDashboard(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
+  ) {
+    return this.operationsService.getDashboard(req.user.sub, req.user.role, tenantId, staffBranchId);
   }
 
   @Get('orders/incoming')
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
-  getIncoming(@Req() req: { user: { sub: string; role: UserRole } }) {
-    return this.operationsService.getIncomingOrders(req.user.sub, req.user.role);
+  getIncoming(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
+  ) {
+    return this.operationsService.getIncomingOrders(req.user.sub, req.user.role, tenantId, staffBranchId);
   }
 
   @Post('orders/:orderId/accept')
@@ -471,8 +502,10 @@ export class PartnerController {
   acceptOrder(
     @Param('orderId') orderId: string,
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
   ) {
-    return this.operationsService.acceptPartnerOrder(orderId, req.user.sub, req.user.role);
+    return this.operationsService.acceptPartnerOrder(orderId, req.user.sub, req.user.role, tenantId, staffBranchId);
   }
 
   @Post('orders/:orderId/request-pickup')
@@ -480,97 +513,126 @@ export class PartnerController {
   async requestPickup(
     @Param('orderId') orderId: string,
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
   ) {
-    const res = await this.operationsService.requestPickup(orderId, req.user.sub, req.user.role);
+    const res = await this.operationsService.requestPickup(orderId, req.user.sub, req.user.role, tenantId, staffBranchId);
     await this.pickupService.dispatchPickupSearch(orderId);
     return res;
   }
 
   @Post('orders/:orderId/request-delivery')
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
-  async requestDelivery(@Param('orderId') orderId: string, @Req() req: { user: { sub: string; role: UserRole } }) {
-    await this.operationsService.requestDelivery(orderId, req.user.sub, req.user.role);
+  async requestDelivery(
+    @Param('orderId') orderId: string,
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
+  ) {
+    await this.operationsService.requestDelivery(orderId, req.user.sub, req.user.role, tenantId, staffBranchId);
     return this.operationsService.notifyDeliveryDispatch(orderId);
   }
 
   @Get('orders/progress')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
-  getProgress(@Req() req: { user: { sub: string; role: UserRole } }) {
-    return this.operationsService.getProgressMonitor(req.user.sub, req.user.role);
+  getProgress(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
+  ) {
+    return this.operationsService.getProgressMonitor(req.user.sub, req.user.role, tenantId, staffBranchId);
   }
 
   @Get('staff')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
-  listStaff(@Req() req: { user: { sub: string; role: UserRole } }) {
-    return this.operationsService.listStaff(req.user.sub, req.user.role);
+  listStaff(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
+  ) {
+    return this.operationsService.listStaff(req.user.sub, req.user.role, tenantId, staffBranchId);
   }
 
   @Get('riders')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
-  listAssignedRiders(@Req() req: { user: { sub: string; role: UserRole } }) {
-    return this.operationsService.listAssignedRiders(req.user.sub, req.user.role);
+  listAssignedRiders(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
+  ) {
+    return this.operationsService.listAssignedRiders(req.user.sub, req.user.role, tenantId, staffBranchId);
   }
 
   @Get('riders/owned')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
-  listOwnedRiders(@Req() req: { user: { sub: string; role: UserRole } }) {
-    return this.operationsService.listOwnedRiders(req.user.sub, req.user.role);
+  listOwnedRiders(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+  ) {
+    return this.operationsService.listOwnedRiders(req.user.sub, req.user.role, tenantId);
   }
 
   @Post('riders/owned')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   createOwnedRider(
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
     @Body() dto: CreateRiderDto,
   ) {
-    return this.operationsService.createOwnedRider(req.user.sub, req.user.role, dto);
+    return this.operationsService.createOwnedRider(req.user.sub, req.user.role, tenantId, dto);
   }
 
   @Patch('riders/owned/:riderUserId')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   updateOwnedRider(
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
     @Param('riderUserId') riderUserId: string,
     @Body() dto: UpdateRiderByPartnerDto,
   ) {
-    return this.operationsService.updateOwnedRider(req.user.sub, req.user.role, riderUserId, dto);
+    return this.operationsService.updateOwnedRider(req.user.sub, req.user.role, tenantId, riderUserId, dto);
   }
 
   @Delete('riders/owned/:riderUserId')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   removeOwnedRider(
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
     @Param('riderUserId') riderUserId: string,
   ) {
-    return this.operationsService.removeOwnedRider(req.user.sub, req.user.role, riderUserId);
+    return this.operationsService.removeOwnedRider(req.user.sub, req.user.role, tenantId, riderUserId);
   }
 
   @Post('staff')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   createStaff(
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
     @Body() dto: CreateStaffDto,
   ) {
-    return this.operationsService.createStaff(req.user.sub, req.user.role, dto);
+    return this.operationsService.createStaff(req.user.sub, req.user.role, tenantId, staffBranchId, dto);
   }
 
   @Patch('staff/:staffId/branch')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   reassignStaffBranch(
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
     @Param('staffId') staffId: string,
     @Body() dto: AssignStaffBranchDto,
   ) {
-    return this.operationsService.reassignStaffBranch(req.user.sub, req.user.role, staffId, dto);
+    return this.operationsService.reassignStaffBranch(req.user.sub, req.user.role, tenantId, staffId, dto);
   }
 
   @Delete('staff/:staffId')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   removeStaff(
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
     @Param('staffId') staffId: string,
   ) {
-    return this.operationsService.removeStaff(req.user.sub, req.user.role, staffId);
+    return this.operationsService.removeStaff(req.user.sub, req.user.role, tenantId, staffId);
   }
 
   @Post('orders/:orderId/assign-staff')
@@ -578,85 +640,103 @@ export class PartnerController {
   assignStaff(
     @Param('orderId') orderId: string,
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
     @Body() dto: AssignStaffDto,
   ) {
-    return this.operationsService.assignStaff(orderId, dto.staffId, req.user.sub, req.user.role);
+    return this.operationsService.assignStaff(orderId, dto.staffId, req.user.sub, req.user.role, tenantId, staffBranchId);
   }
 
   @Get('inventory')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
-  getInventory(@Req() req: { user: { sub: string; role: UserRole } }) {
-    return this.operationsService.getInventory(req.user.sub, req.user.role);
+  getInventory(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+  ) {
+    return this.operationsService.getInventory(req.user.sub, req.user.role, tenantId);
   }
 
   @Post('inventory')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   createInventoryItem(
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
     @Body() dto: CreateInventoryDto,
   ) {
-    return this.operationsService.createInventoryItem(req.user.sub, req.user.role, dto);
+    return this.operationsService.createInventoryItem(req.user.sub, req.user.role, tenantId, dto);
   }
 
   @Patch('inventory/:id')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   updateInventory(
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
     @Param('id') id: string,
     @Body() dto: UpdateInventoryDto,
   ) {
-    return this.operationsService.updateInventory(req.user.sub, req.user.role, id, dto);
+    return this.operationsService.updateInventory(req.user.sub, req.user.role, tenantId, id, dto);
   }
 
   @Delete('inventory/:id')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   deleteInventoryItem(
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
     @Param('id') id: string,
   ) {
-    return this.operationsService.deleteInventoryItem(req.user.sub, req.user.role, id);
+    return this.operationsService.deleteInventoryItem(req.user.sub, req.user.role, tenantId, id);
   }
 
   @Get('reports')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   getReports(
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
     @Query('days') days = '7',
   ) {
-    return this.operationsService.getReports(req.user.sub, req.user.role, Number(days) || 7);
+    return this.operationsService.getReports(req.user.sub, req.user.role, tenantId, Number(days) || 7);
   }
 
   @Get('revenue')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
-  getRevenue(@Req() req: { user: { sub: string; role: UserRole } }) {
-    return this.operationsService.getRevenue(req.user.sub, req.user.role);
+  getRevenue(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+  ) {
+    return this.operationsService.getRevenue(req.user.sub, req.user.role, tenantId);
   }
 
   @Get('invoices')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
-  getInvoices(@Req() req: { user: { sub: string; role: UserRole } }) {
-    return this.operationsService.getInvoices(req.user.sub, req.user.role);
+  getInvoices(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+  ) {
+    return this.operationsService.getInvoices(req.user.sub, req.user.role, tenantId);
   }
 
   @Get('invoices/:invoiceId/orders')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   getInvoiceOrders(
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
     @Param('invoiceId') invoiceId: string,
   ) {
-    return this.operationsService.getInvoiceOrders(req.user.sub, req.user.role, invoiceId);
+    return this.operationsService.getInvoiceOrders(req.user.sub, req.user.role, tenantId, invoiceId);
   }
 
   @Get('invoices/:invoiceId/pdf')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
   async downloadInvoicePdf(
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
     @Param('invoiceId') invoiceId: string,
     @Res() res: Response,
   ) {
     const { buffer, filename } = await this.operationsService.downloadInvoicePdf(
       req.user.sub,
       req.user.role,
+      tenantId,
       invoiceId,
     );
     res.setHeader('Content-Type', 'application/pdf');
@@ -682,8 +762,10 @@ export class PartnerController {
   getReceiving(
     @Param('orderId') orderId: string,
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
   ) {
-    return this.shopReceivingService.getReceiving(orderId, req.user.sub, req.user.role);
+    return this.shopReceivingService.getReceiving(orderId, req.user.sub, req.user.role, tenantId, staffBranchId);
   }
 
   @Post('orders/:orderId/receiving/receive')
@@ -691,9 +773,11 @@ export class PartnerController {
   receiveLaundry(
     @Param('orderId') orderId: string,
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
     @Body() dto: ReceiveLaundryDto,
   ) {
-    return this.shopReceivingService.receiveLaundry(orderId, req.user.sub, req.user.role, dto);
+    return this.shopReceivingService.receiveLaundry(orderId, req.user.sub, req.user.role, dto, tenantId, staffBranchId);
   }
 
   @Post('orders/:orderId/receiving/verify-weight')
@@ -701,9 +785,11 @@ export class PartnerController {
   verifyShopWeight(
     @Param('orderId') orderId: string,
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
     @Body() dto: VerifyShopWeightDto,
   ) {
-    return this.shopReceivingService.verifyWeight(orderId, req.user.sub, req.user.role, dto);
+    return this.shopReceivingService.verifyWeight(orderId, req.user.sub, req.user.role, dto, tenantId, staffBranchId);
   }
 
   @Post('orders/:orderId/receiving/confirm-items')
@@ -711,9 +797,11 @@ export class PartnerController {
   confirmShopItems(
     @Param('orderId') orderId: string,
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
     @Body() dto: ConfirmShopItemsDto,
   ) {
-    return this.shopReceivingService.confirmItems(orderId, req.user.sub, req.user.role, dto);
+    return this.shopReceivingService.confirmItems(orderId, req.user.sub, req.user.role, dto, tenantId, staffBranchId);
   }
 
   @Get('processing/config')
@@ -726,16 +814,19 @@ export class PartnerController {
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
   getOrderHistory(
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
     @Query('status') status?: string,
     @Query('customerId') customerId?: string,
   ) {
-    return this.operationsService.getOrderHistory(req.user.sub, req.user.role, status, customerId);
+    return this.operationsService.getOrderHistory(req.user.sub, req.user.role, tenantId, staffBranchId, status, customerId);
   }
 
   @Get('orders/queue')
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
   getQueue(
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
     @Query('mine') mine?: string,
   ) {
     return this.processingService.getQueue(
@@ -743,6 +834,7 @@ export class PartnerController {
       mine === '1' || mine === 'true',
       req.user.sub,
       req.user.role,
+      staffBranchId,
     );
   }
 
@@ -751,8 +843,10 @@ export class PartnerController {
   acceptJob(
     @Param('orderId') orderId: string,
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
   ) {
-    return this.processingService.acceptJob(orderId, req.user.sub, req.user.role);
+    return this.processingService.acceptJob(orderId, req.user.sub, req.user.role, tenantId, staffBranchId);
   }
 
   @Get('orders/:orderId/processing')
@@ -760,8 +854,10 @@ export class PartnerController {
   getProcessing(
     @Param('orderId') orderId: string,
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
   ) {
-    return this.processingService.getOrderProcessing(orderId, req.user.sub, req.user.role);
+    return this.processingService.getOrderProcessing(orderId, req.user.sub, req.user.role, tenantId, staffBranchId);
   }
 
   @Post('orders/:orderId/processing/photo-upload')
@@ -770,6 +866,8 @@ export class PartnerController {
   async uploadProcessingPhoto(
     @Param('orderId') orderId: string,
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
     @UploadedFile() file?: Express.Multer.File,
   ) {
     if (!file) {
@@ -788,6 +886,8 @@ export class PartnerController {
       req.user.sub,
       req.user.role,
       taskPhotoPublicPath(result.public_id),
+      tenantId,
+      staffBranchId,
     );
   }
 
@@ -796,9 +896,11 @@ export class PartnerController {
   advance(
     @Param('orderId') orderId: string,
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
     @Body() dto: AdvanceProcessingDto,
   ) {
-    return this.processingService.advance(orderId, req.user.sub, req.user.role, dto);
+    return this.processingService.advance(orderId, req.user.sub, req.user.role, tenantId, staffBranchId, dto);
   }
 
   @Post('orders/:orderId/processing/move')
@@ -806,9 +908,11 @@ export class PartnerController {
   moveProcessingStep(
     @Param('orderId') orderId: string,
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
     @Body() dto: MoveProcessingStepDto,
   ) {
-    return this.processingService.moveToStep(orderId, req.user.sub, req.user.role, dto);
+    return this.processingService.moveToStep(orderId, req.user.sub, req.user.role, tenantId, staffBranchId, dto);
   }
 
   @Patch('orders/:orderId/processing/shelf')
@@ -816,9 +920,11 @@ export class PartnerController {
   setShelfSlot(
     @Param('orderId') orderId: string,
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
     @Body() dto: SetShelfSlotDto,
   ) {
-    return this.processingService.setShelfSlot(orderId, req.user.sub, req.user.role, dto);
+    return this.processingService.setShelfSlot(orderId, req.user.sub, req.user.role, tenantId, staffBranchId, dto);
   }
 
   @Delete('orders/:orderId/processing/shelf')
@@ -826,41 +932,53 @@ export class PartnerController {
   clearShelfSlot(
     @Param('orderId') orderId: string,
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
   ) {
-    return this.processingService.clearShelfSlot(orderId, req.user.sub, req.user.role);
+    return this.processingService.clearShelfSlot(orderId, req.user.sub, req.user.role, tenantId, staffBranchId);
   }
 
   @Get('orders/shelf-lookup')
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
   findOnShelf(
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
     @Query('query') query?: string,
   ) {
-    return this.processingService.findOnShelf(query ?? '', req.user.sub, req.user.role);
+    return this.processingService.findOnShelf(query ?? '', req.user.sub, req.user.role, tenantId, staffBranchId);
   }
 
   @Get('shelves/search')
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
   searchShelfItems(
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
     @Query('query') query?: string,
   ) {
-    return this.shelfService.searchItems(req.user.sub, req.user.role, query ?? '');
+    return this.shelfService.searchItems(req.user.sub, req.user.role, tenantId, staffBranchId, query ?? '');
   }
 
   @Get('shelves')
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
-  listShelves(@Req() req: { user: { sub: string; role: UserRole } }) {
-    return this.shelfService.listShelves(req.user.sub, req.user.role);
+  listShelves(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
+  ) {
+    return this.shelfService.listShelves(req.user.sub, req.user.role, tenantId, staffBranchId);
   }
 
   @Post('shelves')
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
   createShelf(
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
     @Body() dto: CreateShelfDto,
   ) {
-    return this.shelfService.createShelf(req.user.sub, req.user.role, dto);
+    return this.shelfService.createShelf(req.user.sub, req.user.role, tenantId, staffBranchId, dto);
   }
 
   @Delete('shelves/:shelfId')
@@ -868,8 +986,10 @@ export class PartnerController {
   deleteShelf(
     @Param('shelfId') shelfId: string,
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
   ) {
-    return this.shelfService.deleteShelf(req.user.sub, req.user.role, shelfId);
+    return this.shelfService.deleteShelf(req.user.sub, req.user.role, tenantId, staffBranchId, shelfId);
   }
 
   @Post('shelves/:shelfId/items')
@@ -877,9 +997,11 @@ export class PartnerController {
   addShelfItem(
     @Param('shelfId') shelfId: string,
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
     @Body() dto: AddShelfItemDto,
   ) {
-    return this.shelfService.addItem(req.user.sub, req.user.role, shelfId, dto);
+    return this.shelfService.addItem(req.user.sub, req.user.role, tenantId, staffBranchId, shelfId, dto);
   }
 
   @Delete('shelves/:shelfId/items/:itemId')
@@ -888,8 +1010,10 @@ export class PartnerController {
     @Param('shelfId') shelfId: string,
     @Param('itemId') itemId: string,
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
   ) {
-    return this.shelfService.removeItem(req.user.sub, req.user.role, shelfId, itemId);
+    return this.shelfService.removeItem(req.user.sub, req.user.role, tenantId, staffBranchId, shelfId, itemId);
   }
 
   @Post('orders/:orderId/delivery/dispatch')
@@ -960,16 +1084,19 @@ export class PartnerController {
 
   @Get('customers')
   @Roles(UserRole.PARTNER, UserRole.ADMIN)
-  async getCustomers(@Req() req: { user: { sub: string; role: UserRole } }) {
-    const { sub, role } = req.user;
+  async getCustomers(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
+  ) {
+    const { role } = req.user;
     const matchStage: Record<string, unknown> = {
       status: { $in: [OrderStatus.COMPLETED, OrderStatus.DELIVERED, OrderStatus.CUSTOMER_PICKUP] },
     };
-    if (role === UserRole.PARTNER) {
-      matchStage.partnerId = new Types.ObjectId(sub);
-    } else if (role === UserRole.STAFF) {
-      const staffUser = await this.userModel.findById(sub).select('branchId').lean();
-      if (staffUser?.branchId) matchStage.branchId = staffUser.branchId;
+    if (role === UserRole.PARTNER && tenantId) {
+      matchStage.partnerId = new Types.ObjectId(tenantId);
+    } else if (role === UserRole.STAFF && staffBranchId) {
+      matchStage.branchId = new Types.ObjectId(staffBranchId);
     }
     const rows = await this.orderModel.aggregate([
       { $match: matchStage },
@@ -1004,20 +1131,21 @@ export class PartnerController {
   async getCustomer(
     @Req() req: { user: { sub: string; role: UserRole } },
     @Param('customerId') customerId: string,
+    @CurrentTenantId() tenantId?: string,
+    @CurrentStaffBranchId() staffBranchId?: string,
   ) {
     if (!Types.ObjectId.isValid(customerId)) {
       throw new BadRequestException('Invalid customer id');
     }
-    const { sub, role } = req.user;
+    const { role } = req.user;
     const matchStage: Record<string, unknown> = {
       customerId: new Types.ObjectId(customerId),
       status: { $in: [OrderStatus.COMPLETED, OrderStatus.DELIVERED, OrderStatus.CUSTOMER_PICKUP] },
     };
-    if (role === UserRole.PARTNER) {
-      matchStage.partnerId = new Types.ObjectId(sub);
-    } else if (role === UserRole.STAFF) {
-      const staffUser = await this.userModel.findById(sub).select('branchId').lean();
-      if (staffUser?.branchId) matchStage.branchId = staffUser.branchId;
+    if (role === UserRole.PARTNER && tenantId) {
+      matchStage.partnerId = new Types.ObjectId(tenantId);
+    } else if (role === UserRole.STAFF && staffBranchId) {
+      matchStage.branchId = new Types.ObjectId(staffBranchId);
     }
     const [summary] = await this.orderModel.aggregate([
       { $match: matchStage },
@@ -1057,21 +1185,22 @@ export class PartnerController {
   async updateCustomer(
     @Req() req: { user: { sub: string; role: UserRole } },
     @Param('customerId') customerId: string,
+    @CurrentTenantId() tenantId: string | undefined,
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
     @Body() dto: UpdateCustomerDto,
   ) {
     if (!Types.ObjectId.isValid(customerId)) {
       throw new BadRequestException('Invalid customer id');
     }
-    const { sub, role } = req.user;
+    const { role } = req.user;
     const matchStage: Record<string, unknown> = {
       customerId: new Types.ObjectId(customerId),
       status: { $in: [OrderStatus.COMPLETED, OrderStatus.DELIVERED, OrderStatus.CUSTOMER_PICKUP] },
     };
-    if (role === UserRole.PARTNER) {
-      matchStage.partnerId = new Types.ObjectId(sub);
-    } else if (role === UserRole.STAFF) {
-      const staffUser = await this.userModel.findById(sub).select('branchId').lean();
-      if (staffUser?.branchId) matchStage.branchId = staffUser.branchId;
+    if (role === UserRole.PARTNER && tenantId) {
+      matchStage.partnerId = new Types.ObjectId(tenantId);
+    } else if (role === UserRole.STAFF && staffBranchId) {
+      matchStage.branchId = new Types.ObjectId(staffBranchId);
     }
     const hasOrder = await this.orderModel.exists(matchStage);
     if (!hasOrder) {
@@ -1091,6 +1220,6 @@ export class PartnerController {
     if (dto.phone !== undefined) {
       await this.userModel.updateOne({ _id: customerId }, { $set: { phone: dto.phone } });
     }
-    return this.getCustomer(req, customerId);
+    return this.getCustomer(req, customerId, tenantId, staffBranchId);
   }
 }

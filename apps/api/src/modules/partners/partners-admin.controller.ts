@@ -25,6 +25,7 @@ import {
 import { UpsertPartnerTerritoryDto } from './dto/partner-territory.dto';
 import { PartnersService } from './partners.service';
 import { PartnerTerritoriesService } from './partner-territories.service';
+import { PartnerProvisioningService } from './partner-provisioning.service';
 
 const ASSET_FIELDS = ['logoUrl', 'iconUrl', 'splashUrl', 'faviconUrl'] as const;
 type AssetField = (typeof ASSET_FIELDS)[number];
@@ -37,6 +38,7 @@ export class PartnersAdminController {
     private readonly partnersService: PartnersService,
     private readonly storageService: LocalStorageService,
     private readonly partnerTerritoriesService: PartnerTerritoriesService,
+    private readonly provisioningService: PartnerProvisioningService,
   ) {}
 
   @Get()
@@ -104,5 +106,30 @@ export class PartnersAdminController {
   @Patch(':id/territory')
   async patchTerritory(@Param('id') id: string, @Body() dto: UpsertPartnerTerritoryDto) {
     return this.partnerTerritoriesService.upsertForPartner(id, dto);
+  }
+
+  /**
+   * Explicit, admin-triggered provisioning of a dedicated database for this partner (Part C of
+   * the multi-tenant plan). Deliberately its own endpoint rather than a side effect of
+   * `PATCH :id/branding` or `POST :id/territory` — backfilling live Orders/Branches into a new
+   * database is exactly the kind of hard-to-reverse action that shouldn't happen implicitly.
+   */
+  @Post(':id/provision-database')
+  async provisionDatabase(@Param('id') id: string) {
+    const partner = await this.partnersService.findById(id);
+    const result = await this.provisioningService.provision(partner.ownerUserId.toString());
+    return { success: true, data: result };
+  }
+
+  /** Snapshots (mongodump) and drops this partner's dedicated database — the "archive on
+   * unsubscribe" goal. `outDir` must be an operator-provided path the API process can write to. */
+  @Post(':id/archive-database')
+  async archiveDatabase(@Param('id') id: string, @Body('outDir') outDir: string) {
+    if (!outDir?.trim()) {
+      throw new BadRequestException('outDir is required — where to write the mongodump snapshot');
+    }
+    const partner = await this.partnersService.findById(id);
+    await this.provisioningService.archiveAndTeardown(partner.ownerUserId.toString(), outDir.trim());
+    return { success: true };
   }
 }

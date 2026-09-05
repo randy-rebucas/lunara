@@ -2,10 +2,12 @@ import { Controller, Get, Param, Req, Res, UseGuards } from '@nestjs/common';
 import type { UserRole } from '@lunara/types';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { TenantGuard } from '../../common/guards/tenant.guard';
+import { CurrentStaffBranchId, CurrentTenantId } from '../../common/decorators/current-tenant.decorator';
 import { MediaService } from './media.service';
 
 @Controller('uploads')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, TenantGuard)
 export class MediaController {
   constructor(private readonly mediaService: MediaService) {}
 
@@ -26,8 +28,10 @@ export class MediaController {
     @Param('filename') filename: string,
     @Req() req: { user: { sub: string; role: UserRole } },
     @Res() res: Response,
+    @CurrentTenantId() tenantId?: string,
+    @CurrentStaffBranchId() staffBranchId?: string,
   ) {
-    await this.mediaService.assertAccess('task-photos', filename, req.user);
+    await this.mediaService.assertAccess('task-photos', filename, req.user, tenantId, staffBranchId);
     res.sendFile(this.mediaService.resolveFilePath('task-photos', filename), (err) => {
       if (err && !res.headersSent) res.status(404).json({ message: 'File not found' });
     });

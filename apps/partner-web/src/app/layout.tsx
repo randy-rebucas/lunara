@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google';
 import { Toaster } from 'sonner';
 import brandIcon from '@lunara/brand/icon';
 import { AuthGuard } from '../components/auth-guard';
+import { BrandingProvider } from '../components/branding-provider';
 import { ErrorBoundary } from '../components/error-boundary';
 import { PortalShell } from '../components/portal-shell';
 import { ServiceWorkerRegister } from '../components/sw-register';
@@ -41,7 +42,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen font-sans antialiased">
         <ErrorBoundary>
           <AuthGuard>
-            <PortalShell>{children}</PortalShell>
+            <BrandingProvider>
+              <PortalShell>{children}</PortalShell>
+            </BrandingProvider>
           </AuthGuard>
         </ErrorBoundary>
         <Toaster position="bottom-right" richColors />

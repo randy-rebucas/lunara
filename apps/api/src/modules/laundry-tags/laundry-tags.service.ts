@@ -5,7 +5,6 @@ import { randomUUID } from 'crypto';
 import { UserRole, type PortalRole } from '@lunara/types';
 import { resolveTagCode } from '@lunara/utils';
 import { Branch, BranchDocument } from '../branches/schemas/branch.schema';
-import { resolvePortalBranchId } from '../partner/partner-access';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
 import { TrackingGateway } from '../realtime/tracking.gateway';
@@ -189,7 +188,12 @@ export class LaundryTagsService {
     return tag;
   }
 
-  async listTags(query: QueryTagsDto, actor: { sub: string; role: PortalRole }) {
+  async listTags(
+    query: QueryTagsDto,
+    actor: { sub: string; role: PortalRole },
+    tenantId?: string,
+    staffBranchId?: string,
+  ) {
     // Scoping filter (branch access + batchId) shared between the paginated item
     // query and the status-count aggregate — `status` is deliberately excluded here
     // so the counts always reflect the full scoped pool, not just the current filter.
@@ -198,14 +202,13 @@ export class LaundryTagsService {
 
     if (actor.role === UserRole.STAFF) {
       // Staff are locked to their own branch regardless of what branchId (if any) was requested.
-      const staffBranchId = await resolvePortalBranchId(this.userModel, actor.sub, actor.role);
       if (!staffBranchId) return { items: [], total: 0, statusCounts: {} };
-      scopeFilter.branchId = staffBranchId;
+      scopeFilter.branchId = new Types.ObjectId(staffBranchId);
     } else if (actor.role === UserRole.PARTNER) {
       // Partners see tags across whichever branches they own; a requested branchId narrows
       // that set further but can never widen it to another partner's branch.
       const ownedBranchIds = (
-        await this.branchModel.find({ partnerUserId: new Types.ObjectId(actor.sub) }).select('_id').lean()
+        await this.branchModel.find({ partnerUserId: new Types.ObjectId(tenantId) }).select('_id').lean()
       ).map((b) => b._id);
       if (query.branchId) {
         const requested = new Types.ObjectId(query.branchId);
@@ -254,7 +257,12 @@ export class LaundryTagsService {
   }
 
   /** Resolves a scanned tag code/QR payload to its current order + owning customer, scoped by role. */
-  async lookup(codeOrPayload: string, actor: { sub: string; role: UserRole }) {
+  async lookup(
+    codeOrPayload: string,
+    actor: { sub: string; role: UserRole },
+    tenantId?: string,
+    staffBranchId?: string,
+  ) {
     const code = resolveTagCode(codeOrPayload);
     const tag = await this.tagModel.findOne({ code });
     if (!tag) throw new NotFoundException('Tag not found');
@@ -271,7 +279,7 @@ export class LaundryTagsService {
       return { tag: { code: tag.code, status: tag.status }, order: null, customer: null };
     }
 
-    await this.assertLookupAccess(order, actor);
+    await this.assertLookupAccess(order, actor, tenantId, staffBranchId);
 
     const [customerProfile, customerUser] = await Promise.all([
       this.customerModel.findOne({ userId: order.customerId }).select('firstName lastName'),
@@ -299,20 +307,24 @@ export class LaundryTagsService {
     };
   }
 
-  private async assertLookupAccess(order: OrderDocument, actor: { sub: string; role: UserRole }) {
+  private async assertLookupAccess(
+    order: OrderDocument,
+    actor: { sub: string; role: UserRole },
+    tenantId?: string,
+    staffBranchId?: string,
+  ) {
     if (actor.role === UserRole.ADMIN) return;
 
     if (actor.role === UserRole.PARTNER) {
       const ownedBranchIds = (
-        await this.branchModel.find({ partnerUserId: new Types.ObjectId(actor.sub) }).select('_id').lean()
+        await this.branchModel.find({ partnerUserId: new Types.ObjectId(tenantId) }).select('_id').lean()
       ).map((b) => b._id.toString());
       if (order.branchId && ownedBranchIds.includes(order.branchId.toString())) return;
       throw new ForbiddenException('Order is not at one of your branches');
     }
 
     if (actor.role === UserRole.STAFF) {
-      const staffBranchId = await resolvePortalBranchId(this.userModel, actor.sub, actor.role);
-      if (staffBranchId && order.branchId?.toString() === staffBranchId.toString()) return;
+      if (staffBranchId && order.branchId?.toString() === staffBranchId) return;
       throw new ForbiddenException('Order is not at your branch');
     }
 

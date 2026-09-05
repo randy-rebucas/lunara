@@ -1,14 +1,10 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { UserRole } from '@lunara/types';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { LocalStorageService } from '../../common/storage/local-storage.service';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
-import { User, UserDocument } from '../users/schemas/user.schema';
-import {
-  assertOrderPortalAccess,
-  resolvePortalBranchId,
-} from '../partner/partner-access';
+import { assertOrderPortalAccess } from '../partner/partner-access';
 import { parseTaskPhotoFilename } from './task-photo-filename';
 
 type MediaCategory =
@@ -35,7 +31,6 @@ const ADMIN_ONLY_CATEGORIES: ReadonlySet<MediaCategory> = new Set([
 export class MediaService {
   constructor(
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
-    @InjectModel(User.name) private userModel: Model<UserDocument>,
     private readonly storageService: LocalStorageService,
   ) {}
 
@@ -53,6 +48,8 @@ export class MediaService {
     category: MediaCategory,
     filename: string,
     user: { sub: string; role: UserRole },
+    tenantId?: string,
+    staffBranchId?: string,
   ) {
     if (user.role === UserRole.ADMIN) return;
 
@@ -66,7 +63,7 @@ export class MediaService {
       return;
     }
 
-    await this.assertTaskPhotoAccess(filename, user);
+    await this.assertTaskPhotoAccess(filename, user, tenantId, staffBranchId);
   }
 
   private assertOwnerPrefixAccess(filename: string, user: { sub: string; role: UserRole }) {
@@ -82,6 +79,8 @@ export class MediaService {
   private async assertTaskPhotoAccess(
     filename: string,
     user: { sub: string; role: UserRole },
+    tenantId?: string,
+    staffBranchId?: string,
   ) {
     if (filename.startsWith(`${user.sub}-`)) return;
 
@@ -108,8 +107,12 @@ export class MediaService {
     }
 
     if (user.role === UserRole.PARTNER || user.role === UserRole.STAFF) {
-      const branchId = await resolvePortalBranchId(this.userModel, user.sub, user.role);
-      assertOrderPortalAccess(order, user.sub, user.role, branchId);
+      assertOrderPortalAccess(
+        order,
+        tenantId!,
+        user.role,
+        staffBranchId ? new Types.ObjectId(staffBranchId) : undefined,
+      );
       return;
     }
 

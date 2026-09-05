@@ -9,6 +9,11 @@ import { usePartnerNotificationsSocket } from '../lib/use-partner-notifications-
 import { BrandMark } from './ui/brand-mark';
 import { PortalHeaderActions } from './portal-header-actions';
 
+// Keep in sync with auth-guard.tsx's PUBLIC_PATHS — pages here render bare (no shell/nav/header),
+// since the header alone (PortalHeaderActions) fetches /partner/profile unconditionally on mount
+// and partnerFetch hard-redirects to /login on the 401 that returns with no token.
+const PUBLIC_PATHS = new Set(['/login', '/offline', '/signup', '/verify-email']);
+
 const SUBSCRIPTION_PLAN_LABELS: Record<PartnerSubscriptionInfo['subscriptionPlan'], string> = {
   trial: 'Trial',
   basic: 'Basic',
@@ -347,9 +352,10 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
     };
   }, [partner]);
 
-  const { connected } = usePartnerNotificationsSocket({ enabled: pathname !== '/login' && pathname !== '/offline' });
+  const isPublicPath = PUBLIC_PATHS.has(pathname);
+  const { connected } = usePartnerNotificationsSocket({ enabled: !isPublicPath });
 
-  if (pathname === '/login' || pathname === '/offline') return <>{children}</>;
+  if (isPublicPath) return <>{children}</>;
 
   async function logout() {
     await staffLogout();

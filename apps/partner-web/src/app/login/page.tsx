@@ -5,7 +5,9 @@ import { useEffect, useState } from 'react';
 import { UserRole } from '@lunara/types';
 import brandIcon from '@lunara/brand/icon';
 import Image from 'next/image';
+import Link from 'next/link';
 import { Icon, ICONS } from '../../components/ui/icon';
+import { BubbleField, DARK_PANEL_BUBBLES, LIGHT_PANEL_BUBBLES } from '../../components/bubble-field';
 import { getPartnerToken, getPortalUser, staffLogin } from '../../lib/partner-api';
 
 const DEV_EMAIL = 'partner@lunara.dev';
@@ -15,50 +17,6 @@ const isDev = process.env.NODE_ENV === 'development';
 const MAIL_ICON = 'M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75';
 const LOCK_ICON = 'M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z';
 const SHIELD_ICON = 'M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.75h-.152c-3.196 0-6.1-1.248-8.25-3.286z';
-
-const BUBBLES = [
-  { left: '4%', size: 24, duration: 16, delay: 0, drift: 16 },
-  { left: '14%', size: 46, duration: 22, delay: 3, drift: -18 },
-  { left: '26%', size: 16, duration: 12, delay: 6, drift: 12 },
-  { left: '36%', size: 60, duration: 26, delay: 1, drift: 24 },
-  { left: '48%', size: 20, duration: 14, delay: 8, drift: -14 },
-  { left: '58%', size: 38, duration: 20, delay: 4, drift: 18 },
-  { left: '70%', size: 14, duration: 11, delay: 2, drift: -10 },
-  { left: '80%', size: 52, duration: 24, delay: 7, drift: 20 },
-  { left: '90%', size: 22, duration: 15, delay: 5, drift: -16 },
-] as const;
-
-const FORM_BUBBLES = [
-  { left: '3%', size: 20, duration: 17, delay: 1, drift: 12 },
-  { left: '15%', size: 40, duration: 23, delay: 5, drift: -16 },
-  { left: '30%', size: 14, duration: 12, delay: 8, drift: 10 },
-  { left: '44%', size: 50, duration: 25, delay: 2, drift: 20 },
-  { left: '58%', size: 18, duration: 14, delay: 6, drift: -12 },
-  { left: '70%', size: 34, duration: 19, delay: 0, drift: 16 },
-  { left: '84%', size: 16, duration: 13, delay: 4, drift: -10 },
-  { left: '94%', size: 44, duration: 21, delay: 7, drift: 18 },
-] as const;
-
-function BubbleField({ bubbles, className }: { bubbles: readonly { left: string; size: number; duration: number; delay: number; drift: number }[]; className: string }) {
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
-      {bubbles.map((b, i) => (
-        <span
-          key={i}
-          className={className}
-          style={{
-            left: b.left,
-            width: b.size,
-            height: b.size,
-            animationDuration: `${b.duration}s`,
-            animationDelay: `${b.delay}s`,
-            ['--bubble-drift' as string]: `${b.drift}px`,
-          }}
-        />
-      ))}
-    </div>
-  );
-}
 
 const FEATURES = [
   {
@@ -121,7 +79,7 @@ export default function PortalLoginPage() {
           aria-hidden
         />
 
-        <BubbleField bubbles={BUBBLES} className="login-bubble" />
+        <BubbleField bubbles={DARK_PANEL_BUBBLES} className="login-bubble" />
 
         <div className="relative flex items-center gap-2.5">
           <Image
@@ -171,7 +129,7 @@ export default function PortalLoginPage() {
       </div>
 
       <div className="relative flex w-full flex-1 items-center justify-center overflow-hidden bg-surface px-6 py-12 sm:px-12">
-        <BubbleField bubbles={FORM_BUBBLES} className="login-bubble-light" />
+        <BubbleField bubbles={LIGHT_PANEL_BUBBLES} className="login-bubble-light" />
 
         <form onSubmit={handleSubmit} className="relative w-full max-w-md">
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
@@ -262,6 +220,13 @@ export default function PortalLoginPage() {
               </div>
             </div>
           </div>
+
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            New shop owner?{' '}
+            <Link href="/signup" className="link-primary">
+              Become a Lunara partner
+            </Link>
+          </p>
 
           {isDev && (
             <p className="mt-6 text-center text-xs text-muted-foreground">

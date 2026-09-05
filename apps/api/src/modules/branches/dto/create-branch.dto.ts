@@ -38,6 +38,10 @@ export class CreateBranchDto {
   @IsNotEmpty()
   province!: string;
 
+  @IsOptional()
+  @IsString()
+  postalCode?: string;
+
   @IsMongoId()
   partnerUserId!: string;
 

@@ -34,6 +34,6 @@ import { User, UserSchema } from '../users/schemas/user.schema';
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, OtpService, SmsService, TwilioVerifyService],
-  exports: [AuthService, JwtModule],
+  exports: [AuthService, JwtModule, OtpService],
 })
 export class AuthModule {}

@@ -15,14 +15,21 @@ import { UserRole } from '@lunara/types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { TenantGuard } from '../../common/guards/tenant.guard';
+import { CurrentStaffBranchId, CurrentTenantId } from '../../common/decorators/current-tenant.decorator';
 import { DeliveryService } from '../riders/delivery.service';
 import { HandoffQrService } from '../handoff/handoff-qr.service';
 import { CustomerSignDeliveryDto, CustomerVerifyDeliveryDto } from './dto/delivery.dto';
 import { AssignRiderDto, RescheduleOrderDto, UpdateOrderStatusDto } from './dto/order.dto';
 import { OrdersService } from './orders.service';
 
+// TenantGuard added here (in addition to JwtAuthGuard/RolesGuard, matching the pattern in
+// partner.controller.ts) because findOne/markCustomerPickup/completeCustomerPickup below are
+// PARTNER/STAFF/ADMIN-reachable order endpoints that need the guard-resolved req.tenantId /
+// req.staffBranchId. It is a no-op for CUSTOMER/RIDER requests to this same controller (the
+// guard passes them through with tenantId left undefined).
 @Controller('orders')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, TenantGuard)
 export class OrdersController {
   constructor(
     private readonly ordersService: OrdersService,
@@ -89,8 +96,13 @@ export class OrdersController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string, @Req() req: { user: { sub: string; role: UserRole } }) {
-    return this.ordersService.findOne(id, req.user);
+  findOne(
+    @Param('id') id: string,
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId?: string,
+    @CurrentStaffBranchId() staffBranchId?: string,
+  ) {
+    return this.ordersService.findOne(id, req.user, tenantId, staffBranchId);
   }
 
   @Delete(':id')
@@ -134,8 +146,10 @@ export class OrdersController {
   markCustomerPickup(
     @Param('id') id: string,
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId?: string,
+    @CurrentStaffBranchId() staffBranchId?: string,
   ) {
-    return this.ordersService.markCustomerPickup(id, req.user.sub, req.user.role);
+    return this.ordersService.markCustomerPickup(id, req.user.sub, req.user.role, tenantId, staffBranchId);
   }
 
   @Post(':id/customer-pickup/complete')
@@ -143,7 +157,9 @@ export class OrdersController {
   completeCustomerPickup(
     @Param('id') id: string,
     @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentTenantId() tenantId?: string,
+    @CurrentStaffBranchId() staffBranchId?: string,
   ) {
-    return this.ordersService.completeCustomerPickup(id, req.user.sub, req.user.role);
+    return this.ordersService.completeCustomerPickup(id, req.user.sub, req.user.role, tenantId, staffBranchId);
   }
 }

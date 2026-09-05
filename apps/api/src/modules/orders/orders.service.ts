@@ -31,7 +31,7 @@ import {
 import { PromotionsService } from '../promotions/promotions.service';
 import { LaundryTagsService } from '../laundry-tags/laundry-tags.service';
 import { User, UserDocument } from '../users/schemas/user.schema';
-import { assertOrderPortalAccess, resolvePortalBranchId } from '../partner/partner-access';
+import { assertOrderPortalAccess } from '../partner/partner-access';
 import { Address, AddressDocument } from '../addresses/schemas/address.schema';
 import { Rider, RiderDocument } from '../riders/schemas/rider.schema';
 import { Order, OrderDocument } from './schemas/order.schema';
@@ -332,6 +332,11 @@ export class OrdersService {
     statusGroup?: 'active' | 'past',
   ) {
     const userId = new Types.ObjectId(user.sub);
+    // NOTE: pre-existing gap, left as-is per migration instructions (not introduced or fixed
+    // here) — PARTNER/STAFF hitting this method fall through to an unfiltered `{}` filter
+    // (no partnerId/branchId scoping), unlike findOne/markCustomerPickup/completeCustomerPickup
+    // below which do enforce tenant scoping via assertOrderPortalAccess. Flagging rather than
+    // fixing speculatively.
     const filter: Record<string, unknown> =
       user.role === UserRole.CUSTOMER
         ? { customerId: userId }
@@ -361,7 +366,12 @@ export class OrdersService {
     };
   }
 
-  async findOne(id: string, user: { sub: string; role: UserRole }) {
+  async findOne(
+    id: string,
+    user: { sub: string; role: UserRole },
+    tenantId?: string,
+    staffBranchId?: string,
+  ) {
     const order = await this.orderModel.findById(id);
     if (!order) throw new NotFoundException('Order not found');
 
@@ -374,8 +384,16 @@ export class OrdersService {
       if (!isPickupRider && !isDeliveryRider) throw new ForbiddenException();
     }
     if (user.role === UserRole.PARTNER || user.role === UserRole.STAFF) {
-      const staffBranchId = await resolvePortalBranchId(this.userModel, user.sub, user.role);
-      assertOrderPortalAccess(order, user.sub, user.role, staffBranchId);
+      // tenantId/staffBranchId are guard-resolved (TenantGuard) — for PARTNER, tenantId equals
+      // the partner's own user id (same value assertOrderPortalAccess previously compared
+      // against user.sub); for STAFF, staffBranchId is the same branch id previously derived
+      // via resolvePortalBranchId's DB lookup. Same granularity, trusted source.
+      assertOrderPortalAccess(
+        order,
+        tenantId ?? user.sub,
+        user.role,
+        staffBranchId ? new Types.ObjectId(staffBranchId) : undefined,
+      );
     }
 
     if (user.role !== UserRole.CUSTOMER) {
@@ -687,13 +705,23 @@ export class OrdersService {
     return { success: true, data: updated };
   }
 
-  async markCustomerPickup(id: string, updatedBy: string, role: UserRole) {
+  async markCustomerPickup(
+    id: string,
+    updatedBy: string,
+    role: UserRole,
+    tenantId?: string,
+    staffBranchId?: string,
+  ) {
     const order = await this.orderModel.findById(id);
     if (!order) throw new NotFoundException('Order not found');
 
     if (role === UserRole.PARTNER || role === UserRole.STAFF) {
-      const staffBranchId = await resolvePortalBranchId(this.userModel, updatedBy, role);
-      assertOrderPortalAccess(order, updatedBy, role, staffBranchId);
+      assertOrderPortalAccess(
+        order,
+        tenantId ?? updatedBy,
+        role,
+        staffBranchId ? new Types.ObjectId(staffBranchId) : undefined,
+      );
     }
 
     if (order.status !== OrderStatus.READY_FOR_DELIVERY) {
@@ -717,13 +745,23 @@ export class OrdersService {
     return { success: true, data: await this.orderModel.findById(id) };
   }
 
-  async completeCustomerPickup(id: string, updatedBy: string, role: UserRole) {
+  async completeCustomerPickup(
+    id: string,
+    updatedBy: string,
+    role: UserRole,
+    tenantId?: string,
+    staffBranchId?: string,
+  ) {
     const order = await this.orderModel.findById(id);
     if (!order) throw new NotFoundException('Order not found');
 
     if (role === UserRole.PARTNER || role === UserRole.STAFF) {
-      const staffBranchId = await resolvePortalBranchId(this.userModel, updatedBy, role);
-      assertOrderPortalAccess(order, updatedBy, role, staffBranchId);
+      assertOrderPortalAccess(
+        order,
+        tenantId ?? updatedBy,
+        role,
+        staffBranchId ? new Types.ObjectId(staffBranchId) : undefined,
+      );
     }
 
     if (order.status !== OrderStatus.CUSTOMER_PICKUP) {

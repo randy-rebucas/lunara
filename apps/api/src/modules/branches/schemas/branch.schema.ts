@@ -211,6 +211,9 @@ export class Branch {
   @Prop({ required: true })
   province!: string;
 
+  @Prop()
+  postalCode?: string;
+
   @Prop({ type: Types.ObjectId, required: true, index: true })
   partnerUserId!: Types.ObjectId;
 
