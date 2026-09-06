@@ -6,7 +6,6 @@
     "scheme": "lunara-rider",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.lunara.rider",
       "supportsTablet": false
@@ -16,6 +15,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-status-bar",
       [
         "expo-notifications",
         {

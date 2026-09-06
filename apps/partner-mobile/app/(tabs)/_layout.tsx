@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import { Platform } from 'react-native';
+import { Platform, type ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../src/theme';
 
@@ -9,7 +9,7 @@ const TAB_BAR_CONTENT_HEIGHT = 52;
 type TabIcon = keyof typeof Ionicons.glyphMap;
 
 function tabIcon(name: TabIcon) {
-  return ({ color, size }: { color: string; size: number }) => (
+  return ({ color, size }: { color: ColorValue; size: number }) => (
     <Ionicons name={name} size={size} color={color} />
   );
 }

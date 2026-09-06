@@ -101,12 +101,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primaryLight,
   },
   bg: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     width: undefined,
     height: undefined,
   },
   bubbleField: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   bubble: {
     position: 'absolute',

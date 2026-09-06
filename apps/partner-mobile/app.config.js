@@ -23,11 +23,17 @@ module.exports = {
     },
   },
   icon,
-  splash: {
-    image: icon,
-    resizeMode: 'contain',
-    backgroundColor: '#ffffff',
-  },
+  plugins: [
+    ...appJson.plugins,
+    [
+      'expo-splash-screen',
+      {
+        image: icon,
+        resizeMode: 'contain',
+        backgroundColor: '#ffffff',
+      },
+    ],
+  ],
   android: {
     ...appJson.android,
     adaptiveIcon: {

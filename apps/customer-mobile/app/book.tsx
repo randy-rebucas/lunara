@@ -1,4 +1,5 @@
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import type { ComponentType } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -12,7 +13,11 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Slider from '@react-native-community/slider';
+import RNSlider, { type SliderProps } from '@react-native-community/slider';
+
+// @react-native-community/slider's type defs don't satisfy TS 6's stricter JSX.ElementClass
+// check, so its component export is unusable as JSX without a widening cast here.
+const Slider = RNSlider as unknown as ComponentType<SliderProps>;
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AddressType, BookingType, PaymentMethod, type OperatingHours } from '@lunara/types';
 import {

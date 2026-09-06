@@ -1,4 +1,4 @@
-import type { Router } from 'expo-router';
+import type { ImperativeRouter } from 'expo-router';
 
 export interface OnboardingStatus {
   needsProfile: boolean;
@@ -26,7 +26,7 @@ export async function fetchOnboardingStatus(
  * where deeper checks can still catch an incomplete profile/address on the next screen. */
 export async function redirectAfterAuth(
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>,
-  router: Pick<Router, 'replace'>,
+  router: Pick<ImperativeRouter, 'replace'>,
 ) {
   try {
     const status = await fetchOnboardingStatus(apiFetch);

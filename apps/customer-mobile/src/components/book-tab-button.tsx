@@ -1,11 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
-import type { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
+import type { GestureResponderEvent } from 'react-native';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, shadow, spacing } from '../theme';
 
 const CIRCLE_SIZE = 56;
 
-export function BookTabButton({ onPress, accessibilityState }: BottomTabBarButtonProps) {
+type BookTabButtonProps = {
+  onPress?: (e: GestureResponderEvent) => void;
+  accessibilityState?: { selected?: boolean };
+};
+
+export function BookTabButton({ onPress, accessibilityState }: BookTabButtonProps) {
   const focused = !!accessibilityState?.selected;
 
   return (

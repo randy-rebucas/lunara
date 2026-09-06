@@ -6,7 +6,6 @@
     "scheme": "lunara-staff",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.lunara.staff",
       "supportsTablet": false
@@ -16,6 +15,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-status-bar",
       [
         "expo-camera",
         {

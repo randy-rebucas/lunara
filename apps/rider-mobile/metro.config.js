@@ -21,10 +21,8 @@ config.resolver.blockList = [
   new RegExp(`${sep}packages${sep}[^${sep}]+${sep}dist${sep}.*`),
 ];
 
-// Single React instance + explicit workspace package roots (avoids invalid hook call / asset resolution).
+// Explicit workspace package roots (avoids asset resolution issues).
 config.resolver.extraNodeModules = {
-  react: path.join(monorepoRoot, 'node_modules/react'),
-  'react-native': path.join(monorepoRoot, 'node_modules/react-native'),
   '@lunara/brand': path.join(monorepoRoot, 'packages/brand'),
   '@lunara/config': path.join(monorepoRoot, 'packages/config'),
   '@lunara/types': path.join(monorepoRoot, 'packages/types'),
