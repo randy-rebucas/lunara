@@ -10,6 +10,7 @@ import { formatPeso } from '../../lib/format-peso';
 import { isAdminRealtimeConnected } from '../../lib/admin-realtime';
 import { useAdminQuery } from '../../lib/use-admin-query';
 import { useAdminOperationsSocket } from '../../lib/use-admin-operations-socket';
+import { type StatusPillCopy } from './tile-tones';
 
 interface DashboardData {
   counts: {
@@ -59,7 +60,7 @@ function deriveSystemState(counts: DashboardData['counts']): SystemState {
   return 'nominal';
 }
 
-const systemCopy: Record<SystemState, { label: string; detail: string; dot: string; bar: string }> = {
+const systemCopy: StatusPillCopy<SystemState> = {
   nominal: {
     label: 'All systems nominal',
     detail: 'No critical queue backlogs detected.',

@@ -49,7 +49,7 @@ const avatarStyles = StyleSheet.create({
   image: { width: '100%', height: '100%' },
   text: { fontSize: 22, fontWeight: '800', color: '#fff', letterSpacing: 0.5 },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.35)',
     alignItems: 'center',
     justifyContent: 'center',

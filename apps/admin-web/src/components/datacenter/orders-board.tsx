@@ -10,6 +10,7 @@ import { formatPeso } from '../../lib/format-peso';
 import { isAdminRealtimeConnected } from '../../lib/admin-realtime';
 import { useAdminQuery } from '../../lib/use-admin-query';
 import { useAdminOperationsSocket } from '../../lib/use-admin-operations-socket';
+import { TILE_TONES, type StatusPillCopy } from './tile-tones';
 
 interface OrderRow {
   _id: string;
@@ -94,10 +95,7 @@ function derivePipelineState(
   return 'nominal';
 }
 
-const pipelineCopy: Record<
-  PipelineState,
-  { label: string; detail: string; dot: string; bar: string }
-> = {
+const pipelineCopy: StatusPillCopy<PipelineState> = {
   nominal: {
     label: 'Pipeline nominal',
     detail: 'No dispatch backlog or SLA exceptions in the loaded ledger.',
@@ -171,14 +169,6 @@ function paymentLabel(o: OrderRow): string {
 }
 
 // ── Stat tiles ─────────────────────────────────────────────────────────────
-const TILE_TONES = {
-  primary: 'bg-primary/[0.04] ring-primary/15',
-  accent: 'bg-accent/[0.04] ring-accent/20',
-  secondary: 'bg-secondary/[0.04] ring-secondary/15',
-  amber: 'bg-amber-500/[0.04] ring-amber-500/20',
-  rose: 'bg-rose-500/[0.04] ring-rose-500/20',
-} as const;
-
 function StatTile({
   label,
   value,

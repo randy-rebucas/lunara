@@ -1,0 +1,146 @@
+[
+  {
+    "id": "5348690c-8e41-44df-855f-2dd21984ab10",
+    "status": "ERRORED",
+    "platform": "ANDROID",
+    "error": {
+      "errorCode": "UNKNOWN_ERROR",
+      "message": "Unknown error. See logs of the Install dependencies build phase for more information."
+    },
+    "artifacts": {},
+    "fingerprint": {
+      "id": "01a074a2-e310-7e13-b123-a72c1017e2e7",
+      "hash": "5776f70a2b2609ee6174ac206998a8f8f5c2c4e8"
+    },
+    "initiatingActor": {
+      "id": "730979ed-9c05-45c0-89ce-88377b315f3e",
+      "displayName": "randyreb"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/08355e56-d5dc-4fe0-b11c-8b6a27691dc5/5348690c-8e41-44df-855f-2dd21984ab10/2026-09-06T05%3A23%3A26Z-f5cc176e-2910-449c-9d06-e71cdeb39b47.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260906%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260906T052616Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=1fe507f00ee2f8bd67bdd97430a6e1d7842b127a8d2bedeedecbe91f8ce01a09f4ebc186a7e1583bc58f3902869b73c00af6f104deba8b047ec54fda98e2ecefc81a14d4c1503eb2c8b49da9e4c47f2f73cd111b0b7ee80dd3e0b8f57f64a4676b007618ba7eba8aba471b376049d388335d1ecb835980df792bfd4e0490f1f8d2a90a35da470b9a96ab7762e9367ca64fb0600387172e7fb96c526f3beb51d2d3aff73187643eaa18e85600ba02f5f4b88c2d21af286ddd7eb4c48d8a0d21f38724bc67baccd6e84a11bb911401984b59183fecc6c799ffd1afb9e1c2fabd305d96bf58a29aa3a7bd4176f97642a65c0979bc2f25cf9bc64455378a4d18f5f6"
+    ],
+    "project": {
+      "id": "08355e56-d5dc-4fe0-b11c-8b6a27691dc5",
+      "name": "Lunara",
+      "slug": "lunara-customer",
+      "ownerAccount": {
+        "id": "8612a07c-ac16-422f-b78e-4f70ae4c8a19",
+        "name": "randyreb"
+      }
+    },
+    "distribution": "STORE",
+    "buildProfile": "production",
+    "sdkVersion": "57.0.0",
+    "appVersion": "1.2.7",
+    "appBuildVersion": "31",
+    "gitCommitHash": "0e033b983e4405f7b2ccf4152f5edeb64b2025dd",
+    "gitCommitMessage": "fix: commit root package.json react/@types-react version bump\n\npackage-lock.json committed in 605e9d6 was regenerated against this\nalready-bumped package.json (react 19.2.3, @types/react ~19.2.4), but\npackage.json itself was left uncommitted, so the committed lock/manifest\npair still mismatched and EAS's `npm ci` failed identically.\n\nCo-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>",
+    "priority": "HIGH",
+    "createdAt": "2026-09-06T05:23:22.060Z",
+    "updatedAt": "2026-09-06T05:23:50.119Z",
+    "completedAt": "2026-09-06T05:23:49.909Z",
+    "expirationDate": "2026-10-06T05:23:22.081Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 4112,
+      "buildQueueTime": 4514,
+      "buildDuration": 19223
+    }
+  },
+  {
+    "id": "aa1f5482-afe8-4129-a8d5-93cdea3f6f46",
+    "status": "ERRORED",
+    "platform": "ANDROID",
+    "error": {
+      "errorCode": "UNKNOWN_ERROR",
+      "message": "Unknown error. See logs of the Install dependencies build phase for more information."
+    },
+    "artifacts": {},
+    "fingerprint": {
+      "id": "01a074a2-e310-7e13-b123-a72c1017e2e7",
+      "hash": "5776f70a2b2609ee6174ac206998a8f8f5c2c4e8"
+    },
+    "initiatingActor": {
+      "id": "730979ed-9c05-45c0-89ce-88377b315f3e",
+      "displayName": "randyreb"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/08355e56-d5dc-4fe0-b11c-8b6a27691dc5/aa1f5482-afe8-4129-a8d5-93cdea3f6f46/2026-09-06T04%3A06%3A05Z-447f0ec8-2b6e-4052-98eb-b11f85e81999.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260906%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260906T052616Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=23f0e49590e6f7d4376d3156ac3ae9d544403ff3542e6be9f352b0ef9c7c6b6c54c97affc671fb7d5b02eb9dbe2d8ed377569788f3aef3f92235b334ba9b739cf048f3824e02240a008397b076b8d21e8c990c4112e4ec17e69fa74cba1dd645b9a1fde6b7691114825a7507568a2891bff9a15f602fb1ccfd8e1549b0b70e165c2316a2d2200091a14c21eee3e88e2b2a95d4fd0f7dec8f5f7957fab014f5ac6151ffbec9188e53b4bc7bb9d3b0307c6f7cce5d996d735fd53089a0924ba852f6f705e4da7f9cb16af3e5f72a94113a29c34140f309495eb5cb3cc15029cba46414e092c0dcce087d1b72207d5a1c9bad38b0e4844474b85d883967cfbae941"
+    ],
+    "project": {
+      "id": "08355e56-d5dc-4fe0-b11c-8b6a27691dc5",
+      "name": "Lunara",
+      "slug": "lunara-customer",
+      "ownerAccount": {
+        "id": "8612a07c-ac16-422f-b78e-4f70ae4c8a19",
+        "name": "randyreb"
+      }
+    },
+    "distribution": "INTERNAL",
+    "buildProfile": "preview",
+    "sdkVersion": "57.0.0",
+    "appVersion": "1.2.7",
+    "appBuildVersion": "30",
+    "gitCommitHash": "0e033b983e4405f7b2ccf4152f5edeb64b2025dd",
+    "gitCommitMessage": "fix: commit root package.json react/@types-react version bump\n\npackage-lock.json committed in 605e9d6 was regenerated against this\nalready-bumped package.json (react 19.2.3, @types/react ~19.2.4), but\npackage.json itself was left uncommitted, so the committed lock/manifest\npair still mismatched and EAS's `npm ci` failed identically.\n\nCo-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>",
+    "priority": "HIGH",
+    "createdAt": "2026-09-06T04:06:01.867Z",
+    "updatedAt": "2026-09-06T04:06:27.044Z",
+    "completedAt": "2026-09-06T04:06:26.770Z",
+    "expirationDate": "2026-12-05T04:06:01.938Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 3289,
+      "buildQueueTime": 4628,
+      "buildDuration": 16986
+    }
+  },
+  {
+    "id": "c431244e-7335-4c38-ae11-d3aa0cb0a793",
+    "status": "ERRORED",
+    "platform": "ANDROID",
+    "error": {
+      "errorCode": "UNKNOWN_ERROR",
+      "message": "Unknown error. See logs of the Install dependencies build phase for more information."
+    },
+    "artifacts": {},
+    "fingerprint": {
+      "id": "01a074a2-e310-7e13-b123-a72c1017e2e7",
+      "hash": "5776f70a2b2609ee6174ac206998a8f8f5c2c4e8"
+    },
+    "initiatingActor": {
+      "id": "730979ed-9c05-45c0-89ce-88377b315f3e",
+      "displayName": "randyreb"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/08355e56-d5dc-4fe0-b11c-8b6a27691dc5/c431244e-7335-4c38-ae11-d3aa0cb0a793/2026-09-06T03%3A38%3A00Z-4a9c35a8-4ab3-4cd1-b0b4-dad637ff66be.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260906%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260906T052616Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=87222ca5c8b42bea68e85dbc0650a59c8d631eaca3f9b55fcafb37fdc65816d2bb6c4547438cd44fd3e519e61c9b87a96ae1660a5bb0b050fbca74d457a7c29f9a094ed7b33f90d42710f7cab69a30bca759a80c29c7942d9ad00705feab1223f32aeb30ac33f09145bbee4ae6a1ec239addfa18c9f37575352747fe1b01920d521ed1796258cd5fe3b31d1062235c9cffeade15dcd0471b2af450436e331ba11911198e792cb069e7c8c8b21a28345df8614725da43a88dd88c01aecd202a85ab32a0b52b3f58e4b9248517610a4da084a7554e913c7b83c9069a1015f00131b80a6f364e104933420170166bd6a62354dde2318cf9ec74ae9eb89548665b16"
+    ],
+    "project": {
+      "id": "08355e56-d5dc-4fe0-b11c-8b6a27691dc5",
+      "name": "Lunara",
+      "slug": "lunara-customer",
+      "ownerAccount": {
+        "id": "8612a07c-ac16-422f-b78e-4f70ae4c8a19",
+        "name": "randyreb"
+      }
+    },
+    "distribution": "INTERNAL",
+    "buildProfile": "preview",
+    "sdkVersion": "57.0.0",
+    "appVersion": "1.2.7",
+    "appBuildVersion": "30",
+    "gitCommitHash": "0e033b983e4405f7b2ccf4152f5edeb64b2025dd",
+    "gitCommitMessage": "fix: commit root package.json react/@types-react version bump\n\npackage-lock.json committed in 605e9d6 was regenerated against this\nalready-bumped package.json (react 19.2.3, @types/react ~19.2.4), but\npackage.json itself was left uncommitted, so the committed lock/manifest\npair still mismatched and EAS's `npm ci` failed identically.\n\nCo-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>",
+    "priority": "HIGH",
+    "createdAt": "2026-09-06T03:37:59.386Z",
+    "updatedAt": "2026-09-06T03:38:24.625Z",
+    "completedAt": "2026-09-06T03:38:24.434Z",
+    "expirationDate": "2026-12-05T03:37:59.428Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 814,
+      "buildQueueTime": 4956,
+      "buildDuration": 19278
+    }
+  }
+]

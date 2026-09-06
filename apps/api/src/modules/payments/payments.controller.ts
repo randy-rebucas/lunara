@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpException,
   NotFoundException,
   Param,
   Post,
@@ -81,12 +82,16 @@ export class PaymentsController {
     return this.paymentsService
       .handlePaymongoWebhook(rawBody, signature)
       .then((result) => res.status(200).json(result))
-      .catch((err) =>
-        res.status(err.status ?? 400).json({
+      .catch((err) => {
+        // Only a deliberate HttpException (e.g. bad signature) means "don't retry" — anything
+        // else (DB/network failure, unexpected bug) is our fault, not a bad delivery, so it must
+        // come back as 5xx or PayMongo will treat it as permanently rejected and stop retrying.
+        const status = err instanceof HttpException ? err.getStatus() : 500;
+        return res.status(status).json({
           success: false,
           message: err.message ?? 'Webhook handling failed',
-        }),
-      );
+        });
+      });
   }
 
   @Get('mock/paymongo/checkout')

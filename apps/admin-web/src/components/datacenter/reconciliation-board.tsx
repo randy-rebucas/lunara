@@ -8,6 +8,7 @@ import { DetailRow, OpsPanel } from '../ui/ops-panel';
 import { adminFetch } from '../../lib/admin-api';
 import { formatPeso, formatPesoWhole } from '../../lib/format-peso';
 import { useAdminQuery } from '../../lib/use-admin-query';
+import { TILE_TONES } from './tile-tones';
 
 interface ReconciliationData {
   pnl: {
@@ -115,13 +116,6 @@ function dayKey(iso: string) {
 }
 
 // ── Stat tiles ─────────────────────────────────────────────────────────────
-const TILE_TONES = {
-  primary: 'bg-primary/[0.04] ring-primary/15',
-  accent: 'bg-accent/[0.04] ring-accent/20',
-  secondary: 'bg-secondary/[0.04] ring-secondary/15',
-  amber: 'bg-amber-500/[0.04] ring-amber-500/20',
-  rose: 'bg-rose-500/[0.04] ring-rose-500/20',
-} as const;
 
 function StatTile({
   label,

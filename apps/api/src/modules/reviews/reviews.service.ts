@@ -162,14 +162,21 @@ export class ReviewsService {
 
   /** Real, published reviews for the public marketing site — no auth, so only rating/comment/first
    * name + last initial are exposed (never email/phone/full name). */
-  async listFeatured(limit = 12) {
+  async listFeatured(limit = 12, partnerId?: string) {
+    const match: Record<string, unknown> = {
+      rating: { $gte: 4 },
+      comment: { $exists: true, $nin: [null, ''] },
+    };
+    if (partnerId && Types.ObjectId.isValid(partnerId)) {
+      match.partnerId = new Types.ObjectId(partnerId);
+    }
     const rows = await this.reviewModel.aggregate<{
       _id: Types.ObjectId;
       rating: number;
       comment: string;
       customer?: { firstName: string; lastName: string };
     }>([
-      { $match: { rating: { $gte: 4 }, comment: { $exists: true, $nin: [null, ''] } } },
+      { $match: match },
       { $sort: { publishedAt: -1 } },
       { $limit: limit },
       {

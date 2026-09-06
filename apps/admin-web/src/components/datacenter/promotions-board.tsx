@@ -6,6 +6,7 @@ import { filterBySearch, ListControls } from '../list-controls';
 import { adminFetch } from '../../lib/admin-api';
 import { formatPeso } from '../../lib/format-peso';
 import { useAdminQuery } from '../../lib/use-admin-query';
+import { TILE_TONES, type StatusPillCopy } from './tile-tones';
 
 interface Promotion {
   _id: string;
@@ -34,7 +35,7 @@ interface Promotion {
 type PromoState = 'nominal' | 'attention';
 type StatusTab = 'all' | 'active' | 'inactive';
 
-const promoCopy: Record<PromoState, { label: string; detail: string; dot: string; bar: string }> = {
+const promoCopy: StatusPillCopy<PromoState> = {
   nominal: {
     label: 'Promotions live',
     detail: 'At least one promo code is active for customer checkout.',
@@ -81,15 +82,6 @@ function derivePromoState(items: Promotion[]): PromoState {
 }
 
 // ── Small blocks ───────────────────────────────────────────────────────────
-const TILE_TONES = {
-  primary: 'bg-primary/[0.04] ring-primary/15',
-  accent: 'bg-accent/[0.04] ring-accent/20',
-  secondary: 'bg-secondary/[0.04] ring-secondary/15',
-  amber: 'bg-amber-500/[0.04] ring-amber-500/20',
-  violet: 'bg-violet-500/[0.04] ring-violet-500/20',
-  rose: 'bg-rose-500/[0.04] ring-rose-500/20',
-} as const;
-
 function StatTile({
   label,
   value,

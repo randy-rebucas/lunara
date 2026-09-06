@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { headers } from 'next/headers';
 import { Building2, MapPin, Sparkles } from 'lucide-react';
 import { appConfig } from '@lunara/config';
 import { resolveApiV1BaseUrl } from '@lunara/hooks';
@@ -29,7 +30,8 @@ export const metadata: Metadata = buildPageMetadata({
 
 export default async function LocationsPage() {
   const apiBase = resolveApiV1BaseUrl(process.env.NEXT_PUBLIC_API_URL);
-  const serviceAreas = await fetchActiveServiceAreas(apiBase);
+  const host = (await headers()).get('host') ?? undefined;
+  const serviceAreas = await fetchActiveServiceAreas(apiBase, host);
 
   const cityCount = new Set(serviceAreas.map((b) => b.city)).size;
   const avgRadius =
