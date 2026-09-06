@@ -19,3 +19,9 @@ export function parseApiError(body: unknown, fallback = 'Request failed'): strin
 
   return fallback;
 }
+
+/** `e instanceof Error ? e.message : fallback` — the idiom repeated at nearly every catch block
+ * across the app's screens, pulled out into one helper. */
+export function toErrorMessage(e: unknown, fallback: string): string {
+  return e instanceof Error ? e.message : fallback;
+}

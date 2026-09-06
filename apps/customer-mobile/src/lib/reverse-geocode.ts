@@ -41,7 +41,27 @@ function pickPostalFromResults(results: Location.LocationGeocodedAddress[]): str
   return '';
 }
 
+// Nominatim's usage policy caps requests to ~1/sec and asks callers to cache results rather than
+// re-querying the same location. Round to ~11m precision so nearby taps within a delivery address
+// share a cache entry, and keep a short TTL + a global minimum gap between outgoing requests.
+const NOMINATIM_CACHE_TTL_MS = 10 * 60 * 1000;
+const NOMINATIM_MIN_GAP_MS = 1100;
+const nominatimCache = new Map<string, { postalCode: string; expiresAt: number }>();
+let lastNominatimRequestAt = 0;
+
+function nominatimCacheKey(latitude: number, longitude: number): string {
+  return `${latitude.toFixed(4)},${longitude.toFixed(4)}`;
+}
+
 async function fetchPostalCodeFromNominatim(latitude: number, longitude: number): Promise<string> {
+  const key = nominatimCacheKey(latitude, longitude);
+  const cached = nominatimCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.postalCode;
+
+  const waitMs = NOMINATIM_MIN_GAP_MS - (Date.now() - lastNominatimRequestAt);
+  if (waitMs > 0) return cached?.postalCode ?? '';
+  lastNominatimRequestAt = Date.now();
+
   try {
     const params = new URLSearchParams({
       lat: String(latitude),
@@ -63,7 +83,9 @@ async function fetchPostalCodeFromNominatim(latitude: number, longitude: number)
       display_name?: string;
     };
 
-    return extractPhilippinePostalCode(data.address?.postcode, data.display_name);
+    const postalCode = extractPhilippinePostalCode(data.address?.postcode, data.display_name);
+    nominatimCache.set(key, { postalCode, expiresAt: Date.now() + NOMINATIM_CACHE_TTL_MS });
+    return postalCode;
   } catch {
     return '';
   }

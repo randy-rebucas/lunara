@@ -93,6 +93,7 @@ module.exports = {
   },
   plugins: [
     ...brandedPlugins,
+    'expo-secure-store',
     [
       'expo-splash-screen',
       {

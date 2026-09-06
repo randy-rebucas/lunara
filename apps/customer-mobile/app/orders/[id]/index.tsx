@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Image,
   Linking,
-  Modal,
   Platform,
   Pressable,
   RefreshControl,
@@ -13,7 +12,7 @@ import {
   View,
 } from 'react-native';
 import { KeyboardSafeScrollView } from '../../../src/components/ui/keyboard-safe-scroll-view';
-import { OrderStatus, PaymentMethod, PaymentStatus, type OperatingHours } from '@lunara/types';
+import { OrderStatus, PaymentMethod, PaymentStatus } from '@lunara/types';
 import {
   buildCustomerTimeline,
   formatCashTimingLabel,
@@ -21,19 +20,21 @@ import {
   formatOrderStatusLabel,
   formatPaymentMethodLabel,
   formatPaymentStatusLabel,
-  type BranchHoliday,
 } from '@lunara/utils';
 import { Button } from '../../../src/components/ui/button';
 import { Card } from '../../../src/components/ui/card';
 import { Input } from '../../../src/components/ui/input';
-import { PickupSchedulePicker } from '../../../src/components/pickup-schedule-picker';
 import { brandName, colors, radius, spacing, typography } from '../../../src/theme';
 import { useOrderTrackingSocket } from '../../../src/hooks/use-order-tracking-socket';
 import { DataLoadState } from '../../../src/components/data-load-state';
 import { OrderTimeline } from '../../../src/components/order-timeline';
 import { HandoffQrCard } from '../../../src/components/handoff-qr-card';
 import { branchTypeLabel } from '../../../src/components/nearest-branches';
+import { ReviewModal } from '../../../src/components/order-detail/review-modal';
+import { RescheduleModal } from '../../../src/components/order-detail/reschedule-modal';
+import { DeliverySignModal } from '../../../src/components/order-detail/delivery-sign-modal';
 import { formatOrderNumber } from '../../../src/lib/active-order';
+import { toErrorMessage } from '../../../src/lib/api-error';
 import { resolveMediaUrl } from '../../../src/lib/media-url';
 import { useAuthStore } from '../../../src/store/auth';
 
@@ -111,27 +112,14 @@ export default function OrderTrackScreen() {
   const [notifications, setNotifications] = useState<LiveNotification[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [verifyCode, setVerifyCode] = useState('');
-  const [signatureName, setSignatureName] = useState('');
   const [verifying, setVerifying] = useState(false);
-  const [signing, setSigning] = useState(false);
   const [deliveryError, setDeliveryError] = useState('');
   const [loadError, setLoadError] = useState('');
   const [pageLoading, setPageLoading] = useState(true);
   const [paymentExpanded, setPaymentExpanded] = useState(false);
   const [branchExpanded, setBranchExpanded] = useState(false);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
-  const [reviewRating, setReviewRating] = useState(0);
-  const [reviewComment, setReviewComment] = useState('');
-  const [reviewSubmitting, setReviewSubmitting] = useState(false);
-  const [reviewError, setReviewError] = useState('');
   const [rescheduleModalOpen, setRescheduleModalOpen] = useState(false);
-  const [rescheduleOperatingHours, setRescheduleOperatingHours] = useState<OperatingHours | null>(null);
-  const [rescheduleHolidays, setRescheduleHolidays] = useState<BranchHoliday[]>([]);
-  const [rescheduleServerNow, setRescheduleServerNow] = useState<string | undefined>(undefined);
-  const [rescheduleSelectedStartAt, setRescheduleSelectedStartAt] = useState('');
-  const [rescheduleLoading, setRescheduleLoading] = useState(false);
-  const [rescheduleSubmitting, setRescheduleSubmitting] = useState(false);
-  const [rescheduleError, setRescheduleError] = useState('');
   const [subscribeFrequencyDays, setSubscribeFrequencyDays] = useState(7);
   const [subscribing, setSubscribing] = useState(false);
   const [subscribed, setSubscribed] = useState(false);
@@ -183,7 +171,7 @@ export default function OrderTrackScreen() {
         setHasReview(false);
       }
     } catch (e) {
-      setLoadError(e instanceof Error ? e.message : 'Failed to load order');
+      setLoadError(toErrorMessage(e, 'Failed to load order'));
       setOrder(null);
     } finally {
       setPageLoading(false);
@@ -247,115 +235,41 @@ export default function OrderTrackScreen() {
       await load();
       pushNotification('Delivery verified');
     } catch (e) {
-      setDeliveryError(e instanceof Error ? e.message : 'Verification failed');
+      setDeliveryError(toErrorMessage(e, 'Verification failed'));
     } finally {
       setVerifying(false);
     }
   }
 
-  async function handleSign(nameOverride?: string) {
-    if (!id || signing) return;
-    const name = (nameOverride ?? signatureName).trim();
-    if (name.length < 2) {
-      setDeliveryError('Enter your name (min 2 characters) to sign.');
-      return;
-    }
-    setDeliveryError('');
-    setSigning(true);
-    try {
-      await apiFetch(`/orders/${id}/delivery/sign`, {
-        method: 'POST',
-        body: JSON.stringify({ signatureName: name }),
-      });
-      await load();
-      pushNotification('Delivery signed');
-    } catch (e) {
-      setDeliveryError(e instanceof Error ? e.message : 'Sign failed');
-    } finally {
-      setSigning(false);
-    }
-  }
-
-  function openReviewModal() {
-    setReviewRating(0);
-    setReviewComment('');
-    setReviewError('');
-    setReviewModalOpen(true);
-  }
-
-  async function handleSubmitReview() {
+  async function handleSign(name: string) {
     if (!id) return;
-    if (reviewRating < 1) {
-      setReviewError('Select a star rating before submitting.');
-      return;
-    }
-    setReviewSubmitting(true);
-    setReviewError('');
-    try {
-      await apiFetch('/reviews', {
-        method: 'POST',
-        body: JSON.stringify({
-          orderId: id,
-          rating: reviewRating,
-          comment: reviewComment.trim() || undefined,
-        }),
-      });
-      setCanReview(false);
-      setHasReview(true);
-      setReviewModalOpen(false);
-      pushNotification('Thanks for your review!');
-    } catch (e) {
-      setReviewError(e instanceof Error ? e.message : 'Could not submit review');
-    } finally {
-      setReviewSubmitting(false);
-    }
+    await apiFetch(`/orders/${id}/delivery/sign`, {
+      method: 'POST',
+      body: JSON.stringify({ signatureName: name }),
+    });
+    await load();
+    pushNotification('Delivery signed');
   }
 
-  async function openRescheduleModal() {
-    if (!order) return;
-    setRescheduleError('');
-    setRescheduleSelectedStartAt('');
-    setRescheduleModalOpen(true);
-    if (!order.pickupAddressId) {
-      setRescheduleError('Could not load pickup schedule for this order.');
-      return;
-    }
-    setRescheduleLoading(true);
-    try {
-      const branchParam = order.branchId ? `&branchId=${encodeURIComponent(order.branchId)}` : '';
-      const avail = await apiFetch<{
-        operatingHours: OperatingHours;
-        holidays?: BranchHoliday[];
-        serverNow?: string;
-      }>(`/booking/availability?addressId=${encodeURIComponent(order.pickupAddressId)}${branchParam}`);
-      setRescheduleOperatingHours(avail.operatingHours);
-      setRescheduleHolidays(avail.holidays ?? []);
-      setRescheduleServerNow(avail.serverNow);
-    } catch (e) {
-      setRescheduleError(e instanceof Error ? e.message : 'Could not load pickup schedule');
-      setRescheduleOperatingHours(null);
-    } finally {
-      setRescheduleLoading(false);
-    }
+  async function handleSubmitReview(rating: number, comment: string) {
+    if (!id) return;
+    await apiFetch('/reviews', {
+      method: 'POST',
+      body: JSON.stringify({ orderId: id, rating, comment: comment || undefined }),
+    });
+    setCanReview(false);
+    setHasReview(true);
+    pushNotification('Thanks for your review!');
   }
 
-  async function handleSubmitReschedule() {
-    if (!id || !rescheduleSelectedStartAt) return;
-    setRescheduleSubmitting(true);
-    setRescheduleError('');
-    try {
-      await apiFetch(`/orders/${id}/reschedule`, {
-        method: 'PATCH',
-        body: JSON.stringify({ scheduledPickupAt: rescheduleSelectedStartAt }),
-      });
-      setRescheduleModalOpen(false);
-      await load();
-      pushNotification('Pickup rescheduled');
-    } catch (e) {
-      setRescheduleError(e instanceof Error ? e.message : 'Could not reschedule pickup');
-    } finally {
-      setRescheduleSubmitting(false);
-    }
+  async function handleSubmitReschedule(newStartAt: string) {
+    if (!id) return;
+    await apiFetch(`/orders/${id}/reschedule`, {
+      method: 'PATCH',
+      body: JSON.stringify({ scheduledPickupAt: newStartAt }),
+    });
+    await load();
+    pushNotification('Pickup rescheduled');
   }
 
   async function handleSubscribe() {
@@ -368,9 +282,13 @@ export default function OrderTrackScreen() {
       await apiFetch('/subscriptions', {
         method: 'POST',
         body: JSON.stringify({
-          bookingType: order.bookingType,
+          services: [
+            {
+              bookingType: order.bookingType,
+              ...(order.bagSizeId ? { bagSizeId: order.bagSizeId } : {}),
+            },
+          ],
           ...(order.branchId ? { branchId: order.branchId } : {}),
-          ...(order.bagSizeId ? { bagSizeId: order.bagSizeId } : {}),
           addonIds: order.addons?.map((a) => a.id) ?? [],
           addonQuantities: Object.fromEntries(
             (order.addons ?? []).map((a) => [a.id, a.quantity ?? 1]),
@@ -382,7 +300,7 @@ export default function OrderTrackScreen() {
       });
       setSubscribed(true);
     } catch (e) {
-      setSubscribeError(e instanceof Error ? e.message : 'Could not set up recurring pickup');
+      setSubscribeError(toErrorMessage(e, 'Could not set up recurring pickup'));
     } finally {
       setSubscribing(false);
     }
@@ -479,7 +397,11 @@ export default function OrderTrackScreen() {
           </View>
         ) : null}
         {canReschedule ? (
-          <Pressable onPress={openRescheduleModal} style={styles.rescheduleLink} hitSlop={4}>
+          <Pressable
+            onPress={() => setRescheduleModalOpen(true)}
+            style={styles.rescheduleLink}
+            hitSlop={4}
+          >
             <Ionicons name="time-outline" size={14} color={colors.primary} />
             <Text style={styles.rescheduleLinkText}>Reschedule pickup</Text>
           </Pressable>
@@ -708,55 +630,12 @@ export default function OrderTrackScreen() {
         </Card>
       )}
 
-      <Modal
+      <DeliverySignModal
         visible={Boolean(showDeliveryActions && deliveryUi?.needsSign)}
-        transparent
-        animationType="slide"
-        onRequestClose={() => {}}
-      >
-        <View style={styles.sheetOverlay}>
-          <View style={styles.sheetPanel}>
-            <View style={styles.sheetHandle} />
-            <View style={styles.cardHeaderRow}>
-              <Ionicons name="create-outline" size={18} color={colors.primary} />
-              <Text style={styles.actionTitle}>Sign for delivery</Text>
-            </View>
-            <Input
-              style={styles.input}
-              placeholder="Your name"
-              value={signatureName}
-              onChangeText={setSignatureName}
-            />
-            <Button
-              label={signing ? 'Signing…' : 'Sign'}
-              onPress={() => handleSign()}
-              disabled={signing}
-              style={styles.actionBtn}
-            />
-
-            {accountName ? (
-              <View style={styles.orRow}>
-                <View style={styles.orLine} />
-                <Text style={styles.orText}>Or</Text>
-                <View style={styles.orLine} />
-              </View>
-            ) : null}
-
-            {accountName ? (
-              <Pressable
-                style={styles.tapToSignRow}
-                onPress={() => handleSign(accountName)}
-                disabled={signing}
-                accessibilityRole="button"
-                accessibilityLabel={`Tap to sign as ${accountName}`}
-              >
-                <Ionicons name="finger-print-outline" size={16} color={colors.primary} />
-                <Text style={styles.tapToSignText}>Just click to sign as {accountName}</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        </View>
-      </Modal>
+        accountName={accountName}
+        onSign={handleSign}
+        onSigned={() => {}}
+      />
 
       {deliveryError ? (
         <View style={styles.errorRow}>
@@ -795,7 +674,11 @@ export default function OrderTrackScreen() {
           <Text style={styles.doneTitle}>All done!</Text>
           <Text style={styles.doneSub}>Thanks for using {brandName}.</Text>
           {canReview ? (
-            <Button label="Rate your experience" onPress={openReviewModal} style={styles.doneAction} />
+            <Button
+              label="Rate your experience"
+              onPress={() => setReviewModalOpen(true)}
+              style={styles.doneAction}
+            />
           ) : null}
           {hasReview && !canReview ? (
             <Pressable onPress={() => router.push(`/review/${id}`)} accessibilityRole="button">
@@ -817,114 +700,22 @@ export default function OrderTrackScreen() {
         </Card>
       )}
 
-      <Modal
+      <RescheduleModal
         visible={rescheduleModalOpen}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setRescheduleModalOpen(false)}
-      >
-        <View style={styles.sheetOverlay}>
-          <Pressable style={styles.sheetBackdrop} onPress={() => setRescheduleModalOpen(false)} />
-          <View style={styles.sheetPanel}>
-            <View style={styles.sheetHandle} />
-            <View style={styles.cardHeaderRow}>
-              <Ionicons name="time-outline" size={18} color={colors.primary} />
-              <Text style={styles.actionTitle}>Reschedule pickup</Text>
-            </View>
+        onClose={() => setRescheduleModalOpen(false)}
+        pickupAddressId={order.pickupAddressId}
+        branchId={order.branchId}
+        apiFetch={apiFetch}
+        onReschedule={handleSubmitReschedule}
+        onRescheduled={() => setRescheduleModalOpen(false)}
+      />
 
-            {rescheduleLoading ? (
-              <Text style={styles.meta}>Loading available pickup schedule…</Text>
-            ) : rescheduleOperatingHours ? (
-              <PickupSchedulePicker
-                operatingHours={rescheduleOperatingHours}
-                holidays={rescheduleHolidays}
-                serverNow={rescheduleServerNow}
-                selectedStartAt={rescheduleSelectedStartAt}
-                onSelectStartAt={setRescheduleSelectedStartAt}
-              />
-            ) : !rescheduleError ? (
-              <Text style={styles.meta}>No pickup schedule available for this address.</Text>
-            ) : null}
-
-            {rescheduleError ? (
-              <View style={styles.errorRow}>
-                <Ionicons name="alert-circle-outline" size={14} color={colors.destructive} />
-                <Text style={styles.error}>{rescheduleError}</Text>
-              </View>
-            ) : null}
-
-            <Button
-              label={rescheduleSubmitting ? 'Saving…' : 'Confirm new pickup time'}
-              onPress={handleSubmitReschedule}
-              disabled={rescheduleSubmitting || !rescheduleSelectedStartAt}
-              style={styles.actionBtn}
-            />
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
+      <ReviewModal
         visible={reviewModalOpen}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setReviewModalOpen(false)}
-      >
-        <View style={styles.sheetOverlay}>
-          <Pressable style={styles.sheetBackdrop} onPress={() => setReviewModalOpen(false)} />
-          <View style={styles.sheetPanel}>
-            <View style={styles.sheetHandle} />
-            <View style={styles.cardHeaderRow}>
-              <Ionicons name="star-outline" size={18} color={colors.primary} />
-              <Text style={styles.actionTitle}>Rate your experience</Text>
-            </View>
-
-            <View style={styles.starsWrap}>
-              <View style={styles.starsRow}>
-                {[1, 2, 3, 4, 5].map((value) => (
-                  <Pressable
-                    key={value}
-                    onPress={() => setReviewRating(value)}
-                    hitSlop={8}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${value} star${value > 1 ? 's' : ''}`}
-                    accessibilityState={{ selected: value === reviewRating }}
-                  >
-                    <Ionicons
-                      name={value <= reviewRating ? 'star' : 'star-outline'}
-                      size={36}
-                      color={value <= reviewRating ? colors.star : colors.border}
-                    />
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-
-            <Input
-              style={styles.input}
-              placeholder="Comments (optional)"
-              value={reviewComment}
-              onChangeText={setReviewComment}
-              multiline
-              numberOfLines={3}
-              textAlignVertical="top"
-            />
-
-            {reviewError ? (
-              <View style={styles.errorRow}>
-                <Ionicons name="alert-circle-outline" size={14} color={colors.destructive} />
-                <Text style={styles.error}>{reviewError}</Text>
-              </View>
-            ) : null}
-
-            <Button
-              label={reviewSubmitting ? 'Submitting…' : 'Submit review'}
-              onPress={handleSubmitReview}
-              disabled={reviewSubmitting || reviewRating < 1}
-              style={styles.actionBtn}
-            />
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setReviewModalOpen(false)}
+        onSubmit={handleSubmitReview}
+        onSubmitted={() => setReviewModalOpen(false)}
+      />
 
       {showLostItemHint && !isTerminalCompleted ? (
         <Pressable
@@ -1068,46 +859,6 @@ const styles = StyleSheet.create({
   actionHint: { marginTop: spacing.xs, fontSize: 13, color: colors.muted },
   input: { marginTop: spacing.md },
   actionBtn: { marginTop: spacing.md },
-  sheetOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(15, 23, 42, 0.45)',
-  },
-  sheetBackdrop: { flex: 1 },
-  starsWrap: { alignItems: 'center', marginTop: spacing.md, marginBottom: spacing.sm },
-  starsRow: { flexDirection: 'row', gap: spacing.sm },
-  sheetPanel: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xxl,
-  },
-  orRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginTop: spacing.lg,
-  },
-  orLine: { flex: 1, height: 1, backgroundColor: colors.border },
-  orText: { fontSize: 12, fontWeight: '600', color: colors.mutedForeground },
-  tapToSignRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    paddingVertical: spacing.sm,
-  },
-  tapToSignText: { fontSize: 13, fontWeight: '600', color: colors.primary },
-  sheetHandle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: radius.full,
-    backgroundColor: colors.border,
-    marginBottom: spacing.lg,
-  },
   errorRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.sm },
   error: { color: colors.destructive, fontSize: 13 },
   receiptRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg, flexWrap: 'wrap' },

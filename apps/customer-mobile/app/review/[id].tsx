@@ -8,6 +8,7 @@ import { Input } from '../../src/components/ui/input';
 import { KeyboardSafeScrollView } from '../../src/components/ui/keyboard-safe-scroll-view';
 import { DataLoadState } from '../../src/components/data-load-state';
 import { useAuthStore } from '../../src/store/auth';
+import { toErrorMessage } from '../../src/lib/api-error';
 import type { AppNotification } from '../../src/lib/notification-types';
 import { brandName, colors, radius, spacing, typography } from '../../src/theme';
 
@@ -65,7 +66,7 @@ export default function OrderReviewScreen() {
         await apiFetch(`/notifications/${unread._id}/read`, { method: 'PATCH' });
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load review');
+      setError(toErrorMessage(e, 'Could not load review'));
     } finally {
       setLoading(false);
     }
@@ -96,7 +97,7 @@ export default function OrderReviewScreen() {
         current ? { ...current, canReview: false, review: result.review } : current,
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not submit review');
+      setError(toErrorMessage(e, 'Could not submit review'));
     } finally {
       setSubmitting(false);
     }

@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useAsyncResource } from '../../src/hooks/use-async-resource';
 import {
   Pressable,
   RefreshControl,
@@ -163,42 +164,26 @@ export default function OrdersScreen() {
   const tabPadding = useTabScreenPadding();
   const apiFetch = useAuthStore((s) => s.apiFetch);
   const realtimeTick = useOrderRealtimeStore((s) => s.tick);
-  const [orders, setOrders] = useState<OrderRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
 
-  const load = useCallback(async () => {
-    setError('');
-    try {
-      const data = await apiFetch<{ items: OrderRow[] }>('/orders');
-      setOrders(data.items);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load orders');
-      setOrders([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [apiFetch]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const fetchOrders = useCallback(
+    async () => (await apiFetch<{ items: OrderRow[] }>('/orders')).items,
+    [apiFetch],
+  );
+  const {
+    data: ordersData,
+    loading,
+    error,
+    refreshing,
+    reload: load,
+    onRefresh,
+  } = useAsyncResource(fetchOrders, { errorFallback: 'Failed to load orders' });
+  const orders = ordersData ?? [];
 
   useEffect(() => {
     if (realtimeTick === 0) return;
     load().catch(() => {});
   }, [realtimeTick, load]);
-
-  async function onRefresh() {
-    setRefreshing(true);
-    try {
-      await load();
-    } finally {
-      setRefreshing(false);
-    }
-  }
 
   const ongoingOrders = useMemo(() => orders.filter((o) => isActiveOrderStatus(o.status)), [orders]);
   const pastOrders = useMemo(
@@ -265,7 +250,6 @@ export default function OrdersScreen() {
           error={error}
           loadingMessage="Loading orders…"
           onRetry={() => {
-            setLoading(true);
             load();
           }}
         />

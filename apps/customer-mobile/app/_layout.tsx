@@ -18,6 +18,8 @@ import { CustomerTrackingSync } from '../src/components/customer-tracking-sync';
 
 import { PushNotificationsBootstrap } from '../src/components/push-notifications-bootstrap';
 
+import { ErrorBoundary } from '../src/components/error-boundary';
+
 import { useAppVersionGate } from '../src/hooks/use-app-version-gate';
 
 import {
@@ -247,6 +249,8 @@ export default function RootLayout() {
       {tokens?.accessToken ? <CustomerTrackingSync /> : null}
 
       {tokens?.accessToken ? <PushNotificationsBootstrap /> : null}
+
+      <ErrorBoundary>
 
       <Stack screenOptions={{ headerShown: false }}>
 
@@ -564,6 +568,8 @@ export default function RootLayout() {
         />
 
       </Stack>
+
+      </ErrorBoundary>
 
       {showIntro ? <IntroSlider onDone={() => setShowIntro(false)} /> : null}
 

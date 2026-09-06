@@ -1,0 +1,12 @@
+{
+  "partnerId": null,
+  "appName": "Lunara",
+  "slug": "lunara-development-territory",
+  "iosBundleId": "com.lunara.customer.devterritory",
+  "androidPackage": "com.lunara.customer.devterritory",
+  "easProjectId": null,
+  "splashBackgroundColor": "#ffffff",
+  "theme": {
+    "appDisplayName": "Lunara (Dev Territory)"
+  }
+}
