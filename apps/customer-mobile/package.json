@@ -27,7 +27,7 @@
     "@lunara/utils": "*",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/slider": "5.2.0",
-    "expo": "^57",
+    "expo": "^57.0.0",
     "expo-application": "~57.0.2",
     "expo-camera": "~57.0.4",
     "expo-constants": "~57.0.17",

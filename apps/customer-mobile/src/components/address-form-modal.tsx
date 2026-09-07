@@ -57,6 +57,7 @@ export function AddressFormModal({
 
   useEffect(() => {
     if (!visible) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional fetch/update-on-mount, not a synchronous render loop
     setError('');
     if (editing) {
       setForm(addressToForm(editing));

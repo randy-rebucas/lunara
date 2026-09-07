@@ -109,7 +109,7 @@ export default function OrderTrackScreen() {
   const [canReview, setCanReview] = useState(false);
   const [hasReview, setHasReview] = useState(false);
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [notifications, setNotifications] = useState<LiveNotification[]>([]);
+  const [, setNotifications] = useState<LiveNotification[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [verifyCode, setVerifyCode] = useState('');
   const [verifying, setVerifying] = useState(false);
@@ -179,6 +179,7 @@ export default function OrderTrackScreen() {
   }, [apiFetch, id]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional fetch/update-on-mount, not a synchronous render loop
     setPageLoading(true);
     load();
   }, [load]);

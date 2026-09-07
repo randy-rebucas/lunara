@@ -178,7 +178,7 @@ export default function OrdersScreen() {
     reload: load,
     onRefresh,
   } = useAsyncResource(fetchOrders, { errorFallback: 'Failed to load orders' });
-  const orders = ordersData ?? [];
+  const orders = useMemo(() => ordersData ?? [], [ordersData]);
 
   useEffect(() => {
     if (realtimeTick === 0) return;

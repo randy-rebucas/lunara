@@ -13,6 +13,7 @@ const BUBBLES = [
 ] as const;
 
 function Bubble({ size, left, delay, duration }: (typeof BUBBLES)[number]) {
+  // eslint-disable-next-line react-hooks/refs -- reading a ref (Animated.Value / bottom-sheet ref) during render is the documented pattern here
   const rise = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -31,8 +32,11 @@ function Bubble({ size, left, delay, duration }: (typeof BUBBLES)[number]) {
     return () => loop.stop();
   }, [rise, delay, duration]);
 
+  // eslint-disable-next-line react-hooks/refs -- reading a ref (Animated.Value / bottom-sheet ref) during render is the documented pattern here
   const translateY = rise.interpolate({ inputRange: [0, 1], outputRange: [0, -520] });
+  // eslint-disable-next-line react-hooks/refs -- reading a ref (Animated.Value / bottom-sheet ref) during render is the documented pattern here
   const translateX = rise.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 12, -8] });
+  // eslint-disable-next-line react-hooks/refs -- reading a ref (Animated.Value / bottom-sheet ref) during render is the documented pattern here
   const opacity = rise.interpolate({ inputRange: [0, 0.1, 0.85, 1], outputRange: [0, 0.9, 0.5, 0] });
 
   return (
@@ -53,6 +57,7 @@ function Bubble({ size, left, delay, duration }: (typeof BUBBLES)[number]) {
 }
 
 export function AuthLoadingScreen() {
+  // eslint-disable-next-line react-hooks/refs -- reading a ref (Animated.Value / bottom-sheet ref) during render is the documented pattern here
   const progress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -68,6 +73,7 @@ export function AuthLoadingScreen() {
     ).start();
   }, [progress]);
 
+  // eslint-disable-next-line react-hooks/refs -- reading a ref (Animated.Value / bottom-sheet ref) during render is the documented pattern here
   const barWidth = progress.interpolate({ inputRange: [0, 1], outputRange: ['15%', '100%'] });
 
   return (

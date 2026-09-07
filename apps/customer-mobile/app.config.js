@@ -1,11 +1,12 @@
 const fs = require('fs');
 const path = require('path');
-const { loadProjectEnv } = require('@expo/env');
 
 const projectRoot = __dirname;
 const monorepoRoot = path.resolve(projectRoot, '../..');
 
-loadProjectEnv(monorepoRoot);
+// expo-cli already auto-loads the monorepo root .env on startup; an explicit
+// second load() call here crashed under SDK51's @expo/cli (undefined push in
+// its console.log interception on the redundant invocation).
 
 const appJson = require('./app.json').expo;
 const websiteUrl = process.env.EXPO_PUBLIC_WEBSITE_URL?.trim() || 'https://lunara.app';
@@ -76,6 +77,7 @@ const brandedPlugins = JSON.parse(
 /** @type {import('expo/config').ExpoConfig} */
 module.exports = {
   ...appJson,
+  newArchEnabled: true,
   name: manifest?.appName ?? appJson.name,
   slug: manifest?.slug ?? appJson.slug,
   extra: {

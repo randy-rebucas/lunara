@@ -33,6 +33,7 @@ export function HandoffQrCard({ orderId, context, apiFetch }: HandoffQrCardProps
   }, [apiFetch, context, orderId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional fetch/update-on-mount, not a synchronous render loop
     void load();
   }, [load]);
 

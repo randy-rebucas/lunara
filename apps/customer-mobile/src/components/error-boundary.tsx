@@ -29,7 +29,6 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     // to wire one in later (Sentry, Bugsnag, etc.) without touching every screen.
     void info;
     if (__DEV__) {
-      // eslint-disable-next-line no-console
       console.error('Unhandled render error caught by ErrorBoundary:', error);
     }
   }

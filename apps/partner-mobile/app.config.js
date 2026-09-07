@@ -22,7 +22,7 @@ module.exports = {
       projectId: '0aacce5a-08d9-4668-8cdb-f6eb00022569',
     },
   },
-  plugins: [...(appJson.plugins ?? []), 'expo-status-bar'],
+  plugins: [...(appJson.plugins ?? [])],
   icon,
   splash: {
     image: icon,

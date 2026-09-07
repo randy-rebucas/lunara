@@ -5,7 +5,8 @@ import { apiUnreachableMessage } from './network-error';
 
 /** Baked in at build time per partner-brands/<slug>/manifest.json — null for the default Lunara app. */
 export function getPartnerId(): string | null {
-  return (Constants.expoConfig?.extra?.partnerId as string | null) ?? null;
+  const value = Constants.expoConfig?.extra?.partnerId;
+  return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
 type RequestBody = { kind: 'json'; init?: RequestInit } | { kind: 'form'; formData: FormData };

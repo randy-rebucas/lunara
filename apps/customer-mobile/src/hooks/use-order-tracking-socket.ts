@@ -18,6 +18,7 @@ export function useOrderTrackingSocket(
   const accessToken = useAuthStore((s) => s.tokens?.accessToken);
   const [connected, setConnected] = useState(false);
   const handlersRef = useRef(handlers);
+  // eslint-disable-next-line react-hooks/refs -- reading a ref (Animated.Value / bottom-sheet ref) during render is the documented pattern here
   handlersRef.current = handlers;
 
   useEffect(() => {

@@ -29,6 +29,7 @@ export function BranchPickerSheet({
   onClose,
 }: BranchPickerSheetProps) {
   const insets = useSafeAreaInsets();
+  // eslint-disable-next-line react-hooks/refs -- reading a ref (Animated.Value / bottom-sheet ref) during render is the documented pattern here
   const translateY = useRef(new Animated.Value(300)).current;
 
   useEffect(() => {

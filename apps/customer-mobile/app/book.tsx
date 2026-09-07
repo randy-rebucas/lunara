@@ -104,6 +104,7 @@ export default function BookScreen() {
   const pendingRebookBranchRef = useRef<string | null>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional fetch/update-on-mount, not a synchronous render loop
     setConfigLoading(true);
     apiFetch<BookingConfig>('/booking/config')
       .then(setConfig)
@@ -294,6 +295,7 @@ export default function BookScreen() {
   }, [addons]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional fetch/update-on-mount, not a synchronous render loop
     setForm((f) => {
       const validIds = new Set(addons.map((a) => a.id));
       const pruned = f.addonIds.filter((id) => validIds.has(id));
@@ -397,7 +399,6 @@ export default function BookScreen() {
     }
   }, [
     form.bookingType,
-    form.customServiceId,
     form.bagSizeId,
     form.enteredWeightKg,
     form.enteredLoadCount,
@@ -477,6 +478,7 @@ export default function BookScreen() {
 
   useEffect(() => {
     if (!form.addressId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional fetch/update-on-mount, not a synchronous render loop
     loadAvailability(form.addressId);
     loadShops(form.addressId);
     // Reset when the address changes — the branch-scoped effect below re-applies
@@ -490,6 +492,7 @@ export default function BookScreen() {
   useEffect(() => {
     if (!form.addressId || form.autoDispatch) return;
     if (!form.branchId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional fetch/update-on-mount, not a synchronous render loop
     loadAvailability(form.addressId, form.branchId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.branchId, form.autoDispatch]);
@@ -505,6 +508,7 @@ export default function BookScreen() {
 
   useEffect(() => {
     if (expressReturnAllowed) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional fetch/update-on-mount, not a synchronous render loop
     setForm((f) =>
       f.addonIds.includes(EXPRESS_RETURN_ADDON_ID)
         ? { ...f, addonIds: f.addonIds.filter((id) => id !== EXPRESS_RETURN_ADDON_ID) }

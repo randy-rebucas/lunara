@@ -1,5 +1,6 @@
 import { PromotionAudience, PromotionKind } from '@lunara/types';
-import type { Collection } from 'mongodb';
+import type { mongo } from 'mongoose';
+type Collection = mongo.Collection;
 
 function defaultFlashEndsAt() {
   const end = new Date();

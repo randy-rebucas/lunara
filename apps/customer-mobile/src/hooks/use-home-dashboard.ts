@@ -39,11 +39,13 @@ export function useHomeDashboard() {
   }, [apiFetch]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional fetch/update-on-mount, not a synchronous render loop
     load();
   }, [load]);
 
   useEffect(() => {
     if (realtimeTick === 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional fetch/update-on-mount, not a synchronous render loop
     load().catch(() => {});
   }, [realtimeTick, load]);
 

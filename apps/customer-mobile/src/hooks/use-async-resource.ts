@@ -50,11 +50,11 @@ export function useAsyncResource<T>(
 
   useEffect(() => {
     if (!enabled) return;
+    // Load-on-mount/dependency-change: setLoading + reload() run synchronously here by design
+    // so the loading flag flips before the async fetch below resolves.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     reload();
-    // `reload` already depends on `fetcher`, so this effect re-runs exactly when the caller's
-    // fetcher identity changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reload, enabled]);
 
   const onRefresh = useCallback(async () => {

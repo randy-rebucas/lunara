@@ -16,9 +16,8 @@ import {
 } from 'react-native';
 import { INTRO_SLIDES, type IntroSlide } from '../lib/intro-slides';
 import { markIntroSeen } from '../lib/intro-slider';
-import { brandName } from '../theme';
+import { brandName, colors, radius, spacing, typography } from '../theme';
 import { Button } from './ui/button';
-import { colors, radius, spacing, typography } from '../theme';
 
 interface IntroSliderProps {
   onDone: () => void;
@@ -55,6 +54,7 @@ function makeBubbles(): BubbleConfig[] {
 }
 
 function Bubble({ config }: { config: BubbleConfig }) {
+  // eslint-disable-next-line react-hooks/refs -- reading a ref (Animated.Value / bottom-sheet ref) during render is the documented pattern here
   const progress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -71,18 +71,22 @@ function Bubble({ config }: { config: BubbleConfig }) {
     return () => animation.stop();
   }, [config, progress]);
 
+  // eslint-disable-next-line react-hooks/refs -- reading a ref (Animated.Value / bottom-sheet ref) during render is the documented pattern here
   const translateY = progress.interpolate({
     inputRange: [0, 0.5, 1],
     outputRange: [0, -config.drift, 0],
   });
+  // eslint-disable-next-line react-hooks/refs -- reading a ref (Animated.Value / bottom-sheet ref) during render is the documented pattern here
   const translateX = progress.interpolate({
     inputRange: [0, 0.5, 1],
     outputRange: [0, config.sway, 0],
   });
+  // eslint-disable-next-line react-hooks/refs -- reading a ref (Animated.Value / bottom-sheet ref) during render is the documented pattern here
   const opacity = progress.interpolate({
     inputRange: [0, 0.2, 0.8, 1],
     outputRange: [config.opacity * 0.4, config.opacity, config.opacity, config.opacity * 0.4],
   });
+  // eslint-disable-next-line react-hooks/refs -- reading a ref (Animated.Value / bottom-sheet ref) during render is the documented pattern here
   const scale = progress.interpolate({
     inputRange: [0, 0.5, 1],
     outputRange: [0.9, 1.08, 0.9],

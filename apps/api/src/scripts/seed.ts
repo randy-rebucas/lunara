@@ -59,8 +59,8 @@ interface RiderSeedProfile {
 }
 
 async function seedRiderProfile(
-  db: import('mongodb').Db,
-  users: import('mongodb').Collection,
+  db: import('mongoose').mongo.Db,
+  users: import('mongoose').mongo.Collection,
   profile: RiderSeedProfile,
 ) {
   const riderUser = await users.findOne({ email: profile.email });
