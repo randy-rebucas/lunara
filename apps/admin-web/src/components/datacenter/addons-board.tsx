@@ -6,6 +6,7 @@ import { filterBySearch, ListControls } from '../list-controls';
 import { adminFetch, adminUpload } from '../../lib/admin-api';
 import { formatPeso } from '../../lib/format-peso';
 import { useAdminQuery } from '../../lib/use-admin-query';
+import { TILE_TONES, type StatusPillCopy } from './tile-tones';
 
 interface LaundryAddonRow {
   _id: string;
@@ -34,7 +35,7 @@ function categoryLabel(category?: string) {
 
 type AddonState = 'nominal' | 'attention';
 
-const addonCopy: Record<AddonState, { label: string; detail: string; dot: string; bar: string }> = {
+const addonCopy: StatusPillCopy<AddonState> = {
   nominal: {
     label: 'Add-ons live',
     detail: 'At least one add-on is active for customer booking.',
@@ -77,13 +78,6 @@ function PlaceholderIcon({ className }: { className?: string }) {
 }
 
 // ── Stat tiles ─────────────────────────────────────────────────────────────
-const TILE_TONES = {
-  primary: 'bg-primary/[0.04] ring-primary/15',
-  accent: 'bg-accent/[0.04] ring-accent/20',
-  secondary: 'bg-secondary/[0.04] ring-secondary/15',
-  amber: 'bg-amber-500/[0.04] ring-amber-500/20',
-} as const;
-
 function StatTile({
   label,
   value,

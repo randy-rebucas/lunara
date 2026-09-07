@@ -46,7 +46,7 @@ export function ProfileAvatar({ name, avatarUrl, uploading, onUpload }: ProfileA
       // its Done/Cancel buttons hidden underneath them. The avatar is displayed in a fixed
       // circular frame with cover fill, so an uncropped image still looks correct.
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.85,
       });
 

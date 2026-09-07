@@ -307,6 +307,7 @@ export class BranchManagementService {
       line1: dto.line1,
       city: dto.city,
       province: dto.province,
+      postalCode: dto.postalCode,
       partnerUserId: partner._id,
       isMainShop: !hasMainShop,
       managerUserId: dto.managerUserId

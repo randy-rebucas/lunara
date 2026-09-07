@@ -5,6 +5,7 @@ import { filterBySearch, ListControls } from '../list-controls';
 import { adminFetch } from '../../lib/admin-api';
 import { formatPeso } from '../../lib/format-peso';
 import { useAdminQuery } from '../../lib/use-admin-query';
+import { TILE_TONES, type StatusPillCopy } from './tile-tones';
 
 interface LaundryServiceRow {
   _id: string;
@@ -34,7 +35,7 @@ function categoryLabel(category?: string) {
 
 type ServiceState = 'nominal' | 'attention';
 
-const serviceCopy: Record<ServiceState, { label: string; detail: string; dot: string; bar: string }> = {
+const serviceCopy: StatusPillCopy<ServiceState> = {
   nominal: {
     label: 'Services live',
     detail: 'At least one laundry service is active for customer booking.',
@@ -55,13 +56,6 @@ function deriveServiceState(items: LaundryServiceRow[]): ServiceState {
 }
 
 // ── Stat tiles ─────────────────────────────────────────────────────────────
-const TILE_TONES = {
-  primary: 'bg-primary/[0.04] ring-primary/15',
-  accent: 'bg-accent/[0.04] ring-accent/20',
-  secondary: 'bg-secondary/[0.04] ring-secondary/15',
-  amber: 'bg-amber-500/[0.04] ring-amber-500/20',
-} as const;
-
 function StatTile({
   label,
   value,

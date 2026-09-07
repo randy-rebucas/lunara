@@ -9,6 +9,7 @@ import { adminFetch } from '../../lib/admin-api';
 import { isAdminRealtimeConnected } from '../../lib/admin-realtime';
 import { useAdminOperationsSocket } from '../../lib/use-admin-operations-socket';
 import { useAdminQuery } from '../../lib/use-admin-query';
+import { TILE_TONES } from './tile-tones';
 
 type LaundryTagStatus = 'available' | 'assigned' | 'retired';
 
@@ -29,13 +30,6 @@ const STATUS_FILTER_OPTIONS = [
 ];
 
 // ── Stat tiles ─────────────────────────────────────────────────────────────
-const TILE_TONES = {
-  primary: 'bg-primary/[0.04] ring-primary/15',
-  accent: 'bg-accent/[0.04] ring-accent/20',
-  secondary: 'bg-secondary/[0.04] ring-secondary/15',
-  amber: 'bg-amber-500/[0.04] ring-amber-500/20',
-} as const;
-
 function StatTile({
   label,
   value,

@@ -20,6 +20,7 @@ export function CustomerTrackingSync() {
   useEffect(() => {
     if (!accessToken) return;
 
+    const joinedOrders = joinedOrdersRef.current;
     const apiUrl = getApiOrigin();
     const socket: Socket = io(`${apiUrl}/tracking`, {
       transports: ['websocket'],
@@ -31,9 +32,9 @@ export function CustomerTrackingSync() {
         const data = await apiFetch<{ items: { _id: string; status: string }[] }>('/orders');
         for (const order of data.items) {
           if (!isActiveOrderStatus(order.status)) continue;
-          if (joinedOrdersRef.current.has(order._id)) continue;
+          if (joinedOrders.has(order._id)) continue;
           socket.emit('joinOrder', { orderId: order._id });
-          joinedOrdersRef.current.add(order._id);
+          joinedOrders.add(order._id);
         }
       } catch {
         // ignore — customer room still receives events
@@ -89,7 +90,7 @@ export function CustomerTrackingSync() {
 
     return () => {
       sub.remove();
-      joinedOrdersRef.current.clear();
+      joinedOrders.clear();
       socket.disconnect();
     };
   }, [accessToken, apiFetch, notify, bumpNotifications]);

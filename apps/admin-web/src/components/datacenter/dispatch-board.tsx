@@ -12,6 +12,7 @@ import {
   type DispatcherAlert,
   useAdminOperationsSocket,
 } from '../../lib/use-admin-operations-socket';
+import { TILE_TONES, type StatusPillCopy } from './tile-tones';
 
 interface IncomingOrder {
   orderId: string;
@@ -117,10 +118,7 @@ function deriveDispatchState(
   return 'nominal';
 }
 
-const dispatchCopy: Record<
-  DispatchState,
-  { label: string; detail: string; dot: string; bar: string }
-> = {
+const dispatchCopy: StatusPillCopy<DispatchState> = {
   nominal: {
     label: 'Dispatch nominal',
     detail: 'Queue clear — no pending shop or rider assignments.',
@@ -142,15 +140,6 @@ const dispatchCopy: Record<
 };
 
 // ── Small blocks ───────────────────────────────────────────────────────────
-const TILE_TONES = {
-  primary: 'bg-primary/[0.04] ring-primary/15',
-  secondary: 'bg-secondary/[0.04] ring-secondary/15',
-  accent: 'bg-accent/[0.04] ring-accent/20',
-  amber: 'bg-amber-500/[0.04] ring-amber-500/20',
-  violet: 'bg-violet-500/[0.04] ring-violet-500/20',
-  rose: 'bg-rose-500/[0.04] ring-rose-500/20',
-} as const;
-
 function StatTile({
   label,
   value,

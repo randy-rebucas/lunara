@@ -1,5 +1,6 @@
 import { AddonCategory, BookingType, ServiceCategory } from '@lunara/types';
-import type { Collection } from 'mongodb';
+import type { mongo } from 'mongoose';
+type Collection = mongo.Collection;
 import { defaultAddonImageUrl, writeCatalogAddonImages } from './catalog-addon-images';
 
 export const DEFAULT_LAUNDRY_SERVICES = [

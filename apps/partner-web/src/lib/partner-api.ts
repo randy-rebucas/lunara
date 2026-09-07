@@ -1,5 +1,6 @@
 import type {
   PartnerBranchRider,
+  PartnerBrandConfig,
   PartnerOwnedRider,
   PartnerOwnProfile,
   PortalRole,
@@ -159,6 +160,18 @@ export async function removeShopLogo(): Promise<{ id: string; logoUrl?: string }
 
 export async function getOwnProfile(): Promise<PartnerOwnProfile> {
   return partnerFetch<PartnerOwnProfile>('/partner/profile');
+}
+
+export interface PartnerBrandingInfo {
+  isDefault: boolean;
+  partnerId: string | null;
+  brandConfig: PartnerBrandConfig;
+}
+
+/** Authenticated equivalent of customer-web's public branding lookup — resolves the logged-in
+ * user's own tenant, falling back to default Lunara branding if they have no Partner brand doc. */
+export async function getMyBranding(): Promise<PartnerBrandingInfo> {
+  return partnerFetch<PartnerBrandingInfo>('/partner/branding/me');
 }
 
 export interface PartnerBranch {

@@ -8,6 +8,7 @@ import { adminFetch } from '../../lib/admin-api';
 import { formatOrderId, formatSlugLabel } from '../../lib/format-label';
 import { formatPeso } from '../../lib/format-peso';
 import { useAdminQuery } from '../../lib/use-admin-query';
+import { TILE_TONES, type StatusPillCopy } from './tile-tones';
 
 interface TimelineEntry {
   stage: string;
@@ -55,7 +56,7 @@ interface RefundCounts {
 type RefundQueueState = 'nominal' | 'attention' | 'critical';
 type StatusTab = 'all' | 'needs_review' | 'approved' | 'processed' | 'rejected' | 'closed';
 
-const refundCopy: Record<RefundQueueState, { label: string; detail: string; dot: string; bar: string }> = {
+const refundCopy: StatusPillCopy<RefundQueueState> = {
   nominal: {
     label: 'Refund queue clear',
     detail: 'No pending or in-review refund requests.',
@@ -107,15 +108,6 @@ function formatDateTime(iso?: string) {
 }
 
 // ── Small blocks ───────────────────────────────────────────────────────────
-const TILE_TONES = {
-  primary: 'bg-primary/[0.04] ring-primary/15',
-  accent: 'bg-accent/[0.04] ring-accent/20',
-  secondary: 'bg-secondary/[0.04] ring-secondary/15',
-  amber: 'bg-amber-500/[0.04] ring-amber-500/20',
-  violet: 'bg-violet-500/[0.04] ring-violet-500/20',
-  rose: 'bg-rose-500/[0.04] ring-rose-500/20',
-} as const;
-
 function StatTile({
   label,
   value,

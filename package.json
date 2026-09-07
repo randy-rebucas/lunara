@@ -23,8 +23,8 @@
     "clean": "turbo run clean && rimraf node_modules"
   },
   "dependencies": {
-    "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
   },
   "devDependencies": {
     "playwright-core": "^1.62.1",
@@ -37,11 +37,8 @@
     "node": ">=20"
   },
   "overrides": {
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
-    "@types/react": "~19.1.10",
-    "react-native-qrcode-svg": {
-      "react-native-svg": "~15.12.1"
+    "@expo/metro-config@0.18.11": {
+      "metro": "0.80.12"
     }
   }
 }

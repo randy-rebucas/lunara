@@ -3,8 +3,6 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { UserRole } from '@lunara/types';
 import { Branch, BranchDocument } from '../branches/schemas/branch.schema';
-import { User, UserDocument } from '../users/schemas/user.schema';
-import { resolvePortalBranchId } from './partner-access';
 import { Shelf, ShelfDocument } from './schemas/shelf.schema';
 import { AddShelfItemDto, CreateShelfDto } from './dto/shelf.dto';
 
@@ -13,17 +11,20 @@ export class ShelfService {
   constructor(
     @InjectModel(Shelf.name) private shelfModel: Model<ShelfDocument>,
     @InjectModel(Branch.name) private branchModel: Model<BranchDocument>,
-    @InjectModel(User.name) private userModel: Model<UserDocument>,
   ) {}
 
   /** Branches this user may see shelves for. STAFF: their one branch. PARTNER: every branch they own. ADMIN: all shop branches. */
-  private async resolveAccessibleBranchIds(userId: string, role: UserRole): Promise<Types.ObjectId[]> {
+  private async resolveAccessibleBranchIds(
+    userId: string,
+    role: UserRole,
+    tenantId?: string,
+    staffBranchId?: string,
+  ): Promise<Types.ObjectId[]> {
     if (role === UserRole.STAFF) {
-      const branchId = await resolvePortalBranchId(this.userModel, userId, role);
-      return branchId ? [branchId] : [];
+      return staffBranchId ? [new Types.ObjectId(staffBranchId)] : [];
     }
     if (role === UserRole.PARTNER) {
-      const branches = await this.branchModel.find({ partnerUserId: new Types.ObjectId(userId) });
+      const branches = await this.branchModel.find({ partnerUserId: new Types.ObjectId(tenantId ?? userId) });
       return branches.map((b) => b._id);
     }
     const branches = await this.branchModel.find({ branchType: 'partner_shop' });
@@ -34,15 +35,16 @@ export class ShelfService {
   private async resolveTargetBranchId(
     userId: string,
     role: UserRole,
+    tenantId: string | undefined,
+    staffBranchId: string | undefined,
     branchIdInput?: string,
   ): Promise<Types.ObjectId> {
     if (role === UserRole.STAFF) {
-      const branchId = await resolvePortalBranchId(this.userModel, userId, role);
-      if (!branchId) throw new ForbiddenException('Staff account has no branch assignment');
-      return branchId;
+      if (!staffBranchId) throw new ForbiddenException('Staff account has no branch assignment');
+      return new Types.ObjectId(staffBranchId);
     }
 
-    const accessible = await this.resolveAccessibleBranchIds(userId, role);
+    const accessible = await this.resolveAccessibleBranchIds(userId, role, tenantId, staffBranchId);
     if (accessible.length === 0) throw new BadRequestException('No shop branch found for this account');
 
     if (branchIdInput) {
@@ -53,10 +55,16 @@ export class ShelfService {
     return accessible[0];
   }
 
-  private async assertShelfAccess(shelfId: string, userId: string, role: UserRole): Promise<ShelfDocument> {
+  private async assertShelfAccess(
+    shelfId: string,
+    userId: string,
+    role: UserRole,
+    tenantId?: string,
+    staffBranchId?: string,
+  ): Promise<ShelfDocument> {
     const shelf = await this.shelfModel.findById(shelfId);
     if (!shelf) throw new NotFoundException('Shelf not found');
-    const accessible = await this.resolveAccessibleBranchIds(userId, role);
+    const accessible = await this.resolveAccessibleBranchIds(userId, role, tenantId, staffBranchId);
     if (!accessible.some((b) => b.toString() === shelf.branchId.toString())) {
       throw new ForbiddenException('Shelf is not managed by this account');
     }
@@ -80,8 +88,14 @@ export class ShelfService {
     };
   }
 
-  async createShelf(userId: string, role: UserRole, dto: CreateShelfDto) {
-    const branchId = await this.resolveTargetBranchId(userId, role, dto.branchId);
+  async createShelf(
+    userId: string,
+    role: UserRole,
+    tenantId: string | undefined,
+    staffBranchId: string | undefined,
+    dto: CreateShelfDto,
+  ) {
+    const branchId = await this.resolveTargetBranchId(userId, role, tenantId, staffBranchId, dto.branchId);
     const existing = await this.shelfModel
       .findOne({ branchId, name: dto.name })
       .collation({ locale: 'en', strength: 2 });
@@ -91,21 +105,28 @@ export class ShelfService {
     return { success: true, data: this.formatShelf(shelf) };
   }
 
-  async listShelves(userId: string, role: UserRole) {
-    const branchIds = await this.resolveAccessibleBranchIds(userId, role);
+  async listShelves(userId: string, role: UserRole, tenantId?: string, staffBranchId?: string) {
+    const branchIds = await this.resolveAccessibleBranchIds(userId, role, tenantId, staffBranchId);
     if (branchIds.length === 0) return { success: true, data: [] };
     const shelves = await this.shelfModel.find({ branchId: { $in: branchIds } }).sort({ name: 1 });
     return { success: true, data: shelves.map((s) => this.formatShelf(s)) };
   }
 
-  async deleteShelf(userId: string, role: UserRole, shelfId: string) {
-    const shelf = await this.assertShelfAccess(shelfId, userId, role);
+  async deleteShelf(userId: string, role: UserRole, tenantId: string | undefined, staffBranchId: string | undefined, shelfId: string) {
+    const shelf = await this.assertShelfAccess(shelfId, userId, role, tenantId, staffBranchId);
     await shelf.deleteOne();
     return { success: true, data: { _id: shelfId } };
   }
 
-  async addItem(userId: string, role: UserRole, shelfId: string, dto: AddShelfItemDto) {
-    const shelf = await this.assertShelfAccess(shelfId, userId, role);
+  async addItem(
+    userId: string,
+    role: UserRole,
+    tenantId: string | undefined,
+    staffBranchId: string | undefined,
+    shelfId: string,
+    dto: AddShelfItemDto,
+  ) {
+    const shelf = await this.assertShelfAccess(shelfId, userId, role, tenantId, staffBranchId);
     shelf.items.push({
       name: dto.name,
       quantity: dto.quantity ?? 1,
@@ -116,8 +137,15 @@ export class ShelfService {
     return { success: true, data: this.formatShelf(shelf) };
   }
 
-  async removeItem(userId: string, role: UserRole, shelfId: string, itemId: string) {
-    const shelf = await this.assertShelfAccess(shelfId, userId, role);
+  async removeItem(
+    userId: string,
+    role: UserRole,
+    tenantId: string | undefined,
+    staffBranchId: string | undefined,
+    shelfId: string,
+    itemId: string,
+  ) {
+    const shelf = await this.assertShelfAccess(shelfId, userId, role, tenantId, staffBranchId);
     const before = shelf.items.length;
     shelf.items = shelf.items.filter(
       (item) => (item as unknown as { _id: Types.ObjectId })._id.toString() !== itemId,
@@ -127,10 +155,16 @@ export class ShelfService {
     return { success: true, data: this.formatShelf(shelf) };
   }
 
-  async searchItems(userId: string, role: UserRole, query: string) {
+  async searchItems(
+    userId: string,
+    role: UserRole,
+    tenantId: string | undefined,
+    staffBranchId: string | undefined,
+    query: string,
+  ) {
     const trimmed = query.trim();
     if (!trimmed) return { success: true, data: [] };
-    const branchIds = await this.resolveAccessibleBranchIds(userId, role);
+    const branchIds = await this.resolveAccessibleBranchIds(userId, role, tenantId, staffBranchId);
     if (branchIds.length === 0) return { success: true, data: [] };
 
     const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

@@ -11,7 +11,6 @@ import {
 } from '../branches/schemas/branch.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { LocalStorageService } from '../../common/storage/local-storage.service';
-import { resolvePortalBranchId } from './partner-access';
 import { UpdatePartnerSettingsDto } from './dto/update-partner-settings.dto';
 
 function normalizePortalSettings(raw?: Partial<PartnerPortalSettings> | null): PartnerPortalSettings {
@@ -33,21 +32,25 @@ export class PartnerSettingsService {
     private readonly storageService: LocalStorageService,
   ) {}
 
-  private async resolveBranch(userId: string, role: UserRole): Promise<BranchDocument> {
+  private async resolveBranch(
+    userId: string,
+    role: UserRole,
+    tenantId?: string,
+    staffBranchId?: string,
+  ): Promise<BranchDocument> {
     if (role === UserRole.PARTNER || role === UserRole.ADMIN) {
       const branch =
         role === UserRole.ADMIN
           ? await this.branchModel.findOne({ branchType: 'partner_shop' }).sort({ name: 1 })
           : await this.branchModel
-              .findOne({ partnerUserId: new Types.ObjectId(userId) })
+              .findOne({ partnerUserId: new Types.ObjectId(tenantId ?? userId) })
               .sort({ isMainShop: -1, name: 1 });
       if (!branch) throw new NotFoundException('Partner shop branch not found');
       return branch;
     }
 
-    const branchId = await resolvePortalBranchId(this.userModel, userId, role);
-    if (!branchId) throw new NotFoundException('No branch assigned to this account');
-    const branch = await this.branchModel.findById(branchId);
+    if (!staffBranchId) throw new NotFoundException('No branch assigned to this account');
+    const branch = await this.branchModel.findById(staffBranchId);
     if (!branch) throw new NotFoundException('Branch not found');
     return branch;
   }
@@ -89,8 +92,8 @@ export class PartnerSettingsService {
     };
   }
 
-  async getSettings(userId: string, role: UserRole) {
-    const branch = await this.resolveBranch(userId, role);
+  async getSettings(userId: string, role: UserRole, tenantId?: string, staffBranchId?: string) {
+    const branch = await this.resolveBranch(userId, role, tenantId, staffBranchId);
     const canEdit = await this.resolveCanEdit(userId, role);
     const settings = sanitizeSettingsForClient(normalizePortalSettings(branch.toObject().portalSettings));
     return {
@@ -111,7 +114,13 @@ export class PartnerSettingsService {
     return Boolean(staff?.canManageSettings);
   }
 
-  async updateSettings(userId: string, role: UserRole, dto: UpdatePartnerSettingsDto) {
+  async updateSettings(
+    userId: string,
+    role: UserRole,
+    tenantId: string | undefined,
+    staffBranchId: string | undefined,
+    dto: UpdatePartnerSettingsDto,
+  ) {
     if (!(await this.resolveCanEdit(userId, role))) {
       throw new ForbiddenException(
         role === UserRole.STAFF
@@ -120,7 +129,7 @@ export class PartnerSettingsService {
       );
     }
 
-    const branch = await this.resolveBranch(userId, role);
+    const branch = await this.resolveBranch(userId, role, tenantId, staffBranchId);
     if (role === UserRole.PARTNER && branch.partnerUserId.toString() !== userId) {
       throw new ForbiddenException("Cannot update another shop's settings");
     }
@@ -160,11 +169,17 @@ export class PartnerSettingsService {
     };
   }
 
-  async updateLogo(userId: string, role: UserRole, file: Express.Multer.File) {
+  async updateLogo(
+    userId: string,
+    role: UserRole,
+    tenantId: string | undefined,
+    staffBranchId: string | undefined,
+    file: Express.Multer.File,
+  ) {
     if (role !== UserRole.PARTNER && role !== UserRole.ADMIN) {
       throw new ForbiddenException('Only shop partners can update the shop logo');
     }
-    const branch = await this.resolveBranch(userId, role);
+    const branch = await this.resolveBranch(userId, role, tenantId, staffBranchId);
     if (role === UserRole.PARTNER && branch.partnerUserId.toString() !== userId) {
       throw new ForbiddenException("Cannot update another shop's logo");
     }
@@ -187,11 +202,16 @@ export class PartnerSettingsService {
     };
   }
 
-  async removeLogo(userId: string, role: UserRole) {
+  async removeLogo(
+    userId: string,
+    role: UserRole,
+    tenantId?: string,
+    staffBranchId?: string,
+  ) {
     if (role !== UserRole.PARTNER && role !== UserRole.ADMIN) {
       throw new ForbiddenException('Only shop partners can update the shop logo');
     }
-    const branch = await this.resolveBranch(userId, role);
+    const branch = await this.resolveBranch(userId, role, tenantId, staffBranchId);
     if (role === UserRole.PARTNER && branch.partnerUserId.toString() !== userId) {
       throw new ForbiddenException("Cannot update another shop's logo");
     }

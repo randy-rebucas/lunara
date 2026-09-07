@@ -1270,11 +1270,17 @@ export class BranchesService {
     };
   }
 
-  /** Marketing-safe listing for the public website — active branches only, no internal fields. */
-  async listPublicBranches() {
+  /** Marketing-safe listing for the public website — active branches only, no internal fields.
+   * Pass `partnerId` to scope to one white-label partner's own branches (their custom domain);
+   * omitted for the default lunara.com site, which lists the full partner directory. */
+  async listPublicBranches(partnerId?: string) {
     await this.ensureSeeded();
+    const filter: Record<string, unknown> = { ...this.operationalBranchFilter() };
+    if (partnerId && Types.ObjectId.isValid(partnerId)) {
+      filter.partnerUserId = new Types.ObjectId(partnerId);
+    }
     const branches = await this.branchModel
-      .find(this.operationalBranchFilter())
+      .find(filter)
       .select('name city province serviceRadiusKm logoUrl partnerUserId isMainShop')
       .sort({ name: 1 });
     const ownerProfiles = await this.userProfileModel

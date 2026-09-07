@@ -9,6 +9,7 @@ import { resolveMonorepoEnvPaths } from './common/config/load-env';
 import { getMongoUri, mongoConnectionOptions } from './common/config/database-config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { RedisModule } from './common/redis/redis.module';
+import { TenancyModule } from './common/tenancy/tenancy.module';
 import { StorageModule } from './common/storage/storage.module';
 import { UPLOAD_ROOT } from './common/uploads/upload-paths';
 import { AddressesModule } from './modules/addresses/addresses.module';
@@ -20,6 +21,7 @@ import { BlogModule } from './modules/blog/blog.module';
 import { BookingModule } from './modules/booking/booking.module';
 import { PartnerModule } from './modules/partner/partner.module';
 import { PartnersModule } from './modules/partners/partners.module';
+import { PartnerOnboardingModule } from './modules/partner-onboarding/partner-onboarding.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { HealthModule } from './modules/health/health.module';
@@ -72,6 +74,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
     StorageModule,
     RedisModule,
     MongooseModule.forRoot(getMongoUri(), mongoConnectionOptions),
+    TenancyModule,
     PushModule,
     HealthModule,
     AuthModule,
@@ -86,6 +89,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
     BookingModule,
     PartnerModule,
     PartnersModule,
+    PartnerOnboardingModule,
     OrdersModule,
     RidersModule,
     RiderApplicationsModule,

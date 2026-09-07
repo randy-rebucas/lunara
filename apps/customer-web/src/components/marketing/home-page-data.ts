@@ -225,10 +225,13 @@ export function groupServiceAreasByPartner(areas: ServiceArea[]) {
   return [...groups.values()];
 }
 
-/** Fetches live, active branches from the public API; falls back to the static list on any failure. */
-export async function fetchActiveServiceAreas(apiBase: string): Promise<ServiceArea[]> {
+/** Fetches live, active branches from the public API; falls back to the static list on any failure.
+ * Pass `domain` (the request host) to scope to a white-label partner's own branch(es); omitted
+ * for the default lunara.com site, which lists the full partner directory. */
+export async function fetchActiveServiceAreas(apiBase: string, domain?: string): Promise<ServiceArea[]> {
   try {
-    const res = await fetch(`${apiBase}/public/branches`, { next: { revalidate: 60 } });
+    const qs = domain ? `?domain=${encodeURIComponent(domain)}` : '';
+    const res = await fetch(`${apiBase}/public/branches${qs}`, { next: { revalidate: 60 } });
     if (!res.ok) return [...SERVICE_AREAS];
     const body = await res.json();
     const data = body?.data;
@@ -277,9 +280,10 @@ const AVATAR_COLORS = ['primary', 'secondary', 'accent'] as const;
 /** Fetches real, published customer reviews from the public API. Returns an empty list (rather
  * than fabricated testimonials) if the request fails or there aren't any published yet — the
  * reviews section is skipped in that case. */
-export async function fetchFeaturedReviews(apiBase: string): Promise<CustomerReview[]> {
+export async function fetchFeaturedReviews(apiBase: string, domain?: string): Promise<CustomerReview[]> {
   try {
-    const res = await fetch(`${apiBase}/public/reviews/featured`, { next: { revalidate: 60 } });
+    const qs = domain ? `?domain=${encodeURIComponent(domain)}` : '';
+    const res = await fetch(`${apiBase}/public/reviews/featured${qs}`, { next: { revalidate: 60 } });
     if (!res.ok) return [];
     const body = await res.json();
     const data = body?.data;

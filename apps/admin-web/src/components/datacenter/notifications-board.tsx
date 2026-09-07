@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { filterBySearch, ListControls } from '../list-controls';
 import { adminFetch } from '../../lib/admin-api';
 import { useAdminQuery } from '../../lib/use-admin-query';
+import { TILE_TONES } from './tile-tones';
 
 type Audience = 'all' | 'customer' | 'rider' | 'partner' | 'staff';
 
@@ -48,12 +49,6 @@ function formatSentAt(iso: string) {
 }
 
 // ── Stat tiles ─────────────────────────────────────────────────────────────
-const TILE_TONES = {
-  primary: 'bg-primary/[0.04] ring-primary/15',
-  accent: 'bg-accent/[0.04] ring-accent/20',
-  secondary: 'bg-secondary/[0.04] ring-secondary/15',
-  amber: 'bg-amber-500/[0.04] ring-amber-500/20',
-} as const;
 
 function StatTile({
   label,

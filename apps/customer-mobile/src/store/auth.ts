@@ -1,19 +1,33 @@
 import { create } from 'zustand';
-import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import type { AuthTokens, User } from '@lunara/types';
 import { UserRole } from '@lunara/types';
 import { formatPhone } from '@lunara/utils';
-import { getApiV1BaseUrl } from '../api-config';
-import { parseApiError } from '../lib/api-error';
-import { apiUnreachableMessage } from '../lib/network-error';
+import { authRequest } from '../lib/api-client';
 
-/** Baked in at build time per partner-brands/<slug>/manifest.json — null for the default Lunara app. */
-export function getPartnerId(): string | null {
-  return (Constants.expoConfig?.extra?.partnerId as string | null) ?? null;
+// Re-exported for compatibility — `getPartnerId` is a generic client utility (not auth-specific)
+// but many screens already import it alongside `useAuthStore` from this module.
+export { getPartnerId } from '../lib/api-client';
+
+// User profile (non-sensitive) stays in AsyncStorage; the access/refresh token pair is the
+// sensitive part and lives in SecureStore (Keychain/Keystore-backed) instead of plain storage.
+const USER_STORAGE_KEY = 'lunara_auth_user';
+const TOKENS_STORAGE_KEY = 'lunara_auth_tokens';
+
+async function persistSession(user: User, tokens: AuthTokens): Promise<void> {
+  await Promise.all([
+    AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user)),
+    SecureStore.setItemAsync(TOKENS_STORAGE_KEY, JSON.stringify(tokens)),
+  ]);
 }
 
-const STORAGE_KEY = 'lunara_auth';
+async function clearSession(): Promise<void> {
+  await Promise.all([
+    AsyncStorage.removeItem(USER_STORAGE_KEY),
+    SecureStore.deleteItemAsync(TOKENS_STORAGE_KEY),
+  ]);
+}
 
 interface AuthStore {
   user: User | null;
@@ -30,96 +44,6 @@ interface AuthStore {
   apiUpload: <T>(path: string, formData: FormData) => Promise<T>;
 }
 
-/** On a 401 with a refresh function available, try refreshing once and retrying the original
- * request before giving up — mirrors customer-web's AuthProvider, which transparently refreshes
- * instead of forcing a re-login every time the (7-day) access token expires despite a still-valid
- * 30-day refresh token sitting unused. */
-async function authRequest<T>(
-  path: string,
-  init?: RequestInit,
-  token?: string | null,
-  onUnauthorized?: () => void,
-  refreshAndGetToken?: () => Promise<string | null>,
-): Promise<T> {
-  const baseUrl = getApiV1BaseUrl();
-  const partnerId = getPartnerId();
-  const doFetch = async (accessToken?: string | null) => {
-    try {
-      return await fetch(`${baseUrl}${path}`, {
-        ...init,
-        headers: {
-          'Content-Type': 'application/json',
-          'x-lunara-client': 'mobile',
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-          ...(partnerId ? { 'x-lunara-partner-id': partnerId } : {}),
-          ...(init?.headers ?? {}),
-        },
-      });
-    } catch {
-      throw new Error(apiUnreachableMessage(baseUrl));
-    }
-  };
-
-  let res = await doFetch(token);
-  if (res.status === 401 && token && refreshAndGetToken) {
-    const refreshed = await refreshAndGetToken().catch(() => null);
-    if (refreshed) {
-      res = await doFetch(refreshed);
-    }
-  }
-  const body = await res.json();
-  if (res.status === 401 && token) {
-    onUnauthorized?.();
-    throw new Error('Session expired. Please sign in again.');
-  }
-  if (!res.ok || body.success === false) {
-    throw new Error(parseApiError(body));
-  }
-  return body.data as T;
-}
-
-async function authUpload<T>(
-  path: string,
-  formData: FormData,
-  token?: string | null,
-  onUnauthorized?: () => void,
-  refreshAndGetToken?: () => Promise<string | null>,
-): Promise<T> {
-  const baseUrl = getApiV1BaseUrl();
-  const partnerId = getPartnerId();
-  const doFetch = async (accessToken?: string | null) => {
-    try {
-      return await fetch(`${baseUrl}${path}`, {
-        method: 'POST',
-        headers: {
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-          ...(partnerId ? { 'x-lunara-partner-id': partnerId } : {}),
-        },
-        body: formData,
-      });
-    } catch {
-      throw new Error(apiUnreachableMessage(baseUrl));
-    }
-  };
-
-  let res = await doFetch(token);
-  if (res.status === 401 && token && refreshAndGetToken) {
-    const refreshed = await refreshAndGetToken().catch(() => null);
-    if (refreshed) {
-      res = await doFetch(refreshed);
-    }
-  }
-  const body = await res.json();
-  if (res.status === 401 && token) {
-    onUnauthorized?.();
-    throw new Error('Session expired. Please sign in again.');
-  }
-  if (!res.ok || body.success === false) {
-    throw new Error(parseApiError(body));
-  }
-  return body.data as T;
-}
-
 let refreshInFlight: Promise<string | null> | null = null;
 
 export const useAuthStore = create<AuthStore>((set, get) => ({
@@ -129,14 +53,18 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   hydrate: async () => {
     try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const { user, tokens } = JSON.parse(stored) as { user: User; tokens: AuthTokens };
+      const [storedUser, storedTokens] = await Promise.all([
+        AsyncStorage.getItem(USER_STORAGE_KEY),
+        SecureStore.getItemAsync(TOKENS_STORAGE_KEY),
+      ]);
+      if (storedUser && storedTokens) {
+        const user = JSON.parse(storedUser) as User;
+        const tokens = JSON.parse(storedTokens) as AuthTokens;
         set({ user, tokens, isLoading: false });
         return;
       }
     } catch {
-      await AsyncStorage.removeItem(STORAGE_KEY);
+      await clearSession();
     }
     set({ isLoading: false });
   },
@@ -145,25 +73,25 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   loginWithEmail: async (email, password) => {
     const data = await authRequest<{ user: User; tokens: AuthTokens }>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
+      kind: 'json',
+      init: { method: 'POST', body: JSON.stringify({ email, password }) },
     });
     if (data.user.role !== UserRole.CUSTOMER) {
       throw new Error('This account is not a customer account.');
     }
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    await persistSession(data.user, data.tokens);
     set({ user: data.user, tokens: data.tokens });
   },
 
   loginWithOtp: async (phone, otp) => {
     const data = await authRequest<{ user: User; tokens: AuthTokens }>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ phone: formatPhone(phone), otp: otp.trim() }),
+      kind: 'json',
+      init: { method: 'POST', body: JSON.stringify({ phone: formatPhone(phone), otp: otp.trim() }) },
     });
     if (data.user.role !== UserRole.CUSTOMER) {
       throw new Error('This account is not a customer account.');
     }
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    await persistSession(data.user, data.tokens);
     set({ user: data.user, tokens: data.tokens });
   },
 
@@ -171,8 +99,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   requestOtp: async (phone) => {
     const data = await authRequest<{ phone: string }>('/auth/otp/request', {
-      method: 'POST',
-      body: JSON.stringify({ phone: formatPhone(phone) }),
+      kind: 'json',
+      init: { method: 'POST', body: JSON.stringify({ phone: formatPhone(phone) }) },
     });
     return {
       phone: data.phone ?? formatPhone(phone),
@@ -182,12 +110,12 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   logout: async () => {
     const { tokens } = get();
     if (tokens?.accessToken) {
-      await authRequest('/auth/logout', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${tokens.accessToken}` },
-      }).catch(() => {});
+      await authRequest(
+        '/auth/logout',
+        { kind: 'json', init: { method: 'POST', headers: { Authorization: `Bearer ${tokens.accessToken}` } } },
+      ).catch(() => {});
     }
-    await AsyncStorage.removeItem(STORAGE_KEY);
+    await clearSession();
     set({ user: null, tokens: null });
   },
 
@@ -198,7 +126,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     }
     return authRequest<T>(
       path,
-      init,
+      { kind: 'json', init },
       tokens.accessToken,
       () => {
         void get().logout();
@@ -212,9 +140,9 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     if (!tokens?.accessToken) {
       throw new Error('Please sign in to continue.');
     }
-    return authUpload<T>(
+    return authRequest<T>(
       path,
-      formData,
+      { kind: 'form', formData },
       tokens.accessToken,
       () => {
         void get().logout();
@@ -239,13 +167,13 @@ async function refreshAccessToken(
   refreshInFlight = (async () => {
     try {
       const data = await authRequest<{ user?: User; tokens: AuthTokens }>('/auth/refresh', {
-        method: 'POST',
-        body: JSON.stringify({ refreshToken: tokens.refreshToken }),
+        kind: 'json',
+        init: { method: 'POST', body: JSON.stringify({ refreshToken: tokens.refreshToken }) },
       });
       const nextUser = data.user ?? user;
       if (!nextUser) return null;
       const next = { user: nextUser, tokens: data.tokens };
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      await persistSession(nextUser, data.tokens);
       set(next);
       return data.tokens.accessToken;
     } catch {

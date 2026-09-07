@@ -365,6 +365,7 @@ export class AdminController {
     const { buffer, filename } = await this.partnerOperationsService.downloadInvoicePdf(
       req.user.sub,
       UserRole.ADMIN,
+      undefined,
       invoiceId,
     );
     res.setHeader('Content-Type', 'application/pdf');

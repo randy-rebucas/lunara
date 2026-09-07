@@ -1,4 +1,5 @@
-import type { Collection } from 'mongodb';
+import type { mongo } from 'mongoose';
+type Collection = mongo.Collection;
 
 export const DEFAULT_BLOG_POSTS = [
   {

@@ -56,6 +56,8 @@ npm run dev --workspace=@lunara/customer-mobile
 npm run dev --workspace=@lunara/rider-mobile
 npm run dev --workspace=@lunara/partner-mobile
 
+# EAS build commands must run from apps/customer-mobile (that's where eas.json/app.json live)
+cd apps/customer-mobile
 eas build --platform android --profile production
 
 # Run partner brands

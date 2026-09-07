@@ -1,10 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Alert, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { Button } from '../../src/components/ui/button';
 import { Card } from '../../src/components/ui/card';
 import { DataLoadState } from '../../src/components/data-load-state';
 import { KeyboardSafeScrollView } from '../../src/components/ui/keyboard-safe-scroll-view';
+import { useAsyncResource } from '../../src/hooks/use-async-resource';
+import { toErrorMessage } from '../../src/lib/api-error';
 import { useAuthStore } from '../../src/store/auth';
 import { colors, radius, spacing, typography } from '../../src/theme';
 
@@ -21,36 +23,22 @@ const FREQUENCY_LABELS: Record<number, string> = { 7: 'Weekly', 14: 'Biweekly', 
 
 export default function SubscriptionsListScreen() {
   const apiFetch = useAuthStore((s) => s.apiFetch);
-  const [items, setItems] = useState<SubscriptionRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState('');
   const [actioningId, setActioningId] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setError('');
-    try {
-      const data = await apiFetch<SubscriptionRow[]>('/subscriptions');
-      setItems(data);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load subscriptions');
-    } finally {
-      setLoading(false);
-    }
-  }, [apiFetch]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  async function onRefresh() {
-    setRefreshing(true);
-    try {
-      await load();
-    } finally {
-      setRefreshing(false);
-    }
-  }
+  const fetchSubscriptions = useCallback(
+    () => apiFetch<SubscriptionRow[]>('/subscriptions'),
+    [apiFetch],
+  );
+  const {
+    data: itemsData,
+    loading,
+    error,
+    refreshing,
+    reload: load,
+    onRefresh,
+    setData: setItems,
+  } = useAsyncResource(fetchSubscriptions, { errorFallback: 'Failed to load subscriptions' });
+  const items = itemsData ?? [];
 
   async function toggleActive(item: SubscriptionRow) {
     setActioningId(item._id);
@@ -61,7 +49,7 @@ export default function SubscriptionsListScreen() {
       });
       await load();
     } catch (e) {
-      Alert.alert('Could not update', e instanceof Error ? e.message : 'Try again');
+      Alert.alert('Could not update', toErrorMessage(e, 'Try again'));
     } finally {
       setActioningId(null);
     }
@@ -80,9 +68,9 @@ export default function SubscriptionsListScreen() {
             setActioningId(item._id);
             try {
               await apiFetch(`/subscriptions/${item._id}`, { method: 'DELETE' });
-              setItems((prev) => prev.filter((s) => s._id !== item._id));
+              setItems((prev) => (prev ?? []).filter((s) => s._id !== item._id));
             } catch (e) {
-              Alert.alert('Could not cancel', e instanceof Error ? e.message : 'Try again');
+              Alert.alert('Could not cancel', toErrorMessage(e, 'Try again'));
             } finally {
               setActioningId(null);
             }
@@ -106,7 +94,6 @@ export default function SubscriptionsListScreen() {
         error={error}
         loadingMessage="Loading subscriptions…"
         onRetry={() => {
-          setLoading(true);
           load();
         }}
       />

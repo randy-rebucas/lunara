@@ -53,7 +53,7 @@ import { CreateInventoryDto } from './dto/create-inventory.dto';
 import { CreateRiderDto } from '../admin/dto/create-rider.dto';
 import { UpdateRiderByPartnerDto } from './dto/update-rider.dto';
 import { isRiderCompliant } from '../riders/rider-compliance';
-import { applyStaffBranchFilter, assertOrderPortalAccess, resolvePortalBranchId } from './partner-access';
+import { applyStaffBranchFilter, assertOrderPortalAccess } from './partner-access';
 import { PartnerOrderNotificationService } from '../push/partner-order-notification.service';
 import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
 import {
@@ -416,7 +416,13 @@ export class PartnerOperationsService {
     return { filter };
   }
 
-  async getDashboard(userId: string, role: UserRole) {
+  // FLAG: dashboardScopeFilter/resolvePartnerBranches/revenueOrderFilter still re-derive scope
+  // from (userId, role) internally instead of the passed tenantId/staffBranchId. Also note
+  // dashboardScopeFilter returns an UNRESTRICTED (empty) filter for STAFF today (only PARTNER and
+  // ADMIN branches set a filter) — left exactly as-is; not silently fixed here.
+  async getDashboard(userId: string, role: UserRole, tenantId?: string, staffBranchId?: string) {
+    void tenantId;
+    void staffBranchId;
     const { filter: scopeFilter, shop } = await this.dashboardScopeFilter(userId, role);
     const revenueFilter = await this.revenueOrderFilter(userId, role);
 
@@ -597,7 +603,14 @@ export class PartnerOperationsService {
     };
   }
 
-  async acceptPartnerOrder(orderId: string, partnerUserId: string, role: UserRole) {
+  async acceptPartnerOrder(
+    orderId: string,
+    partnerUserId: string,
+    role: UserRole,
+    tenantId?: string,
+    staffBranchId?: string,
+  ) {
+    void tenantId;
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
 
@@ -607,7 +620,7 @@ export class PartnerOperationsService {
     if (!order.branchId) {
       throw new BadRequestException('Order has not been assigned to a shop yet');
     }
-    const branchId = await resolvePortalBranchId(this.userModel, partnerUserId, role);
+    const branchId = staffBranchId ? new Types.ObjectId(staffBranchId) : undefined;
     assertOrderPortalAccess(order, partnerUserId, role, branchId);
     if (order.partnerAcceptedAt) {
       throw new BadRequestException('Order already accepted by the shop');
@@ -638,7 +651,17 @@ export class PartnerOperationsService {
     return { success: true, data: await this.summarizeIncoming(order) };
   }
 
-  async requestPickup(orderId: string, partnerUserId: string, role: UserRole) {
+  // FLAG: this method never scoped STAFF at all (only a PARTNER ownership check exists below) —
+  // preserved exactly; tenantId/staffBranchId are accepted for signature consistency but unused.
+  async requestPickup(
+    orderId: string,
+    partnerUserId: string,
+    role: UserRole,
+    tenantId?: string,
+    staffBranchId?: string,
+  ) {
+    void tenantId;
+    void staffBranchId;
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
 
@@ -671,11 +694,18 @@ export class PartnerOperationsService {
     return { success: true, data: { orderId, pickupRequestedAt: order.pickupRequestedAt } };
   }
 
-  async requestDelivery(orderId: string, partnerUserId: string, role: UserRole) {
+  async requestDelivery(
+    orderId: string,
+    partnerUserId: string,
+    role: UserRole,
+    tenantId?: string,
+    staffBranchId?: string,
+  ) {
+    void tenantId;
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
 
-    const branchId = await resolvePortalBranchId(this.userModel, partnerUserId, role);
+    const branchId = staffBranchId ? new Types.ObjectId(staffBranchId) : undefined;
     assertOrderPortalAccess(order, partnerUserId, role, branchId);
     if (order.status !== OrderStatus.READY_FOR_DELIVERY) {
       throw new BadRequestException('Order must be ready for delivery');
@@ -699,7 +729,13 @@ export class PartnerOperationsService {
     return this.riderAssignmentService.notifyAwaitingDeliveryDispatch(orderId);
   }
 
-  async getIncomingOrders(partnerUserId?: string, role?: UserRole) {
+  async getIncomingOrders(
+    partnerUserId?: string,
+    role?: UserRole,
+    tenantId?: string,
+    staffBranchId?: string,
+  ) {
+    void tenantId;
     const filter: Record<string, unknown> = {
       status: { $in: INCOMING_STATUSES },
       dispatchStatus: 'dispatched',
@@ -716,7 +752,7 @@ export class PartnerOperationsService {
         DEFAULT_PARTNER_PORTAL_SETTINGS.allowStaffToRequestDelivery;
     }
     if (role === UserRole.STAFF && partnerUserId) {
-      const branchId = await resolvePortalBranchId(this.userModel, partnerUserId, role);
+      const branchId = staffBranchId ? new Types.ObjectId(staffBranchId) : undefined;
       applyStaffBranchFilter(filter, role, branchId);
       if (branchId) {
         const branch = await this.branchModel.findById(branchId);
@@ -748,7 +784,15 @@ export class PartnerOperationsService {
     };
   }
 
-  async getOrderHistory(userId: string, role: UserRole, status?: string, customerId?: string) {
+  async getOrderHistory(
+    userId: string,
+    role: UserRole,
+    tenantId?: string,
+    staffBranchId?: string,
+    status?: string,
+    customerId?: string,
+  ) {
+    void tenantId;
     const HISTORY_STATUSES = [
       OrderStatus.DELIVERED,
       OrderStatus.COMPLETED,
@@ -763,7 +807,7 @@ export class PartnerOperationsService {
     if (role === UserRole.PARTNER) {
       filter.partnerId = new Types.ObjectId(userId);
     } else if (role === UserRole.STAFF) {
-      const branchId = await resolvePortalBranchId(this.userModel, userId, role);
+      const branchId = staffBranchId ? new Types.ObjectId(staffBranchId) : undefined;
       applyStaffBranchFilter(filter, role, branchId);
     }
     if (customerId && Types.ObjectId.isValid(customerId)) {
@@ -838,7 +882,12 @@ export class PartnerOperationsService {
 
   /** Riders this partner has added themselves (partnerId-scoped) — distinct from
    * listAssignedRiders(), which shows each branch's single default pickup/delivery rider. */
-  async listOwnedRiders(userId: string, role: UserRole) {
+  // FLAG: resolvePartnerId still re-derives the owning partner from (userId, role) internally
+  // (partner-level scope: riders shared across all of a partner's branches) instead of tenantId —
+  // left as-is since resolvePartnerId/resolvePartnerBranchId also drive ADMIN's "representative
+  // branch" fallback, which doesn't map cleanly onto tenantId===undefined.
+  async listOwnedRiders(userId: string, role: UserRole, tenantId?: string) {
+    void tenantId;
     const partnerId = await this.resolvePartnerId(userId, role);
     const riders = await this.riderModel.find({ partnerId }).sort({ createdAt: -1 });
     const users = await this.userModel
@@ -852,7 +901,8 @@ export class PartnerOperationsService {
     };
   }
 
-  async createOwnedRider(userId: string, role: UserRole, dto: CreateRiderDto) {
+  async createOwnedRider(userId: string, role: UserRole, tenantId: string | undefined, dto: CreateRiderDto) {
+    void tenantId;
     const partnerId = await this.resolvePartnerId(userId, role);
     const email = dto.email.trim().toLowerCase();
     const phone = dto.phone?.trim();
@@ -888,7 +938,14 @@ export class PartnerOperationsService {
     return { success: true, data: this.formatOwnedRider(rider, user) };
   }
 
-  async updateOwnedRider(userId: string, role: UserRole, riderUserId: string, dto: UpdateRiderByPartnerDto) {
+  async updateOwnedRider(
+    userId: string,
+    role: UserRole,
+    tenantId: string | undefined,
+    riderUserId: string,
+    dto: UpdateRiderByPartnerDto,
+  ) {
+    void tenantId;
     const partnerId = await this.resolvePartnerId(userId, role);
     const rider = await this.riderModel.findOne({ userId: new Types.ObjectId(riderUserId), partnerId });
     if (!rider) throw new NotFoundException('Rider not found');
@@ -910,7 +967,8 @@ export class PartnerOperationsService {
     return { success: true, data: this.formatOwnedRider(rider, user) };
   }
 
-  async removeOwnedRider(userId: string, role: UserRole, riderUserId: string) {
+  async removeOwnedRider(userId: string, role: UserRole, tenantId: string | undefined, riderUserId: string) {
+    void tenantId;
     const partnerId = await this.resolvePartnerId(userId, role);
     const rider = await this.riderModel.findOne({ userId: new Types.ObjectId(riderUserId), partnerId });
     if (!rider) throw new NotFoundException('Rider not found');
@@ -999,7 +1057,14 @@ export class PartnerOperationsService {
     };
   }
 
-  async listStaff(userId: string, role: UserRole) {
+  // FLAG: for non-PARTNER roles this still calls resolvePartnerBranchId(userId, role), which
+  // queries branchModel by treating `userId` as a partnerUserId — for STAFF that is almost
+  // certainly a pre-existing bug (a staff user's own id will not match any branch's
+  // partnerUserId), but that is the exact existing behavior and is preserved unchanged here
+  // rather than silently switched to staffBranchId.
+  async listStaff(userId: string, role: UserRole, tenantId?: string, staffBranchId?: string) {
+    void tenantId;
+    void staffBranchId;
     const ownedBranchIds = await this.listOwnedBranchIds(userId, role);
     const branchFilter =
       role === UserRole.PARTNER ? { $in: ownedBranchIds } : await this.resolvePartnerBranchId(userId, role);
@@ -1032,7 +1097,11 @@ export class PartnerOperationsService {
 
   /** Riders are hired/onboarded by admin, then assigned to a branch as its default pickup/delivery rider.
    * This lists that assignment so partners can see who's working their shop(s). */
-  async listAssignedRiders(userId: string, role: UserRole) {
+  // FLAG: same resolvePartnerBranchId(userId, role) pattern as listStaff above for non-PARTNER
+  // roles — preserved unchanged.
+  async listAssignedRiders(userId: string, role: UserRole, tenantId?: string, staffBranchId?: string) {
+    void tenantId;
+    void staffBranchId;
     const ownedBranchIds = await this.listOwnedBranchIds(userId, role);
     const branchFilter =
       role === UserRole.PARTNER ? { $in: ownedBranchIds } : await this.resolvePartnerBranchId(userId, role);
@@ -1082,7 +1151,15 @@ export class PartnerOperationsService {
     };
   }
 
-  async createStaff(userId: string, role: UserRole, dto: CreateStaffDto) {
+  async createStaff(
+    userId: string,
+    role: UserRole,
+    tenantId: string | undefined,
+    staffBranchId: string | undefined,
+    dto: CreateStaffDto,
+  ) {
+    void tenantId;
+    void staffBranchId;
     const branchId = dto.branchId
       ? await this.resolveOwnedBranchId(userId, role, dto.branchId)
       : await this.resolvePartnerBranchId(userId, role);
@@ -1141,9 +1218,11 @@ export class PartnerOperationsService {
   async reassignStaffBranch(
     userId: string,
     role: UserRole,
+    tenantId: string | undefined,
     staffId: string,
     dto: AssignStaffBranchDto,
   ) {
+    void tenantId;
     const targetBranchId = await this.resolveOwnedBranchId(userId, role, dto.branchId);
     const ownedBranchIds = await this.listOwnedBranchIds(userId, role);
 
@@ -1171,7 +1250,8 @@ export class PartnerOperationsService {
     };
   }
 
-  async removeStaff(userId: string, role: UserRole, staffId: string) {
+  async removeStaff(userId: string, role: UserRole, tenantId: string | undefined, staffId: string) {
+    void tenantId;
     const ownedBranchIds = await this.listOwnedBranchIds(userId, role);
 
     const staff = await this.userModel.findOne({
@@ -1195,7 +1275,18 @@ export class PartnerOperationsService {
     return { success: true };
   }
 
-  async assignStaff(orderId: string, staffId: string, partnerUserId: string, role: UserRole) {
+  // FLAG: this method never scoped STAFF at all (only a PARTNER ownership check exists below) —
+  // preserved exactly; tenantId/staffBranchId are accepted for signature consistency but unused.
+  async assignStaff(
+    orderId: string,
+    staffId: string,
+    partnerUserId: string,
+    role: UserRole,
+    tenantId?: string,
+    staffBranchId?: string,
+  ) {
+    void tenantId;
+    void staffBranchId;
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
 
@@ -1242,7 +1333,9 @@ export class PartnerOperationsService {
     };
   }
 
-  async getProgressMonitor(userId: string, role: UserRole) {
+  async getProgressMonitor(userId: string, role: UserRole, tenantId?: string, staffBranchId?: string) {
+    void tenantId;
+    void staffBranchId;
     const { filter: scopeFilter } = await this.dashboardScopeFilter(userId, role);
     const items = await this.orderModel
       .find({
@@ -1289,7 +1382,13 @@ export class PartnerOperationsService {
     };
   }
 
-  async getInventory(userId: string, role: UserRole) {
+  // FLAG: resolvePartnerBranches(userId, role) below queries branches by partnerUserId===userId
+  // for any non-ADMIN role, including STAFF — for a STAFF caller (whose userId is their own user
+  // id, not a partner id) this returns zero branches, so getInventory/createInventoryItem/
+  // deleteInventoryItem/updateInventory all already appear to be effectively broken/empty for
+  // STAFF today. Preserved exactly; not fixed here.
+  async getInventory(userId: string, role: UserRole, tenantId?: string) {
+    void tenantId;
     const branches = await this.resolvePartnerBranches(userId, role);
     const branchIds = branches.map((b) => b._id);
     if (branchIds.length === 0) return { success: true, data: [] };
@@ -1304,7 +1403,8 @@ export class PartnerOperationsService {
     };
   }
 
-  async createInventoryItem(userId: string, role: UserRole, dto: CreateInventoryDto) {
+  async createInventoryItem(userId: string, role: UserRole, tenantId: string | undefined, dto: CreateInventoryDto) {
+    void tenantId;
     const branches = await this.resolvePartnerBranches(userId, role);
     if (branches.length === 0) throw new BadRequestException('No shop branch found for this account');
     const branch = dto.branchId ? branches.find((b) => b._id.toString() === dto.branchId) : branches[0];
@@ -1328,7 +1428,8 @@ export class PartnerOperationsService {
     return { success: true, data: this.formatInventoryItem(item, { name: branch.name, code: branch.code }) };
   }
 
-  async deleteInventoryItem(userId: string, role: UserRole, itemId: string) {
+  async deleteInventoryItem(userId: string, role: UserRole, tenantId: string | undefined, itemId: string) {
+    void tenantId;
     const branches = await this.resolvePartnerBranches(userId, role);
     const branchIds = new Set(branches.map((b) => b._id.toString()));
     const item = await this.inventoryModel.findById(itemId);
@@ -1339,7 +1440,14 @@ export class PartnerOperationsService {
     return { success: true, data: { _id: itemId } };
   }
 
-  async updateInventory(userId: string, role: UserRole, itemId: string, dto: UpdateInventoryDto) {
+  async updateInventory(
+    userId: string,
+    role: UserRole,
+    tenantId: string | undefined,
+    itemId: string,
+    dto: UpdateInventoryDto,
+  ) {
+    void tenantId;
     const branches = await this.resolvePartnerBranches(userId, role);
     const branchIds = new Set(branches.map((b) => b._id.toString()));
     const item = await this.inventoryModel.findById(itemId);
@@ -1396,7 +1504,8 @@ export class PartnerOperationsService {
     );
   }
 
-  async getReports(userId: string, role: UserRole, days = 7) {
+  async getReports(userId: string, role: UserRole, tenantId?: string, days = 7) {
+    void tenantId;
     const from = new Date();
     from.setDate(from.getDate() - days);
     from.setHours(0, 0, 0, 0);
@@ -1488,7 +1597,8 @@ export class PartnerOperationsService {
     return filter;
   }
 
-  async getRevenue(userId: string, role: UserRole) {
+  async getRevenue(userId: string, role: UserRole, tenantId?: string) {
+    void tenantId;
     const baseFilter = await this.revenueOrderFilter(userId, role);
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
@@ -1696,7 +1806,11 @@ export class PartnerOperationsService {
     };
   }
 
-  async getInvoices(userId: string, role: UserRole) {
+  // FLAG: for non-ADMIN roles this filters invoices by partnerId===userId — correct for PARTNER,
+  // but for STAFF `userId` is the staff's own user id, not the owning partner's id, so this
+  // already appears to return zero invoices for STAFF today. Preserved exactly; not fixed here.
+  async getInvoices(userId: string, role: UserRole, tenantId?: string) {
+    void tenantId;
     if (role === UserRole.ADMIN) {
       const invoices = await this.invoiceModel.find().sort({ createdAt: -1 }).limit(100);
       return { success: true, data: invoices.map((i) => this.formatInvoice(i)) };
@@ -1811,7 +1925,8 @@ export class PartnerOperationsService {
     return { success: true, data };
   }
 
-  async getInvoiceOrders(userId: string, role: UserRole, invoiceId: string) {
+  async getInvoiceOrders(userId: string, role: UserRole, tenantId: string | undefined, invoiceId: string) {
+    void tenantId;
     const invoice = await this.invoiceModel.findById(invoiceId);
     if (!invoice) throw new NotFoundException('Invoice not found');
 
@@ -2322,7 +2437,13 @@ export class PartnerOperationsService {
 
   /** Regenerates the invoice PDF on demand (no storage — cheap and deterministic from the
    * invoice + its claimed orders) for partner-web/admin-web download buttons. */
-  async downloadInvoicePdf(userId: string, role: UserRole, invoiceId: string): Promise<{ buffer: Buffer; filename: string }> {
+  async downloadInvoicePdf(
+    userId: string,
+    role: UserRole,
+    tenantId: string | undefined,
+    invoiceId: string,
+  ): Promise<{ buffer: Buffer; filename: string }> {
+    void tenantId;
     const invoice = await this.invoiceModel.findById(invoiceId);
     if (!invoice) throw new NotFoundException('Invoice not found');
     if (role !== UserRole.ADMIN && invoice.partnerId.toString() !== userId) {

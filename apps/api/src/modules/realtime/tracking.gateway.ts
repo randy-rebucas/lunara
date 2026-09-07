@@ -47,21 +47,48 @@ export class TrackingGateway implements OnGatewayConnection {
     private readonly partnerOrderNotifications: PartnerOrderNotificationService,
   ) {}
 
-  handleConnection(client: Socket) {
+  async handleConnection(client: Socket) {
     const token = this.extractToken(client);
     if (!token) {
       client.disconnect(true);
       return;
     }
 
+    let payload: JwtPayload;
     try {
-      const payload = this.jwtService.verify<JwtPayload>(token, {
+      payload = this.jwtService.verify<JwtPayload>(token, {
         secret: getJwtSecret(),
       });
-      client.data.user = payload;
     } catch {
       client.disconnect(true);
+      return;
     }
+    client.data.user = payload;
+    // Resolve tenant context once per connection (mirrors common/guards/tenant.guard.ts's
+    // per-request resolution) so room-join handlers below don't each re-derive it ad hoc.
+    const ctx = await this.resolveTenantContext(payload);
+    client.data.tenantId = ctx.tenantId;
+    client.data.staffBranchId = ctx.staffBranchId;
+  }
+
+  /** PARTNER: own id. STAFF: owning partner's id via their branch. ADMIN: unrestricted (undefined). */
+  private async resolveTenantContext(
+    user: JwtPayload,
+  ): Promise<{ tenantId?: string; staffBranchId?: string }> {
+    if (user.role === UserRole.PARTNER) {
+      return { tenantId: user.sub };
+    }
+    if (user.role === UserRole.STAFF) {
+      const staffUser = await this.userModel.findById(user.sub).select('branchId').lean();
+      if (!staffUser?.branchId) return {};
+      const branch = await this.branchModel
+        .findById(staffUser.branchId)
+        .select('partnerUserId')
+        .lean();
+      if (!branch?.partnerUserId) return {};
+      return { tenantId: branch.partnerUserId.toString(), staffBranchId: staffUser.branchId.toString() };
+    }
+    return {};
   }
 
   private extractToken(client: Socket): string | undefined {
@@ -77,6 +104,14 @@ export class TrackingGateway implements OnGatewayConnection {
 
   private getUser(client: Socket): JwtPayload | null {
     return (client.data.user as JwtPayload | undefined) ?? null;
+  }
+
+  private getTenantId(client: Socket): string | undefined {
+    return client.data.tenantId as string | undefined;
+  }
+
+  private getStaffBranchId(client: Socket): string | undefined {
+    return client.data.staffBranchId as string | undefined;
   }
 
   @SubscribeMessage('joinOrder')
@@ -360,7 +395,7 @@ export class TrackingGateway implements OnGatewayConnection {
   }
 
   @SubscribeMessage('joinBranch')
-  handleJoinBranch(
+  async handleJoinBranch(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { branchId: string },
   ) {
@@ -374,6 +409,24 @@ export class TrackingGateway implements OnGatewayConnection {
       return { success: false, error: 'Forbidden' };
     }
     if (!data?.branchId) return { success: false, error: 'branchId required' };
+
+    // ADMIN is unrestricted; PARTNER/STAFF may only join a branch room belonging to their own
+    // tenant (previously any authenticated partner/staff could join any branch's room and
+    // receive that branch's pipeline updates — closed here to match the HTTP-side TenantGuard).
+    if (user.role !== UserRole.ADMIN) {
+      const tenantId = this.getTenantId(client);
+      let allowed: boolean;
+      if (user.role === UserRole.STAFF) {
+        allowed = this.getStaffBranchId(client) === data.branchId;
+      } else {
+        const branch = await this.branchModel.findById(data.branchId).select('partnerUserId').lean();
+        allowed = Boolean(branch?.partnerUserId && branch.partnerUserId.toString() === tenantId);
+      }
+      if (!allowed) {
+        return { success: false, error: 'Forbidden' };
+      }
+    }
+
     client.join(`branch:${data.branchId}`);
     client.join(`portal:${user.sub}`);
     return { success: true, room: `branch:${data.branchId}` };
@@ -424,14 +477,16 @@ export class TrackingGateway implements OnGatewayConnection {
     if (!user) return { success: false, error: 'Unauthorized' };
     if (!data?.conversationId) return { success: false, error: 'conversationId required' };
 
-    // Admins may join any conversation room; partners/staff must own it
+    // Admins may join any conversation room; partners/staff must own it. Tenant id (for STAFF,
+    // their branch's owning partner; for PARTNER, themselves) is resolved once at connect time
+    // in handleConnection/resolveTenantContext rather than re-derived here per join.
     if (user.role !== UserRole.ADMIN) {
       const convo = await this.conversationModel
         .findById(data.conversationId)
         .select('partnerId')
         .lean()
         .catch(() => null);
-      const ownerId = await this.resolveConversationOwnerId(user.sub, user.role);
+      const ownerId = this.getTenantId(client) ?? user.sub;
       if (!convo || convo.partnerId.toString() !== ownerId) {
         return { success: false, error: 'Forbidden' };
       }
@@ -439,25 +494,6 @@ export class TrackingGateway implements OnGatewayConnection {
 
     client.join(`conversation:${data.conversationId}`);
     return { success: true, room: `conversation:${data.conversationId}` };
-  }
-
-  /**
-   * Mirrors `MessagingService.resolveConversationOwnerId` — a shop's conversation is keyed by
-   * its owning partner's userId, and staff accounts don't have one of their own, so resolve to
-   * their branch's partner instead of rejecting every staff join as Forbidden.
-   */
-  private async resolveConversationOwnerId(userId: string, role: string): Promise<string> {
-    if (role === UserRole.STAFF) {
-      const staffUser = await this.userModel.findById(userId).select('branchId').lean();
-      if (staffUser?.branchId) {
-        const branch = await this.branchModel
-          .findById(staffUser.branchId)
-          .select('partnerUserId')
-          .lean();
-        if (branch?.partnerUserId) return branch.partnerUserId.toString();
-      }
-    }
-    return userId;
   }
 
   @SubscribeMessage('leaveConversation')

@@ -3,17 +3,24 @@ import { UserRole } from '@lunara/types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { PartnersService } from '../partners/partners.service';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { ReviewsService } from './reviews.service';
 
-/** No auth — consumed by the public marketing site (homepage testimonials). */
+/** No auth — consumed by the public marketing site (homepage testimonials). Pass `domain` for a
+ * white-label partner's custom domain to scope reviews to that partner only; omitted/unresolved
+ * domain falls back to the platform-wide directory (default lunara.com marketing site). */
 @Controller('public/reviews')
 export class PublicReviewsController {
-  constructor(private readonly reviewsService: ReviewsService) {}
+  constructor(
+    private readonly reviewsService: ReviewsService,
+    private readonly partnersService: PartnersService,
+  ) {}
 
   @Get('featured')
-  listFeatured(@Query('limit') limit = '12') {
-    return this.reviewsService.listFeatured(Number(limit));
+  async listFeatured(@Query('limit') limit = '12', @Query('domain') domain?: string) {
+    const partner = domain?.trim() ? await this.partnersService.findByDomain(domain.trim()) : null;
+    return this.reviewsService.listFeatured(Number(limit), partner?.ownerUserId.toString());
   }
 }
 

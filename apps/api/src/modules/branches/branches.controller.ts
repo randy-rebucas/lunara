@@ -3,16 +3,24 @@ import { UserRole } from '@lunara/types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { PartnersService } from '../partners/partners.service';
 import { BranchesService } from './branches.service';
 
-/** No auth — consumed by the public marketing site (service-areas section, /locations page). */
+/** No auth — consumed by the public marketing site (service-areas section, /locations page).
+ * Pass `domain` for a white-label partner's custom domain to scope to that partner's own
+ * branch(es); omitted/unresolved domain falls back to the platform-wide directory (default
+ * lunara.com marketing site). */
 @Controller('public/branches')
 export class PublicBranchesController {
-  constructor(private readonly branchesService: BranchesService) {}
+  constructor(
+    private readonly branchesService: BranchesService,
+    private readonly partnersService: PartnersService,
+  ) {}
 
   @Get()
-  list() {
-    return this.branchesService.listPublicBranches();
+  async list(@Query('domain') domain?: string) {
+    const partner = domain?.trim() ? await this.partnersService.findByDomain(domain.trim()) : null;
+    return this.branchesService.listPublicBranches(partner?.ownerUserId.toString());
   }
 
   @Get(':id')

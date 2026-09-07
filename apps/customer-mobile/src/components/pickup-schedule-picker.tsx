@@ -77,6 +77,7 @@ export function PickupSchedulePicker({
     if (selectedStartAt) {
       const key = isoToManilaDateKey(selectedStartAt);
       if (dayOptions.some((d) => d.key === key)) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional fetch/update-on-mount, not a synchronous render loop
         setSelectedDayKey(key);
         setTimeValue(isoToManilaTime(selectedStartAt));
         return;

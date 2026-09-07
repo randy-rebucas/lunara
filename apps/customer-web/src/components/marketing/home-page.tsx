@@ -195,8 +195,9 @@ export function HomePage() {
 
   useEffect(() => {
     const apiBase = resolveApiV1BaseUrl(process.env.NEXT_PUBLIC_API_URL);
-    fetchActiveServiceAreas(apiBase).then(setServiceAreas);
-    fetchFeaturedReviews(apiBase).then(setCustomerReviews);
+    const host = window.location.host;
+    fetchActiveServiceAreas(apiBase, host).then(setServiceAreas);
+    fetchFeaturedReviews(apiBase, host).then(setCustomerReviews);
   }, []);
 
   // Render marketing content during the auth check so crawlers and first paint

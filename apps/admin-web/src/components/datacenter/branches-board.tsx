@@ -8,6 +8,7 @@ import { ShopPricingPanel } from './shop-pricing-panel';
 import { adminFetch, adminUpload } from '../../lib/admin-api';
 import { formatPeso } from '../../lib/format-peso';
 import { useAdminQuery } from '../../lib/use-admin-query';
+import { TILE_TONES, type StatusPillCopy } from './tile-tones';
 
 interface BranchTreeNode {
   id: string;
@@ -85,15 +86,6 @@ interface BranchProfile {
 
 type NetworkState = 'nominal' | 'attention';
 
-const TILE_TONES = {
-  primary: 'bg-primary/[0.04] ring-primary/15',
-  accent: 'bg-accent/[0.04] ring-accent/20',
-  secondary: 'bg-secondary/[0.04] ring-secondary/15',
-  amber: 'bg-amber-500/[0.04] ring-amber-500/20',
-  violet: 'bg-violet-500/[0.04] ring-violet-500/20',
-  rose: 'bg-rose-500/[0.04] ring-rose-500/20',
-} as const;
-
 const TILE_CHIPS: Record<keyof typeof TILE_TONES, string> = {
   primary: 'bg-primary/10 text-primary',
   accent: 'bg-accent/10 text-accent',
@@ -161,10 +153,7 @@ function CapacityBar({ percent }: { percent: number }) {
   );
 }
 
-const networkCopy: Record<
-  NetworkState,
-  { label: string; detail: string; dot: string; bar: string }
-> = {
+const networkCopy: StatusPillCopy<NetworkState> = {
   nominal: {
     label: 'Network nominal',
     detail: 'All registered locations are operational.',

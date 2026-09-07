@@ -46,6 +46,7 @@ export default function RefundDetailScreen() {
   }, [apiFetch, id]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional fetch/update-on-mount, not a synchronous render loop
     load();
   }, [load]);
 

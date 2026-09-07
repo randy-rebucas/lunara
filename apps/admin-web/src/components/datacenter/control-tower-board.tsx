@@ -13,6 +13,7 @@ import { formatPeso } from '../../lib/format-peso';
 import { isAdminRealtimeConnected } from '../../lib/admin-realtime';
 import { useAdminQuery } from '../../lib/use-admin-query';
 import { useAdminOperationsSocket } from '../../lib/use-admin-operations-socket';
+import { type StatusPillCopy } from './tile-tones';
 
 const MAP_POLL_INTERVAL_MS = 15_000;
 
@@ -94,7 +95,7 @@ function deriveOpsState(counts: ControlTowerData['counts']): OpsState {
   return 'nominal';
 }
 
-const opsCopy: Record<OpsState, { label: string; detail: string; dot: string; bar: string }> = {
+const opsCopy: StatusPillCopy<OpsState> = {
   nominal: {
     label: 'Logistics nominal',
     detail: 'No SLA breaches or flagged conflicts in the watchlist.',
