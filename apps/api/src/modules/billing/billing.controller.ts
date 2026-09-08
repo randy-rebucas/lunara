@@ -4,9 +4,11 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { SubscriptionService } from './subscription.service';
+import { PlanService } from './plan.service';
 import { BillingPromotionService } from './billing-promotion.service';
 import { AttachPaymentMethodDto } from './dto/attach-payment-method.dto';
 import { RedeemPromotionDto } from './dto/redeem-promotion.dto';
+import { ChangePlanDto } from './dto/change-plan.dto';
 
 @Controller('partner/billing')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -14,8 +16,19 @@ import { RedeemPromotionDto } from './dto/redeem-promotion.dto';
 export class BillingController {
   constructor(
     private readonly subscriptionService: SubscriptionService,
+    private readonly planService: PlanService,
     private readonly promotionService: BillingPromotionService,
   ) {}
+
+  @Get('plans')
+  async listPlans() {
+    return { success: true, data: await this.planService.list(false) };
+  }
+
+  @Post('plan-change')
+  async changePlan(@Req() req: { user: { sub: string } }, @Body() dto: ChangePlanDto) {
+    return { success: true, data: await this.subscriptionService.requestPlanChange(req.user.sub, dto.planId) };
+  }
 
   @Get('payment-method')
   async getPaymentMethod(@Req() req: { user: { sub: string } }) {

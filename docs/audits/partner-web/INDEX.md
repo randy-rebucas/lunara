@@ -29,3 +29,4 @@ One row per module audited with the `audit-module` skill. Findings counts are
 | Shelf lookup | [shelf-lookup.md](shelf-lookup.md) | 2026-08-31 (rebuilt feature, re-audited) | 0 / 1 |
 | Shop settings | [settings.md](settings.md) | 2026-07-23 | 1 / 2 |
 | Staff team | [staff.md](staff.md) | 2026-07-23 | 0 / 0 |
+| Subscription (Plan tab) | [subscription.md](subscription.md) | 2026-09-08 (new) | 3 / 0 |

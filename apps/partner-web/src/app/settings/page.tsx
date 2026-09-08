@@ -12,9 +12,11 @@ import { PageHeader } from '../../components/ui/page-header';
 import { useProtectedPage } from '../../hooks/use-protected-page';
 import {
   attachPaymentMethod,
+  changeSubscriptionPlan,
   createPaymongoCardPaymentMethod,
   getPaymentMethod,
   isPartnerRole,
+  listBillingPlans,
   partnerFetch,
   redeemPromoCode,
   removePaymentMethod,
@@ -26,6 +28,7 @@ import type {
   BranchHoliday,
   DayOperatingHours,
   OperatingHours,
+  PartnerPlanOption,
   PartnerPortalSettings,
   PartnerSettingsData,
   PartnerSubscriptionInfo,
@@ -311,6 +314,133 @@ function PromoCodePanel({
           </div>
           {error && <p className="mt-1.5 text-xs text-destructive">{error}</p>}
         </>
+      )}
+    </div>
+  );
+}
+
+// ── Change plan ──────────────────────────────────────────────────────────────
+function ChangePlanPanel({
+  canEdit,
+  subscription,
+  onChanged,
+}: {
+  canEdit: boolean;
+  subscription: PartnerSubscriptionInfo;
+  onChanged: () => void;
+}) {
+  const [plans, setPlans] = useState<PartnerPlanOption[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedPlanId, setSelectedPlanId] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await listBillingPlans();
+        if (!cancelled) setPlans(data);
+      } catch {
+        if (!cancelled) setPlans([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!canEdit) return null;
+
+  const selectedPlan = plans?.find((p) => p.id === selectedPlanId);
+  const isBrandedUpgrade = selectedPlan && selectedPlan.features?.customBranding && !subscription.hasBrandedApp;
+  const isBlockedDowngrade =
+    selectedPlan && subscription.hasBrandedApp && !selectedPlan.features?.customBranding;
+
+  async function handleChangePlan() {
+    if (!selectedPlanId) return;
+    setSaving(true);
+    setError('');
+    try {
+      const result = await changeSubscriptionPlan(selectedPlanId);
+      toast.success(
+        result.appliedImmediately
+          ? 'Plan updated — your new plan is active now.'
+          : 'Plan change scheduled for your next renewal date.',
+      );
+      setSelectedPlanId('');
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to change plan');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="border-t border-border/60 px-6 py-4 sm:px-8">
+      <p className="text-sm font-medium text-slate-900">Change plan</p>
+      <p className="mt-0.5 text-xs text-muted">
+        Switching to a branded app plan charges the one-time territory reservation fee
+        immediately and applies right away. Other tier changes take effect on your next
+        renewal date.
+      </p>
+
+      {subscription.scheduledPlanName && (
+        <p className="mt-2 rounded-lg bg-primary/5 px-3 py-2 text-xs text-primary ring-1 ring-primary/20">
+          Scheduled: switching to {subscription.scheduledPlanName} on{' '}
+          {formatSubscriptionDate(subscription.scheduledPlanEffectiveAt)}.
+        </p>
+      )}
+
+      {loading ? (
+        <p className="mt-3 text-sm text-muted">Loading plans…</p>
+      ) : !plans || plans.length === 0 ? (
+        <p className="mt-3 text-sm text-muted">No plans available right now.</p>
+      ) : (
+        <div className="mt-3 space-y-2.5">
+          <select
+            value={selectedPlanId}
+            onChange={(e) => setSelectedPlanId(e.target.value)}
+            className="input-field w-full max-w-[320px]"
+          >
+            <option value="">Select a plan…</option>
+            {plans
+              .filter((p) => p.id !== subscription.planId)
+              .map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} — ₱{p.monthlyPrice.toLocaleString('en-PH')}/mo
+                  {p.upgradeFee > 0 ? ` + ₱${p.upgradeFee.toLocaleString('en-PH')} one-time` : ''}
+                </option>
+              ))}
+          </select>
+
+          {isBrandedUpgrade && (
+            <p className="text-xs text-muted">
+              This charges ₱{selectedPlan!.upgradeFee.toLocaleString('en-PH')} to your saved card
+              immediately as a territory reservation fee, then switches your plan right away. Add
+              a payment method above first if you haven&apos;t already.
+            </p>
+          )}
+          {isBlockedDowngrade && (
+            <p className="text-xs text-destructive">
+              Downgrading away from a branded app plan releases your reserved territory — this
+              needs admin approval. Please contact support instead.
+            </p>
+          )}
+          {error && <p className="text-xs text-destructive">{error}</p>}
+
+          <button
+            type="button"
+            disabled={!selectedPlanId || saving || Boolean(isBlockedDowngrade)}
+            className="btn-primary btn-sm disabled:opacity-50"
+            onClick={() => void handleChangePlan()}
+          >
+            {saving ? 'Updating…' : 'Change plan'}
+          </button>
+        </div>
       )}
     </div>
   );
@@ -1019,13 +1149,20 @@ function PartnerSettingsContent() {
             {activeTab === 'plan' && (
               <SectionPanel
                 title="Subscription plan"
-                description="Your platform plan and billing status with Lunara. Contact support to change plans."
+                description="Your platform plan and billing status with Lunara."
               >
                 {subscriptionLoading ? (
                   <p className="px-6 py-4 text-sm text-muted sm:px-8">Loading plan details…</p>
                 ) : subscription ? (
                   <dl className="px-6 py-2 sm:px-8">
-                    <DetailRow label="Plan" value={SUBSCRIPTION_PLAN_LABELS[subscription.subscriptionPlan]} />
+                    <DetailRow
+                      label="Plan"
+                      value={
+                        subscription.planName ??
+                        SUBSCRIPTION_PLAN_LABELS[subscription.subscriptionPlan as keyof typeof SUBSCRIPTION_PLAN_LABELS] ??
+                        subscription.subscriptionPlan
+                      }
+                    />
                     <DetailRow
                       label="Price / month"
                       value={
@@ -1067,6 +1204,13 @@ function PartnerSettingsContent() {
                     activeCode={subscription.promotionCode}
                     freeMonthsRemaining={subscription.promotionFreeMonthsRemaining}
                     onRedeemed={() => void reloadSubscription()}
+                  />
+                )}
+                {subscription && (
+                  <ChangePlanPanel
+                    canEdit={canEdit}
+                    subscription={subscription}
+                    onChanged={() => void reloadSubscription()}
                   />
                 )}
               </SectionPanel>

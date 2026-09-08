@@ -125,6 +125,15 @@ export class BillingSubscription {
   @Prop()
   promotionFreeMonthsRemaining?: number;
 
+  /** Partner-initiated tier change awaiting the next renewal — see
+   * SubscriptionService.requestPlanChange/advancePeriod. Not used for branding upgrades,
+   * which apply immediately once the territory fee is charged. */
+  @Prop({ type: Types.ObjectId })
+  scheduledPlanId?: Types.ObjectId;
+
+  @Prop()
+  scheduledPlanEffectiveAt?: Date;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

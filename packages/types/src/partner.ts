@@ -91,8 +91,17 @@ export interface PartnerSettingsData {
 }
 
 export interface PartnerSubscriptionInfo {
-  subscriptionPlan: 'trial' | 'basic' | 'starter' | 'professional';
+  /** Kept as a union of the original four keys for back-compat with existing callers, but any
+   * plan key an admin creates via the Plans admin UI can appear here too — treat as `string`
+   * when rendering a label, don't assume it's one of these four. */
+  subscriptionPlan: 'trial' | 'basic' | 'starter' | 'professional' | (string & {});
+  /** Plan id/name, so the frontend can render an arbitrary plan without a hardcoded label map. */
+  planId?: string;
+  planName?: string;
   planPrice: number;
+  /** True when the current plan has the customBranding feature — gates whether a self-serve
+   * downgrade to a non-branded plan is allowed (see BillingController.changePlan). */
+  hasBrandedApp?: boolean;
   planRenewsAt?: string;
   trialEndsAt?: string;
   /** True once a card is saved for auto-charge — see billing.Subscription.paymentMethodOnFile. */
@@ -103,6 +112,22 @@ export interface PartnerSubscriptionInfo {
   promotionCode?: string;
   /** Only set for a 'free_months' promo — remaining billing cycles at ₱0 before it reverts to full price. */
   promotionFreeMonthsRemaining?: number;
+  /** Set when a tier change was requested and is waiting for the next renewal — see
+   * SubscriptionService.requestPlanChange. */
+  scheduledPlanId?: string;
+  scheduledPlanName?: string;
+  scheduledPlanEffectiveAt?: string;
+}
+
+export interface PartnerPlanOption {
+  id: string;
+  key: string;
+  name: string;
+  monthlyPrice: number;
+  /** One-time fee charged immediately on self-serve upgrade into this plan (e.g. a branded-app
+   * plan's territory reservation fee). 0 when there's none. */
+  upgradeFee: number;
+  features: Record<string, boolean>;
 }
 
 export interface PartnerDashboardShop {

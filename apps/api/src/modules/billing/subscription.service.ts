@@ -1,10 +1,11 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { BillingSubscription, SubscriptionDocument, SubscriptionStatus, SUBSCRIPTION_STATUSES } from './schemas/subscription.schema';
 import { PlanService } from './plan.service';
 import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 import { PaymongoService } from '../payments/paymongo.service';
+import { LedgerService } from '../ledger/ledger.service';
 
 export interface AutoChargeResult {
   success: boolean;
@@ -20,6 +21,7 @@ export class SubscriptionService {
     @InjectModel(BillingSubscription.name) private subscriptionModel: Model<SubscriptionDocument>,
     private planService: PlanService,
     private paymongoService: PaymongoService,
+    private ledgerService: LedgerService,
   ) {}
 
   async findByPartnerId(partnerId: string) {
@@ -98,6 +100,83 @@ export class SubscriptionService {
     return subscription;
   }
 
+  /** Partner self-service plan change. A branding upgrade (target plan has
+   * features.customBranding and the current plan doesn't) charges the plan's one-time
+   * upgradeFee immediately via the partner's saved card and applies right away — mirrors the
+   * territory reservation partners pay at signup. Any other change (a tier switch between two
+   * non-branded plans, or between two branded plans) is scheduled for the next renewal instead
+   * of applying mid-cycle, so the current period's price stays what the partner already agreed
+   * to pay for it. Downgrading away from a branded plan is blocked entirely — releasing a
+   * reserved territory needs admin sign-off, not a self-serve click. */
+  async requestPlanChange(partnerId: string, planId: string) {
+    const subscription = await this.findByPartnerId(partnerId);
+    if (!subscription) throw new NotFoundException('Subscription not found for this partner');
+
+    const targetPlan = await this.planService.findById(planId);
+    if (!targetPlan || !targetPlan.isActive) throw new NotFoundException('Plan not found');
+    if (subscription.planId.toString() === targetPlan._id.toString()) {
+      throw new BadRequestException('You are already on this plan');
+    }
+
+    const currentPlan = await this.planService.findById(subscription.planId);
+    const currentIsBranded = currentPlan?.features?.customBranding === true;
+    const targetIsBranded = targetPlan.features?.customBranding === true;
+
+    if (currentIsBranded && !targetIsBranded) {
+      throw new ForbiddenException(
+        'Downgrading away from a branded app plan releases your reserved territory — please contact support to switch back to the default Lunara app.',
+      );
+    }
+
+    if (targetIsBranded && !currentIsBranded) {
+      if (targetPlan.upgradeFee > 0) {
+        if (!subscription.paymentMethodOnFile || !subscription.paymongoPaymentMethodId) {
+          throw new BadRequestException(
+            'Add a payment method first — the one-time territory reservation fee is charged immediately when you upgrade to a branded app plan.',
+          );
+        }
+        const charge = await this.attemptAutoCharge(
+          subscription,
+          targetPlan.upgradeFee,
+          `${targetPlan.name} plan upgrade — territory reservation fee`,
+        );
+        if (!charge.success) {
+          throw new BadRequestException(`Territory reservation fee could not be charged: ${charge.failureReason}`);
+        }
+        await this.ledgerService.post(
+          `plan_upgrade_fee:${(subscription._id as Types.ObjectId).toString()}:${Date.now()}`,
+          'plan_upgrade_fee',
+          (subscription._id as Types.ObjectId).toString(),
+          [
+            {
+              accountType: 'platform_cash',
+              direction: 'debit',
+              amount: targetPlan.upgradeFee,
+              description: `Territory reservation fee collected from partner ${partnerId} for ${targetPlan.name} plan upgrade`,
+            },
+            {
+              accountType: 'platform_revenue',
+              direction: 'credit',
+              amount: targetPlan.upgradeFee,
+              description: `Territory reservation fee revenue — partner ${partnerId}, ${targetPlan.name} plan`,
+            },
+          ],
+        );
+      }
+      subscription.planId = targetPlan._id as Types.ObjectId;
+      subscription.priceSnapshot = targetPlan.monthlyPrice;
+      subscription.scheduledPlanId = undefined;
+      subscription.scheduledPlanEffectiveAt = undefined;
+      await subscription.save();
+      return { subscription, appliedImmediately: true as const };
+    }
+
+    subscription.scheduledPlanId = targetPlan._id as Types.ObjectId;
+    subscription.scheduledPlanEffectiveAt = subscription.currentPeriodEnd;
+    await subscription.save();
+    return { subscription, appliedImmediately: false as const, effectiveAt: subscription.currentPeriodEnd };
+  }
+
   /** Advances the billing period by one month and flips trialing -> active once a fee has
    * actually been charged. Mirrors the previous `planRenewsAt += 1 month` mutation that used
    * to happen directly on User in PartnerOperationsService.createInvoice. */
@@ -109,6 +188,18 @@ export class SubscriptionService {
     subscription.currentPeriodStart = subscription.currentPeriodEnd;
     subscription.currentPeriodEnd = next;
     if (subscription.status === 'trialing') subscription.status = 'active';
+
+    // A tier change requested mid-cycle via requestPlanChange takes effect on the renewal it
+    // was scheduled for — apply it now that the period it was waiting on has actually turned over.
+    if (subscription.scheduledPlanId) {
+      const scheduledPlan = await this.planService.findById(subscription.scheduledPlanId);
+      if (scheduledPlan) {
+        subscription.planId = scheduledPlan._id as Types.ObjectId;
+        subscription.priceSnapshot = scheduledPlan.monthlyPrice;
+      }
+      subscription.scheduledPlanId = undefined;
+      subscription.scheduledPlanEffectiveAt = undefined;
+    }
 
     // A free-months promo covered this cycle's fee — count it down, clearing the promo once
     // exhausted so the next cycle bills at full price with no separate expiry job.

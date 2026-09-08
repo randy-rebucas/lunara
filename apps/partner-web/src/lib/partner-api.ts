@@ -3,6 +3,7 @@ import type {
   PartnerBrandConfig,
   PartnerOwnedRider,
   PartnerOwnProfile,
+  PartnerPlanOption,
   PortalRole,
   PortalUser,
 } from '@lunara/types';
@@ -365,6 +366,19 @@ export async function redeemPromoCode(code: string): Promise<void> {
   await partnerFetch('/partner/billing/promotion', {
     method: 'POST',
     body: JSON.stringify({ code }),
+  });
+}
+
+export async function listBillingPlans(): Promise<PartnerPlanOption[]> {
+  return partnerFetch<PartnerPlanOption[]>('/partner/billing/plans');
+}
+
+export async function changeSubscriptionPlan(
+  planId: string,
+): Promise<{ appliedImmediately: boolean; effectiveAt?: string }> {
+  return partnerFetch('/partner/billing/plan-change', {
+    method: 'POST',
+    body: JSON.stringify({ planId }),
   });
 }
 

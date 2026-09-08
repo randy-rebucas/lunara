@@ -37,6 +37,13 @@ export class Plan {
   @Prop({ type: [Object], default: [] })
   addOns!: { key: string; name: string; price: number }[];
 
+  /** One-time fee charged when a partner self-serve upgrades into this plan, in addition to
+   * the recurring monthlyPrice — e.g. the branded-app plan's territory reservation fee. 0 for
+   * plans with no upgrade fee. Only ever charged once, on the upgrade itself (see
+   * SubscriptionService.requestPlanChange), never repeated on renewal. */
+  @Prop({ default: 0 })
+  upgradeFee!: number;
+
   @Prop({ default: true })
   isActive!: boolean;
 

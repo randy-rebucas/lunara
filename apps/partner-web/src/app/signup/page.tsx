@@ -17,10 +17,15 @@ const PHONE_ICON =
   'M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z';
 const CHECK_ICON = 'M4.5 12.75l6 6 9-13.5';
 
+const CUSTOMER_APP_URL = 'https://lunara-customer-web.vercel.app/';
+const CUSTOMER_APP_QR_SRC = '/images/lunara_qr.png';
+const RIDER_APP_QR_SRC = '/images/lunara_rider_qr_code.png';
+
 const STEPS = [
   { label: 'Business', description: 'Shop and owner details' },
   { label: 'Branding', description: 'Your own app, or ours' },
   { label: 'Agreement', description: 'Pricing and terms' },
+  { label: 'Commitments', description: 'What we ask in return' },
   { label: 'Contact', description: 'Where we reach you' },
 ] as const;
 
@@ -31,6 +36,66 @@ const RESERVATION_FEE_POINTS = [
   'Is non-transferable',
   'Does not constitute a franchise fee',
   'Does not grant ownership of the Lunara brand',
+];
+
+const PARTNER_COMMITMENTS = [
+  {
+    title: 'Maintain Active Participation',
+    points: [
+      'Keep services active on the platform',
+      'Accept customer bookings whenever operationally feasible',
+      'Update order statuses accurately',
+      'Maintain current business information',
+    ],
+  },
+  {
+    title: 'Promote Platform Adoption',
+    intro: 'The Partner agrees to make reasonable efforts to:',
+    points: [
+      'Encourage customers to use the Lunara App',
+      'Display Lunara promotional materials',
+      'Participate in launch activities and campaigns',
+    ],
+  },
+  {
+    title: 'Provide Feedback',
+    intro: 'The Founding Partner agrees to provide operational feedback that may assist in improving:',
+    points: ['Customer experience', 'Rider operations', 'Partner dashboard features', 'Overall platform performance'],
+  },
+];
+
+const TERRITORIAL_PARTNER_RESPONSIBILITIES = [
+  {
+    title: 'Business Development',
+    points: [
+      'Promote Lunara within the assigned territory.',
+      'Recruit new laundry partners.',
+      'Introduce Lunara to local business owners.',
+      'Participate in business events and networking activities.',
+    ],
+  },
+  {
+    title: 'Partner Support',
+    points: [
+      'Assist new partners during onboarding.',
+      'Coordinate training sessions.',
+      'Help partners understand the Lunara platform.',
+      'Assist in resolving operational concerns.',
+    ],
+  },
+  {
+    title: 'Marketing',
+    points: [
+      'Distribute Lunara promotional materials.',
+      'Conduct local marketing campaigns.',
+      'Promote customer downloads of the Lunara App.',
+    ],
+  },
+  {
+    title: 'Relationship Management',
+    intro: 'Maintain professional relationships with:',
+    points: ['Laundry owners', 'Riders', 'Customers', 'Local organizations', 'Business associations'],
+  },
 ];
 
 const BENEFITS = [
@@ -56,8 +121,8 @@ const emptyAddress: SignupAddressValue = {
   city: '',
   province: '',
   postalCode: '',
-  latitude: 14.5995,
-  longitude: 120.9842,
+  latitude: 0,
+  longitude: 0,
 };
 
 function StepTracker({ step }: { step: number }) {
@@ -108,6 +173,7 @@ export default function PartnerSignupPage() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [agreedToCommitments, setAgreedToCommitments] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
@@ -124,7 +190,8 @@ export default function PartnerSignupPage() {
       businessName.trim().length >= 2 &&
       address.line1.trim() &&
       address.city.trim() &&
-      address.province.trim()
+      address.province.trim() &&
+      (address.latitude !== 0 || address.longitude !== 0)
     );
   }
 
@@ -134,6 +201,14 @@ export default function PartnerSignupPage() {
 
   function canAdvanceFromStep3() {
     return agreedToTerms;
+  }
+
+  function canAdvanceFromStep4() {
+    return agreedToCommitments;
+  }
+
+  function canSubmitStep5() {
+    return email.trim().length > 0 && phone.trim().length > 0;
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -192,9 +267,9 @@ export default function PartnerSignupPage() {
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen">
       <div
-        className="relative hidden w-[42%] flex-col justify-between overflow-hidden bg-[#04142e] bg-cover bg-center px-12 py-12 text-white lg:flex"
+        className="relative hidden w-[42%] flex-col justify-between overflow-y-auto bg-[#04142e] bg-cover bg-center px-12 py-12 text-white lg:flex"
         style={{ backgroundImage: "url('/images/background.png')" }}
       >
         <div
@@ -259,7 +334,7 @@ export default function PartnerSignupPage() {
         </p>
       </div>
 
-      <div className="relative flex w-full flex-1 items-center justify-center overflow-hidden bg-surface px-6 py-12 sm:px-12">
+      <div className="relative flex min-h-0 w-full flex-1 items-start justify-center overflow-y-auto bg-surface px-6 py-12 sm:px-12">
         <BubbleField bubbles={LIGHT_PANEL_BUBBLES} className="login-bubble-light" />
 
         <div className="relative w-full max-w-2xl">
@@ -575,6 +650,92 @@ export default function PartnerSignupPage() {
 
             {step === 3 && (
               <div>
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900">Partner commitments</h1>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  In exchange for the promotional benefits, the Founding Partner agrees to:
+                </p>
+
+                <div className="mt-8 space-y-4">
+                  {PARTNER_COMMITMENTS.map((section, i) => (
+                    <div key={section.title} className="card card-body">
+                      <p className="text-sm font-semibold text-slate-900">
+                        {i + 1}. {section.title}
+                      </p>
+                      {section.intro && (
+                        <p className="mt-1 text-xs text-muted-foreground">{section.intro}</p>
+                      )}
+                      <ul className="mt-2 space-y-1.5">
+                        {section.points.map((point) => (
+                          <li key={point} className="flex items-start gap-2 text-xs text-muted-foreground">
+                            <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-muted-foreground" />
+                            <span>{point}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+
+                {wantsBranding && (
+                  <div className="mt-8">
+                    <h2 className="text-lg font-bold tracking-tight text-slate-900">
+                      Responsibilities of the Territorial Partner
+                    </h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Since you&apos;re reserving a territory, the Territorial Partner also agrees to:
+                    </p>
+                    <div className="mt-4 space-y-4">
+                      {TERRITORIAL_PARTNER_RESPONSIBILITIES.map((section) => (
+                        <div key={section.title} className="card card-body">
+                          <p className="text-sm font-semibold text-slate-900">{section.title}</p>
+                          {section.intro && (
+                            <p className="mt-1 text-xs text-muted-foreground">{section.intro}</p>
+                          )}
+                          <ul className="mt-2 space-y-1.5">
+                            {section.points.map((point) => (
+                              <li key={point} className="flex items-start gap-2 text-xs text-muted-foreground">
+                                <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-muted-foreground" />
+                                <span>{point}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <label className="mt-6 flex items-start gap-3 rounded-xl bg-surface px-1 py-2">
+                  <input
+                    type="checkbox"
+                    checked={agreedToCommitments}
+                    onChange={(e) => setAgreedToCommitments(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-border/60 text-primary focus:ring-primary"
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    I understand and agree to these partner commitments
+                    {wantsBranding ? ' and territorial partner responsibilities' : ''}.
+                  </span>
+                </label>
+
+                <div className="mt-8 flex gap-3">
+                  <button type="button" onClick={() => setStep(2)} className="btn-secondary flex-1 py-3">
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!canAdvanceFromStep4()}
+                    onClick={() => setStep(4)}
+                    className="btn-primary flex-1 py-3"
+                  >
+                    Continue
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {step === 4 && (
+              <div>
                 <h1 className="text-2xl font-bold tracking-tight text-slate-900">How can we reach you?</h1>
                 <p className="mt-2 text-sm text-muted-foreground">
                   We&apos;ll send your temporary password here.
@@ -630,6 +791,45 @@ export default function PartnerSignupPage() {
                   </div>
                 </div>
 
+                <div className="card card-body mt-6 flex items-center gap-4">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={CUSTOMER_APP_QR_SRC}
+                    alt="QR code to the Lunara customer app"
+                    className="h-24 w-24 shrink-0 rounded-lg ring-1 ring-border/50"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-slate-900">Get the Lunara customer app</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Scan the QR code, or share the mobile-first web app with your customers:
+                    </p>
+                    <a
+                      href={CUSTOMER_APP_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="link-primary mt-1 block truncate text-xs font-medium"
+                    >
+                      {CUSTOMER_APP_URL}
+                    </a>
+                  </div>
+                </div>
+
+                <div className="card card-body mt-4 flex items-center gap-4">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={RIDER_APP_QR_SRC}
+                    alt="QR code to the Lunara rider app"
+                    className="h-24 w-24 shrink-0 rounded-lg ring-1 ring-border/50"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-slate-900">Get the Lunara rider app</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Scan the QR code to share with riders who&apos;ll be handling your pickups and
+                      deliveries.
+                    </p>
+                  </div>
+                </div>
+
                 {error && (
                   <div className="alert-error mt-6" role="alert">
                     {error}
@@ -637,10 +837,14 @@ export default function PartnerSignupPage() {
                 )}
 
                 <div className="mt-8 flex gap-3">
-                  <button type="button" onClick={() => setStep(2)} className="btn-secondary flex-1 py-3">
+                  <button type="button" onClick={() => setStep(3)} className="btn-secondary flex-1 py-3">
                     Back
                   </button>
-                  <button type="submit" disabled={submitting} className="btn-primary flex-1 py-3">
+                  <button
+                    type="submit"
+                    disabled={submitting || !canSubmitStep5()}
+                    className="btn-primary flex-1 py-3"
+                  >
                     {submitting ? 'Creating your account…' : 'Create account'}
                   </button>
                 </div>

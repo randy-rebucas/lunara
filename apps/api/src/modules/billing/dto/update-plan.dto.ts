@@ -31,4 +31,9 @@ export class UpdatePlanDto {
   @IsOptional()
   @IsInt()
   sortOrder?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  upgradeFee?: number;
 }

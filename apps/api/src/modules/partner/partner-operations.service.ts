@@ -1843,7 +1843,6 @@ export class PartnerOperationsService {
    * model, so this maps the new Plan/Subscription records onto that same shape rather than
    * introducing a parallel endpoint. */
   async getSubscriptionInfo(partnerId: string) {
-    const KNOWN_PLAN_KEYS = ['trial', 'basic', 'starter', 'professional'] as const;
     const subscription = await this.subscriptionService.findByPartnerId(partnerId);
     if (!subscription) {
       return {
@@ -1851,6 +1850,7 @@ export class PartnerOperationsService {
         data: {
           subscriptionPlan: 'trial' as const,
           planPrice: 0,
+          hasBrandedApp: false,
           planRenewsAt: undefined,
           trialEndsAt: undefined,
           paymentMethodOnFile: false,
@@ -1862,13 +1862,17 @@ export class PartnerOperationsService {
       };
     }
     const plan = await this.planService.findById(subscription.planId);
-    const planKey = (plan && (KNOWN_PLAN_KEYS as readonly string[]).includes(plan.key) ? plan.key : 'trial') as
-      (typeof KNOWN_PLAN_KEYS)[number];
+    const scheduledPlan = subscription.scheduledPlanId
+      ? await this.planService.findById(subscription.scheduledPlanId)
+      : null;
     return {
       success: true,
       data: {
-        subscriptionPlan: planKey,
+        subscriptionPlan: plan?.key ?? 'trial',
+        planId: plan?._id?.toString(),
+        planName: plan?.name,
         planPrice: subscription.priceSnapshot ?? 0,
+        hasBrandedApp: plan?.features?.customBranding === true,
         planRenewsAt: subscription.status === 'trialing' ? undefined : subscription.currentPeriodEnd,
         trialEndsAt: subscription.trialEndsAt,
         paymentMethodOnFile: subscription.paymentMethodOnFile,
@@ -1876,6 +1880,9 @@ export class PartnerOperationsService {
         cardLast4: subscription.cardLast4,
         promotionCode: subscription.promotionCode,
         promotionFreeMonthsRemaining: subscription.promotionFreeMonthsRemaining,
+        scheduledPlanId: subscription.scheduledPlanId?.toString(),
+        scheduledPlanName: scheduledPlan?.name,
+        scheduledPlanEffectiveAt: subscription.scheduledPlanEffectiveAt,
       },
     };
   }

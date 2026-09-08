@@ -58,7 +58,10 @@ function PlaceAutocompleteInput({ onPlaceSelected }: { onPlaceSelected: (place: 
     if (!placesLib || !containerRef.current) return;
     const container = containerRef.current;
 
-    const element = new placesLib.PlaceAutocompleteElement({ includedRegionCodes: ['ph'] });
+    const element = new placesLib.PlaceAutocompleteElement({
+      includedRegionCodes: ['ph'],
+      includedPrimaryTypes: ['geocode'],
+    });
     element.classList.add('w-full');
     container.innerHTML = '';
     container.appendChild(element);
@@ -87,21 +90,26 @@ function PlaceAutocompleteInput({ onPlaceSelected }: { onPlaceSelected: (place: 
   );
 }
 
+// Manila — used only to center the map before the partner has picked a location; never stored.
+const PH_DEFAULT_CENTER = { lat: 14.5995, lng: 120.9842 };
+
 function MapPicker({
   value,
+  hasPin,
   recenterToken,
   onPositionChange,
 }: {
   value: SignupAddressValue;
+  hasPin: boolean;
   recenterToken: string;
   onPositionChange: (lat: number, lng: number) => void;
 }) {
-  const position = { lat: value.latitude, lng: value.longitude };
+  const position = hasPin ? { lat: value.latitude, lng: value.longitude } : PH_DEFAULT_CENTER;
   return (
     <Map
       key={recenterToken}
       defaultCenter={position}
-      defaultZoom={15}
+      defaultZoom={hasPin ? 15 : 11}
       gestureHandling="greedy"
       disableDefaultUI={false}
       style={{ width: '100%', height: '100%', borderRadius: '0.5rem' }}
@@ -109,14 +117,16 @@ function MapPicker({
         if (e.detail.latLng) onPositionChange(e.detail.latLng.lat, e.detail.latLng.lng);
       }}
     >
-      <Marker
-        position={position}
-        draggable
-        onDragEnd={(e) => {
-          const pos = e.latLng;
-          if (pos) onPositionChange(pos.lat(), pos.lng());
-        }}
-      />
+      {hasPin && (
+        <Marker
+          position={position}
+          draggable
+          onDragEnd={(e) => {
+            const pos = e.latLng;
+            if (pos) onPositionChange(pos.lat(), pos.lng());
+          }}
+        />
+      )}
     </Map>
   );
 }
@@ -141,18 +151,19 @@ export function SignupAddressEditor({ value, onChange }: SignupAddressEditorProp
               }}
             />
             <p className="mt-1 text-xs text-muted">
-              Search to auto-fill the fields below, or drag the pin / click the map to fine-tune.
+              {hasPin
+                ? 'Search to auto-fill the fields below, or drag the pin / click the map to fine-tune.'
+                : 'Search above, or click the map below to drop a pin — required so we know exactly where to route orders.'}
             </p>
           </div>
-          {hasPin && (
-            <div className="h-48">
-              <MapPicker
-                value={value}
-                recenterToken={String(recenterToken)}
-                onPositionChange={(latitude, longitude) => onChange({ ...value, latitude, longitude })}
-              />
-            </div>
-          )}
+          <div className="h-48">
+            <MapPicker
+              value={value}
+              hasPin={hasPin}
+              recenterToken={String(recenterToken)}
+              onPositionChange={(latitude, longitude) => onChange({ ...value, latitude, longitude })}
+            />
+          </div>
         </APIProvider>
       ) : (
         <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
