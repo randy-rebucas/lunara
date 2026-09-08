@@ -310,11 +310,51 @@ eas build --platform ios --profile production
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
 | Build fails: "API not found" | Missing `EXPO_PUBLIC_API_URL` in EAS secrets | Run `eas secret:create --name EXPO_PUBLIC_API_URL ...` |
-| "Cannot connect to API" on app | Wrong `EXPO_PUBLIC_API_URL` | Verify URL is public (not `localhost`); update secret and rebuild |
+| "Cannot connect to API" on app (production build) | Wrong `EXPO_PUBLIC_API_URL` | Verify URL is public (not `localhost`); update secret and rebuild |
+| "Cannot reach API at http://192.168.x.x:3001" in dev | See [Dev-time "Cannot reach API"](#dev-time-cannot-reach-api) below | LAN reachability issue, or (post-SDK-57) a fetch-level crash misreported as unreachable |
 | Push notifications not working | Firebase not configured | Set `FIREBASE_*` on API (Render) |
 | App crashes on launch | Dependency issue | Check EAS build logs for errors; rebuild with `--no-cache` |
 | "Submit failed" | Service account key issue (Android) | Regenerate key at Google Cloud Console; retry submit |
 | WebSocket fails on device | API doesn't support WSS | Use `https://` (not `http://`) in `EXPO_PUBLIC_API_URL` |
+
+### Dev-time "Cannot reach API"
+
+The dev sign-in screen shows `Cannot reach API at http://<lan-ip>:3001. Start the API (npm run dev --workspace=@lunara/api) and use the same Wi‑Fi as your phone.` whenever `fetch()` inside [`authRequest`](../apps/customer-mobile/src/lib/api-client.ts) throws for *any* reason — the message names the LAN cause, but it fires for other fetch-level failures too, and it can be misleading. Work through it in this order:
+
+1. **API not running or not on the same network.** Confirm `npm run dev --workspace=@lunara/api` is running, the phone and dev machine are on the same Wi‑Fi/LAN, and the LAN IP in the error is reachable from the phone's own browser (not just from the dev machine — a PC-side curl/browser success does **not** prove the phone can reach it).
+2. **Router/AP client isolation or a blocked port.** If Metro (port 8081) reaches the phone fine but the API port doesn't, and the phone's own browser can't load the API URL either, suspect AP/client isolation or a port-specific block on the router — check `Get-NetFirewallRule` for the API's port on the dev machine first (rule scope/profile), then the router. A quick way to sidestep this entirely during dev: tunnel the API with `ngrok http 3001` and point the app at the public URL via `EXPO_PUBLIC_API_URL=https://<id>.ngrok-free.app` in `apps/customer-mobile/.env` (local, gitignored — don't put a tunnel URL in the shared root `.env`), then restart `expo start` so the new value gets inlined into the bundle. This is a dev-only workaround, not a fix for the underlying network block.
+3. **Rule out stale state before assuming (1) or (2).** Confirm the phone can load the exact configured URL in its *own* browser, and that the app was fully force-quit and reopened after any `.env`/env-var change (`EXPO_PUBLIC_*` values are inlined into the JS bundle at Metro's transform time — a stale bundle keeps the old URL even after Metro restarts).
+4. **If the URL is provably reachable (browser succeeds, curl succeeds) but the app still fails** — this is not a network problem. `authRequest`'s `catch` around `fetch()` swallows the real error into the generic message above. Temporarily log it:
+   ```ts
+   } catch (e) {
+     console.error('[api-client] fetch failed', baseUrl + path, e);
+     throw new Error(apiUnreachableMessage(baseUrl));
+   }
+   ```
+   and reproduce. This is how a real SDK 57 regression was found in this app (see below) — the true error was a native `ArgumentCastException`, not a network failure at all.
+
+#### Root cause found post-SDK-57 upgrade: `partnerId` header crash
+
+After upgrading `customer-mobile` from Expo SDK 51 → 57, sign-in failed with the generic "Cannot reach API" message even though the API and its URL were confirmed reachable (curl and the phone's own browser both succeeded against the same URL). Logging the real error (step 4 above) surfaced:
+
+```
+Error: fetch failed: ArgumentCastException: The 2nd argument cannot be cast to type NativeRequestInit
+→ Caused by: FieldInvalidTypeException: Cannot cast '...' for field 'headers' of type Array<Array<String>>
+→ Caused by: ConversionToNativeFailedException: Conversion from JavaScript value of type 'object' to native 'String' failed
+```
+
+**Cause:** `app.config.js` computes `extra.partnerId` as `manifest?.partnerId ?? null` — correctly `null` for the default (non-white-labeled) build. But Expo SDK 57's config serialization coerces that `null` into `{}` by the time it reaches the device's runtime manifest (`Constants.expoConfig.extra.partnerId` is genuinely `{}` on device, confirmed via `npx expo config --json`). The old `getPartnerId()` used `?? null`, which doesn't catch this — `{}` is truthy, so it passed the empty object through. That object then got spread into a fetch header: `{ 'x-lunara-partner-id': {} }`. SDK 51's JS-polyfilled `fetch` silently tolerated a non-string header value; SDK 57's new native `fetch` module (via ExpoModulesCore) hard-crashes on it before the request is even sent — which is exactly why curl/browser (which never touch this header-building code) worked fine while the app never did.
+
+**Fix** ([`src/lib/api-client.ts`](../apps/customer-mobile/src/lib/api-client.ts)): require `partnerId` to actually be a non-empty string, not just truthy —
+
+```ts
+export function getPartnerId(): string | null {
+  const value = Constants.expoConfig?.extra?.partnerId;
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+```
+
+`theme/index.ts` reads the same kind of `extra.*` fields (`partnerTheme`, `partnerFontFamily`) with the same `?? null` pattern and has the same underlying `{}`-instead-of-`null` quirk, but it degrades harmlessly there (`{}.regular` is `undefined`; spreading `{}` into a theme override is a no-op) so it was left as-is. If a future SDK bump adds new `extra.*` config values, apply the same "must actually be the expected type" guard rather than trusting `??`.
 
 ---
 

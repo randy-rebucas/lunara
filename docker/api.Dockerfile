@@ -10,7 +10,7 @@ COPY packages/utils/package.json ./packages/utils/
 COPY packages/validation/package.json ./packages/validation/
 COPY apps/api/package.json ./apps/api/
 COPY tsconfig.base.json ./
-RUN npm ci --workspace=@lunara/api --include-workspace-root
+RUN npm ci --workspace=@lunara/types --workspace=@lunara/utils --workspace=@lunara/validation --workspace=@lunara/api --include-workspace-root
 
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
