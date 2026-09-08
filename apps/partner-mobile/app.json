@@ -2,7 +2,7 @@
   "expo": {
     "name": "Lunara Staff",
     "slug": "lunara-staff",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "scheme": "lunara-staff",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",

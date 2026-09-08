@@ -15,7 +15,7 @@ interface DayHours {
   closeTime?: string;
 }
 
-type SubscriptionPlan = 'trial' | 'basic' | 'starter' | 'professional';
+type SubscriptionPlan = 'trial' | 'basic' | 'starter' | 'professional' | 'default' | 'branded';
 
 interface Shop {
   _id: string;
@@ -131,6 +131,8 @@ const PLAN_LABEL: Record<SubscriptionPlan, string> = {
   basic: 'Basic',
   starter: 'Starter',
   professional: 'Professional',
+  default: 'Regular Partner',
+  branded: 'Territorial Partner',
 };
 
 const PLAN_BADGE: Record<SubscriptionPlan, string> = {
@@ -138,6 +140,8 @@ const PLAN_BADGE: Record<SubscriptionPlan, string> = {
   basic: 'badge-neutral',
   starter: 'badge-secondary',
   professional: 'badge-accent',
+  default: 'badge-neutral',
+  branded: 'badge-accent',
 };
 
 function isTrial(s: Shop) {
@@ -515,7 +519,7 @@ function PartnerDetailsDrawer({
   const [savingInfo, setSavingInfo] = useState(false);
 
   const [editingSub, setEditingSub] = useState(false);
-  const [subPlan, setSubPlan] = useState<SubscriptionPlan>('trial');
+  const [subPlan, setSubPlan] = useState<SubscriptionPlan>('default');
   const [subPrice, setSubPrice] = useState('0');
   const [subRenewsAt, setSubRenewsAt] = useState('');
   const [subTrialEndsAt, setSubTrialEndsAt] = useState('');
@@ -921,10 +925,8 @@ function PartnerDetailsDrawer({
                 <div>
                   <label htmlFor="sub-plan" className="form-label">Plan</label>
                   <select id="sub-plan" className="input-field" value={subPlan} onChange={(e) => setSubPlan(e.target.value as SubscriptionPlan)}>
-                    <option value="trial">Trial</option>
-                    <option value="basic">Basic</option>
-                    <option value="starter">Starter</option>
-                    <option value="professional">Professional</option>
+                    <option value="default">Regular Partner</option>
+                    <option value="branded">Territorial Partner</option>
                   </select>
                 </div>
                 <div>

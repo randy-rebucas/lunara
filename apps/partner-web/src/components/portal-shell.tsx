@@ -19,6 +19,8 @@ const SUBSCRIPTION_PLAN_LABELS: Record<PartnerSubscriptionInfo['subscriptionPlan
   basic: 'Basic',
   starter: 'Starter',
   professional: 'Professional',
+  default: 'Regular Partner',
+  branded: 'Territorial Partner',
 };
 
 function formatShortDate(d?: string) {
@@ -398,7 +400,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
                 className="mb-3 flex items-center justify-between rounded-lg border border-border/60 px-3 py-2 text-xs hover:bg-slate-50"
               >
                 <span className="font-medium text-slate-700">
-                  {SUBSCRIPTION_PLAN_LABELS[subscription.subscriptionPlan]} plan
+                  {SUBSCRIPTION_PLAN_LABELS[subscription.subscriptionPlan] ?? subscription.subscriptionPlan} plan
                 </span>
                 <span className="text-muted">
                   {subscription.subscriptionPlan === 'trial'

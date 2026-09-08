@@ -89,6 +89,8 @@ const SUBSCRIPTION_PLAN_LABELS: Record<PartnerSubscriptionInfo['subscriptionPlan
   basic: 'Basic',
   starter: 'Starter',
   professional: 'Professional',
+  default: 'Regular Partner',
+  branded: 'Territorial Partner',
 };
 
 const TABS: { id: Tab; label: string }[] = [
@@ -383,8 +385,8 @@ function ChangePlanPanel({
     <div className="border-t border-border/60 px-6 py-4 sm:px-8">
       <p className="text-sm font-medium text-slate-900">Change plan</p>
       <p className="mt-0.5 text-xs text-muted">
-        Switching to a branded app plan charges the one-time territory reservation fee
-        immediately and applies right away. Other tier changes take effect on your next
+        Switching to the Territorial Partner plan charges the one-time territory reservation
+        fee immediately and applies right away. Other tier changes take effect on your next
         renewal date.
       </p>
 
@@ -426,8 +428,8 @@ function ChangePlanPanel({
           )}
           {isBlockedDowngrade && (
             <p className="text-xs text-destructive">
-              Downgrading away from a branded app plan releases your reserved territory — this
-              needs admin approval. Please contact support instead.
+              Downgrading away from the Territorial Partner plan releases your reserved
+              territory — this needs admin approval. Please contact support instead.
             </p>
           )}
           {error && <p className="text-xs text-destructive">{error}</p>}

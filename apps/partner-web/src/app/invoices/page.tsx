@@ -28,6 +28,8 @@ const SUBSCRIPTION_PLAN_LABELS: Record<PartnerSubscriptionInfo['subscriptionPlan
   basic: 'Basic',
   starter: 'Starter',
   professional: 'Professional',
+  default: 'Regular Partner',
+  branded: 'Territorial Partner',
 };
 
 export default function InvoicesPage() {
@@ -202,7 +204,7 @@ export default function InvoicesPage() {
               {subscription ? (
                 <>
                   <p className="mt-1 text-sm font-semibold text-slate-900">
-                    {SUBSCRIPTION_PLAN_LABELS[subscription.subscriptionPlan]}
+                    {SUBSCRIPTION_PLAN_LABELS[subscription.subscriptionPlan] ?? subscription.subscriptionPlan}
                     {subscription.subscriptionPlan !== 'trial' ? ` · ${formatPeso(subscription.planPrice)}/mo` : ''}
                   </p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
