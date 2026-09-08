@@ -401,9 +401,13 @@ export default function PartnerSignupPage() {
                   </div>
                 )}
 
-                {wantsBranding && (
+                {wantsBranding !== null && (
                   <div className="mt-6 border-t border-border/60 pt-6">
-                    <PhonePreviewMockup logoUrl={logoPreviewUrl} businessName={businessName} />
+                    <PhonePreviewMockup
+                      logoUrl={logoPreviewUrl}
+                      businessName={businessName}
+                      variant={wantsBranding ? 'branded' : 'default'}
+                    />
                   </div>
                 )}
 
