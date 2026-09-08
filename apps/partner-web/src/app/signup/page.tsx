@@ -347,62 +347,109 @@ export default function PartnerSignupPage() {
                   Lunara look.
                 </p>
 
-                <div className="mt-8 grid items-start gap-x-8 gap-y-2 sm:grid-cols-[minmax(0,220px)_1fr]">
-                  <div className="pt-2.5">
-                    <label className="text-sm font-medium text-slate-900">App branding</label>
-                    <p className="mt-0.5 text-xs text-muted-foreground">You can change this later</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setWantsBranding(true)}
-                      aria-pressed={wantsBranding === true}
-                      className={`rounded-lg border px-4 py-3 text-left text-sm font-medium transition-colors ${
-                        wantsBranding === true
-                          ? 'border-primary bg-primary/5 text-primary'
-                          : 'border-border text-muted-foreground hover:border-primary/40'
+                <div className="mt-8 grid gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => setWantsBranding(true)}
+                    aria-pressed={wantsBranding === true}
+                    className={`relative flex items-start gap-3 rounded-xl px-4 py-4 text-left shadow-[var(--shadow-card)] ring-1 transition-all ${
+                      wantsBranding === true
+                        ? 'bg-primary/5 ring-2 ring-primary'
+                        : 'bg-surface ring-border/50 hover:ring-primary/30'
+                    }`}
+                  >
+                    <span
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
+                        wantsBranding === true ? 'bg-primary text-white' : 'bg-primary/10 text-primary'
                       }`}
                     >
-                      Yes, brand my app
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setWantsBranding(false);
-                        handleLogoChange(null);
-                      }}
-                      aria-pressed={wantsBranding === false}
-                      className={`rounded-lg border px-4 py-3 text-left text-sm font-medium transition-colors ${
-                        wantsBranding === false
-                          ? 'border-primary bg-primary/5 text-primary'
-                          : 'border-border text-muted-foreground hover:border-primary/40'
+                      <Icon d={ICONS.tag} className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-900">Yes, brand my app</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">Your logo, your colors</p>
+                    </div>
+                    {wantsBranding === true && (
+                      <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-white">
+                        <Icon d={CHECK_ICON} className="h-3 w-3" />
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWantsBranding(false);
+                      handleLogoChange(null);
+                    }}
+                    aria-pressed={wantsBranding === false}
+                    className={`relative flex items-start gap-3 rounded-xl px-4 py-4 text-left shadow-[var(--shadow-card)] ring-1 transition-all ${
+                      wantsBranding === false
+                        ? 'bg-primary/5 ring-2 ring-primary'
+                        : 'bg-surface ring-border/50 hover:ring-primary/30'
+                    }`}
+                  >
+                    <span
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
+                        wantsBranding === false ? 'bg-primary text-white' : 'bg-primary/10 text-primary'
                       }`}
                     >
-                      No, use default Lunara
-                    </button>
-                  </div>
+                      <Icon d={ICONS.box} className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-900">No, use default Lunara</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">Get started right away</p>
+                    </div>
+                    {wantsBranding === false && (
+                      <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-white">
+                        <Icon d={CHECK_ICON} className="h-3 w-3" />
+                      </span>
+                    )}
+                  </button>
                 </div>
+                <p className="mt-2 text-xs text-muted-foreground">You can change this later</p>
 
                 {wantsBranding && (
-                  <div className="mt-6 grid items-start gap-x-8 gap-y-2 border-t border-border/60 pt-6 sm:grid-cols-[minmax(0,220px)_1fr]">
-                    <div className="pt-2.5">
-                      <label htmlFor="logo-upload" className="text-sm font-medium text-slate-900">
-                        Upload your logo
-                      </label>
-                      <p className="mt-0.5 text-xs text-muted-foreground">PNG, JPEG, or WebP — up to 5MB</p>
+                  <div className="card card-body mt-6">
+                    <label htmlFor="logo-upload" className="text-sm font-medium text-slate-900">
+                      Upload your logo
+                    </label>
+                    <p className="mt-0.5 text-xs text-muted-foreground">PNG, JPEG, or WebP — up to 5MB</p>
+                    <div className="mt-3 flex items-center gap-3">
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary/10 ring-1 ring-border/50">
+                        {logoPreviewUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={logoPreviewUrl} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          <Icon d={ICONS.camera} className="h-5 w-5 text-primary" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <input
+                          id="logo-upload"
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          onChange={(e) => handleLogoChange(e.target.files?.[0] ?? null)}
+                          className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary hover:file:bg-primary/15"
+                        />
+                        {logo && (
+                          <div className="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
+                            <span className="truncate">{logo.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleLogoChange(null)}
+                              className="font-medium text-primary hover:text-primary/80"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <input
-                      id="logo-upload"
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      onChange={(e) => handleLogoChange(e.target.files?.[0] ?? null)}
-                      className="input-field file:mr-3 file:rounded-md file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary"
-                    />
                   </div>
                 )}
 
                 {wantsBranding !== null && (
-                  <div className="mt-6 border-t border-border/60 pt-6">
+                  <div className="card card-body mt-6">
                     <PhonePreviewMockup
                       logoUrl={logoPreviewUrl}
                       businessName={businessName}
