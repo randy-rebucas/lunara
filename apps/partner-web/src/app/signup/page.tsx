@@ -20,8 +20,18 @@ const CHECK_ICON = 'M4.5 12.75l6 6 9-13.5';
 const STEPS = [
   { label: 'Business', description: 'Shop and owner details' },
   { label: 'Branding', description: 'Your own app, or ours' },
+  { label: 'Agreement', description: 'Pricing and terms' },
   { label: 'Contact', description: 'Where we reach you' },
 ] as const;
+
+const RESERVATION_FEE_POINTS = [
+  'Reserves one (1) municipality or one (1) city',
+  'Is valid for twelve (12) months',
+  'Is non-refundable',
+  'Is non-transferable',
+  'Does not constitute a franchise fee',
+  'Does not grant ownership of the Lunara brand',
+];
 
 const BENEFITS = [
   {
@@ -97,6 +107,7 @@ export default function PartnerSignupPage() {
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | undefined>(undefined);
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
@@ -119,6 +130,10 @@ export default function PartnerSignupPage() {
 
   function canAdvanceFromStep2() {
     return wantsBranding !== null;
+  }
+
+  function canAdvanceFromStep3() {
+    return agreedToTerms;
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -475,6 +490,90 @@ export default function PartnerSignupPage() {
             )}
 
             {step === 2 && (
+              <div key="agreement-step">
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900">Partnership agreement</h1>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {wantsBranding
+                    ? 'Your branded app comes with an exclusive territory.'
+                    : 'Here is your pricing for using the Lunara brand.'}
+                </p>
+
+                <div className="mt-4 rounded-xl bg-primary/5 px-4 py-3 text-xs font-medium text-primary ring-1 ring-primary/20">
+                  🎉 We provide a 1-month free trial before billing starts.
+                </div>
+
+                {wantsBranding ? (
+                  <div className="mt-8 space-y-4">
+                    <div className="card card-body flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">Monthly subscription</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">Your branded app, billed monthly</p>
+                      </div>
+                      <p className="text-lg font-bold text-slate-900 whitespace-nowrap">₱3,000<span className="text-xs font-medium text-muted-foreground">/mo</span></p>
+                    </div>
+
+                    <div className="card card-body">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">Territory Reservation Fee</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">One-time fee to reserve your territory</p>
+                        </div>
+                        <p className="text-lg font-bold text-slate-900 whitespace-nowrap">₱5,000</p>
+                      </div>
+                      <div className="mt-4 border-t border-border/60 pt-4">
+                        <p className="text-xs font-medium text-slate-900">The reservation fee:</p>
+                        <ul className="mt-2 space-y-1.5">
+                          {RESERVATION_FEE_POINTS.map((point) => (
+                            <li key={point} className="flex items-start gap-2 text-xs text-muted-foreground">
+                              <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-muted-foreground" />
+                              <span>{point}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-8">
+                    <div className="card card-body flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">Monthly subscription</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">Use the default Lunara app and brand</p>
+                      </div>
+                      <p className="text-lg font-bold text-slate-900 whitespace-nowrap">₱1,299<span className="text-xs font-medium text-muted-foreground">/mo</span></p>
+                    </div>
+                  </div>
+                )}
+
+                <label className="mt-6 flex items-start gap-3 rounded-xl bg-surface px-1 py-2">
+                  <input
+                    type="checkbox"
+                    checked={agreedToTerms}
+                    onChange={(e) => setAgreedToTerms(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-border/60 text-primary focus:ring-primary"
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    I have read and agree to the pricing and terms of this partnership agreement.
+                  </span>
+                </label>
+
+                <div className="mt-8 flex gap-3">
+                  <button type="button" onClick={() => setStep(1)} className="btn-secondary flex-1 py-3">
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!canAdvanceFromStep3()}
+                    onClick={() => setStep(3)}
+                    className="btn-primary flex-1 py-3"
+                  >
+                    Continue
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {step === 3 && (
               <div>
                 <h1 className="text-2xl font-bold tracking-tight text-slate-900">How can we reach you?</h1>
                 <p className="mt-2 text-sm text-muted-foreground">
@@ -538,7 +637,7 @@ export default function PartnerSignupPage() {
                 )}
 
                 <div className="mt-8 flex gap-3">
-                  <button type="button" onClick={() => setStep(1)} className="btn-secondary flex-1 py-3">
+                  <button type="button" onClick={() => setStep(2)} className="btn-secondary flex-1 py-3">
                     Back
                   </button>
                   <button type="submit" disabled={submitting} className="btn-primary flex-1 py-3">
