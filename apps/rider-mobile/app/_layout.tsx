@@ -1,4 +1,4 @@
-import { Stack, useRouter, useSegments, type Href } from 'expo-router';
+import { Stack, useRootNavigationState, useRouter, useSegments, type Href } from 'expo-router';
 import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -35,6 +35,7 @@ function isPublicRoute(segments: string[]): boolean {
 export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
+  const navigationState = useRootNavigationState();
   const hydrate = useAuthStore((s) => s.hydrate);
   const isLoading = useAuthStore((s) => s.isLoading);
   const tokens = useAuthStore((s) => s.tokens);
@@ -45,6 +46,10 @@ export default function RootLayout() {
   }, [hydrate]);
 
   useEffect(() => {
+    // The native Stack navigator hasn't mounted yet on the first render(s) while
+    // isLoading/checkingVersion render AuthLoadingScreen instead of <Stack> — router.replace()
+    // before that throws "Couldn't find a navigation object".
+    if (!navigationState?.key) return;
     if (isLoading) return;
     const signedIn = Boolean(tokens?.accessToken);
     const publicRoute = isPublicRoute(segments as string[]);
@@ -56,7 +61,7 @@ export default function RootLayout() {
     if (signedIn && segments[0] === 'login') {
       router.replace('/(tabs)' as Href);
     }
-  }, [isLoading, tokens, segments, router]);
+  }, [navigationState, isLoading, tokens, segments, router]);
 
   if (checkingVersion || isLoading) return <AuthLoadingScreen />;
   if (updateRequired) return <ForceUpdateScreen storeUrl={storeUrl} />;
