@@ -124,7 +124,7 @@ export class SubscriptionService {
 
     if (currentIsBranded && !targetIsBranded) {
       throw new ForbiddenException(
-        'Downgrading away from a branded app plan releases your reserved territory — please contact support to switch back to the default Lunara app.',
+        'Downgrading away from the Territorial Partner plan releases your reserved territory — please contact support to switch back to the Regular Partner plan.',
       );
     }
 
@@ -132,7 +132,7 @@ export class SubscriptionService {
       if (targetPlan.upgradeFee > 0) {
         if (!subscription.paymentMethodOnFile || !subscription.paymongoPaymentMethodId) {
           throw new BadRequestException(
-            'Add a payment method first — the one-time territory reservation fee is charged immediately when you upgrade to a branded app plan.',
+            'Add a payment method first — the one-time territory reservation fee is charged immediately when you upgrade to the Territorial Partner plan.',
           );
         }
         const charge = await this.attemptAutoCharge(

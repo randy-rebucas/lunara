@@ -9,9 +9,10 @@ import { UpdatePlanDto } from './dto/update-plan.dto';
 export class PlanService {
   constructor(@InjectModel(Plan.name) private planModel: Model<PlanDocument>) {}
 
-  async list(includeInactive = false) {
+  async list(includeInactive = false): Promise<(Plan & { _id: Types.ObjectId; id: string })[]> {
     const filter = includeInactive ? {} : { isActive: true };
-    return this.planModel.find(filter).sort({ sortOrder: 1, monthlyPrice: 1 }).lean();
+    const plans = await this.planModel.find(filter).sort({ sortOrder: 1, monthlyPrice: 1 }).lean();
+    return plans.map((plan) => ({ ...plan, id: String(plan._id) }));
   }
 
   async findById(planId: string | Types.ObjectId) {

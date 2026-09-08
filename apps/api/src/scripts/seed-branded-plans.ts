@@ -30,7 +30,7 @@ const PlanSchema = new mongoose.Schema(
 const SEEDS = [
   {
     key: 'default',
-    name: 'Default (Lunara brand)',
+    name: 'Regular Partner',
     monthlyPrice: 1299,
     trialDays: 0,
     features: { customBranding: false },
@@ -39,7 +39,7 @@ const SEEDS = [
   },
   {
     key: 'branded',
-    name: 'Branded App',
+    name: 'Territorial Partner',
     monthlyPrice: 3000,
     trialDays: 0,
     features: { customBranding: true },
