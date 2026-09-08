@@ -15,6 +15,10 @@ RUN npm ci --workspace=@lunara/types --workspace=@lunara/utils --workspace=@luna
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/package.json /app/package-lock.json ./
+# Carry over any per-workspace node_modules npm nested to resolve version conflicts
+# (e.g. packages/validation/node_modules/zod) before overlaying full source below.
+COPY --from=deps /app/packages ./packages
+COPY --from=deps /app/apps ./apps
 COPY packages/types ./packages/types
 COPY packages/utils ./packages/utils
 COPY packages/validation ./packages/validation
