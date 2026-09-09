@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-09T00:00:00Z",
+  "title": "Design System: Lunara Partner Portal",
+  "extensions": {
+    "colorMeta": {
+      "primary": { "role": "primary", "displayName": "Indigo", "canonical": "#4f46e5", "tonalRamp": ["#1e1b4b", "#312e81", "#3730a3", "#4338ca", "#4f46e5", "#6366f1", "#818cf8", "#c7d2fe"] },
+      "secondary": { "role": "secondary", "displayName": "Cyan", "canonical": "#06b6d4", "tonalRamp": ["#083344", "#164e63", "#155e75", "#0e7490", "#06b6d4", "#22d3ee", "#67e8f9", "#cffafe"] },
+      "hero-navy": { "role": "neutral", "displayName": "Hero Navy", "canonical": "#04142e", "tonalRamp": ["#000509", "#020a16", "#03102380", "#04142e", "#0a2350", "#173a6e", "#345f92", "#8fb3d6"] },
+      "sky-accent": { "role": "accent", "displayName": "Sky Accent", "canonical": "#7dd3fc", "tonalRamp": ["#082f49", "#0c4a6e", "#075985", "#0369a1", "#0ea5e9", "#38bdf8", "#7dd3fc", "#e0f2fe"] },
+      "surface": { "role": "neutral", "displayName": "Surface White", "canonical": "#ffffff" },
+      "surface-muted": { "role": "neutral", "displayName": "Surface Muted", "canonical": "#f8fafc" },
+      "border": { "role": "neutral", "displayName": "Border Slate", "canonical": "#e2e8f0" },
+      "muted": { "role": "neutral", "displayName": "Muted Slate", "canonical": "#64748b" },
+      "muted-foreground": { "role": "neutral", "displayName": "Muted Foreground Slate", "canonical": "#94a3b8" },
+      "destructive": { "role": "destructive", "displayName": "Destructive Red", "canonical": "#ef4444" }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Headline", "purpose": "Hero H1/H2 on brand-voice dark/light panels." },
+      "title": { "displayName": "Title", "purpose": "Section headers in the operational register." },
+      "body": { "displayName": "Body", "purpose": "Paragraph copy, descriptions, helper text." },
+      "label": { "displayName": "Label", "purpose": "Small uppercase category labels on structural UI only." }
+    },
+    "shadows": [
+      { "name": "card", "value": "0 1px 3px 0 rgb(15 23 42 / 0.06), 0 1px 2px -1px rgb(15 23 42 / 0.06)", "purpose": "Default resting elevation for cards and panels." },
+      { "name": "elevated", "value": "0 4px 6px -1px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.06)", "purpose": "Raised state for cards that need to read above neighbors, and active nav link." }
+    ],
+    "motion": [
+      { "name": "bubble-rise", "value": "translateY(-120vh) translateX(var(--bubble-drift)) over 11-26s linear infinite, fade in/out", "purpose": "Signature rising-bubble ambient motion inside dark and light brand panels; disabled under prefers-reduced-motion." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "lg", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Main call-to-action across light-register surfaces (sign in, become a partner).",
+      "html": "<button class=\"ds-btn-primary\">Become a Lunara partner</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; background: #4f46e5; color: #ffffff; border-radius: 8px; padding: 10px 16px; font-size: 14px; font-weight: 500; border: none; transition: background-color 0.15s ease; } .ds-btn-primary:hover { background: #4338ca; } .ds-btn-primary:focus-visible { outline: 2px solid #4f46e5; outline-offset: 2px; } .ds-btn-primary:disabled { opacity: 0.5; }"
+    },
+    {
+      "name": "Outline Button (dark panel)",
+      "kind": "button",
+      "refersTo": "button-outline-dark",
+      "description": "Secondary CTA on the dark navy hero panel (e.g. 'Sign in' beside the primary CTA).",
+      "html": "<button class=\"ds-btn-outline-dark\">Sign in</button>",
+      "css": ".ds-btn-outline-dark { display: inline-flex; align-items: center; justify-content: center; background: transparent; color: #ffffff; border-radius: 8px; padding: 12px 24px; font-size: 16px; font-weight: 500; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.25); border: none; transition: background-color 0.15s ease; } .ds-btn-outline-dark:hover { background: rgba(255,255,255,0.1); }"
+    },
+    {
+      "name": "Input Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Text input with a leading outline icon, used on login/signup forms.",
+      "html": "<div class=\"ds-input-wrap\"><svg class=\"ds-input-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75\"/></svg><input class=\"ds-input-field\" type=\"email\" placeholder=\"you@shop.com\" /></div>",
+      "css": ".ds-input-wrap { position: relative; } .ds-input-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; color: #94a3b8; pointer-events: none; } .ds-input-field { width: 100%; background: #ffffff; color: #0f172a; border-radius: 8px; padding: 10px 16px 10px 44px; font-size: 14px; box-shadow: inset 0 0 0 1px #e2e8f0; border: none; } .ds-input-field:focus { outline: none; box-shadow: inset 0 0 0 2px rgba(79,70,229,0.25); } .ds-input-field::placeholder { color: #94a3b8; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Base white surface with ambient shadow and thin ring border, used throughout the operational register.",
+      "html": "<div class=\"ds-card\"><p class=\"ds-card-title\">Marisol R.</p><p class=\"ds-card-sub\">Wash & Fold · 2 loads</p></div>",
+      "css": ".ds-card { background: #ffffff; border-radius: 12px; box-shadow: 0 1px 3px 0 rgba(15,23,42,0.06), 0 1px 2px -1px rgba(15,23,42,0.06); box-shadow, inset 0 0 0 1px rgba(226,232,240,0.5); padding: 20px 24px; } .ds-card-title { font-size: 14px; font-weight: 600; color: #0f172a; } .ds-card-sub { font-size: 12px; color: #64748b; }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "badge-primary",
+      "description": "Tinted pill used for order/status labels; hue swaps by semantic meaning (primary, secondary, trend-up/down).",
+      "html": "<span class=\"ds-badge\">In progress</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; border-radius: 9999px; padding: 2px 10px; font-size: 12px; font-weight: 500; background: rgba(79,70,229,0.1); color: #4f46e5; }"
+    },
+    {
+      "name": "Active Nav Link",
+      "kind": "nav",
+      "refersTo": "nav-link-active",
+      "description": "Pill-shaped active navigation state, solid indigo fill.",
+      "html": "<a class=\"ds-nav-link-active\" href=\"#\">Orders</a>",
+      "css": ".ds-nav-link-active { display: block; border-radius: 9999px; background: #4f46e5; color: #ffffff; padding: 10px 16px; font-size: 14px; font-weight: 600; box-shadow: 0 1px 3px 0 rgba(15,23,42,0.06), 0 1px 2px -1px rgba(15,23,42,0.06); }"
+    },
+    {
+      "name": "Outline Icon",
+      "kind": "custom",
+      "refersTo": "icon-system",
+      "description": "The shared 24x24 outline-stroke SVG icon primitive used everywhere in the product; no filled icons or icon fonts exist.",
+      "html": "<svg class=\"ds-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M4.5 12.75l6 6 9-13.5\"/></svg>",
+      "css": ".ds-icon { width: 20px; height: 20px; }"
+    },
+    {
+      "name": "Bubble Field (signature)",
+      "kind": "custom",
+      "refersTo": "bubble-field",
+      "description": "Rising soap-bubble ambient motion layer behind dark/light brand panels; disabled under prefers-reduced-motion.",
+      "html": "<div class=\"ds-bubble-wrap\"><span class=\"ds-bubble\" style=\"left:20%;width:36px;height:36px;animation-duration:18s;animation-delay:2s;--bubble-drift:16px;\"></span></div>",
+      "css": ".ds-bubble-wrap { position: absolute; inset: 0; overflow: hidden; pointer-events: none; } .ds-bubble { position: absolute; bottom: -15%; border-radius: 9999px; background: radial-gradient(circle at 24% 22%, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.95) 6%, transparent 9%), radial-gradient(circle at 68% 72%, rgba(255,255,255,0.35) 0%, transparent 22%), radial-gradient(circle at 45% 45%, rgba(255,255,255,0.04) 45%, rgba(165,210,255,0.16) 78%, rgba(255,255,255,0.4) 100%); box-shadow: inset 3px 3px 6px rgba(255,255,255,0.55), inset -5px -5px 10px rgba(30,90,180,0.25), inset 0 0 14px rgba(255,255,255,0.2), 0 3px 8px rgba(0,0,0,0.12); border: 1px solid rgba(255,255,255,0.45); animation: ds-bubble-rise linear infinite; } @keyframes ds-bubble-rise { 0% { transform: translateY(0) translateX(0); opacity: 0; } 10% { opacity: 1; } 90% { opacity: 0.8; } 100% { transform: translateY(-120vh) translateX(var(--bubble-drift, 20px)); opacity: 0; } }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Night Shift Console",
+    "overview": "The portal's public/auth surfaces run on a fixed two-register world: a dark navy console panel (#04142e) that carries brand voice, motion, and persuasion, paired with a plain white/slate operational register that carries forms and real data. The dark panel is never where a partner does work — it's where Lunara talks to them (hero copy, feature pitch, CTAs); the light register is where they act (sign in, fill a form, read a queue). This split repeats verbatim across /login, /signup, and the root landing page (/), which confirms it as system rather than a one-page choice. Inside the dark panel, a rising soap-bubble field (BubbleField) is the one recurring signature motion element — an on-brand nod to laundry rather than generic ambient decoration — layered under radial indigo/cyan glows. Outline-stroke icons (never filled glyphs, never emoji) mark every feature line and form field. The PhonePreviewMockup component is the system's other signature: a fully-coded, real-data phone chrome (not a screenshot or drawing) used whenever the product needs to show the customer-facing app. The landing page's chaos-vs-system split (torn paper slips vs. a calm .card queue) is a page-local storytelling device built from existing primitives — it does not introduce new tokens or components, and its rotated-paper motif should not be read as a system-wide device.",
+    "keyCharacteristics": [
+      "Dark hero navy (#04142e) with radial indigo/cyan glow, reserved for brand-voice panels, never for operational surfaces.",
+      "Rising bubble motion (BubbleField) as the one signature ambient animation.",
+      "Outline-stroke SVG icons at 1.75 stroke width, sourced from a shared ICONS path map — no icon fonts, no filled glyphs.",
+      "Flat card system: subtle ring + soft shadow, no hard offsets, no neobrutalist edges.",
+      "Indigo primary / cyan secondary, used sparingly against a mostly white/slate operational canvas."
+    ],
+    "rules": [
+      { "name": "The Two-Register Rule", "body": "Dark navy (#04142e) panels carry brand voice and motion; white/slate panels carry forms and real data. A surface is one or the other, never a blend — confirmed identically across /login, /signup, and /.", "section": "colors" },
+      { "name": "The One Accent Rule", "body": "text-sky-300 is the only light accent color allowed on the dark panel; it marks the single most important phrase in a headline, never body copy.", "section": "colors" },
+      { "name": "The No-Display-Face Rule", "body": "There is no separate display typeface; hierarchy comes entirely from size and weight of the same Inter family. Do not introduce a second font for impact.", "section": "typography" },
+      { "name": "The Ambient-Only Rule", "body": "Shadows are diffuse and soft at every weight in use; there is no hard-offset/neobrutalist shadow anywhere in the shipped code. Depth reads as ambient lift, not drawn outline.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep the dark hero navy (#04142e) exclusive to brand-voice panels (hero, close/CTA sections); keep operational content on white/slate.",
+      "Do reuse BubbleField with its existing bubble-position presets for any new dark or light brand panel rather than inventing new motion.",
+      "Do reuse PhonePreviewMockup for any new surface that needs to depict the customer-facing app.",
+      "Do draw all icons from the shared outline-SVG Icon/ICONS pattern (24x24 viewBox, strokeWidth={1.75}, currentColor).",
+      "Do keep shadows soft and ambient (--shadow-card / --shadow-elevated); pair every shadow with a ring-1 ring-border at low opacity."
+    ],
+    "donts": [
+      "Don't introduce a second typeface for emphasis — hierarchy comes from Inter's weight/size scale alone.",
+      "Don't use hard-offset or neobrutalist shadows anywhere; the system's depth language is uniformly soft and diffuse.",
+      "Don't use filled icons, icon fonts, or emoji as UI iconography — outline SVG only.",
+      "Don't treat the landing page's rotated-paper 'chaos' collage as a reusable system device; it is a one-surface storytelling metaphor built from existing card/utility primitives, not a new token or component."
+    ]
+  }
+}

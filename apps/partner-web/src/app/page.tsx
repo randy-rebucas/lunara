@@ -1,242 +1,254 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import Link from 'next/link';
-import { useCallback, useMemo } from 'react';
-import type { PartnerDashboardData, PartnerOrderSummary } from '@lunara/types';
+import brandIcon from '@lunara/brand/icon';
+import { getMyBranding, getPartnerToken } from '../lib/partner-api';
+import { getLastPartnerSlug, withPartnerSlug } from '../lib/partner-path';
 import { AuthLoading } from '../components/auth-loading';
-import { DataPageStatus } from '../components/data-page-status';
-import { LiveBadge, StatCard, StatusPill } from '../components/ui/card';
-import { PageHeader } from '../components/ui/page-header';
-import { DonutChart, DonutLegend, RevenueLineChart, withDonutColors } from '../components/dash-charts';
-import { useRequirePartner } from '../hooks/use-protected-page';
-import { formatPeso } from '../lib/format-peso';
-import { partnerOrderHref } from '../lib/partner-order-links';
-import { getPortalUser, partnerFetch } from '../lib/partner-api';
-import { usePartnerQuery } from '../lib/use-partner-query';
-import { usePartnerPipelineSocket } from '../lib/use-partner-pipeline-socket';
+import { Icon, ICONS } from '../components/ui/icon';
+import { BubbleField, DARK_PANEL_BUBBLES } from '../components/bubble-field';
+import { PhonePreviewMockup } from '../components/phone-preview-mockup';
 
-function orderActionHint(order: PartnerOrderSummary): string | null {
-  if (order.canAccept) return 'Awaiting acceptance';
-  if (order.canReceiveAtShop) return order.receivingStepLabel ?? 'Shop receiving';
-  if (order.receivingStepLabel) return order.receivingStepLabel;
-  if (order.currentStepLabel) return order.currentStepLabel;
-  return null;
-}
+const PHONE_RING_ICON =
+  'M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z';
 
-export default function PartnerDashboardPage() {
-  const { ready } = useRequirePartner();
-  const portalUser = getPortalUser();
+const CHAOS_SLIPS = [
+  { text: 'Tita Baby — 3 loads, rush??', rotate: '-6deg', top: '2%', left: '4%' },
+  { text: 'del ivery 4pm — CANCEL', rotate: '4deg', top: '15%', left: '32%' },
+  { text: '₱450 owed — ask ulit', rotate: '-3deg', top: '32%', left: '8%' },
+  { text: 'missed call (3) — Grace', rotate: '7deg', top: '46%', left: '38%' },
+  { text: 'wash+fold?? or dc??', rotate: '-8deg', top: '62%', left: '4%' },
+  { text: 'restock detergent??', rotate: '5deg', top: '76%', left: '34%' },
+  { text: 'who closed out Tuesday?', rotate: '-4deg', top: '90%', left: '10%' },
+];
 
-  const load = useCallback(async () => {
-    return partnerFetch<PartnerDashboardData>('/partner/dashboard');
-  }, []);
+// Tally goes to a bad total, then gets crossed out — the "before" side has no
+// system to trust its own numbers, let alone reconcile them.
+const CHAOS_TALLY = { top: '6%', left: '58%', rotate: '3deg' };
 
-  const { data, loading, error, reload } = usePartnerQuery(load, []);
+const QUEUE_ROWS = [
+  { name: 'Marisol R.', item: 'Wash & Fold · 2 loads', status: 'In progress', tone: 'badge-primary' },
+  { name: 'Kevin D.', item: 'Dry Clean · 1 barong', status: 'Ready', tone: 'badge-trend-up' },
+  { name: 'Ana L.', item: 'Wash, Dry, Fold · 3 loads', status: 'Received', tone: 'badge-secondary' },
+];
 
-  const branchIds = useMemo(
-    () => (data?.recentOrders ?? []).map((o) => o.branchId).filter(Boolean) as string[],
-    [data?.recentOrders],
-  );
+const CAPABILITIES = [
+  {
+    title: 'One order queue',
+    description: 'Every booking — walk-in, phone, or app — lands in the same queue, status tracked start to finish.',
+  },
+  {
+    title: 'Staff & inventory in sync',
+    description: 'Assign work, log detergent and supply use, and see stock levels without a second spreadsheet.',
+  },
+  {
+    title: 'Revenue that reconciles itself',
+    description: 'Every completed order becomes a ledger entry — earnings, Lunara fees, and invoices in one place.',
+  },
+];
 
-  const { connected: socketLive } = usePartnerPipelineSocket(branchIds, {
-    onPipelineUpdated: () => {
-      void reload();
-    },
-  });
+/**
+ * Every real page lives under /{partnerSlug} (see app/[partnerSlug]/), so a bare "/" visit has
+ * nowhere to render. Redirect to the signed-in user's own portal if we can resolve it, otherwise
+ * to whichever portal was last visited on this device, otherwise show a way in.
+ */
+export default function RootRedirectPage() {
+  const router = useRouter();
+  const [unresolved, setUnresolved] = useState(false);
 
-  const alerts = useMemo(() => {
-    if (!data) return [];
-    const list: { label: string; href: string; tone: 'amber' | 'red' }[] = [];
-    if (data.counts.awaitingAccept > 0) {
-      list.push({
-        label: `${data.counts.awaitingAccept} order${data.counts.awaitingAccept === 1 ? '' : 's'} need acceptance`,
-        href: '/orders/incoming',
-        tone: 'amber',
-      });
+  useEffect(() => {
+    let cancelled = false;
+
+    async function resolve() {
+      if (getPartnerToken()) {
+        try {
+          const { slug } = await getMyBranding();
+          if (!cancelled && slug) {
+            router.replace(withPartnerSlug(slug, '/'));
+            return;
+          }
+        } catch {
+          // fall through to last-visited slug
+        }
+      }
+
+      const lastSlug = getLastPartnerSlug();
+      if (!cancelled && lastSlug) {
+        router.replace(withPartnerSlug(lastSlug, '/login'));
+        return;
+      }
+
+      if (!cancelled) setUnresolved(true);
     }
-    if (data.counts.lowStockItems > 0) {
-      list.push({
-        label: `${data.counts.lowStockItems} inventory item${data.counts.lowStockItems === 1 ? '' : 's'} low on stock`,
-        href: '/inventory',
-        tone: 'red',
-      });
-    }
-    if (data.counts.readyForDelivery > 0) {
-      list.push({
-        label: `${data.counts.readyForDelivery} ready for delivery`,
-        href: '/orders/progress',
-        tone: 'amber',
-      });
-    }
-    return list;
-  }, [data]);
 
-  if (!ready) return <AuthLoading message="Loading dashboard…" />;
+    resolve();
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
-  const shopTitle = data?.shop?.name ?? 'Your shop';
+  if (!unresolved) return <AuthLoading message="Loading your portal…" />;
 
   return (
-    <div>
-      <PageHeader
-        title={shopTitle}
-        description={
-          portalUser?.email
-            ? `Welcome back, ${portalUser.email.split('@')[0]}. Orders, staff, and revenue for ${data?.shop?.code ?? 'your branch'}.`
-            : 'Shop snapshot — orders, staff, inventory, and revenue at a glance.'
-        }
-        badge={socketLive ? <LiveBadge /> : undefined}
-        actions={
-          <button type="button" className="btn-outline btn-sm" onClick={() => reload()}>
-            Refresh
-          </button>
-        }
-      />
+    <main>
+      {/* Hero: the day told twice — chaos, then one queue. */}
+      <section
+        className="relative overflow-hidden bg-[#04142e] bg-cover bg-center px-6 pb-20 pt-14 text-white sm:px-10 sm:pb-28 sm:pt-16"
+        style={{ backgroundImage: 'url(/images/background.png)' }}
+      >
+        <div className="pointer-events-none absolute inset-0 bg-[#04142e]/70" />
+        <BubbleField bubbles={DARK_PANEL_BUBBLES} className="login-bubble" />
 
-      <div className="mt-4">
-        <DataPageStatus loading={loading} error={error} loadingMessage="Loading dashboard…" />
-      </div>
-
-      {data && (
-        <>
-          {alerts.length > 0 && (
-            <div className="mt-6 flex flex-wrap gap-2">
-              {alerts.map((a) => (
-                <Link
-                  key={a.href + a.label}
-                  href={a.href}
-                  className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
-                    a.tone === 'red'
-                      ? 'border-red-200 bg-red-50 text-red-800 hover:bg-red-100'
-                      : 'border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100'
-                  }`}
-                >
-                  {a.label} →
-                </Link>
-              ))}
+        <div className="relative mx-auto flex max-w-6xl flex-col items-center">
+          <div className="flex items-center gap-2.5">
+            <Image
+              src={brandIcon}
+              alt=""
+              width={36}
+              height={36}
+              className="shrink-0 rounded-xl shadow-lg"
+              aria-hidden
+              priority
+            />
+            <div>
+              <p className="text-sm font-bold tracking-wide">LUNARA</p>
+              <p className="text-xs text-slate-400">Lunara Business Account</p>
             </div>
-          )}
-
-          <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <StatCard
-              label="Today's orders"
-              value={data.trends.ordersToday.value}
-              href="/orders/incoming"
-              trend={{ deltaPct: data.trends.ordersToday.deltaPct }}
-            />
-            <StatCard
-              label="Completed orders"
-              value={data.trends.completedToday.value}
-              href="/orders/history"
-              accent="accent"
-              trend={{ deltaPct: data.trends.completedToday.deltaPct }}
-            />
-            <StatCard
-              label="Revenue"
-              value={formatPeso(data.trends.revenueToday.value, true)}
-              href="/revenue"
-              accent="secondary"
-              trend={{ deltaPct: data.trends.revenueToday.deltaPct }}
-            />
-            <StatCard
-              label="Staff members"
-              value={data.trends.staffMembers.value}
-              href="/staff"
-              trend={{ deltaPct: data.trends.staffMembers.deltaPct }}
-            />
           </div>
 
-          <div className="mt-8 grid gap-4 lg:grid-cols-3">
-            <section className="section-panel lg:col-span-2">
-              <div className="section-panel-header flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-900">Recent orders</h3>
-                  <p className="mt-0.5 text-sm text-muted">
-                    Pickup, intake, and orders moving through your shop
-                  </p>
-                </div>
-                <Link href="/orders/incoming" className="link-primary text-sm">
-                  View all →
-                </Link>
-              </div>
-              <div className="divide-y divide-border/60">
-                {data.recentOrders.length === 0 && (
-                  <p className="px-6 py-8 text-sm text-muted sm:px-8">
-                    No active pipeline orders right now. New assignments appear here when Lunara dispatches
-                    to your shop.
-                  </p>
-                )}
-                {data.recentOrders.map((o) => {
-                  const hint = orderActionHint(o);
-                  return (
-                    <Link
-                      key={o._id}
-                      href={partnerOrderHref(o)}
-                      className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 transition-colors hover:bg-slate-50/80 sm:px-8"
-                    >
-                      <div className="min-w-0">
-                        <p className="font-medium capitalize text-slate-900">
-                          {o.bookingType.replace(/_/g, ' ')}
-                        </p>
-                        <div className="mt-1 flex flex-wrap items-center gap-2">
-                          <StatusPill status={o.status} />
-                          {o.branchName && <span className="text-sm text-muted">{o.branchName}</span>}
-                        </div>
-                        {hint && (
-                          <p className="mt-1 text-xs font-medium text-amber-700">{hint}</p>
-                        )}
-                        {o.slaLabel && (
-                          <p className="mt-0.5 text-xs text-muted-foreground">{o.slaLabel}</p>
-                        )}
-                      </div>
-                      <p className="w-full font-semibold text-slate-900 sm:w-auto sm:text-right">{formatPeso(o.total)}</p>
-                    </Link>
-                  );
-                })}
-              </div>
-            </section>
+          <h1 className="mt-10 max-w-3xl text-balance text-center text-3xl font-bold leading-tight sm:text-5xl">
+            Every order. On paper, in your head —<br className="hidden sm:block" />{' '}
+            <span className="text-sky-300">or in one queue.</span>
+          </h1>
+          <p className="mt-4 max-w-xl text-center text-base text-slate-300">
+            Lunara replaces the notebook, the group chat, and the missed calls with one system for
+            orders, staff, inventory, and revenue — plus a booking app with your shop&apos;s own name on it.
+          </p>
 
-            <div className="flex flex-col gap-4">
-              <section className="section-panel">
-                <div className="section-panel-header flex items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-base font-semibold text-slate-900">Revenue overview</h3>
-                    <p className="mt-0.5 text-xs text-muted">Last 7 days</p>
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+            <Link href="/signup" className="btn-primary px-6 py-3 text-base">
+              Become a Lunara partner
+            </Link>
+            <Link
+              href="/login"
+              className="inline-flex items-center justify-center rounded-lg px-6 py-3 text-base font-medium text-white ring-1 ring-white/25 transition-colors hover:bg-white/10"
+            >
+              Sign in
+            </Link>
+          </div>
+
+          {/* The split: same shop, same morning, told twice. */}
+          <div className="relative mt-16 grid w-full gap-8 sm:mt-20 lg:grid-cols-2 lg:gap-6">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute left-1/2 top-1/2 z-10 hidden h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[#04142e] text-slate-500 ring-1 ring-white/15 lg:flex"
+            >
+              <Icon d={ICONS.arrow} className="h-5 w-5" />
+            </div>
+
+            {/* Before: scattered slips, desaturated. */}
+            <div className="relative flex h-full flex-col rounded-2xl bg-white/[0.03] p-6 ring-1 ring-white/10">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Without Lunara</p>
+              <div className="relative mt-4 min-h-[360px] flex-1">
+                {CHAOS_SLIPS.map((slip) => (
+                  <div
+                    key={slip.text}
+                    className="absolute w-40 rounded-sm bg-slate-100/90 px-2.5 py-2 text-[11px] font-medium text-slate-600 shadow-md sm:w-44"
+                    style={{ top: slip.top, left: slip.left, transform: `rotate(${slip.rotate})` }}
+                  >
+                    {slip.text}
                   </div>
-                  <Link href="/revenue" className="link-primary text-xs">
-                    Details →
-                  </Link>
+                ))}
+                <div
+                  className="absolute w-36 rounded-sm bg-slate-100/90 px-2.5 py-2 shadow-md sm:w-40"
+                  style={{ top: CHAOS_TALLY.top, left: CHAOS_TALLY.left, transform: `rotate(${CHAOS_TALLY.rotate})` }}
+                >
+                  <p className="text-[11px] font-medium text-slate-600">Today&apos;s total?</p>
+                  <p className="text-[11px] font-semibold text-slate-400 line-through decoration-2">
+                    120 + 85 + 60 = 240
+                  </p>
+                  <p className="text-[11px] font-semibold text-slate-600">…240? 265?</p>
                 </div>
-                <div className="card-body pt-4">
-                  <RevenueLineChart data={data.revenue.series} />
-                </div>
-              </section>
+              </div>
+              <span className="mt-4 inline-flex w-fit items-center gap-1.5 self-end rounded-full bg-red-500/15 px-2.5 py-1 text-[11px] font-semibold text-red-300 ring-1 ring-red-400/30">
+                <Icon d={PHONE_RING_ICON} className="h-3 w-3" />
+                missed calls (3)
+              </span>
+            </div>
 
-              <section className="section-panel">
-                <div className="section-panel-header">
-                  <h3 className="text-base font-semibold text-slate-900">Top services</h3>
-                  <p className="mt-0.5 text-xs text-muted">Last 7 days, by order count</p>
-                </div>
-                <div className="card-body pt-4">
-                  {data.services.length === 0 ? (
-                    <p className="py-6 text-center text-sm text-muted">No completed orders this week yet.</p>
-                  ) : (
-                    <>
-                      <DonutChart
-                        segments={withDonutColors(data.services)}
-                        centerLabel="Orders"
-                        centerValue={String(data.services.reduce((s, x) => s + x.count, 0))}
-                      />
-                      <div className="mt-4">
-                        <DonutLegend segments={withDonutColors(data.services)} />
-                      </div>
-                    </>
-                  )}
-                </div>
-              </section>
+            {/* After: one calm surface — queue and booking app share the same white ground. */}
+            <div className="overflow-hidden rounded-2xl bg-white ring-1 ring-white/10">
+              <p className="px-6 pt-6 text-xs font-semibold uppercase tracking-wide text-primary">With Lunara</p>
+              <ul className="mt-4 divide-y divide-border/60 px-6">
+                {QUEUE_ROWS.map((row) => (
+                  <li key={row.name} className="flex items-center justify-between gap-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">{row.name}</p>
+                      <p className="truncate text-xs text-muted">{row.item}</p>
+                    </div>
+                    <span className={row.tone}>{row.status}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-5 border-t border-border/60 px-6 pt-5 text-xs text-muted">
+                And customers book straight into that same queue, from your own app:
+              </p>
+              <div className="px-6 pb-6 pt-3">
+                <PhonePreviewMockup businessName="Your Shop" variant="default" />
+              </div>
             </div>
           </div>
-        </>
-      )}
-    </div>
+        </div>
+      </section>
+
+      {/* Capabilities: what the "after" is actually built from — three plain lines, not a tile grid. */}
+      <section className="portal-bg px-6 py-16 sm:px-10 sm:py-20">
+        <div className="mx-auto max-w-3xl">
+          <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl">
+            Everything the queue on the right is running on.
+          </h2>
+          <div className="mt-10 divide-y divide-border/60 border-y border-border/60">
+            {CAPABILITIES.map(({ title, description }) => (
+              <div key={title} className="flex flex-col gap-1 py-6 sm:flex-row sm:items-baseline sm:gap-8">
+                <p className="shrink-0 text-sm font-semibold text-primary sm:w-64">{title}</p>
+                <p className="text-sm text-muted sm:max-w-md">{description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Close: the two doors this whole page exists to point at. */}
+      <section
+        className="relative overflow-hidden bg-[#04142e] px-6 py-16 text-center text-white sm:px-10 sm:py-20"
+        style={{
+          backgroundImage:
+            'radial-gradient(50% 60% at 50% 100%, rgba(37,99,235,0.3), transparent)',
+        }}
+      >
+        <div className="relative mx-auto max-w-xl">
+          <h2 className="text-2xl font-bold sm:text-3xl">Ready to run your shop on one queue?</h2>
+          <p className="mt-3 text-sm text-slate-300">
+            Applying reserves your city on Lunara and walks you through pricing and terms directly —
+            nothing to guess here.
+          </p>
+          <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
+            <Link href="/signup" className="btn-primary px-6 py-3 text-base">
+              Become a Lunara partner
+            </Link>
+            <Link
+              href="/login"
+              className="inline-flex items-center justify-center rounded-lg px-6 py-3 text-base font-medium text-white ring-1 ring-white/25 transition-colors hover:bg-white/10"
+            >
+              Sign in to your shop
+            </Link>
+          </div>
+          <p className="mt-8 text-xs text-slate-500">© {new Date().getFullYear()} Lunara. All rights reserved.</p>
+        </div>
+      </section>
+    </main>
   );
 }

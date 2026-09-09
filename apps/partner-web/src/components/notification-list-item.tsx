@@ -10,6 +10,7 @@ import {
   resolvePortalNotificationRoute,
   type PortalNotification,
 } from '../lib/notification-types';
+import { usePartnerPath } from '../lib/partner-path';
 
 export function NotificationListItem({
   notification,
@@ -19,6 +20,7 @@ export function NotificationListItem({
   onMarkRead?: (id: string) => void | Promise<void>;
 }) {
   const router = useRouter();
+  const toPath = usePartnerPath();
   const route = resolvePortalNotificationRoute(notification);
   const category = resolveNotificationCategory(notification);
 
@@ -27,7 +29,7 @@ export function NotificationListItem({
       await onMarkRead?.(notification._id);
     }
     if (route) {
-      router.push(notificationRouteToPath(route));
+      router.push(toPath(notificationRouteToPath(route)));
     }
   }
 

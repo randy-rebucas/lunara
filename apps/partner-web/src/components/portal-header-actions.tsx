@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import type { PartnerOwnProfile } from '@lunara/types';
 import { getOwnProfile, getPortalUser, staffLogout } from '../lib/partner-api';
+import { usePartnerPath } from '../lib/partner-path';
 import { PortalNotificationsBell } from './portal-notifications-bell';
 
 function ProfileAvatar({ avatarUrl, name, email }: { avatarUrl?: string; name?: string; email?: string }) {
@@ -33,6 +34,7 @@ function ChevronDown() {
 
 export function PortalHeaderActions() {
   const router = useRouter();
+  const toPath = usePartnerPath();
   const user = getPortalUser();
   const [open, setOpen] = useState(false);
   const [profile, setProfile] = useState<PartnerOwnProfile | null>(null);
@@ -98,14 +100,14 @@ export function PortalHeaderActions() {
         {open ? (
           <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-xl bg-surface py-1.5 shadow-[var(--shadow-elevated)] ring-1 ring-border/60">
             <Link
-              href="/profile"
+              href={toPath('/profile')}
               className="block px-4 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50"
               onClick={() => setOpen(false)}
             >
               Profile
             </Link>
             <Link
-              href="/settings"
+              href={toPath('/settings')}
               className="block px-4 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50"
               onClick={() => setOpen(false)}
             >

@@ -30,8 +30,12 @@ export class PartnersController {
   constructor(private readonly partnersService: PartnersService) {}
 
   @Get()
-  async resolveBranding(@Query('domain') domain?: string) {
-    const partner = domain?.trim() ? await this.partnersService.findByDomain(domain.trim()) : null;
+  async resolveBranding(@Query('domain') domain?: string, @Query('slug') slug?: string) {
+    const partner = slug?.trim()
+      ? await this.partnersService.findBySlug(slug.trim())
+      : domain?.trim()
+        ? await this.partnersService.findByDomain(domain.trim())
+        : null;
 
     if (!partner) {
       return {
@@ -45,6 +49,7 @@ export class PartnersController {
       data: {
         isDefault: false,
         partnerId: partner.ownerUserId.toString(),
+        slug: partner.slug,
         brandConfig: partner.brandConfig,
       },
     };
@@ -77,6 +82,7 @@ export class PartnerBrandingController {
       data: {
         isDefault: false,
         partnerId: partner.ownerUserId.toString(),
+        slug: partner.slug,
         brandConfig: partner.brandConfig,
       },
     };

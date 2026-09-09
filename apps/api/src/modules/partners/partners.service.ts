@@ -47,6 +47,10 @@ export class PartnersService {
     return this.partnerModel.findOne({ 'brandConfig.domain': domain, isActive: true });
   }
 
+  async findBySlug(slug: string) {
+    return this.partnerModel.findOne({ slug, isActive: true });
+  }
+
   async findById(id: string) {
     const partner = await this.partnerModel.findById(id);
     if (!partner) throw new NotFoundException('Partner not found');

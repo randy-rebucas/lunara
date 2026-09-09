@@ -60,7 +60,7 @@ export default function VerifyEmailPage() {
             <p className="mt-2 text-sm text-muted-foreground">
               You can now sign in to your partner account.
             </p>
-            <Link href="/login" className="btn-primary mt-8 inline-flex w-full justify-center py-3">
+            <Link href={"/login"} className="btn-primary mt-8 inline-flex w-full justify-center py-3">
               Sign in
             </Link>
           </>
@@ -75,7 +75,7 @@ export default function VerifyEmailPage() {
               Link expired or invalid
             </h1>
             <p className="mt-2 text-sm text-muted-foreground">{error}</p>
-            <Link href="/login" className="link-primary mt-6 inline-block text-sm">
+            <Link href={"/login"} className="link-primary mt-6 inline-block text-sm">
               Back to sign in
             </Link>
           </>
