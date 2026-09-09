@@ -24,6 +24,8 @@ import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
 import { Review, ReviewSchema } from '../reviews/schemas/review.schema';
 import { PartnerModule } from '../partner/partner.module';
 import { ServiceAreasModule } from '../service-areas/service-areas.module';
+import { Plan, PlanSchema } from '../billing/schemas/plan.schema';
+import { BillingSubscription, SubscriptionSchema } from '../billing/schemas/subscription.schema';
 import {
   PartnerApplication,
   PartnerApplicationSchema,
@@ -41,6 +43,8 @@ import {
       { name: Branch.name, schema: BranchSchema },
       { name: Review.name, schema: ReviewSchema },
       { name: PartnerApplication.name, schema: PartnerApplicationSchema },
+      { name: Plan.name, schema: PlanSchema },
+      { name: BillingSubscription.name, schema: SubscriptionSchema },
     ]),
     SupportModule,
     RefundsModule,

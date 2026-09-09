@@ -39,8 +39,13 @@ export class OrdersController {
 
   @Get('queue')
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
-  getQueue(@Query('status') status?: string) {
-    return this.ordersService.getPartnerQueue(status);
+  getQueue(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Query('status') status?: string,
+    @CurrentTenantId() tenantId?: string,
+    @CurrentStaffBranchId() staffBranchId?: string,
+  ) {
+    return this.ordersService.getPartnerQueue(req.user, status, tenantId, staffBranchId);
   }
 
   @Get()
@@ -49,8 +54,10 @@ export class OrdersController {
     @Query('page') page = '1',
     @Query('limit') limit = '20',
     @Query('status') status?: 'active' | 'past',
+    @CurrentTenantId() tenantId?: string,
+    @CurrentStaffBranchId() staffBranchId?: string,
   ) {
-    return this.ordersService.findAll(req.user, Number(page), Number(limit), status);
+    return this.ordersService.findAll(req.user, Number(page), Number(limit), status, tenantId, staffBranchId);
   }
 
   @Get(':id/handoff-qr')

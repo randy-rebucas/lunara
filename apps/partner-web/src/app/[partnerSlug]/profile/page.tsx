@@ -48,7 +48,9 @@ export default function PortalProfilePage() {
   const [user, setUser] = useState<PortalUser | null>(null);
   const partner = isPartnerRole();
   const [nameDraft, setNameDraft] = useState('');
+  const [phoneDraft, setPhoneDraft] = useState('');
   const [savingName, setSavingName] = useState(false);
+  const [savingPhone, setSavingPhone] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
 
   const loadShop = useCallback(() => partnerFetch<PartnerSettingsData>('/partner/settings'), []);
@@ -68,6 +70,10 @@ export default function PortalProfilePage() {
     setNameDraft(profileData?.displayName ?? '');
   }, [profileData?.displayName]);
 
+  useEffect(() => {
+    setPhoneDraft(profileData?.phone ?? '');
+  }, [profileData?.phone]);
+
   async function logout() {
     await staffLogout();
     router.replace('/login');
@@ -78,7 +84,7 @@ export default function PortalProfilePage() {
     if (!trimmed || trimmed === profileData?.displayName) return;
     setSavingName(true);
     try {
-      await updateOwnProfile(trimmed);
+      await updateOwnProfile({ displayName: trimmed });
       await reloadProfile();
       window.dispatchEvent(new Event('lunara:profile-updated'));
       toast.success('Name updated');
@@ -86,6 +92,21 @@ export default function PortalProfilePage() {
       toast.error(err instanceof Error ? err.message : 'Could not update name');
     } finally {
       setSavingName(false);
+    }
+  }
+
+  async function savePhone() {
+    const trimmed = phoneDraft.trim();
+    if (trimmed === (profileData?.phone ?? '')) return;
+    setSavingPhone(true);
+    try {
+      await updateOwnProfile({ phone: trimmed });
+      await reloadProfile();
+      toast.success('Phone number updated');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not update phone number');
+    } finally {
+      setSavingPhone(false);
     }
   }
 
@@ -191,6 +212,28 @@ export default function PortalProfilePage() {
               onClick={() => void saveName()}
             >
               {savingName ? 'Saving…' : 'Save name'}
+            </button>
+          </div>
+
+          <div className="mb-6 flex flex-wrap items-end gap-2 border-b border-border/60 pb-6">
+            <label className="flex-1 min-w-[180px]">
+              <span className="mb-1 block text-sm font-medium text-slate-900">Phone number</span>
+              <input
+                type="tel"
+                className="input"
+                placeholder="e.g. 09171234567"
+                value={phoneDraft}
+                maxLength={32}
+                onChange={(e) => setPhoneDraft(e.target.value)}
+              />
+            </label>
+            <button
+              type="button"
+              className="btn-outline btn-sm"
+              disabled={savingPhone || phoneDraft.trim() === (profileData?.phone ?? '')}
+              onClick={() => void savePhone()}
+            >
+              {savingPhone ? 'Saving…' : 'Save phone'}
             </button>
           </div>
 

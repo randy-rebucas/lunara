@@ -11,6 +11,15 @@ import { SettingsService } from '../settings/settings.service';
 import { Conversation, ConversationDocument } from './schemas/conversation.schema';
 import { Message, MessageDocument } from './schemas/message.schema';
 
+/** Some legacy conversation/message documents have createdAt/updatedAt stored as plain strings
+ * (from an older seed/migration) rather than Dates, so calling .toISOString() straight off the
+ * lean() result can throw — normalize through `new Date()` first. */
+function toIsoString(value: unknown): string {
+  if (!value) return '';
+  const date = value instanceof Date ? value : new Date(value as string);
+  return Number.isNaN(date.getTime()) ? '' : date.toISOString();
+}
+
 @Injectable()
 export class MessagingService {
   private readonly logger = new Logger(MessagingService.name);
@@ -48,11 +57,15 @@ export class MessagingService {
 
   async getOrCreateConversation(partnerId: string) {
     const pid = new Types.ObjectId(partnerId);
-    const existing = await this.conversationModel.findOne({ partnerId: pid }).lean();
-    const convoId = existing
-      ? existing._id.toString()
-      : (await this.conversationModel.create({ partnerId: pid }))._id.toString();
-    return this.populateConversation(convoId, partnerId);
+    // Atomic upsert instead of find-then-create: partnerId is uniquely indexed, and a
+    // concurrent first visit (e.g. a double-fired effect on a brand-new account with no
+    // conversation yet) can otherwise race two creates and throw an E11000 duplicate-key error.
+    const convo = await this.conversationModel.findOneAndUpdate(
+      { partnerId: pid },
+      { $setOnInsert: { partnerId: pid } },
+      { upsert: true, new: true },
+    );
+    return this.populateConversation(convo._id.toString(), partnerId);
   }
 
   async getConversation(conversationId: string) {
@@ -79,8 +92,8 @@ export class MessagingService {
       subject: convo.subject ?? '',
       lastMessage,
       unreadCount: convo.partnerUnread,
-      createdAt: (convo as any).createdAt?.toISOString() ?? '',
-      updatedAt: (convo as any).updatedAt?.toISOString() ?? '',
+      createdAt: toIsoString((convo as any).createdAt),
+      updatedAt: toIsoString((convo as any).updatedAt),
     };
   }
 
@@ -231,8 +244,8 @@ export class MessagingService {
             province: branch?.province ?? null,
             line1: branch?.line1 ?? null,
           },
-          createdAt: (c as any).createdAt?.toISOString() ?? '',
-          updatedAt: (c as any).updatedAt?.toISOString() ?? '',
+          createdAt: toIsoString((c as any).createdAt),
+          updatedAt: toIsoString((c as any).updatedAt),
         };
       });
   }
@@ -259,7 +272,7 @@ export class MessagingService {
         province: branch?.province ?? null,
         line1: branch?.line1 ?? null,
       },
-      createdAt: (convo as any).createdAt?.toISOString() ?? '',
+      createdAt: toIsoString((convo as any).createdAt),
     };
   }
 
@@ -276,7 +289,9 @@ export class MessagingService {
     return {
       _id: msg._id.toString(),
       conversationId: msg.conversationId.toString(),
-      senderId: msg.senderId.toString(),
+      // senderId is null for system/support messages seeded without a real admin user attached
+      // (e.g. the demo-data "Welcome to Lunara" note) — fall back to '' rather than crash.
+      senderId: msg.senderId ? msg.senderId.toString() : '',
       senderRole: msg.senderRole,
       senderName: msg.senderName,
       content: msg.content ?? '',

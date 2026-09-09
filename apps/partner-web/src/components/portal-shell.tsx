@@ -3,13 +3,22 @@
 import Link from 'next/link';
 import { usePathname, useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import type { PartnerSubscriptionInfo } from '@lunara/types';
-import { isPartnerRole, partnerFetch, staffLogout } from '../lib/partner-api';
+import { UserRole, type PartnerSettingsData, type PartnerSubscriptionInfo } from '@lunara/types';
+import {
+  getDemoDataStatus,
+  getPortalUser,
+  isPartnerRole,
+  partnerFetch,
+  SHOP_BRANDING_CHANGED_EVENT,
+  staffLogout,
+} from '../lib/partner-api';
 import { usePartnerNotificationsSocket } from '../lib/use-partner-notifications-socket';
 import { usePartnerPath, stripPartnerSlug, withPartnerSlug } from '../lib/partner-path';
 import { BranchSwitcher } from './branch-switcher';
 import { BrandMark } from './ui/brand-mark';
 import { PortalHeaderActions } from './portal-header-actions';
+import { DemoDataBanner } from './demo-data-banner';
+import { ForceChangePasswordModal } from './force-change-password-modal';
 
 const SUBSCRIPTION_PLAN_LABELS: Record<PartnerSubscriptionInfo['subscriptionPlan'], string> = {
   trial: 'Trial',
@@ -333,10 +342,28 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   const [partner, setPartner] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [subscription, setSubscription] = useState<PartnerSubscriptionInfo | null>(null);
+  const [hasDemoData, setHasDemoData] = useState(false);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [shopBranding, setShopBranding] = useState<{ name: string; logoUrl?: string } | null>(null);
 
   useEffect(() => {
     setPartner(isPartnerRole());
+    setMustChangePassword(Boolean(getPortalUser()?.mustChangePassword));
   }, [pathname]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getDemoDataStatus()
+      .then((data) => {
+        if (!cancelled) setHasDemoData(data.hasDemoData);
+      })
+      .catch(() => {
+        if (!cancelled) setHasDemoData(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!partner) {
@@ -356,6 +383,29 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
     };
   }, [partner]);
 
+  // Sidebar brand mark shows the shop's own name/logo instead of the generic "Lunara Business
+  // Account" label once settings have loaded — same source the Shop settings page reads from.
+  // Also refetched on SHOP_BRANDING_CHANGED_EVENT so a logo upload/removal on the Settings page
+  // shows up in the sidebar immediately, without waiting for the next full page mount.
+  useEffect(() => {
+    let cancelled = false;
+    function loadBranding() {
+      partnerFetch<PartnerSettingsData>('/partner/settings')
+        .then((data) => {
+          if (!cancelled) setShopBranding({ name: data.branch.name, logoUrl: data.branch.logoUrl });
+        })
+        .catch(() => {
+          if (!cancelled) setShopBranding(null);
+        });
+    }
+    loadBranding();
+    window.addEventListener(SHOP_BRANDING_CHANGED_EVENT, loadBranding);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(SHOP_BRANDING_CHANGED_EVENT, loadBranding);
+    };
+  }, []);
+
   // Every public page (/, /login, /signup, /verify-email, /offline) has no /{partnerSlug} segment
   // — none of them get the shell/nav/header. /{partnerSlug}/login is the one exception with a
   // slug segment that's still public: the sign-in form itself, not a portal screen.
@@ -370,10 +420,14 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   }
 
   const groups = partner ? partnerNavGroups : staffNavGroups;
-  const title = partner ? 'Lunara Business Account' : 'Lunara Staff';
+  const title = shopBranding?.name || (partner ? 'Lunara Business Account' : 'Lunara Staff');
 
   return (
     <div className="portal-bg min-h-screen">
+      {mustChangePassword && (
+        <ForceChangePasswordModal onDone={() => setMustChangePassword(false)} />
+      )}
+
       {sidebarOpen && (
         <button
           type="button"
@@ -391,10 +445,15 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
       >
         <div className="flex h-full flex-col p-5">
           <div className="mb-7 px-1">
-            <BrandMark partner={partner} />
+            <BrandMark
+              partner={partner}
+              title={shopBranding?.name}
+              subtitle={shopBranding?.name ? 'Shop operations' : undefined}
+              logoSrc={shopBranding?.logoUrl}
+            />
           </div>
 
-          <div className="flex-1 overflow-y-auto overscroll-contain">
+          <div data-tour-id="sidebar-nav" className="flex-1 overflow-y-auto overscroll-contain">
             <SidebarNav groups={groups} onNavigate={() => setSidebarOpen(false)} />
           </div>
 
@@ -451,10 +510,20 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
 
           {partner && <BranchSwitcher />}
 
-          <PortalHeaderActions />
+          <div data-tour-id="header-actions" className="ml-auto flex items-center gap-2 sm:gap-3">
+            <PortalHeaderActions />
+          </div>
         </header>
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
+        <main className="flex-1 p-4 sm:p-6 lg:p-8">
+          {hasDemoData && (
+            <DemoDataBanner
+              canClear={getPortalUser()?.role === UserRole.PARTNER}
+              onCleared={() => setHasDemoData(false)}
+            />
+          )}
+          {children}
+        </main>
       </div>
     </div>
   );

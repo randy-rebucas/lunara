@@ -108,11 +108,12 @@ export class EmailService {
     });
   }
 
-  async sendPartnerInvite(to: string, password: string): Promise<void> {
+  async sendPartnerInvite(to: string, password: string, shopLink?: string): Promise<void> {
+    const linkLine = shopLink ? `\n\nYour shop link: ${shopLink}` : '';
     await this.send({
       to,
       subject: "You've been invited to join Lunara as a partner",
-      text: `A partner account has been created for you on Lunara.\n\nEmail: ${to}\nTemporary password: ${password}\n\nSign in on the Lunara partner portal to manage your branch. You can change your password after logging in.`,
+      text: `A partner account has been created for you on Lunara.\n\nEmail: ${to}\nTemporary password: ${password}${linkLine}\n\nSign in on the Lunara partner portal to manage your branch. You'll be asked to set your own password on first login.`,
     });
   }
 

@@ -6,6 +6,7 @@ export interface PortalUser {
   email?: string;
   role: PortalRole;
   branchId?: string;
+  mustChangePassword?: boolean;
 }
 
 export interface DayOperatingHours {

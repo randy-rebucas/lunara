@@ -78,6 +78,11 @@ export class Promotion {
   @Prop({ type: Types.ObjectId })
   reviewedBy?: Types.ObjectId;
 
+  /** True only for promotions auto-seeded by PartnerDemoDataService alongside a new partner's demo
+   * data — removed once the partner clicks "Ready" in partner-web. */
+  @Prop({ index: true })
+  isDemoData?: boolean;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

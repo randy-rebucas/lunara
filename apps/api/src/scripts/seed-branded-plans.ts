@@ -32,7 +32,7 @@ const SEEDS = [
     key: 'default',
     name: 'Regular Partner',
     monthlyPrice: 1299,
-    trialDays: 0,
+    trialDays: 14,
     features: { customBranding: false },
     upgradeFee: 0,
     sortOrder: 10,
@@ -41,7 +41,9 @@ const SEEDS = [
     key: 'branded',
     name: 'Territorial Partner',
     monthlyPrice: 3000,
-    trialDays: 0,
+    // Longer trial — territorial partners are waiting on their own branded mobile app to clear
+    // Play Store review before they can fully operate under their own listing.
+    trialDays: 30,
     features: { customBranding: true },
     upgradeFee: 5000,
     sortOrder: 11,

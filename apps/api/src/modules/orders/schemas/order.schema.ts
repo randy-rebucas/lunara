@@ -515,6 +515,11 @@ export class Order {
   @Prop({ type: Types.ObjectId })
   deliveryApprovedBy?: Types.ObjectId;
 
+  /** True only for orders auto-seeded by PartnerDemoDataService for a newly onboarded partner to
+   * explore with — cleared (and this doc deleted) once the partner clicks "Ready" in partner-web. */
+  @Prop({ index: true })
+  isDemoData?: boolean;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

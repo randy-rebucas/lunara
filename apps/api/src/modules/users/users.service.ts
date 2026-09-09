@@ -1,12 +1,20 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
-import { UserRole } from '@lunara/types';
+import { OrderStatus, UserRole } from '@lunara/types';
+import { isActiveOrderStatus } from '@lunara/utils';
 import { User, UserDocument } from './schemas/user.schema';
+import { UserProfile, UserProfileDocument } from './schemas/user-profile.schema';
 import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
+import { Rider, RiderDocument } from '../riders/schemas/rider.schema';
+import { Partner, PartnerDocument } from '../partners/schemas/partner.schema';
+import { Address, AddressDocument } from '../addresses/schemas/address.schema';
+import { Wallet, WalletDocument } from '../wallets/schemas/wallet.schema';
+import { Notification, NotificationDocument } from '../reviews/schemas/notification.schema';
+import { Branch, BranchDocument } from '../branches/schemas/branch.schema';
 
 /** Case-insensitive markers seen in waves of spam signups (each is a fixed prefix/tag followed by
  *  a random suffix); matched against the user's email. Add new confirmed markers here. */
@@ -42,7 +50,90 @@ export class UsersService {
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
+    @InjectModel(UserProfile.name) private userProfileModel: Model<UserProfileDocument>,
+    @InjectModel(Rider.name) private riderModel: Model<RiderDocument>,
+    @InjectModel(Partner.name) private partnerModel: Model<PartnerDocument>,
+    @InjectModel(Address.name) private addressModel: Model<AddressDocument>,
+    @InjectModel(Wallet.name) private walletModel: Model<WalletDocument>,
+    @InjectModel(Notification.name) private notificationModel: Model<NotificationDocument>,
+    @InjectModel(Branch.name) private branchModel: Model<BranchDocument>,
   ) {}
+
+  /**
+   * Guards against deleting a user whose removal would either destroy money (a nonzero wallet
+   * balance has nowhere to go) or silently orphan live business state (a partner's branches, or
+   * an order actively in progress for a customer/rider). Financial/audit history that merely
+   * *references* the user (orders, payments, ledger entries, reviews, support tickets, etc.) is
+   * deliberately left alone rather than deleted or nulled — Mongo has no FK constraints, the
+   * codebase already reads those joins defensively (missing user = blank display field, never a
+   * crash), and destroying that history would be worse than a stale ObjectId pointing at a
+   * deleted account.
+   */
+  private async assertSafeToDelete(user: UserDocument): Promise<void> {
+    const wallet = await this.walletModel.findOne({ userId: user._id }).select('balance');
+    if (wallet && wallet.balance > 0) {
+      throw new BadRequestException(
+        `${user.email ?? user._id.toString()} has a wallet balance of ₱${wallet.balance} — settle or withdraw it before deleting this account`,
+      );
+    }
+
+    if (user.role === UserRole.PARTNER) {
+      const branchCount = await this.branchModel.countDocuments({ partnerUserId: user._id });
+      if (branchCount > 0) {
+        throw new BadRequestException(
+          `${user.email ?? user._id.toString()} still owns ${branchCount} branch(es) — reassign or remove them before deleting this account`,
+        );
+      }
+    }
+
+    if (user.role === UserRole.CUSTOMER) {
+      const activeStatuses = Object.values(OrderStatus).filter(isActiveOrderStatus);
+      const hasActiveOrder = await this.orderModel.exists({
+        customerId: user._id,
+        status: { $in: activeStatuses },
+      });
+      if (hasActiveOrder) {
+        throw new BadRequestException(
+          `${user.email ?? user._id.toString()} has an order in progress — wait for it to complete or cancel it before deleting this account`,
+        );
+      }
+    }
+
+    if (user.role === UserRole.RIDER) {
+      const activeStatuses = Object.values(OrderStatus).filter(isActiveOrderStatus);
+      const hasActiveOrder = await this.orderModel.exists({
+        $or: [{ pickupRiderId: user._id }, { deliveryRiderId: user._id }],
+        status: { $in: activeStatuses },
+      });
+      if (hasActiveOrder) {
+        throw new BadRequestException(
+          `${user.email ?? user._id.toString()} has an order in progress — reassign it before deleting this account`,
+        );
+      }
+    }
+  }
+
+  /** Deletes every document that exists solely to extend this User (profile-shaped join
+   * collections), once assertSafeToDelete has cleared it. Does not touch financial/order/audit
+   * history — see assertSafeToDelete's doc comment.
+   *
+   * `force` additionally hard-deletes a partner's branches (a no-op for non-partners, since the
+   * filter matches nothing) — only reachable when assertSafeToDelete was bypassed, i.e. an admin
+   * explicitly chose to override the "still owns branches" guard. This orphans the branchId
+   * reference on any orders that branch had; that data loss is the deliberate cost of forcing
+   * past the guard, not a side effect anyone should hit by accident. */
+  private async cascadeDeleteUserData(userId: Types.ObjectId, force = false): Promise<void> {
+    await Promise.all([
+      this.customerModel.deleteOne({ userId }),
+      this.riderModel.deleteOne({ userId }),
+      this.partnerModel.deleteOne({ ownerUserId: userId }),
+      this.userProfileModel.deleteOne({ userId }),
+      this.addressModel.deleteMany({ userId }),
+      this.walletModel.deleteOne({ userId }),
+      this.notificationModel.deleteMany({ userId }),
+      ...(force ? [this.branchModel.deleteMany({ partnerUserId: userId })] : []),
+    ]);
+  }
 
   /**
    * Deletes users (and their customer profiles) matching known spam-signup patterns.
@@ -61,27 +152,53 @@ export class UsersService {
 
     const toDelete = [...markedUsers.map((u) => u._id)];
     for (const candidate of fuzzyCandidates) {
-      const customer = await this.customerModel.findOne({ userId: candidate._id }).select('_id');
-      const hasOrders = customer
-        ? (await this.orderModel.exists({ customerId: customer._id })) !== null
-        : false;
+      // Order.customerId stores the User._id directly (see orders.service.ts/partner-demo-data
+      // seeding — never Customer._id), so the check must compare against candidate._id itself.
+      const hasOrders = (await this.orderModel.exists({ customerId: candidate._id })) !== null;
       if (!hasOrders) toDelete.push(candidate._id);
     }
 
     if (toDelete.length === 0) return { success: true, data: { deletedCount: 0 } };
 
-    await this.customerModel.deleteMany({ userId: { $in: toDelete } });
+    await Promise.all(toDelete.map((id) => this.cascadeDeleteUserData(id as Types.ObjectId)));
     const result = await this.userModel.deleteMany({ _id: { $in: toDelete } });
     return { success: true, data: { deletedCount: result.deletedCount } };
   }
 
-  /** Deletes the given users and their customer profiles outright, no safety checks — the caller
-   *  (an admin explicitly selecting rows) is the safety check. */
-  async bulkDelete(ids: string[]) {
+  /** Deletes the given users and everything that exists solely to extend them (customer/rider/
+   * partner profiles, addresses, wallet, notifications) — see cascadeDeleteUserData. Skips (not
+   * fails) any user that assertSafeToDelete rejects — a nonzero wallet balance, a partner that
+   * still owns branches, or an active order — so one bad row in a bulk selection doesn't block
+   * the rest. Financial/order/audit history that only references the user is left untouched.
+   *
+   * `force: true` bypasses every assertSafeToDelete check (wallet balance, owned branches, active
+   * orders) and additionally hard-deletes a partner's branches — a deliberate, explicit admin
+   * override, not a default. The caller (admin-web) should only offer this after the guarded
+   * attempt has already reported exactly what would be destroyed. */
+  async bulkDelete(ids: string[], force = false) {
     if (!ids.length) throw new BadRequestException('No user ids provided');
-    await this.customerModel.deleteMany({ userId: { $in: ids } });
-    const result = await this.userModel.deleteMany({ _id: { $in: ids } });
-    return { success: true, data: { deletedCount: result.deletedCount } };
+    const users = await this.userModel.find({ _id: { $in: ids } });
+
+    const deletedIds: string[] = [];
+    const skipped: { id: string; email?: string; reason: string }[] = [];
+    for (const user of users) {
+      try {
+        if (!force) await this.assertSafeToDelete(user);
+        await this.cascadeDeleteUserData(user._id as Types.ObjectId, force);
+        deletedIds.push(user._id.toString());
+      } catch (err) {
+        skipped.push({
+          id: user._id.toString(),
+          email: user.email,
+          reason: err instanceof Error ? err.message : 'Could not delete this account',
+        });
+      }
+    }
+
+    if (deletedIds.length > 0) {
+      await this.userModel.deleteMany({ _id: { $in: deletedIds } });
+    }
+    return { success: true, data: { deletedCount: deletedIds.length, deletedIds, skipped } };
   }
 
   async getProfile(userId: string) {

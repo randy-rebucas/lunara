@@ -15,7 +15,8 @@ export function buildOrderTools(orders: OrdersService): ToolSpec[] {
         },
       },
       personas: ['olivia', 'daniel'],
-      handler: async (input: { status?: string }) => orders.getPartnerQueue(input?.status),
+      handler: async (input: { status?: string }, ctx) =>
+        orders.getPartnerQueue({ sub: ctx.userId, role: ctx.role as UserRole }, input?.status),
     },
     {
       name: 'get_order_detail',

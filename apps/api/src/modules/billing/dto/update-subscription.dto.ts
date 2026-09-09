@@ -15,6 +15,10 @@ export class UpdateSubscriptionDto {
   currentPeriodEnd?: string;
 
   @IsOptional()
+  @IsDateString()
+  trialEndsAt?: string;
+
+  @IsOptional()
   @IsBoolean()
   cancelAtPeriodEnd?: boolean;
 

@@ -116,6 +116,15 @@ const BENEFITS = [
   },
 ];
 
+function slugify(input: string): string {
+  return input
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
+    .slice(0, 40);
+}
+
 const emptyAddress: SignupAddressValue = {
   line1: '',
   city: '',
@@ -251,7 +260,7 @@ export default function PartnerSignupPage() {
             <Icon d={CHECK_ICON} className="h-7 w-7" />
           </span>
           <h1 className="mt-6 text-2xl font-bold tracking-tight text-slate-900">
-            Application received!
+            Account created!
           </h1>
           <p className="mt-3 text-sm text-muted-foreground">
             Your account has been created. We&apos;ve sent your temporary password to{' '}
@@ -398,14 +407,22 @@ export default function PartnerSignupPage() {
                     </label>
                     <p className="mt-0.5 text-xs text-muted-foreground">Shown to your customers</p>
                   </div>
-                  <input
-                    id="business-name"
-                    className="input-field"
-                    value={businessName}
-                    onChange={(e) => setBusinessName(e.target.value)}
-                    placeholder="e.g. CleanWash Laundry"
-                    required
-                  />
+                  <div>
+                    <input
+                      id="business-name"
+                      className="input-field"
+                      value={businessName}
+                      onChange={(e) => setBusinessName(e.target.value)}
+                      placeholder="e.g. CleanWash Laundry"
+                      required
+                    />
+                    {businessName.trim() && (
+                      <p className="mt-1.5 text-xs text-muted-foreground">
+                        Your shop link: <span className="font-medium text-slate-700">lunara.app/{slugify(businessName) || 'shop'}-••••</span>{' '}
+                        <span className="text-muted-foreground/80">(a unique code is added when your account is created)</span>
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 <div className="mt-6 grid items-start gap-x-8 gap-y-2 border-t border-border/60 pt-6 sm:grid-cols-[minmax(0,220px)_1fr]">

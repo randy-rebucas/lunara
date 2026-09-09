@@ -201,37 +201,54 @@ export class RiderAssignmentService {
     const since = new Date();
     since.setDate(since.getDate() - 30);
 
-    const inputs = await Promise.all(
-      riders.map(async (r) => {
-        const uid = r.userId.toString();
-        const [activePickup, activeDelivery, completed] = await Promise.all([
-          this.orderModel.countDocuments({
-            pickupRiderId: r.userId,
+    // Grouped aggregates instead of 3 countDocuments() per candidate rider — the latter was up to
+    // 150 sequential round-trips on a 50-rider pool for what's a single "suggest a rider" click.
+    const riderIds = riders.map((r) => r.userId);
+    const [activePickupCounts, activeDeliveryCounts, completedCounts] = await Promise.all([
+      this.orderModel.aggregate<{ _id: Types.ObjectId; count: number }>([
+        {
+          $match: {
+            pickupRiderId: { $in: riderIds },
             status: { $in: [OrderStatus.RIDER_ASSIGNED_PICKUP, OrderStatus.RIDER_ASSIGNED] },
-          }),
-          this.orderModel.countDocuments({
-            deliveryRiderId: r.userId,
-            status: OrderStatus.OUT_FOR_DELIVERY,
-          }),
-          this.orderModel.countDocuments({
-            pickupRiderId: r.userId,
+          },
+        },
+        { $group: { _id: '$pickupRiderId', count: { $sum: 1 } } },
+      ]),
+      this.orderModel.aggregate<{ _id: Types.ObjectId; count: number }>([
+        { $match: { deliveryRiderId: { $in: riderIds }, status: OrderStatus.OUT_FOR_DELIVERY } },
+        { $group: { _id: '$deliveryRiderId', count: { $sum: 1 } } },
+      ]),
+      this.orderModel.aggregate<{ _id: Types.ObjectId; count: number }>([
+        {
+          $match: {
+            pickupRiderId: { $in: riderIds },
             status: { $in: [OrderStatus.PICKED_UP, OrderStatus.DELIVERED, OrderStatus.COMPLETED] },
             updatedAt: { $gte: since },
-          }),
-        ]);
-        const coords = r.currentLocation?.coordinates;
-        return {
-          userId: uid,
-          email: riderUsers.find((u) => u._id.toString() === uid)?.email,
-          isOnline: r.isOnline,
-          activePickupTasks: activePickup,
-          activeDeliveryTasks: activeDelivery,
-          completedPickups30d: completed,
-          riderLng: coords?.[0],
-          riderLat: coords?.[1],
-        };
-      }),
-    );
+          },
+        },
+        { $group: { _id: '$pickupRiderId', count: { $sum: 1 } } },
+      ]),
+    ]);
+    const toCountMap = (rows: { _id: Types.ObjectId; count: number }[]) =>
+      new Map(rows.map((r) => [r._id.toString(), r.count]));
+    const activePickupMap = toCountMap(activePickupCounts);
+    const activeDeliveryMap = toCountMap(activeDeliveryCounts);
+    const completedMap = toCountMap(completedCounts);
+
+    const inputs = riders.map((r) => {
+      const uid = r.userId.toString();
+      const coords = r.currentLocation?.coordinates;
+      return {
+        userId: uid,
+        email: riderUsers.find((u) => u._id.toString() === uid)?.email,
+        isOnline: r.isOnline,
+        activePickupTasks: activePickupMap.get(uid) ?? 0,
+        activeDeliveryTasks: activeDeliveryMap.get(uid) ?? 0,
+        completedPickups30d: completedMap.get(uid) ?? 0,
+        riderLng: coords?.[0],
+        riderLat: coords?.[1],
+      };
+    });
 
     const suggestions = rankRidersForPickup(
       inputs,
@@ -289,7 +306,14 @@ export class RiderAssignmentService {
     if (!order) throw new NotFoundException('Order not found');
     this.assertReadyForPickupAssignment(order);
 
-    if (order.pickupRiderId) {
+    // Atomic claim: a plain read-then-write here would let two concurrent assignment calls (e.g.
+    // manual dispatch racing auto-assign) both pass this check and overwrite each other on save().
+    // findOneAndUpdate with pickupRiderId unset as part of the filter makes only one call win.
+    const claimed = await this.orderModel.findOneAndUpdate(
+      { _id: order._id, pickupRiderId: { $exists: false } },
+      { $set: { pickupRiderId: new Types.ObjectId(riderUserId) } },
+    );
+    if (!claimed) {
       throw new BadRequestException('Pickup rider already assigned');
     }
 
@@ -499,12 +523,14 @@ export class RiderAssignmentService {
     const since = new Date();
     since.setDate(since.getDate() - 30);
 
-    const inputs = await Promise.all(
-      riders.map(async (r) => {
-        const uid = r.userId.toString();
-        const [activePickup, activeDelivery, completed] = await Promise.all([
-          this.orderModel.countDocuments({
-            pickupRiderId: r.userId,
+    // Grouped aggregates instead of 3 countDocuments() per candidate rider — see the matching
+    // comment in suggestPickupRider above.
+    const riderIds = riders.map((r) => r.userId);
+    const [activePickupCounts, activeDeliveryCounts, completedCounts] = await Promise.all([
+      this.orderModel.aggregate<{ _id: Types.ObjectId; count: number }>([
+        {
+          $match: {
+            pickupRiderId: { $in: riderIds },
             status: {
               $in: [
                 OrderStatus.RIDER_ASSIGNED_PICKUP,
@@ -513,32 +539,50 @@ export class RiderAssignmentService {
                 OrderStatus.IN_TRANSIT_TO_SHOP,
               ],
             },
-          }),
-          this.orderModel.countDocuments({
-            deliveryRiderId: r.userId,
-            status: {
-              $in: [OrderStatus.RIDER_ASSIGNED_DELIVERY, OrderStatus.OUT_FOR_DELIVERY],
-            },
-          }),
-          this.orderModel.countDocuments({
-            deliveryRiderId: r.userId,
+          },
+        },
+        { $group: { _id: '$pickupRiderId', count: { $sum: 1 } } },
+      ]),
+      this.orderModel.aggregate<{ _id: Types.ObjectId; count: number }>([
+        {
+          $match: {
+            deliveryRiderId: { $in: riderIds },
+            status: { $in: [OrderStatus.RIDER_ASSIGNED_DELIVERY, OrderStatus.OUT_FOR_DELIVERY] },
+          },
+        },
+        { $group: { _id: '$deliveryRiderId', count: { $sum: 1 } } },
+      ]),
+      this.orderModel.aggregate<{ _id: Types.ObjectId; count: number }>([
+        {
+          $match: {
+            deliveryRiderId: { $in: riderIds },
             status: { $in: [OrderStatus.DELIVERED, OrderStatus.COMPLETED] },
             updatedAt: { $gte: since },
-          }),
-        ]);
-        const coords = r.currentLocation?.coordinates;
-        return {
-          userId: uid,
-          email: riderUsers.find((u) => u._id.toString() === uid)?.email,
-          isOnline: r.isOnline,
-          activePickupTasks: activePickup,
-          activeDeliveryTasks: activeDelivery,
-          completedPickups30d: completed,
-          riderLng: coords?.[0],
-          riderLat: coords?.[1],
-        };
-      }),
-    );
+          },
+        },
+        { $group: { _id: '$deliveryRiderId', count: { $sum: 1 } } },
+      ]),
+    ]);
+    const toCountMap = (rows: { _id: Types.ObjectId; count: number }[]) =>
+      new Map(rows.map((r) => [r._id.toString(), r.count]));
+    const activePickupMap = toCountMap(activePickupCounts);
+    const activeDeliveryMap = toCountMap(activeDeliveryCounts);
+    const completedMap = toCountMap(completedCounts);
+
+    const inputs = riders.map((r) => {
+      const uid = r.userId.toString();
+      const coords = r.currentLocation?.coordinates;
+      return {
+        userId: uid,
+        email: riderUsers.find((u) => u._id.toString() === uid)?.email,
+        isOnline: r.isOnline,
+        activePickupTasks: activePickupMap.get(uid) ?? 0,
+        activeDeliveryTasks: activeDeliveryMap.get(uid) ?? 0,
+        completedPickups30d: completedMap.get(uid) ?? 0,
+        riderLng: coords?.[0],
+        riderLat: coords?.[1],
+      };
+    });
 
     const suggestions = rankRidersForDelivery(
       inputs,
@@ -602,7 +646,12 @@ export class RiderAssignmentService {
     if (!order) throw new NotFoundException('Order not found');
     this.assertReadyForDeliveryAssignment(order);
 
-    if (order.deliveryRiderId) {
+    // Atomic claim — see assignPickupRider's comment on why this can't be a plain read-then-write.
+    const claimed = await this.orderModel.findOneAndUpdate(
+      { _id: order._id, deliveryRiderId: { $exists: false } },
+      { $set: { deliveryRiderId: new Types.ObjectId(riderUserId) } },
+    );
+    if (!claimed) {
       throw new BadRequestException('Delivery rider already assigned');
     }
 

@@ -86,9 +86,22 @@ export async function staffLogin(email: string, password: string) {
     email: body.data.user.email,
     role: body.data.user.role,
     branchId: body.data.user.branchId,
+    mustChangePassword: body.data.user.mustChangePassword,
   };
   localStorage.setItem(USER_KEY, JSON.stringify(user));
   return user;
+}
+
+export async function changeOwnPassword(currentPassword: string, newPassword: string): Promise<void> {
+  await partnerFetch('/auth/change-password', {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+  const user = getPortalUser();
+  if (user) {
+    user.mustChangePassword = false;
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+  }
 }
 
 export async function staffLogout() {
@@ -162,6 +175,15 @@ export async function removeShopLogo(): Promise<{ id: string; logoUrl?: string }
   return partnerFetch('/partner/settings/logo', { method: 'DELETE' }).then(
     (data) => (data as { branch: { id: string; logoUrl?: string } }).branch,
   );
+}
+
+export const SHOP_BRANDING_CHANGED_EVENT = 'lunara:shop-branding-changed';
+
+/** Notifies the portal shell (sidebar brand mark) to refetch the shop's name/logo right away,
+ * instead of waiting for the next full page mount to pick up an edit made on the Settings page. */
+export function notifyShopBrandingChanged() {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event(SHOP_BRANDING_CHANGED_EVENT));
 }
 
 export async function getOwnProfile(): Promise<PartnerOwnProfile> {
@@ -399,10 +421,21 @@ export async function changeSubscriptionPlan(
   });
 }
 
-export async function updateOwnProfile(displayName: string): Promise<PartnerOwnProfile> {
+export async function getDemoDataStatus(): Promise<{ hasDemoData: boolean }> {
+  return partnerFetch('/partner/demo-data/status');
+}
+
+export async function clearDemoData(): Promise<{ success: boolean }> {
+  return partnerFetch('/partner/demo-data/clear', { method: 'POST' });
+}
+
+export async function updateOwnProfile(updates: {
+  displayName?: string;
+  phone?: string;
+}): Promise<PartnerOwnProfile> {
   return partnerFetch<PartnerOwnProfile>('/partner/profile', {
     method: 'PATCH',
-    body: JSON.stringify({ displayName }),
+    body: JSON.stringify(updates),
   });
 }
 

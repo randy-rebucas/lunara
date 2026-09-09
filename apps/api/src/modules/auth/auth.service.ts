@@ -41,7 +41,7 @@ import { RewardsService } from '../rewards/rewards.service';
 
 import { User, UserDocument } from '../users/schemas/user.schema';
 
-import { LoginDto, RegisterDto, ResetPasswordDto } from './dto/auth.dto';
+import { ChangePasswordDto, LoginDto, RegisterDto, ResetPasswordDto } from './dto/auth.dto';
 
 import { OtpService } from './otp.service';
 
@@ -269,6 +269,23 @@ export class AuthService {
 
 
 
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    const user = await this.userModel.findById(userId);
+    if (!user || !user.passwordHash) throw new UnauthorizedException();
+
+    const valid = await bcrypt.compare(dto.currentPassword, user.passwordHash);
+    if (!valid) throw new UnauthorizedException('Current password is incorrect');
+
+    user.passwordHash = await bcrypt.hash(dto.newPassword, 12);
+    user.mustChangePassword = false;
+    await user.save();
+
+    return {
+      success: true,
+      data: { message: 'Password updated.' },
+    };
+  }
+
   async verifyEmail(token: string) {
     const userId = await this.otpService.consumeEmailVerificationToken(token);
     if (!userId) throw new UnauthorizedException('Invalid or expired verification link');
@@ -374,7 +391,7 @@ export class AuthService {
 
     const refreshToken = this.jwtService.sign(payload, {
 
-      secret: process.env.JWT_REFRESH_SECRET ?? 'dev-refresh-secret',
+      secret: getJwtRefreshSecret(),
 
       expiresIn: '30d',
 
@@ -405,6 +422,8 @@ export class AuthService {
           branchId: user.branchId?.toString(),
 
           isActive: user.isActive,
+
+          mustChangePassword: user.mustChangePassword,
 
           lastLoginAt: user.lastLoginAt,
 

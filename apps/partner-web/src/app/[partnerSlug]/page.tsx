@@ -1,20 +1,35 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useMemo } from 'react';
-import type { PartnerDashboardData, PartnerOrderSummary } from '@lunara/types';
+import { useCallback, useMemo, useState } from 'react';
+import type {
+  PartnerDashboardData,
+  PartnerInventoryItem,
+  PartnerOrderSummary,
+  PartnerOwnProfile,
+} from '@lunara/types';
 import { AuthLoading } from '../../components/auth-loading';
+import { DailyTipBanner } from '../../components/daily-tip-banner';
 import { DataPageStatus } from '../../components/data-page-status';
+import { SetupGuide, type SetupGuideStep } from '../../components/setup-guide';
 import { LiveBadge, StatCard, StatusPill } from '../../components/ui/card';
 import { PageHeader } from '../../components/ui/page-header';
 import { DonutChart, DonutLegend, RevenueLineChart, withDonutColors } from '../../components/dash-charts';
 import { useRequirePartner } from '../../hooks/use-protected-page';
 import { formatPeso } from '../../lib/format-peso';
 import { partnerOrderHref } from '../../lib/partner-order-links';
-import { getPortalUser, partnerFetch } from '../../lib/partner-api';
+import { getPortalUser, listOwnBranches, getOwnProfile, partnerFetch, type PartnerBranch } from '../../lib/partner-api';
 import { usePartnerPath } from '../../lib/partner-path';
 import { usePartnerQuery } from '../../lib/use-partner-query';
 import { usePartnerPipelineSocket } from '../../lib/use-partner-pipeline-socket';
+import {
+  dismissSetupGuide,
+  isSetupGuideDismissed,
+  isSetupGuideOpen,
+  setSetupGuideOpen,
+} from '../../lib/setup-guide-storage';
+import { getDailyTip } from '../../lib/daily-tips';
+import { dismissDailyTipToday, isDailyTipDismissedToday } from '../../lib/daily-tip-storage';
 
 function orderActionHint(order: PartnerOrderSummary): string | null {
   if (order.canAccept) return 'Awaiting acceptance';
@@ -34,6 +49,76 @@ export default function PartnerDashboardPage() {
   }, []);
 
   const { data, loading, error, reload } = usePartnerQuery(load, []);
+
+  const loadSetupStatus = useCallback(async () => {
+    const [profile, branches, inventory] = await Promise.all([
+      getOwnProfile(),
+      listOwnBranches(),
+      partnerFetch<PartnerInventoryItem[]>('/partner/inventory'),
+    ]);
+    return { profile, branches, inventory };
+  }, []);
+
+  const { data: setupStatus } = usePartnerQuery(loadSetupStatus, []);
+  const [setupGuideDismissed, setSetupGuideDismissed] = useState(() => isSetupGuideDismissed());
+  const [setupGuideOpen, setSetupGuideOpenState] = useState(() => isSetupGuideOpen());
+
+  const toggleSetupGuide = useCallback(() => {
+    setSetupGuideOpenState((prev) => {
+      const next = !prev;
+      setSetupGuideOpen(next);
+      return next;
+    });
+  }, []);
+
+  const setupSteps = useMemo<SetupGuideStep[]>(() => {
+    if (!setupStatus || !data) return [];
+    const profile: PartnerOwnProfile = setupStatus.profile;
+    const branches: PartnerBranch[] = setupStatus.branches;
+    const inventory: PartnerInventoryItem[] = setupStatus.inventory;
+    return [
+      {
+        key: 'profile',
+        label: 'Complete your profile',
+        description: 'Add your display name and phone number.',
+        done: Boolean(profile.displayName && profile.phone),
+        href: toPath('/profile'),
+      },
+      {
+        key: 'branch',
+        label: 'Add a branch',
+        description: 'Set up at least one branch where orders can be received.',
+        done: branches.length > 0,
+        href: toPath('/branches'),
+      },
+      {
+        key: 'inventory',
+        label: 'Add inventory items',
+        description: 'Track supplies so you get low-stock alerts.',
+        done: inventory.length > 0,
+        href: toPath('/inventory'),
+      },
+      {
+        key: 'staff',
+        label: 'Add staff',
+        description: 'Invite team members to help manage orders.',
+        done: data.counts.staffMembers > 0,
+        href: toPath('/staff'),
+      },
+      {
+        key: 'first-order',
+        label: 'Receive your first order',
+        description: 'Orders assigned to your shop will show up on this dashboard.',
+        done: data.recentOrders.length > 0 || data.counts.completedToday > 0 || data.revenue.weekOrders > 0,
+        href: toPath('/orders/incoming'),
+      },
+    ];
+  }, [setupStatus, data, toPath]);
+
+  const showSetupGuide = setupSteps.length > 0 && !setupGuideDismissed && setupSteps.some((s) => !s.done);
+
+  const [dailyTipDismissed, setDailyTipDismissed] = useState(() => isDailyTipDismissedToday());
+  const dailyTip = useMemo(() => getDailyTip(), []);
 
   const branchIds = useMemo(
     () => (data?.recentOrders ?? []).map((o) => o.branchId).filter(Boolean) as string[],
@@ -92,11 +177,45 @@ export default function PartnerDashboardPage() {
             Refresh
           </button>
         }
+        tourSteps={[
+          {
+            element: '[data-tour="dashboard-stats"]',
+            title: 'Your snapshot',
+            description: "Today's orders, completed orders, revenue, and staff — click any card to dig in.",
+          },
+          {
+            element: '[data-tour="dashboard-recent-orders"]',
+            title: 'Recent orders',
+            description: 'Orders moving through your shop right now, with a shortcut to the full queue.',
+          },
+        ]}
       />
 
       <div className="mt-4">
         <DataPageStatus loading={loading} error={error} loadingMessage="Loading dashboard…" />
       </div>
+
+      {!dailyTipDismissed && (
+        <DailyTipBanner
+          tip={dailyTip}
+          onDismiss={() => {
+            dismissDailyTipToday();
+            setDailyTipDismissed(true);
+          }}
+        />
+      )}
+
+      {showSetupGuide && (
+        <SetupGuide
+          steps={setupSteps}
+          open={setupGuideOpen}
+          onToggle={toggleSetupGuide}
+          onDismiss={() => {
+            dismissSetupGuide();
+            setSetupGuideDismissed(true);
+          }}
+        />
+      )}
 
       {data && (
         <>
@@ -118,7 +237,7 @@ export default function PartnerDashboardPage() {
             </div>
           )}
 
-          <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div data-tour="dashboard-stats" className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
             <StatCard
               label="Today's orders"
               value={data.trends.ordersToday.value}
@@ -148,7 +267,7 @@ export default function PartnerDashboardPage() {
           </div>
 
           <div className="mt-8 grid gap-4 lg:grid-cols-3">
-            <section className="section-panel lg:col-span-2">
+            <section data-tour="dashboard-recent-orders" className="section-panel lg:col-span-2">
               <div className="section-panel-header flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h3 className="text-lg font-semibold text-slate-900">Recent orders</h3>
