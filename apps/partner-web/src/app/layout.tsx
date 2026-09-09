@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
+import { Suspense } from 'react';
 import { Toaster } from 'sonner';
 import brandIcon from '@lunara/brand/icon';
 import { AuthGuard } from '../components/auth-guard';
@@ -7,6 +8,7 @@ import { BrandingProvider } from '../components/branding-provider';
 import { ErrorBoundary } from '../components/error-boundary';
 import { PortalShell } from '../components/portal-shell';
 import { ServiceWorkerRegister } from '../components/sw-register';
+import { BranchProvider } from '../lib/branch-context';
 import './globals.css';
 
 const inter = Inter({
@@ -41,11 +43,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={inter.variable}>
       <body className="min-h-screen font-sans antialiased">
         <ErrorBoundary>
-          <AuthGuard>
-            <BrandingProvider>
-              <PortalShell>{children}</PortalShell>
-            </BrandingProvider>
-          </AuthGuard>
+          <Suspense fallback={null}>
+            <AuthGuard>
+              <BrandingProvider>
+                <BranchProvider>
+                  <PortalShell>{children}</PortalShell>
+                </BranchProvider>
+              </BrandingProvider>
+            </AuthGuard>
+          </Suspense>
         </ErrorBoundary>
         <Toaster position="bottom-right" richColors />
         <ServiceWorkerRegister />

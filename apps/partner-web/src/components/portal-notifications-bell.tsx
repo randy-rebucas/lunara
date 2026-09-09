@@ -4,9 +4,11 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { useNotifications } from '../hooks/use-notifications';
 import { usePartnerNotificationsSocket } from '../lib/use-partner-notifications-socket';
+import { usePartnerPath } from '../lib/partner-path';
 import { NotificationListItem } from './notification-list-item';
 
 export function PortalNotificationsBell() {
+  const toPath = usePartnerPath();
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const { items, unreadCount, refresh, markRead } = useNotifications(30);
@@ -94,7 +96,7 @@ export function PortalNotificationsBell() {
           </div>
 
           <div className="border-t border-border/60 px-4 py-3">
-            <Link href="/notifications" className="btn-primary btn-sm w-full text-center" onClick={() => setOpen(false)}>
+            <Link href={toPath('/notifications')} className="btn-primary btn-sm w-full text-center" onClick={() => setOpen(false)}>
               View all notifications
             </Link>
           </div>

@@ -15,6 +15,7 @@ import type { PartnerQueueOrder } from '@lunara/types';
 import { LAUNDRY_PROCESSING_STEPS } from '@lunara/utils';
 import { formatPeso } from '../lib/format-peso';
 import { partnerFetch } from '../lib/partner-api';
+import { usePartnerPath } from '../lib/partner-path';
 
 interface ProcessingKanbanBoardProps {
   orders: PartnerQueueOrder[];
@@ -29,6 +30,7 @@ function OrderCard({
   order: PartnerQueueOrder;
   onAcceptJob: (orderId: string, e: React.MouseEvent) => void;
 }) {
+  const toPath = usePartnerPath();
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: order._id,
   });
@@ -57,7 +59,7 @@ function OrderCard({
       >
         ⠿
       </button>
-      <Link href={`/orders/${order._id}`} className="block pr-6 hover:text-primary">
+      <Link href={toPath(`/orders/${order._id}`)} className="block pr-6 hover:text-primary">
         <p className="font-medium capitalize text-slate-900">
           {order.bookingType.replace(/_/g, ' ')}
         </p>

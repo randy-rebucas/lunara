@@ -1,22 +1,18 @@
 'use client';
 
 import { useEffect } from 'react';
-import { usePathname } from 'next/navigation';
 import { usePartnerBranding } from '../hooks/use-partner-branding';
 
-const UNAUTHENTICATED_PATHS = new Set(['/login', '/offline']);
-
-/** Applies the logged-in partner's brand colors (as CSS custom properties already consumed by
- * globals.css, matching customer-web's --lunara-* pattern) and display name once authenticated.
- * No-ops (default Lunara theme) for brandless partners, unauthenticated pages, or fetch errors. */
+/** Applies the active partner's brand colors (as CSS custom properties already consumed by
+ * globals.css, matching customer-web's --lunara-* pattern) and display name — resolved by the
+ * /{partnerSlug} route segment pre-login, and by the authenticated tenant afterward.
+ * No-ops (default Lunara theme) for brandless partners or fetch errors. */
 export function BrandingProvider({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const skip = UNAUTHENTICATED_PATHS.has(pathname);
   const { brandConfig, isDefault } = usePartnerBranding();
 
   useEffect(() => {
     const root = document.documentElement;
-    if (skip || isDefault || !brandConfig) {
+    if (isDefault || !brandConfig) {
       root.style.removeProperty('--lunara-primary');
       root.style.removeProperty('--lunara-secondary');
       root.style.removeProperty('--lunara-accent');
@@ -29,7 +25,7 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
     root.style.setProperty('--lunara-accent', brandConfig.colors.accent);
     root.style.setProperty('--lunara-border', brandConfig.colors.border);
     document.title = `${brandConfig.appDisplayName} Business Account`;
-  }, [skip, isDefault, brandConfig]);
+  }, [isDefault, brandConfig]);
 
   return <>{children}</>;
 }

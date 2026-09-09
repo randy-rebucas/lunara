@@ -258,7 +258,7 @@ export default function PartnerSignupPage() {
             <span className="font-medium text-slate-900">{email}</span>. Please check your inbox
             and verify your email before signing in.
           </p>
-          <Link href="/login" className="btn-primary mt-8 inline-flex w-full justify-center py-3">
+          <Link href={"/login"} className="btn-primary mt-8 inline-flex w-full justify-center py-3">
             Back to sign in
           </Link>
         </div>
@@ -854,7 +854,7 @@ export default function PartnerSignupPage() {
 
           <p className="mt-8 text-center text-sm text-muted-foreground">
             Already have an account?{' '}
-            <Link href="/login" className="link-primary">
+            <Link href={"/login"} className="link-primary">
               Sign in
             </Link>
           </p>

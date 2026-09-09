@@ -1,18 +1,15 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import type { PartnerSubscriptionInfo } from '@lunara/types';
 import { isPartnerRole, partnerFetch, staffLogout } from '../lib/partner-api';
 import { usePartnerNotificationsSocket } from '../lib/use-partner-notifications-socket';
+import { usePartnerPath, stripPartnerSlug, withPartnerSlug } from '../lib/partner-path';
+import { BranchSwitcher } from './branch-switcher';
 import { BrandMark } from './ui/brand-mark';
 import { PortalHeaderActions } from './portal-header-actions';
-
-// Keep in sync with auth-guard.tsx's PUBLIC_PATHS — pages here render bare (no shell/nav/header),
-// since the header alone (PortalHeaderActions) fetches /partner/profile unconditionally on mount
-// and partnerFetch hard-redirects to /login on the 401 that returns with no token.
-const PUBLIC_PATHS = new Set(['/login', '/offline', '/signup', '/verify-email']);
 
 const SUBSCRIPTION_PLAN_LABELS: Record<PartnerSubscriptionInfo['subscriptionPlan'], string> = {
   trial: 'Trial',
@@ -213,7 +210,10 @@ function SidebarNav({
   groups: NavGroup[];
   onNavigate?: () => void;
 }) {
-  const pathname = usePathname();
+  const fullPathname = usePathname();
+  const { partnerSlug } = useParams<{ partnerSlug: string }>();
+  const pathname = stripPartnerSlug(fullPathname, partnerSlug);
+  const toPath = usePartnerPath();
 
   // Sub-menus (items with children): open by default, but collapsed once the user closes them,
   // unless the active route lives inside — then force it open so the current page stays visible.
@@ -270,7 +270,7 @@ function SidebarNav({
                     <div key={item.href}>
                       <div className="flex items-center">
                         <Link
-                          href={item.href}
+                          href={toPath(item.href)}
                           onClick={onNavigate}
                           className={`flex flex-1 items-center gap-3 ${itemActive ? 'nav-link-active' : 'nav-link'}`}
                         >
@@ -299,7 +299,7 @@ function SidebarNav({
                           {item.children.map((child) => (
                             <Link
                               key={child.href}
-                              href={child.href}
+                              href={toPath(child.href)}
                               onClick={onNavigate}
                               className={`block rounded-lg px-2 py-1.5 text-sm ${
                                 isActive(pathname, child.href)
@@ -326,7 +326,9 @@ function SidebarNav({
 
 // ── Shell ──────────────────────────────────────────────────────────────────
 export function PortalShell({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
+  const fullPathname = usePathname();
+  const { partnerSlug } = useParams<{ partnerSlug: string }>();
+  const pathname = stripPartnerSlug(fullPathname, partnerSlug);
   const router = useRouter();
   const [partner, setPartner] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -354,7 +356,10 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
     };
   }, [partner]);
 
-  const isPublicPath = PUBLIC_PATHS.has(pathname);
+  // Every public page (/, /login, /signup, /verify-email, /offline) has no /{partnerSlug} segment
+  // — none of them get the shell/nav/header. /{partnerSlug}/login is the one exception with a
+  // slug segment that's still public: the sign-in form itself, not a portal screen.
+  const isPublicPath = !partnerSlug || pathname === '/login';
   const { connected } = usePartnerNotificationsSocket({ enabled: !isPublicPath });
 
   if (isPublicPath) return <>{children}</>;
@@ -396,7 +401,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
           <div className="mt-4 border-t border-border/60 pt-3">
             {subscription && (
               <Link
-                href="/settings?tab=plan"
+                href={withPartnerSlug(partnerSlug, '/settings?tab=plan')}
                 className="mb-3 flex items-center justify-between rounded-lg border border-border/60 px-3 py-2 text-xs hover:bg-slate-50"
               >
                 <span className="font-medium text-slate-700">
@@ -419,7 +424,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
 
       {/* Main column */}
       <div className="flex min-h-screen min-w-0 flex-col lg:pl-[var(--width-sidebar)]">
-        {!connected && pathname !== '/login' && (
+        {!connected && (
           <div className="sticky top-0 z-40 border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-center text-xs font-medium text-amber-700">
             Connection lost — reconnecting…
           </div>
@@ -443,6 +448,8 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
           </button>
 
           <span className="text-sm font-semibold text-slate-900 lg:hidden">{title}</span>
+
+          {partner && <BranchSwitcher />}
 
           <PortalHeaderActions />
         </header>

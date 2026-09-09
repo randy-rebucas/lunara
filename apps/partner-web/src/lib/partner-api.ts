@@ -24,6 +24,13 @@ export function getApiBaseUrl() {
   return API_URL;
 }
 
+function redirectToLogin() {
+  if (typeof window === 'undefined') return;
+  if (window.location.pathname.startsWith('/login')) return;
+  const next = encodeURIComponent(window.location.pathname + window.location.search);
+  window.location.href = `/login?next=${next}`;
+}
+
 export function getPartnerToken() {
   if (typeof window === 'undefined') return '';
   return localStorage.getItem(STORAGE_KEY) ?? '';
@@ -117,9 +124,7 @@ export async function partnerFetch<T>(path: string, init?: RequestInit): Promise
   const body = await res.json();
   if (res.status === 401) {
     clearPartnerToken();
-    if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
-      window.location.href = '/login';
-    }
+    redirectToLogin();
     throw new Error('Session expired. Please sign in again.');
   }
   if (!body.success) throw new Error(parseApiError(body));
@@ -146,7 +151,7 @@ export async function uploadShopLogo(file: File): Promise<{ id: string; logoUrl?
   const body = await res.json();
   if (res.status === 401) {
     clearPartnerToken();
-    if (typeof window !== 'undefined') window.location.href = '/login';
+    redirectToLogin();
     throw new Error('Session expired. Please sign in again.');
   }
   if (!body.success) throw new Error(parseApiError(body, 'Logo upload failed'));
@@ -166,6 +171,7 @@ export async function getOwnProfile(): Promise<PartnerOwnProfile> {
 export interface PartnerBrandingInfo {
   isDefault: boolean;
   partnerId: string | null;
+  slug?: string;
   brandConfig: PartnerBrandConfig;
 }
 
@@ -173,6 +179,17 @@ export interface PartnerBrandingInfo {
  * user's own tenant, falling back to default Lunara branding if they have no Partner brand doc. */
 export async function getMyBranding(): Promise<PartnerBrandingInfo> {
   return partnerFetch<PartnerBrandingInfo>('/partner/branding/me');
+}
+
+/** Pre-login branding lookup by partner slug (the /{partnerSlug} route segment), used to theme
+ * the login/signup screens before a session exists. */
+export async function getPublicBranding(slug: string): Promise<PartnerBrandingInfo> {
+  const res = await fetch(`${API_URL}/public/branding?slug=${encodeURIComponent(slug)}`, {
+    credentials: 'include',
+  });
+  const body = await res.json();
+  if (!body.success) throw new Error(parseApiError(body, 'Failed to load branding'));
+  return body.data as PartnerBrandingInfo;
 }
 
 export interface PartnerBranch {
@@ -409,7 +426,7 @@ async function uploadAvatar(path: string, file: File): Promise<PartnerOwnProfile
   const body = await res.json();
   if (res.status === 401) {
     clearPartnerToken();
-    if (typeof window !== 'undefined') window.location.href = '/login';
+    redirectToLogin();
     throw new Error('Session expired. Please sign in again.');
   }
   if (!body.success) throw new Error(parseApiError(body, 'Avatar upload failed'));
@@ -526,7 +543,7 @@ export async function uploadProcessingPhoto(orderId: string, file: File): Promis
   const body = await res.json();
   if (res.status === 401) {
     clearPartnerToken();
-    if (typeof window !== 'undefined') window.location.href = '/login';
+    redirectToLogin();
     throw new Error('Session expired. Please sign in again.');
   }
   if (!body.success) throw new Error(parseApiError(body, 'Photo upload failed'));
@@ -553,7 +570,7 @@ export async function fetchAuthenticatedMediaUrl(publicPath: string): Promise<st
 
   if (res.status === 401) {
     clearPartnerToken();
-    if (typeof window !== 'undefined') window.location.href = '/login';
+    redirectToLogin();
     throw new Error('Session expired. Please sign in again.');
   }
 
