@@ -46,7 +46,16 @@ async function authRequest<T>(
       res = await doFetch(refreshed);
     }
   }
-  const body = await res.json();
+  let body: { success?: boolean; data?: unknown; message?: string };
+  try {
+    body = await res.json();
+  } catch {
+    throw new Error(
+      res.ok
+        ? `Unexpected response from ${baseUrl}.`
+        : `API error ${res.status} at ${baseUrl}. Make sure the API is running and the URL is correct.`,
+    );
+  }
   if (res.status === 401 && token) {
     onUnauthorized?.();
     throw new Error('Session expired. Please sign in again.');
