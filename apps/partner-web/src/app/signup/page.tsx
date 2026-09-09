@@ -278,7 +278,7 @@ export default function PartnerSignupPage() {
   return (
     <div className="flex h-screen">
       <div
-        className="relative hidden w-[42%] flex-col justify-between overflow-y-auto bg-[#04142e] bg-cover bg-center px-12 py-12 text-white lg:flex"
+        className="relative hidden w-[42%] flex-col justify-between overflow-x-hidden overflow-y-auto bg-[#04142e] bg-cover bg-center px-12 py-12 text-white lg:flex"
         style={{ backgroundImage: "url('/images/background.png')" }}
       >
         <div
@@ -309,7 +309,7 @@ export default function PartnerSignupPage() {
         </div>
 
         <div className="relative">
-          <h2 className="text-3xl font-bold leading-tight sm:text-4xl">
+          <h2 className="max-w-sm break-words text-2xl font-bold leading-tight lg:text-3xl">
             Grow Your Shop
             <br />
             <span className="text-sky-300">Without the Overhead</span>
