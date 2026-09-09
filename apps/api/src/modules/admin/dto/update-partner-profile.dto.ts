@@ -1,28 +1,9 @@
-import { IsBoolean, IsDateString, IsIn, IsNumber, IsOptional, IsString, Min } from 'class-validator';
-
-const PLANS = ['trial', 'basic', 'starter', 'professional'] as const;
+import { IsBoolean, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 
 export class UpdatePartnerProfileDto {
   @IsOptional()
   @IsString()
   ownerName?: string;
-
-  @IsOptional()
-  @IsIn(PLANS)
-  subscriptionPlan?: (typeof PLANS)[number];
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  planPrice?: number;
-
-  @IsOptional()
-  @IsDateString()
-  planRenewsAt?: string;
-
-  @IsOptional()
-  @IsDateString()
-  trialEndsAt?: string;
 
   @IsOptional()
   @IsString()

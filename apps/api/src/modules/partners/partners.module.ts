@@ -10,6 +10,7 @@ import { PartnersController, PartnerBrandingController } from './partners.contro
 import { PartnersService } from './partners.service';
 import { PartnerTerritoriesService } from './partner-territories.service';
 import { PartnerProvisioningService } from './partner-provisioning.service';
+import { PartnerDemoDataService } from './partner-demo-data.service';
 
 @Module({
   imports: [
@@ -22,7 +23,7 @@ import { PartnerProvisioningService } from './partner-provisioning.service';
     ]),
   ],
   controllers: [PartnersController, PartnerBrandingController, PartnersAdminController],
-  providers: [PartnersService, PartnerTerritoriesService, PartnerProvisioningService],
-  exports: [PartnersService, PartnerTerritoriesService],
+  providers: [PartnersService, PartnerTerritoriesService, PartnerProvisioningService, PartnerDemoDataService],
+  exports: [PartnersService, PartnerTerritoriesService, PartnerDemoDataService],
 })
 export class PartnersModule {}

@@ -103,6 +103,17 @@ export class User {
   @Prop({ default: false })
   canManageSettings!: boolean;
 
+  /** Partner-only: true once demo/sample data has been auto-seeded for this partner and not yet
+   * cleared — drives the "You're using demo data" banner in partner-web. See PartnerDemoDataService. */
+  @Prop({ default: false })
+  hasDemoData!: boolean;
+
+  /** True when the account was created with a system-generated password (partner/staff/rider
+   * onboarding) and that password hasn't been changed yet — drives the forced change-password
+   * modal on first login. Cleared by AuthService.changePassword. */
+  @Prop({ default: false })
+  mustChangePassword!: boolean;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

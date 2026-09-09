@@ -90,7 +90,7 @@ export class UsersController {
 
   @Delete('bulk')
   @Roles(UserRole.ADMIN)
-  bulkDelete(@Body('ids') ids: string[]) {
-    return this.usersService.bulkDelete(ids ?? []);
+  bulkDelete(@Body('ids') ids: string[], @Body('force') force?: boolean) {
+    return this.usersService.bulkDelete(ids ?? [], force === true);
   }
 }

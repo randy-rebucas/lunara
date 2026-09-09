@@ -13,7 +13,6 @@ const ALLOWED_SCRIPTS = [
   'seed:promotions',
   'seed:services',
   'seed:addons',
-  'migrate:settlement-ledger',
 ] as const;
 
 

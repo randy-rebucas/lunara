@@ -284,18 +284,19 @@ NEXT_PUBLIC_PAYMONGO_PUBLIC_KEY=           # partner-web, client-side card token
 
 ## Migration
 
-`apps/api/src/scripts/migrate-billing-subscriptions.ts` — one-time, idempotent
-backfill from the deprecated `User.subscriptionPlan/planPrice/planRenewsAt/trialEndsAt`
+The one-time backfill from the deprecated `User.subscriptionPlan/planPrice/planRenewsAt/trialEndsAt`
 fields (still present on `User`, marked `@deprecated`, never deleted) into
-`Plan`/`BillingSubscription`. Safe to re-run (upserts). Does not touch the
-`User` fields — that cleanup is a separate, deliberately-deferred step.
+`Plan`/`BillingSubscription` already ran against the real dev database — the
+script (`migrate-billing-subscriptions.ts`) has since been deleted.
 
-```
-MONGODB_URI=<uri> npx ts-node src/scripts/migrate-billing-subscriptions.ts
-```
-
-Run once already against the real dev database — new partners since then get a
-`BillingSubscription` through normal admin plan assignment, not this script.
+**This migration is data-only, not code-complete**: the deprecated `User` fields
+are still actively read and written, not just present for backward compatibility.
+`AdminService.updatePartnerProfile` (`apps/api/src/modules/admin/admin.service.ts`)
+still writes to them, and `admin-web`'s Partners board
+(`apps/admin-web/src/components/datacenter/partners-board.tsx`) has a live edit
+form built entirely against these fields — not `BillingSubscription`. Retiring
+them requires migrating that admin screen onto the new model first; don't delete
+the dual-write without doing that.
 
 ## Naming and model collisions
 

@@ -28,6 +28,32 @@ export class SubscriptionService {
     return this.subscriptionModel.findOne({ partnerId: new Types.ObjectId(partnerId) });
   }
 
+  /** Creates the initial 'trialing' subscription for a newly onboarded partner, sized to the
+   * chosen plan's trialDays (see seed-branded-plans.ts). No-ops if one already exists for this
+   * partner, so it's safe to call defensively from the signup flow. */
+  async createTrialSubscription(partnerId: string, planKey: string) {
+    const existing = await this.findByPartnerId(partnerId);
+    if (existing) return existing;
+
+    const plan = await this.planService.findByKey(planKey);
+    if (!plan) throw new NotFoundException(`Plan "${planKey}" not found`);
+
+    const now = new Date();
+    const trialEndsAt = new Date(now);
+    trialEndsAt.setDate(trialEndsAt.getDate() + plan.trialDays);
+
+    return this.subscriptionModel.create({
+      partnerId: new Types.ObjectId(partnerId),
+      planId: plan._id,
+      status: 'trialing',
+      currentPeriodStart: now,
+      currentPeriodEnd: trialEndsAt,
+      trialEndsAt,
+      priceSnapshot: plan.monthlyPrice,
+      provider: 'manual',
+    });
+  }
+
   /** Joins each subscription with its partner's email/phone so the admin billing UI can show a
    * human-readable list without a separate per-row lookup. */
   async list() {
@@ -79,10 +105,33 @@ export class SubscriptionService {
 
   /** Admin manual override: reassign plan and/or force a status/period change. Generates no
    * ledger entries itself — billing effects flow through PartnerOperationsService.createInvoice
-   * the next time a fee is actually due. */
+   * the next time a fee is actually due.
+   *
+   * Upserts: only partners onboarded through the self-serve signup flow get a BillingSubscription
+   * automatically (see PartnerOnboardingService.signup -> createTrialSubscription) — a partner
+   * created directly by an admin (AdminService.createPartner/onboardPartner) has none yet. Rather
+   * than 404 the admin billing UI for those partners, create one on first edit here. */
   async adminUpdate(partnerId: string, dto: UpdateSubscriptionDto) {
-    const subscription = await this.findByPartnerId(partnerId);
-    if (!subscription) throw new NotFoundException('Subscription not found for this partner');
+    let subscription = await this.findByPartnerId(partnerId);
+    if (!subscription) {
+      if (!dto.planId) {
+        throw new NotFoundException('Subscription not found for this partner — choose a plan to create one');
+      }
+      const plan = await this.planService.findById(dto.planId);
+      if (!plan) throw new NotFoundException('Plan not found');
+      const now = new Date();
+      const currentPeriodEnd = new Date(now);
+      currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + 1);
+      subscription = await this.subscriptionModel.create({
+        partnerId: new Types.ObjectId(partnerId),
+        planId: plan._id,
+        status: 'active',
+        currentPeriodStart: now,
+        currentPeriodEnd,
+        priceSnapshot: plan.monthlyPrice,
+        provider: 'manual',
+      });
+    }
 
     if (dto.planId) {
       const plan = await this.planService.findById(dto.planId);
@@ -92,6 +141,7 @@ export class SubscriptionService {
     }
     if (dto.status) subscription.status = dto.status;
     if (dto.currentPeriodEnd) subscription.currentPeriodEnd = new Date(dto.currentPeriodEnd);
+    if (dto.trialEndsAt) subscription.trialEndsAt = new Date(dto.trialEndsAt);
     if (dto.cancelAtPeriodEnd !== undefined) subscription.cancelAtPeriodEnd = dto.cancelAtPeriodEnd;
     if (dto.adminNote !== undefined) subscription.adminNote = dto.adminNote;
     if (dto.status === 'cancelled' && !subscription.cancelledAt) subscription.cancelledAt = new Date();

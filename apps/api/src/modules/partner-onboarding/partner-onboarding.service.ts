@@ -8,6 +8,8 @@ import { User, UserDocument } from '../users/schemas/user.schema';
 import { Branch, BranchDocument } from '../branches/schemas/branch.schema';
 import { BranchManagementService } from '../branches/branch-management.service';
 import { PartnersService } from '../partners/partners.service';
+import { PartnerDemoDataService } from '../partners/partner-demo-data.service';
+import { SubscriptionService } from '../billing/subscription.service';
 import { LocalStorageService } from '../../common/storage/local-storage.service';
 import { EmailService } from '../../common/email/email.service';
 import { RecaptchaService } from '../../common/recaptcha/recaptcha.service';
@@ -37,6 +39,8 @@ export class PartnerOnboardingService {
     @InjectModel(Branch.name) private readonly branchModel: Model<BranchDocument>,
     private readonly branchManagementService: BranchManagementService,
     private readonly partnersService: PartnersService,
+    private readonly partnerDemoDataService: PartnerDemoDataService,
+    private readonly subscriptionService: SubscriptionService,
     private readonly storageService: LocalStorageService,
     private readonly emailService: EmailService,
     private readonly recaptchaService: RecaptchaService,
@@ -63,16 +67,38 @@ export class PartnerOnboardingService {
       role: UserRole.PARTNER,
       isActive: true,
       isEmailVerified: false,
+      mustChangePassword: true,
     });
 
     const branch = await this.createShopBranch(user._id.toString(), dto);
 
+    let shopSlug: string | undefined;
     if (dto.wantsBranding && logo) {
-      await this.provisionBranding(user._id.toString(), dto.businessName, logo);
+      shopSlug = await this.provisionBranding(user._id.toString(), dto.businessName, logo);
     }
 
-    await this.emailService.sendPartnerInvite(email, password);
+    const baseUrl = process.env.PARTNER_WEB_URL ?? 'http://localhost:3003';
+    const shopLink = shopSlug ? `${baseUrl}/${shopSlug}` : `${baseUrl}/login`;
+    await this.emailService.sendPartnerInvite(email, password, shopLink);
     await this.sendVerificationEmail(user);
+
+    try {
+      await this.partnerDemoDataService.seedDemoData(user._id.toString(), branch.data.branchId);
+    } catch (err) {
+      // A partner without demo data is a much smaller problem than a partner who can't sign up.
+      this.logger.error(`Failed to seed demo data for ${email}: ${err}`);
+    }
+
+    try {
+      await this.subscriptionService.createTrialSubscription(
+        user._id.toString(),
+        dto.wantsBranding ? 'branded' : 'default',
+      );
+    } catch (err) {
+      // A partner without a subscription record is recoverable (admin can backfill); a partner
+      // who can't sign up isn't.
+      this.logger.error(`Failed to create trial subscription for ${email}: ${err}`);
+    }
 
     this.logger.log(`New self-serve partner signup: ${email} (branch ${branch.data.branchId})`);
     return { email };
@@ -109,7 +135,11 @@ export class PartnerOnboardingService {
     });
   }
 
-  private async provisionBranding(ownerUserId: string, businessName: string, logo: Express.Multer.File) {
+  private async provisionBranding(
+    ownerUserId: string,
+    businessName: string,
+    logo: Express.Multer.File,
+  ): Promise<string | undefined> {
     const baseSlug = slugify(businessName) || 'partner';
     let slug = `${baseSlug}-${randomSuffix()}`;
 
@@ -125,7 +155,7 @@ export class PartnerOnboardingService {
     }
     if (!partner) {
       this.logger.warn(`Could not provision a Partner brand doc for ${ownerUserId} after retries`);
-      return;
+      return undefined;
     }
 
     const uploaded = await this.storageService.uploadBuffer(
@@ -136,6 +166,7 @@ export class PartnerOnboardingService {
       logo.mimetype,
     );
     await this.partnersService.setAssetUrl(partner._id.toString(), 'logoUrl', uploaded.secure_url);
+    return slug;
   }
 
   /** Mirrors AuthService's private sendVerificationEmail — same token mechanism, so this account

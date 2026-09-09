@@ -36,6 +36,7 @@ import { PartnerCampaign, PartnerCampaignSchema } from './schemas/partner-campai
 import { PartnerCampaignsService } from './partner-campaigns.service';
 import { PartnerExpense, PartnerExpenseSchema } from './schemas/partner-expense.schema';
 import { PartnerExpensesService } from './partner-expenses.service';
+import { PartnersModule } from '../partners/partners.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { PartnerExpensesService } from './partner-expenses.service';
     PromotionsModule,
     BillingModule,
     PushModule,
+    PartnersModule,
   ],
   controllers: [PartnerController],
   providers: [

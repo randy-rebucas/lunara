@@ -3,6 +3,7 @@ import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { AuthService } from './auth.service';
 import {
+  ChangePasswordDto,
   ForgotPasswordDto,
   LoginDto,
   OtpRequestDto,
@@ -94,6 +95,13 @@ export class AuthController {
   @Throttle(AUTH_THROTTLE)
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
+  }
+
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  @Throttle(AUTH_THROTTLE)
+  changePassword(@Req() req: { user: { sub: string } }, @Body() dto: ChangePasswordDto) {
+    return this.authService.changePassword(req.user.sub, dto);
   }
 
   @Post('refresh')

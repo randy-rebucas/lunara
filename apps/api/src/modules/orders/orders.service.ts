@@ -31,7 +31,7 @@ import {
 import { PromotionsService } from '../promotions/promotions.service';
 import { LaundryTagsService } from '../laundry-tags/laundry-tags.service';
 import { User, UserDocument } from '../users/schemas/user.schema';
-import { assertOrderPortalAccess } from '../partner/partner-access';
+import { applyStaffBranchFilter, assertOrderPortalAccess } from '../partner/partner-access';
 import { Address, AddressDocument } from '../addresses/schemas/address.schema';
 import { Rider, RiderDocument } from '../riders/schemas/rider.schema';
 import { Order, OrderDocument } from './schemas/order.schema';
@@ -304,13 +304,27 @@ export class OrdersService {
     return { success: true, data: order };
   }
 
-  async getPartnerQueue(status?: string) {
-    const filter: Record<string, unknown> = {
-      status: {
-        $nin: [OrderStatus.CANCELLED, OrderStatus.REFUNDED, OrderStatus.COMPLETED],
-      },
-    };
-    if (status) filter.status = status;
+  async getPartnerQueue(
+    user: { sub: string; role: UserRole },
+    status?: string,
+    tenantId?: string,
+    staffBranchId?: string,
+  ) {
+    const filter: Record<string, unknown> =
+      user.role === UserRole.PARTNER
+        ? { partnerId: new Types.ObjectId(tenantId ?? user.sub) }
+        : {};
+    if (user.role === UserRole.STAFF) {
+      applyStaffBranchFilter(
+        filter,
+        user.role,
+        staffBranchId ? new Types.ObjectId(staffBranchId) : undefined,
+      );
+    }
+
+    filter.status = status
+      ? status
+      : { $nin: [OrderStatus.CANCELLED, OrderStatus.REFUNDED, OrderStatus.COMPLETED] };
 
     const items = await this.orderModel.find(filter).sort({ createdAt: -1 }).limit(100);
     const grouped = items.reduce(
@@ -330,19 +344,28 @@ export class OrdersService {
     page: number,
     limit: number,
     statusGroup?: 'active' | 'past',
+    tenantId?: string,
+    staffBranchId?: string,
   ) {
     const userId = new Types.ObjectId(user.sub);
-    // NOTE: pre-existing gap, left as-is per migration instructions (not introduced or fixed
-    // here) — PARTNER/STAFF hitting this method fall through to an unfiltered `{}` filter
-    // (no partnerId/branchId scoping), unlike findOne/markCustomerPickup/completeCustomerPickup
-    // below which do enforce tenant scoping via assertOrderPortalAccess. Flagging rather than
-    // fixing speculatively.
+    // PARTNER/STAFF are scoped the same way findOne/assertOrderPortalAccess scope them —
+    // partnerId for PARTNER, branchId for STAFF (guard-resolved tenantId/staffBranchId; see
+    // orders.controller.ts's TenantGuard comment). ADMIN is intentionally unrestricted.
     const filter: Record<string, unknown> =
       user.role === UserRole.CUSTOMER
         ? { customerId: userId }
         : user.role === UserRole.RIDER
           ? { $or: [{ pickupRiderId: userId }, { deliveryRiderId: userId }] }
-          : {};
+          : user.role === UserRole.PARTNER
+            ? { partnerId: new Types.ObjectId(tenantId ?? user.sub) }
+            : {};
+    if (user.role === UserRole.STAFF) {
+      applyStaffBranchFilter(
+        filter,
+        user.role,
+        staffBranchId ? new Types.ObjectId(staffBranchId) : undefined,
+      );
+    }
 
     if (statusGroup === 'active' || statusGroup === 'past') {
       const inactiveStatuses = Object.values(OrderStatus).filter((s) => !isActiveOrderStatus(s));

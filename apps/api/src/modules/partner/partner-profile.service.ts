@@ -10,10 +10,15 @@ import { LocalStorageService } from '../../common/storage/local-storage.service'
 import { ResetStaffPasswordDto } from './dto/reset-staff-password.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 
-function formatProfile(profile?: Pick<UserProfile, 'displayName' | 'avatarUrl'> | null) {
+function formatProfile(
+  profile?: Pick<UserProfile, 'displayName' | 'avatarUrl'> | null,
+  user?: Pick<User, 'phone' | 'email'> | null,
+) {
   return {
     displayName: profile?.displayName,
     avatarUrl: profile?.avatarUrl,
+    phone: user?.phone,
+    email: user?.email,
   };
 }
 
@@ -27,16 +32,24 @@ export class PartnerProfileService {
   ) {}
 
   async getOwnProfile(userId: string) {
-    const profile = await this.userProfileModel.findOne({ userId: new Types.ObjectId(userId) }).lean();
-    return { success: true, data: formatProfile(profile) };
+    const [profile, user] = await Promise.all([
+      this.userProfileModel.findOne({ userId: new Types.ObjectId(userId) }).lean(),
+      this.userModel.findById(userId).select('phone email').lean(),
+    ]);
+    return { success: true, data: formatProfile(profile, user) };
   }
 
   async updateOwnProfile(userId: string, dto: UpdateProfileDto) {
+    if (dto.phone !== undefined) {
+      const phone = dto.phone.trim();
+      await this.userModel.updateOne({ _id: userId }, phone ? { phone } : { $unset: { phone: '' } });
+    }
+
     if (dto.displayName === undefined) {
       return this.getOwnProfile(userId);
     }
-    const profile = await this.upsertProfile(userId, { displayName: dto.displayName });
-    return { success: true, data: formatProfile(profile) };
+    await this.upsertProfile(userId, { displayName: dto.displayName });
+    return this.getOwnProfile(userId);
   }
 
   async updateOwnAvatar(userId: string, file: Express.Multer.File) {

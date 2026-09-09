@@ -15,9 +15,8 @@
     "seed:promotions": "npx ts-node src/scripts/seed-promotions.ts",
     "seed:services": "npx ts-node src/scripts/seed-services.ts",
     "seed:addons": "npx ts-node src/scripts/seed-addons.ts",
-    "migrate:settlement-ledger": "npx ts-node src/scripts/migrate-settlement-ledger.ts",
-    "migrate:backfill-main-shop": "npx ts-node src/scripts/backfill-main-shop.ts",
-    "migrate:backfill-email-verified": "npx ts-node src/scripts/backfill-email-verified.ts",
+    "seed:partner-demo": "npx ts-node src/scripts/seed-partner-demo.ts",
+    "unseed:partner-demo": "npx ts-node src/scripts/unseed-partner-demo.ts",
     "migrate:cleanup-notifications": "npx ts-node src/scripts/cleanup-notifications.ts",
     "clean": "rimraf dist tsconfig.tsbuildinfo"
   },

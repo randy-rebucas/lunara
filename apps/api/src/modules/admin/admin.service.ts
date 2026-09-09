@@ -25,6 +25,8 @@ import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { UpdatePromotionDto } from './dto/update-promotion.dto';
 import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
 import { Review, ReviewDocument } from '../reviews/schemas/review.schema';
+import { BillingSubscription, SubscriptionDocument } from '../billing/schemas/subscription.schema';
+import { Plan, PlanDocument } from '../billing/schemas/plan.schema';
 import { UpdatePartnerProfileDto } from './dto/update-partner-profile.dto';
 import {
   buildOrderPaymentSummary,
@@ -134,6 +136,8 @@ export class AdminService {
     @InjectModel(Branch.name) private branchModel: Model<BranchDocument>,
     @InjectModel(PartnerApplication.name) private partnerApplicationModel: Model<PartnerApplicationDocument>,
     @InjectModel(Review.name) private reviewModel: Model<ReviewDocument>,
+    @InjectModel(BillingSubscription.name) private subscriptionModel: Model<SubscriptionDocument>,
+    @InjectModel(Plan.name) private planModel: Model<PlanDocument>,
     private supportService: SupportService,
     private branchesService: BranchesService,
     private branchManagementService: BranchManagementService,
@@ -850,13 +854,40 @@ export class AdminService {
     };
   }
 
+  /** Batched subscriptionPlan/planPrice/planRenewsAt/trialEndsAt equivalent, sourced from
+   * BillingSubscription/Plan instead of the deprecated User fields of the same name (still
+   * present on User for the admin-web Partners board's edit form migration — see
+   * docs/SUBSCRIPTION_BILLING.md — but no longer read here). Falls back to 'trial'/0/undefined
+   * for a partner with no BillingSubscription row, matching the old fields' `?? 'trial'`/`?? 0`
+   * defaults. */
+  private async buildSubscriptionSummaryMap(partnerIds: Types.ObjectId[]) {
+    const subscriptions = await this.subscriptionModel
+      .find({ partnerId: { $in: partnerIds } })
+      .select('partnerId planId priceSnapshot currentPeriodEnd trialEndsAt');
+    const plans = await this.planModel
+      .find({ _id: { $in: subscriptions.map((s) => s.planId) } })
+      .select('key');
+    const planKeyById = new Map(plans.map((p) => [p._id.toString(), p.key]));
+
+    return new Map(
+      subscriptions.map((s) => [
+        s.partnerId.toString(),
+        {
+          subscriptionPlan: planKeyById.get(s.planId.toString()) ?? 'trial',
+          planPrice: s.priceSnapshot ?? 0,
+          planRenewsAt: s.currentPeriodEnd,
+          trialEndsAt: s.trialEndsAt,
+        },
+      ]),
+    );
+  }
+
   async getShops() {
     const partners = await this.userModel
       .find({ role: UserRole.PARTNER })
-      .select(
-        'email phone isActive createdAt ownerName subscriptionPlan planPrice planRenewsAt trialEndsAt',
-      )
+      .select('email phone isActive createdAt ownerName')
       .sort({ email: 1 });
+    const subscriptionMap = await this.buildSubscriptionSummaryMap(partners.map((p) => p._id));
 
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -919,16 +950,17 @@ export class AdminService {
         shops: partners.map((p) => {
           const id = p._id.toString();
           const rating = ratingMap.get(id);
+          const subscription = subscriptionMap.get(id);
           return {
             _id: id,
             email: p.email,
             phone: p.phone,
             isActive: p.isActive,
             ownerName: p.ownerName,
-            subscriptionPlan: p.subscriptionPlan ?? 'trial',
-            planPrice: p.planPrice ?? 0,
-            planRenewsAt: p.planRenewsAt,
-            trialEndsAt: p.trialEndsAt,
+            subscriptionPlan: subscription?.subscriptionPlan ?? 'trial',
+            planPrice: subscription?.planPrice ?? 0,
+            planRenewsAt: subscription?.planRenewsAt,
+            trialEndsAt: subscription?.trialEndsAt,
             totalOrders: statsMap.get(id)?.totalOrders ?? 0,
             revenue: statsMap.get(id)?.revenue ?? 0,
             orders30d: stats30dMap.get(id)?.orders30d ?? 0,
@@ -1045,10 +1077,6 @@ export class AdminService {
       throw new NotFoundException('Partner not found');
     }
     if (dto.ownerName !== undefined) partner.ownerName = dto.ownerName;
-    if (dto.subscriptionPlan !== undefined) partner.subscriptionPlan = dto.subscriptionPlan;
-    if (dto.planPrice !== undefined) partner.planPrice = dto.planPrice;
-    if (dto.planRenewsAt !== undefined) partner.planRenewsAt = new Date(dto.planRenewsAt);
-    if (dto.trialEndsAt !== undefined) partner.trialEndsAt = new Date(dto.trialEndsAt);
     if (dto.businessName !== undefined) partner.businessName = dto.businessName;
     if (dto.tin !== undefined) partner.tin = dto.tin;
     if (dto.businessPermitNumber !== undefined) partner.businessPermitNumber = dto.businessPermitNumber;
@@ -1124,6 +1152,7 @@ export class AdminService {
     const repeatCustomers = customerCounts.filter((c) => c.orderCount > 1).length;
     const repeatRate = pct(repeatCustomers, customerCounts.length);
     const rating = ratingRow[0];
+    const subscription = (await this.buildSubscriptionSummaryMap([partnerId])).get(partnerId.toString());
 
     return {
       success: true,
@@ -1140,10 +1169,10 @@ export class AdminService {
         birRegistrationNumber: partner.birRegistrationNumber,
         birRegistrationVerified: partner.birRegistrationVerified ?? false,
         deliveryRadiusKm: partner.deliveryRadiusKm,
-        subscriptionPlan: partner.subscriptionPlan ?? 'trial',
-        planPrice: partner.planPrice ?? 0,
-        planRenewsAt: partner.planRenewsAt,
-        trialEndsAt: partner.trialEndsAt,
+        subscriptionPlan: subscription?.subscriptionPlan ?? 'trial',
+        planPrice: subscription?.planPrice ?? 0,
+        planRenewsAt: subscription?.planRenewsAt,
+        trialEndsAt: subscription?.trialEndsAt,
         createdAt: partner.createdAt,
         rating: rating ? Math.round(rating.avgRating * 10) / 10 : null,
         reviewCount: rating?.reviewCount ?? 0,

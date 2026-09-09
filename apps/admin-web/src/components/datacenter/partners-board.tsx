@@ -17,6 +17,13 @@ interface DayHours {
 
 type SubscriptionPlan = 'trial' | 'basic' | 'starter' | 'professional' | 'default' | 'branded';
 
+interface BillingPlan {
+  id: string;
+  key: string;
+  name: string;
+  monthlyPrice: number;
+}
+
 interface Shop {
   _id: string;
   email?: string;
@@ -520,10 +527,10 @@ function PartnerDetailsDrawer({
 
   const [editingSub, setEditingSub] = useState(false);
   const [subPlan, setSubPlan] = useState<SubscriptionPlan>('default');
-  const [subPrice, setSubPrice] = useState('0');
   const [subRenewsAt, setSubRenewsAt] = useState('');
   const [subTrialEndsAt, setSubTrialEndsAt] = useState('');
   const [savingSub, setSavingSub] = useState(false);
+  const [plans, setPlans] = useState<BillingPlan[]>([]);
 
   const [verifyBusy, setVerifyBusy] = useState<'permit' | 'bir' | null>(null);
 
@@ -555,6 +562,13 @@ function PartnerDetailsDrawer({
   }, [open, shopId, loadDetail]);
 
   useEffect(() => {
+    if (!open || plans.length > 0) return;
+    adminFetch<BillingPlan[]>('/admin/billing/plans')
+      .then(setPlans)
+      .catch(() => setPlans([]));
+  }, [open, plans.length]);
+
+  useEffect(() => {
     if (!detail) return;
     setInfoForm({
       ownerName: detail.ownerName ?? '',
@@ -565,7 +579,6 @@ function PartnerDetailsDrawer({
       deliveryRadiusKm: detail.deliveryRadiusKm != null ? String(detail.deliveryRadiusKm) : '',
     });
     setSubPlan(detail.subscriptionPlan);
-    setSubPrice(String(detail.planPrice ?? 0));
     setSubRenewsAt(detail.planRenewsAt ? detail.planRenewsAt.slice(0, 10) : '');
     setSubTrialEndsAt(detail.trialEndsAt ? detail.trialEndsAt.slice(0, 10) : '');
   }, [detail]);
@@ -622,15 +635,21 @@ function PartnerDetailsDrawer({
 
   async function saveSubscription() {
     if (!shop) return;
+    const plan = plans.find((p) => p.key === subPlan);
+    if (!plan) {
+      setActionError('Select a plan');
+      return;
+    }
     setSavingSub(true);
     setActionError('');
     try {
-      await adminFetch(`/admin/shops/${shop._id}/profile`, {
+      // Price is no longer free-typed here — it comes from the assigned Plan (priceSnapshot
+      // locks it in server-side). See /admin/billing/subscriptions/:partnerId (adminUpdate).
+      await adminFetch(`/admin/billing/subscriptions/${shop._id}`, {
         method: 'PATCH',
         body: JSON.stringify({
-          subscriptionPlan: subPlan,
-          planPrice: Number(subPrice) || 0,
-          ...(subRenewsAt ? { planRenewsAt: new Date(subRenewsAt).toISOString() } : {}),
+          planId: plan.id,
+          ...(subRenewsAt ? { currentPeriodEnd: new Date(subRenewsAt).toISOString() } : {}),
           ...(subTrialEndsAt ? { trialEndsAt: new Date(subTrialEndsAt).toISOString() } : {}),
         }),
       });
@@ -925,13 +944,13 @@ function PartnerDetailsDrawer({
                 <div>
                   <label htmlFor="sub-plan" className="form-label">Plan</label>
                   <select id="sub-plan" className="input-field" value={subPlan} onChange={(e) => setSubPlan(e.target.value as SubscriptionPlan)}>
-                    <option value="default">Regular Partner</option>
-                    <option value="branded">Territorial Partner</option>
+                    {plans.map((p) => (
+                      <option key={p.id} value={p.key}>
+                        {p.name} (₱{p.monthlyPrice}/mo)
+                      </option>
+                    ))}
                   </select>
-                </div>
-                <div>
-                  <label htmlFor="sub-price" className="form-label">Price / month (₱)</label>
-                  <input id="sub-price" type="number" min={0} className="input-field" value={subPrice} onChange={(e) => setSubPrice(e.target.value)} />
+                  <p className="mt-1 text-xs text-muted">Price is set by the plan, not editable per-partner.</p>
                 </div>
                 {subPlan === 'trial' ? (
                   <div>

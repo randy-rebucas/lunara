@@ -17,6 +17,7 @@ import {
   getPaymentMethod,
   isPartnerRole,
   listBillingPlans,
+  notifyShopBrandingChanged,
   partnerFetch,
   redeemPromoCode,
   removePaymentMethod,
@@ -694,6 +695,7 @@ function PartnerSettingsContent() {
     try {
       await uploadShopLogo(file);
       await reload();
+      notifyShopBrandingChanged();
       toast.success('Logo updated');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not upload logo');
@@ -708,6 +710,7 @@ function PartnerSettingsContent() {
     try {
       await removeShopLogo();
       await reload();
+      notifyShopBrandingChanged();
       toast.success('Logo removed');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not remove logo');

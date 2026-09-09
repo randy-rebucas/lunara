@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
+import Link from 'next/link';
 import type { PartnerQueueOrder } from '@lunara/types';
 import { UserRole } from '@lunara/types';
 import { AuthLoading } from '../../../components/auth-loading';
@@ -12,9 +13,11 @@ import { useProtectedPage } from '../../../hooks/use-protected-page';
 import { getPortalUser, partnerFetch } from '../../../lib/partner-api';
 import { usePartnerQuery } from '../../../lib/use-partner-query';
 import { usePartnerPipelineSocket } from '../../../lib/use-partner-pipeline-socket';
+import { usePartnerPath } from '../../../lib/partner-path';
 
 export default function StaffOrdersPage() {
   const { ready } = useProtectedPage({ roles: [UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN] });
+  const toPartnerPath = usePartnerPath();
   const [mineOnly, setMineOnly] = useState(false);
   const [actionError, setActionError] = useState('');
 
@@ -83,7 +86,13 @@ export default function StaffOrdersPage() {
 
       <div className="mt-6">
         {orders.length === 0 ? (
-          <p className="text-sm text-muted">No orders in the processing queue.</p>
+          <p className="text-sm text-muted">
+            No orders in the processing queue. Completed, cancelled, or refunded orders appear in{' '}
+            <Link href={toPartnerPath('/orders/history')} className="text-brand hover:underline">
+              Order History
+            </Link>
+            .
+          </p>
         ) : (
           <ProcessingKanbanBoard orders={orders} onAcceptJob={acceptJob} onReload={reload} />
         )}

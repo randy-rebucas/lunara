@@ -79,6 +79,7 @@ import { AddShelfItemDto, CreateShelfDto } from './dto/shelf.dto';
 import { SetPromotionOptInDto } from './dto/set-promotion-opt-in.dto';
 import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { PartnerDemoDataService } from '../partners/partner-demo-data.service';
 
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/jpg']);
 
@@ -122,7 +123,23 @@ export class PartnerController {
     private readonly expensesService: PartnerExpensesService,
     private readonly promotionsService: PromotionsService,
     private readonly shelfService: ShelfService,
+    private readonly demoDataService: PartnerDemoDataService,
   ) {}
+
+  @Get('demo-data/status')
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
+  async getDemoDataStatus(@CurrentTenantId() tenantId: string | undefined) {
+    if (!tenantId) return { success: true, data: { hasDemoData: false } };
+    const owner = await this.userModel.findById(tenantId).select('hasDemoData');
+    return { success: true, data: { hasDemoData: owner?.hasDemoData ?? false } };
+  }
+
+  @Post('demo-data/clear')
+  @Roles(UserRole.PARTNER)
+  async clearDemoData(@Req() req: { user: { sub: string; role: UserRole } }) {
+    await this.demoDataService.clearDemoData(req.user.sub);
+    return { success: true };
+  }
 
   @Get('promotions')
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)

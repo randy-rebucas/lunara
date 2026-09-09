@@ -222,6 +222,8 @@ export function UsersBoard() {
   const [detailTab, setDetailTab] = useState<DetailTab>('profile');
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [skippedAccounts, setSkippedAccounts] = useState<{ id: string; email?: string; reason: string }[]>([]);
+  const [forceDeletingId, setForceDeletingId] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [importSummary, setImportSummary] = useState('');
   const [departmentDraft, setDepartmentDraft] = useState('');
@@ -382,19 +384,64 @@ export function UsersBoard() {
     }
     setBulkBusy(true);
     setActionError('');
+    setSkippedAccounts([]);
     try {
-      await adminFetch<{ deletedCount: number }>('/users/bulk', {
+      const result = await adminFetch<{
+        deletedCount: number;
+        deletedIds: string[];
+        skipped: { id: string; email?: string; reason: string }[];
+      }>('/users/bulk', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids }),
       });
-      setData((prev) => (prev ?? []).filter((u) => !checkedIds.has(u._id)));
-      setCheckedIds(new Set());
-      if (selectedId && ids.includes(selectedId)) setSelectedId(null);
+      const deletedSet = new Set(result.deletedIds);
+      setData((prev) => (prev ?? []).filter((u) => !deletedSet.has(u._id)));
+      setCheckedIds((prev) => {
+        const next = new Set(prev);
+        for (const id of result.deletedIds) next.delete(id);
+        return next;
+      });
+      if (selectedId && deletedSet.has(selectedId)) setSelectedId(null);
+      if (result.skipped.length > 0) {
+        setSkippedAccounts(result.skipped);
+      }
     } catch (e) {
       setActionError(e instanceof Error ? e.message : 'Bulk delete failed');
     } finally {
       setBulkBusy(false);
+    }
+  }
+
+  /** Explicit admin override for an account bulkDelete skipped (nonzero wallet balance, a
+   * partner that still owns branches, or an active order). Requires typing FORCE DELETE to
+   * proceed since this bypasses those safety checks and can orphan branches/orders. */
+  async function forceDeleteSkipped(id: string, email?: string) {
+    const typed = window.prompt(
+      `This bypasses safety checks for ${email ?? id} — it can permanently delete their branches ` +
+        `(orphaning any orders on them) and cannot be undone.\n\nType FORCE DELETE to proceed:`,
+    );
+    if (typed !== 'FORCE DELETE') return;
+
+    setForceDeletingId(id);
+    setActionError('');
+    try {
+      const result = await adminFetch<{ deletedCount: number; deletedIds: string[] }>('/users/bulk', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [id], force: true }),
+      });
+      if (result.deletedIds.includes(id)) {
+        setData((prev) => (prev ?? []).filter((u) => u._id !== id));
+        setSkippedAccounts((prev) => prev.filter((s) => s.id !== id));
+        if (selectedId === id) setSelectedId(null);
+      } else {
+        setActionError(`Could not force-delete ${email ?? id}.`);
+      }
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Force delete failed');
+    } finally {
+      setForceDeletingId(null);
     }
   }
 
@@ -604,6 +651,31 @@ export function UsersBoard() {
       {actionError && <div className="alert-error mb-4" role="alert">{actionError}</div>}
       {importSummary && <div className="alert-info mb-4" role="status">{importSummary}</div>}
       {spamCleanupResult && <div className="alert-info mb-4" role="status">{spamCleanupResult}</div>}
+      {skippedAccounts.length > 0 && (
+        <div className="alert-error mb-4 space-y-2" role="alert">
+          <p className="font-medium">
+            {skippedAccounts.length} account{skippedAccounts.length === 1 ? '' : 's'} not deleted — a safety check
+            blocked {skippedAccounts.length === 1 ? 'it' : 'them'}:
+          </p>
+          <ul className="space-y-1.5">
+            {skippedAccounts.map((s) => (
+              <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                <span>
+                  <span className="font-medium">{s.email ?? s.id}</span> — {s.reason}
+                </span>
+                <button
+                  type="button"
+                  className="btn-outline btn-sm shrink-0"
+                  disabled={forceDeletingId === s.id}
+                  onClick={() => void forceDeleteSkipped(s.id, s.email)}
+                >
+                  {forceDeletingId === s.id ? 'Deleting…' : 'Force delete anyway'}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {loading && !data ? (
         <div className="flex items-center gap-3 py-8 text-sm text-muted">
