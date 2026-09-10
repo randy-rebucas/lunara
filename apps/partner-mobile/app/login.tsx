@@ -1,6 +1,6 @@
 import { useRouter, type Href } from 'expo-router';
 import { useState } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { appConfig } from '@lunara/config';
@@ -76,7 +76,7 @@ export default function LoginScreen() {
     <View style={styles.root}>
       <SafeAreaView style={styles.safeTop} edges={['top']}>
         <KeyboardSafeScrollView
-          contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + spacing.xxxl }]}
+          contentContainerStyle={styles.scroll}
           bounces={false}
           showsVerticalScrollIndicator={false}
           useTopSafeInset={false}
@@ -85,6 +85,21 @@ export default function LoginScreen() {
           <View style={styles.hero}>
             <View style={styles.heroBlobOuter} pointerEvents="none" />
             <View style={styles.heroBlobInner} pointerEvents="none" />
+            <Image
+              source={require('../assets/hero-towels.png')}
+              style={styles.heroPhoto}
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+              resizeMode="cover"
+            />
+            <Text
+              style={styles.heroDecoration}
+              pointerEvents="none"
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+            >
+              Clean{'\n'}Operations{'\n'}Happier{'\n'}Communities
+            </Text>
             <View style={styles.brandRow}>
               <BrandMark size="md" />
               <View>
@@ -102,7 +117,7 @@ export default function LoginScreen() {
           </View>
 
           {/* ── White sheet ── */}
-          <View style={styles.sheet}>
+          <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.xxxl }]}>
             <FieldRow
               icon="mail-outline"
               placeholder="Work email"
@@ -212,6 +227,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     opacity: 0.12,
   },
+  heroPhoto: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 170,
+    height: 191,
+    opacity: 0.9,
+  },
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -240,6 +263,19 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   heroAccent: { color: colors.primary },
+  heroDecoration: {
+    position: 'absolute',
+    top: spacing.xl,
+    right: spacing.lg,
+    width: 110,
+    fontSize: 15,
+    fontStyle: 'italic',
+    fontWeight: '600',
+    lineHeight: 19,
+    color: colors.primaryBorder,
+    textAlign: 'right',
+    transform: [{ rotate: '-4deg' }],
+  },
   heroBody: {
     ...typography.body,
     color: colors.slate700,

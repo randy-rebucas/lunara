@@ -1,0 +1,26 @@
+{
+  "source": {
+    "path": "image-extraction/source/login.png",
+    "width": 853,
+    "height": 1844,
+    "platform": "iOS (status bar shows signal/wifi/battery)",
+    "estimatedViewport": "~390x844pt @ ~2.19x (approximate iPhone screenshot)"
+  },
+  "existingImplementation": "apps/partner-mobile/app/login.tsx",
+  "assets": [
+    {
+      "name": "hero_towel_photo",
+      "sourceCrop": [500, 410, 853, 750],
+      "file": "image-extraction/crops/03_hero_towel_photo.png",
+      "category": "photography",
+      "recommendedFormat": "webp (with png fallback)",
+      "status": "reference extraction — NOT present in current login.tsx implementation",
+      "notes": "Stack of folded lavender/blue towels, soft-focus, bleeds off right edge. Currently the hero uses only two decorative CSS circle 'blobs' (heroBlobOuter/heroBlobInner) instead of this photo. This is the one genuine raster-asset gap between the screenshot and the shipped code."
+    }
+  ],
+  "nonAssets": {
+    "handwrittenDecoration": "Already implemented as live <Text> (styles.heroDecoration) with rotate transform — correctly NOT rasterized.",
+    "logoWordmark": "Already implemented via <BrandMark /> + <Text> — correctly NOT rasterized.",
+    "backgroundBlobs": "Already implemented as CSS circles (radius.full + opacity) — correctly NOT rasterized."
+  }
+}
