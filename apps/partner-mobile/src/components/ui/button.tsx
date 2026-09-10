@@ -1,13 +1,16 @@
-import { Pressable, StyleSheet, Text, type PressableProps, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type PressableProps, type ViewStyle } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, spacing } from '../../theme';
 
 type ButtonVariant = 'primary' | 'secondary' | 'accent' | 'outline' | 'ghost';
 type ButtonSize = 'md' | 'lg';
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
 interface ButtonProps extends Omit<PressableProps, 'style'> {
   label: string;
   variant?: ButtonVariant;
   size?: ButtonSize;
+  icon?: IoniconName;
   style?: ViewStyle;
 }
 
@@ -15,10 +18,13 @@ export function Button({
   label,
   variant = 'primary',
   size = 'md',
+  icon,
   disabled,
   style,
   ...props
 }: ButtonProps) {
+  const iconColor = iconColors[variant];
+
   return (
     <Pressable
       style={({ pressed }) => [
@@ -35,18 +41,29 @@ export function Button({
       accessibilityState={{ disabled: !!disabled }}
       {...props}
     >
-      <Text
-        style={[
-          styles.text,
-          styles[`${variant}Text` as keyof typeof styles],
-          size === 'lg' && styles.lgText,
-        ]}
-      >
-        {label}
-      </Text>
+      <View style={styles.content}>
+        <Text
+          style={[
+            styles.text,
+            styles[`${variant}Text` as keyof typeof styles],
+            size === 'lg' && styles.lgText,
+          ]}
+        >
+          {label}
+        </Text>
+        {icon ? <Ionicons name={icon} size={size === 'lg' ? 18 : 16} color={iconColor} /> : null}
+      </View>
     </Pressable>
   );
 }
+
+const iconColors: Record<ButtonVariant, string> = {
+  primary: colors.onPrimary,
+  secondary: colors.onPrimary,
+  accent: colors.onPrimary,
+  outline: colors.foreground,
+  ghost: colors.primary,
+};
 
 const styles = StyleSheet.create({
   base: {
@@ -59,6 +76,11 @@ const styles = StyleSheet.create({
   lg: {
     paddingVertical: spacing.lg,
     paddingHorizontal: spacing.xxxl,
+  },
+  content: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   primary: { backgroundColor: colors.primary },
   secondary: { backgroundColor: colors.secondary },

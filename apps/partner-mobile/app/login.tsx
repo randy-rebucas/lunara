@@ -1,10 +1,12 @@
 import { useRouter, type Href } from 'expo-router';
 import { useState } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View, type PressableStateCallbackType } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { appConfig } from '@lunara/config';
 import { BrandMark } from '../src/components/ui/brand-mark';
+import { Button } from '../src/components/ui/button';
+import { Card } from '../src/components/ui/card';
 import { Input } from '../src/components/ui/input';
 import { KeyboardSafeScrollView } from '../src/components/ui/keyboard-safe-scroll-view';
 import { useAuthStore } from '../src/store/auth';
@@ -81,6 +83,8 @@ export default function LoginScreen() {
         >
           {/* ── Hero ── */}
           <View style={styles.hero}>
+            <View style={styles.heroBlobOuter} pointerEvents="none" />
+            <View style={styles.heroBlobInner} pointerEvents="none" />
             <View style={styles.brandRow}>
               <BrandMark size="md" />
               <View>
@@ -141,34 +145,30 @@ export default function LoginScreen() {
               </View>
             ) : null}
 
-            <Pressable
-              style={({ pressed }: PressableStateCallbackType) => [
-                styles.submitBtn,
-                disabled && styles.submitBtnDisabled,
-                pressed && !disabled && styles.submitBtnPressed,
-              ]}
+            <Button
+              label={loading ? 'Signing in…' : 'Sign in'}
+              icon={loading ? undefined : 'arrow-forward'}
+              size="lg"
               onPress={handleLogin}
               disabled={disabled}
-              accessibilityRole="button"
-              accessibilityLabel="Sign in"
-            >
-              <Text style={styles.submitBtnText}>{loading ? 'Signing in…' : 'Sign in'}</Text>
-              {!loading ? <Ionicons name="arrow-forward" size={18} color="#fff" /> : null}
-            </Pressable>
+              style={styles.submitBtn}
+            />
 
             {/* ── Support footer ── */}
-            <Pressable style={styles.supportRow} onPress={contactSupport} accessibilityRole="button">
-              <View style={styles.supportIconWrap}>
-                <Ionicons name="shield-checkmark-outline" size={20} color={colors.primary} />
-              </View>
-              <View style={styles.supportTextWrap}>
-                <Text style={styles.supportMain}>
-                  Need help?{' '}
-                  <Text style={styles.supportLink}>Contact support</Text>
-                </Text>
-                <Text style={styles.supportSub}>We&apos;re here to help 24/7</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
+            <Pressable onPress={contactSupport} accessibilityRole="button">
+              <Card primary style={styles.supportRow}>
+                <View style={styles.supportIconWrap}>
+                  <Ionicons name="shield-checkmark-outline" size={20} color={colors.primary} />
+                </View>
+                <View style={styles.supportTextWrap}>
+                  <Text style={styles.supportMain}>
+                    Need help?{' '}
+                    <Text style={styles.supportLink}>Contact support</Text>
+                  </Text>
+                  <Text style={styles.supportSub}>We&apos;re here to help 24/7</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
+              </Card>
             </Pressable>
 
             {__DEV__ ? (
@@ -190,6 +190,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xxl,
     paddingTop: spacing.xxl,
     paddingBottom: spacing.xxxl + spacing.lg,
+    overflow: 'hidden',
+  },
+  heroBlobOuter: {
+    position: 'absolute',
+    top: -60,
+    right: -80,
+    width: 260,
+    height: 260,
+    borderRadius: radius.full,
+    backgroundColor: colors.primaryBorder,
+    opacity: 0.35,
+  },
+  heroBlobInner: {
+    position: 'absolute',
+    top: 20,
+    right: -40,
+    width: 160,
+    height: 160,
+    borderRadius: radius.full,
+    backgroundColor: colors.primary,
+    opacity: 0.12,
   },
   brandRow: {
     flexDirection: 'row',
@@ -239,9 +260,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: spacing.sm,
-    backgroundColor: '#FEF2F2',
+    backgroundColor: colors.dangerLight,
     borderWidth: 1,
-    borderColor: '#FECACA',
+    borderColor: colors.dangerBorder,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
@@ -256,34 +277,17 @@ const styles = StyleSheet.create({
   },
 
   submitBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.primary,
     borderRadius: radius.xl,
-    paddingVertical: spacing.lg,
-    paddingHorizontal: spacing.xxxl,
     marginTop: spacing.md,
     marginBottom: spacing.xl,
     ...shadow.elevated,
-  },
-  submitBtnDisabled: { opacity: 0.5, shadowOpacity: 0, elevation: 0 },
-  submitBtnPressed: { opacity: 0.88, transform: [{ scale: 0.985 }] },
-  submitBtnText: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '700',
-    letterSpacing: 0.1,
   },
 
   supportRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: colors.primaryLight,
     borderRadius: radius.lg,
-    padding: spacing.lg,
     marginTop: spacing.md,
     marginBottom: spacing.lg,
   },
