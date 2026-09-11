@@ -246,22 +246,12 @@ export default function AutomationSettingsPage() {
           >
             <AutomationToggle
               id="weekly-stats"
-              label="Weekly stats via SMS + email"
-              description="Every week, text and email a summary of orders, revenue, new customers, and riders joined to the contacts below."
+              label="Weekly stats via email"
+              description="Every week, email a summary of orders, revenue, new customers, and riders joined to the address below."
               checked={form.weeklyStatsEnabled}
               onChange={(weeklyStatsEnabled) => patch({ weeklyStatsEnabled })}
             />
             <div className="flex flex-col gap-3 px-6 py-4 sm:px-8">
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="font-medium text-slate-900">SMS phone number</span>
-                <input
-                  type="tel"
-                  className="input-field"
-                  placeholder="+639171234567"
-                  value={form.weeklyStatsPhone}
-                  onChange={(e) => patch({ weeklyStatsPhone: e.target.value })}
-                />
-              </label>
               <label className="flex flex-col gap-1 text-sm">
                 <span className="font-medium text-slate-900">Email address</span>
                 <input
@@ -276,7 +266,7 @@ export default function AutomationSettingsPage() {
                 <button
                   type="button"
                   className="btn-outline btn-sm"
-                  disabled={sendingTest || (!form.weeklyStatsPhone && !form.weeklyStatsEmail)}
+                  disabled={sendingTest || !form.weeklyStatsEmail}
                   onClick={() => void sendTestNow()}
                 >
                   {sendingTest ? 'Sending…' : 'Send test now'}

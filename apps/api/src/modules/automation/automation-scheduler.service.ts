@@ -13,7 +13,6 @@ import { RiderAssignmentService } from '../riders/rider-assignment.service';
 import { PartnerOperationsService } from '../partner/partner-operations.service';
 import { AuditLogService } from '../audit/audit-log.service';
 import { EmailService } from '../../common/email/email.service';
-import { TwilioSmsService } from '../../common/sms/twilio-sms.service';
 import { SubscriptionService } from '../billing/subscription.service';
 import { SubscriptionStatus } from '../billing/schemas/subscription.schema';
 import { NotificationDispatchService } from '../push/notification-dispatch.service';
@@ -42,7 +41,6 @@ export class AutomationSchedulerService {
     private partnerOperationsService: PartnerOperationsService,
     private auditLogService: AuditLogService,
     private emailService: EmailService,
-    private twilioSmsService: TwilioSmsService,
     private subscriptionService: SubscriptionService,
     private notificationDispatchService: NotificationDispatchService,
   ) {}
@@ -262,7 +260,7 @@ export class AutomationSchedulerService {
    *  be tested without waiting for the weekly cron or flipping the toggle on first. */
   @Cron(CronExpression.EVERY_WEEK)
   async sendWeeklyStats(force = false) {
-    const { enabled, phone, email } = await this.settingsService.getWeeklyStatsConfig();
+    const { enabled, email } = await this.settingsService.getWeeklyStatsConfig();
     if (!enabled && !force) return;
 
     try {
@@ -288,15 +286,6 @@ export class AutomationSchedulerService {
         newCustomers,
         ridersJoined,
       };
-
-      if (phone) {
-        const text =
-          `Lunara weekly stats (from ${summary.periodFrom}): ` +
-          `${summary.totalOrders} orders, ${summary.completedOrders} completed, ` +
-          `${summary.cancelledOrders} cancelled, ₱${summary.revenue} revenue, ` +
-          `${summary.newCustomers} new customers, ${summary.ridersJoined} riders joined.`;
-        await this.twilioSmsService.send(phone, text);
-      }
 
       if (email) {
         await this.emailService.send({
