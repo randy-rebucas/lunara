@@ -40,3 +40,7 @@ export function getApiV1BaseUrl(): string {
   if (Platform.OS === 'web') return base;
   return rewriteLocalhost(base);
 }
+
+export function getApiOrigin(): string {
+  return getApiV1BaseUrl().replace(/\/api\/v1$/, '');
+}

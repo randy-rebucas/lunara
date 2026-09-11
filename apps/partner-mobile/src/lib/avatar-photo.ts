@@ -1,12 +1,9 @@
 import * as ImagePicker from 'expo-image-picker';
 import { Alert } from 'react-native';
+import { resizeForUpload } from './image-resize';
+import type { UploadFile } from './upload-file';
 
-export interface PickedAvatar {
-  localUri: string;
-  formData: FormData;
-}
-
-export async function pickAvatarPhoto(source: 'camera' | 'library'): Promise<PickedAvatar | null> {
+export async function pickAvatarPhoto(source: 'camera' | 'library'): Promise<UploadFile | null> {
   const permission =
     source === 'camera'
       ? await ImagePicker.requestCameraPermissionsAsync()
@@ -24,12 +21,12 @@ export async function pickAvatarPhoto(source: 'camera' | 'library'): Promise<Pic
   if (result.canceled || !result.assets[0]) return null;
 
   const asset = result.assets[0];
-  const formData = new FormData();
-  formData.append('avatar', {
-    uri: asset.uri,
-    name: asset.fileName ?? `avatar-${Date.now()}.jpg`,
-    type: asset.mimeType ?? 'image/jpeg',
-  } as unknown as Blob);
+  const uploadUri = await resizeForUpload(asset.uri);
 
-  return { localUri: asset.uri, formData };
+  return {
+    uri: uploadUri,
+    name: asset.fileName ?? `avatar-${Date.now()}.jpg`,
+    type: 'image/jpeg',
+    fieldName: 'avatar',
+  };
 }

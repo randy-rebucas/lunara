@@ -1,9 +1,12 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system/legacy';
 import type { AuthTokens, User } from '@lunara/types';
 import { UserRole } from '@lunara/types';
 import { getApiV1BaseUrl } from '../api-config';
 import { parseApiError } from '../lib/api-error';
+import { apiUnreachableMessage } from '../lib/network-error';
+import type { UploadFile } from '../lib/upload-file';
 
 const STORAGE_KEY = 'lunara_partner_auth';
 
@@ -66,6 +69,64 @@ async function authRequest<T>(
   return body.data as T;
 }
 
+/** Uploads via expo-file-system's native uploadAsync rather than fetch+FormData — RN's fetch
+ * bridges FormData file parts as base64/blob and sends the body chunked with no Content-Length,
+ * which the ngrok free-tier tunnel used for local dev intermittently resets mid-upload ("Network
+ * request failed") even though plain JSON requests over the same tunnel succeed. uploadAsync
+ * streams the file natively with a known length. Mirrors rider-mobile's authUpload. */
+async function authUpload<T>(
+  path: string,
+  file: UploadFile,
+  token?: string | null,
+  onUnauthorized?: () => void,
+  refreshAndGetToken?: () => Promise<string | null>,
+): Promise<T> {
+  const baseUrl = getApiV1BaseUrl();
+  const doUpload = async (accessToken?: string | null) => {
+    try {
+      return await FileSystem.uploadAsync(`${baseUrl}${path}`, file.uri, {
+        httpMethod: 'POST',
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        fieldName: file.fieldName,
+        mimeType: file.type,
+        parameters: { name: file.name },
+        headers: {
+          'x-lunara-client': 'mobile',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+      });
+    } catch {
+      throw new Error(apiUnreachableMessage(baseUrl));
+    }
+  };
+
+  let res = await doUpload(token);
+  if (res.status === 401 && token && refreshAndGetToken) {
+    const refreshed = await refreshAndGetToken().catch(() => null);
+    if (refreshed) {
+      res = await doUpload(refreshed);
+    }
+  }
+  let body: { success?: boolean; data?: unknown; message?: string };
+  try {
+    body = JSON.parse(res.body);
+  } catch {
+    throw new Error(
+      res.status >= 200 && res.status < 300
+        ? `Unexpected response from ${baseUrl}.`
+        : `API error ${res.status} at ${baseUrl}. Make sure the API is running and the URL is correct.`,
+    );
+  }
+  if (res.status === 401 && token) {
+    onUnauthorized?.();
+    throw new Error('Session expired. Please sign in again.');
+  }
+  if (res.status < 200 || res.status >= 300 || body.success === false) {
+    throw new Error(parseApiError(body));
+  }
+  return body.data as T;
+}
+
 interface AuthStore {
   user: User | null;
   tokens: AuthTokens | null;
@@ -74,6 +135,7 @@ interface AuthStore {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
+  apiUpload: <T>(path: string, file: UploadFile) => Promise<T>;
 }
 
 let refreshInFlight: Promise<string | null> | null = null;
@@ -132,6 +194,22 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     return authRequest<T>(
       path,
       init,
+      tokens.accessToken,
+      () => {
+        void get().logout();
+      },
+      () => refreshAccessToken(get, set),
+    );
+  },
+
+  apiUpload: async <T>(path: string, file: UploadFile) => {
+    const { tokens } = get();
+    if (!tokens?.accessToken) {
+      throw new Error('Please sign in to continue.');
+    }
+    return authUpload<T>(
+      path,
+      file,
       tokens.accessToken,
       () => {
         void get().logout();

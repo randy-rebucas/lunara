@@ -6,6 +6,7 @@ import { Screen } from '../../src/components/ui/screen';
 import { useOwnBranch } from '../../src/hooks/use-own-branch';
 import { partnerFetch, partnerUpload } from '../../src/api';
 import { pickAvatarPhoto } from '../../src/lib/avatar-photo';
+import { resolveMediaUrl } from '../../src/lib/media-url';
 import { useAuthStore } from '../../src/store/auth';
 import { colors, radius, shadow, spacing, typography } from '../../src/theme';
 
@@ -98,7 +99,7 @@ export default function ProfileScreen() {
     if (!picked) return;
     setUploading(true);
     try {
-      const updated = await partnerUpload<PartnerOwnProfile>('/partner/profile/avatar', picked.formData);
+      const updated = await partnerUpload<PartnerOwnProfile>('/partner/profile/avatar', picked);
       setProfile(updated);
     } catch (e) {
       Alert.alert('Upload failed', e instanceof Error ? e.message : 'Please try again.');
@@ -136,7 +137,7 @@ export default function ProfileScreen() {
     <Screen inTab>
       <View style={styles.hero}>
         <Pressable onPress={handleAvatarPress} accessibilityRole="button" accessibilityLabel="Change profile photo">
-          <Avatar name={name} avatarUrl={profile?.avatarUrl} uploading={uploading} />
+          <Avatar name={name} avatarUrl={resolveMediaUrl(profile?.avatarUrl)} uploading={uploading} />
         </Pressable>
         <Text style={styles.heroName}>{name}</Text>
         <Text style={styles.heroContact}>{email}</Text>
