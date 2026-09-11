@@ -37,5 +37,57 @@
     "'No orders here' heading + description — live text",
     "Tip callout box (lightbulb icon + text) — live component",
     "Bottom tab bar (Orders/Scan/Profile) — live navigation component"
+  ],
+  "screens": [
+    {
+      "id": "scan",
+      "source": {
+        "file": "image-extraction/source/scan.png",
+        "width": 853,
+        "height": 1844,
+        "platform": "iOS (status bar, home indicator)",
+        "estimatedDevice": "iPhone Pro Max class (390x844pt @ ~2.19x, or 428x926pt @ 2x)",
+        "screen": "Partner/Shop Ops app — Scan tab, idle state"
+      },
+      "assets": [
+        {
+          "id": "01",
+          "name": "logo_icon",
+          "file": "crops/01_logo_icon.png",
+          "sourceCrop": [30, 135, 150, 215],
+          "category": "brand",
+          "recommendedFormat": "svg",
+          "reason": "Same brand mark as the Orders screen — confirms a shared BrandLogo component; this crop is reference-only."
+        },
+        {
+          "id": "02",
+          "name": "hero_tag_illustration",
+          "file": "crops/02_hero_tag_illustration.png",
+          "sourceCrop": [598, 190, 853, 410],
+          "category": "illustration",
+          "recommendedFormat": "svg (preferred) or optimized PNG/WebP",
+          "reason": "Decorative header artwork (folded linens + QR laundry tag + sparkles), edge-bleed. Not text, not a component. Reference-only crop; source vector/illustration asset should be used in production if available."
+        },
+        {
+          "id": "03",
+          "name": "scanner_frame_icon",
+          "file": "crops/03_scanner_frame_icon.png",
+          "sourceCrop": [220, 420, 630, 670],
+          "category": "icon",
+          "recommendedFormat": "svg",
+          "reason": "Single-color viewfinder + QR glyph icon. Should be rebuilt as a themeable SVG (recolorable per white-label brand, optionally animated), not shipped as a raster crop."
+        }
+      ],
+      "explicitlyNotExtracted": [
+        "Header wordmark + role label, notification bell, avatar — shared AppHeader, live components",
+        "'Scan' title + subtitle — live text",
+        "'Scan laundry tag' card heading/description — live text",
+        "'Open scanner' button — live Button component",
+        "'Manual lookup' / 'Enter code' action cards — live ActionCard components with tone variants",
+        "'Recent scans' heading + 'View all' link — live text/link",
+        "Recent scan rows (order #, customer, timestamp, status pill, chevron) — live RecentScanList/RecentScanRow/StatusPill components",
+        "Bottom tab bar (Orders/Scan/Profile) — shared live navigation component, Scan active"
+      ]
+    }
   ]
 }

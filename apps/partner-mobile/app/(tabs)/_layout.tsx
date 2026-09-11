@@ -48,7 +48,11 @@ export default function TabsLayout() {
       />
       <Tabs.Screen
         name="scan"
-        options={{ title: 'Scan', tabBarIcon: tabIcon('qr-code-outline'), headerShown: false }}
+        options={{ title: 'Scan', tabBarIcon: tabIcon('qr-code-outline') }}
+      />
+      <Tabs.Screen
+        name="attendance"
+        options={{ title: 'Attendance', tabBarIcon: tabIcon('time-outline') }}
       />
       <Tabs.Screen
         name="profile"

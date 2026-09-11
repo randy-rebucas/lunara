@@ -184,8 +184,6 @@ export default function OrdersScreen() {
     return list;
   }, [items, filter, query]);
 
-  const needsAttention = stageCounts.accept;
-
   if (loading) {
     return (
       <Screen inTab>
@@ -200,20 +198,6 @@ export default function OrdersScreen() {
   return (
     <Screen inTab>
       <BranchBanner />
-
-      <View style={styles.summaryRow}>
-        <Text style={styles.summaryText}>
-          {items.length} order{items.length === 1 ? '' : 's'}
-        </Text>
-        {needsAttention > 0 ? (
-          <View style={styles.attentionPill}>
-            <Ionicons name="alert-circle" size={13} color={colors.warning} />
-            <Text style={styles.attentionText}>
-              {needsAttention} need{needsAttention === 1 ? 's' : ''} accepting
-            </Text>
-          </View>
-        ) : null}
-      </View>
 
       <View style={styles.searchWrap}>
         <Ionicons name="search" size={16} color={colors.mutedForeground} style={styles.searchIcon} />
@@ -280,23 +264,6 @@ export default function OrdersScreen() {
 }
 
 const styles = StyleSheet.create({
-  summaryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.md,
-  },
-  summaryText: { ...typography.bodySm, fontWeight: '600' },
-  attentionPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: colors.warningBg,
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-  },
-  attentionText: { fontSize: 11, fontWeight: '700', color: colors.warning },
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',

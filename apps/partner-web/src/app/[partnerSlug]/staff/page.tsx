@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useCallback, useMemo, useState } from 'react';
 import type { PartnerBranchRider, PartnerOwnedRider, PartnerStaffMember } from '@lunara/types';
 import { AuthLoading } from '../../../components/auth-loading';
+import { AttendanceTab } from '../../../components/attendance-tab';
 import { DataPageStatus } from '../../../components/data-page-status';
 import { StaffProfileModal } from '../../../components/staff-profile-modal';
 import { RiderProfileModal } from '../../../components/rider-profile-modal';
@@ -53,7 +54,7 @@ export default function StaffTeamPage() {
   const [branchId, setBranchId] = useState('');
   const [reassigningId, setReassigningId] = useState<string | null>(null);
   const [reassignError, setReassignError] = useState('');
-  const [activeTab, setActiveTab] = useState<'staff' | 'riders'>('staff');
+  const [activeTab, setActiveTab] = useState<'staff' | 'riders' | 'attendance'>('staff');
 
   const [showRiderForm, setShowRiderForm] = useState(false);
   const [riderEmail, setRiderEmail] = useState('');
@@ -309,7 +310,20 @@ export default function StaffTeamPage() {
         >
           Riders
         </button>
+        <button
+          type="button"
+          className={`px-4 py-2 text-sm font-medium ${
+            activeTab === 'attendance'
+              ? 'border-b-2 border-primary text-primary'
+              : 'text-muted hover:text-slate-700'
+          }`}
+          onClick={() => setActiveTab('attendance')}
+        >
+          Attendance
+        </button>
       </div>
+
+      {activeTab === 'attendance' && <AttendanceTab staff={staff ?? []} riders={ownedRiders ?? []} />}
 
       {activeTab === 'staff' && (
       <>

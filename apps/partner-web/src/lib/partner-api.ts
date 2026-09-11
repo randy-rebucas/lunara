@@ -1,4 +1,6 @@
 import type {
+  PartnerAttendanceRecord,
+  PartnerAttendanceSummary,
   PartnerBranchRider,
   PartnerBrandConfig,
   PartnerOwnedRider,
@@ -506,6 +508,45 @@ export async function removeStaff(staffId: string): Promise<void> {
 
 export async function listAssignedRiders(): Promise<PartnerBranchRider[]> {
   return partnerFetch<PartnerBranchRider[]>('/partner/riders');
+}
+
+export interface AttendanceQuery {
+  userId?: string;
+  role?: 'staff' | 'rider';
+  status?: 'active' | 'completed';
+  from?: string;
+  to?: string;
+  limit?: number;
+}
+
+export async function listPartnerAttendance(query: AttendanceQuery = {}): Promise<PartnerAttendanceRecord[]> {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined) params.set(key, String(value));
+  }
+  const qs = params.toString();
+  return partnerFetch<PartnerAttendanceRecord[]>(`/partner/attendance${qs ? `?${qs}` : ''}`);
+}
+
+export async function getPartnerAttendanceSummary(): Promise<PartnerAttendanceSummary> {
+  return partnerFetch<PartnerAttendanceSummary>('/partner/attendance/summary');
+}
+
+export interface CorrectAttendanceInput {
+  clockInAt?: string;
+  /** Pass `null` to reopen a completed session (clear its clock-out); omit to leave unchanged. */
+  clockOutAt?: string | null;
+  notes?: string;
+}
+
+export async function correctAttendanceRecord(
+  recordId: string,
+  input: CorrectAttendanceInput,
+): Promise<PartnerAttendanceRecord> {
+  return partnerFetch<PartnerAttendanceRecord>(`/partner/attendance/${recordId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
 }
 
 export async function listOwnedRiders(): Promise<PartnerOwnedRider[]> {

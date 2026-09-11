@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActionSheetIOS,
   ActivityIndicator,
@@ -13,16 +13,113 @@ import {
   Text,
   View,
 } from 'react-native';
+import type { AttendanceRecordView } from '@lunara/types';
 import { ComplianceBanner } from '../../src/components/compliance-banner';
 import { useRiderOperations } from '../../src/context/rider-operations';
+import { Button } from '../../src/components/ui/button';
+import { Card } from '../../src/components/ui/card';
 import { LocationPermissionBanner } from '../../src/components/ui/location-permission-banner';
 import { Screen } from '../../src/components/ui/screen';
 import { StatusBadge } from '../../src/components/ui/status-badge';
 import { useTabScreenPadding } from '../../src/hooks/use-tab-bar-height';
 import { pickRiderAvatar, type AvatarSource } from '../../src/lib/rider-avatar';
 import type { RiderMe } from '../../src/lib/rider-types';
+import { riderFetch } from '../../src/api';
 import { useAuthStore } from '../../src/store/auth';
 import { colors, radius, shadow, spacing, typography } from '../../src/theme';
+
+function formatTime(iso: string) {
+  return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
+/** Attendance ("am I on the clock") is intentionally separate from shift status ("am I
+ * receiving assignments") — see AttendanceRecord schema notes on the API side. */
+function AttendanceCard() {
+  const [current, setCurrent] = useState<AttendanceRecordView | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await riderFetch<AttendanceRecordView | null>('/attendance/me/current');
+      setCurrent(res);
+    } catch {
+      setCurrent(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function clockIn() {
+    setBusy(true);
+    try {
+      await riderFetch('/attendance/clock-in', { method: 'POST', body: JSON.stringify({}) });
+      await load();
+    } catch (e) {
+      Alert.alert('Could not clock in', e instanceof Error ? e.message : 'Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clockOut() {
+    setBusy(true);
+    try {
+      await riderFetch('/attendance/clock-out', { method: 'POST', body: JSON.stringify({}) });
+      await load();
+    } catch (e) {
+      Alert.alert('Could not clock out', e instanceof Error ? e.message : 'Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <View style={sectionStyles.wrap}>
+      <Text style={sectionStyles.label}>ATTENDANCE</Text>
+      <Card style={attendanceStyles.card}>
+        {loading ? (
+          <ActivityIndicator color={colors.primary} />
+        ) : (
+          <>
+            <View style={attendanceStyles.row}>
+              <View
+                style={[
+                  attendanceStyles.dot,
+                  { backgroundColor: current ? colors.accent : colors.mutedForeground },
+                ]}
+              />
+              <Text style={attendanceStyles.status}>{current ? 'Clocked in' : 'Not clocked in'}</Text>
+            </View>
+            <Text style={attendanceStyles.hint}>
+              {current ? `Since ${formatTime(current.clockInAt)}` : 'Clock in to start your shift.'}
+            </Text>
+            <Button
+              label={current ? 'Clock out' : 'Clock in'}
+              variant={current ? 'outline' : 'primary'}
+              disabled={busy}
+              onPress={current ? clockOut : clockIn}
+              style={attendanceStyles.button}
+            />
+          </>
+        )}
+      </Card>
+    </View>
+  );
+}
+
+const attendanceStyles = StyleSheet.create({
+  card: { alignItems: 'flex-start' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  dot: { width: 10, height: 10, borderRadius: 5 },
+  status: { fontSize: 15, fontWeight: '700', color: colors.foreground },
+  hint: { ...typography.caption, marginTop: spacing.xs, marginBottom: spacing.md },
+  button: { alignSelf: 'stretch' },
+});
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -313,6 +410,8 @@ export default function ProfileScreen() {
           <StatusBadge shiftStatus={shiftStatus} />
         </View>
       </View>
+
+      <AttendanceCard />
 
       {/* ── Account ── */}
       <MenuSection label="ACCOUNT">

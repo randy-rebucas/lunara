@@ -2,13 +2,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { PartnerOwnProfile } from '@lunara/types';
+import { Card } from '../../src/components/ui/card';
 import { Screen } from '../../src/components/ui/screen';
 import { useOwnBranch } from '../../src/hooks/use-own-branch';
 import { partnerFetch, partnerUpload } from '../../src/api';
 import { pickAvatarPhoto } from '../../src/lib/avatar-photo';
 import { resolveMediaUrl } from '../../src/lib/media-url';
 import { useAuthStore } from '../../src/store/auth';
-import { colors, radius, shadow, spacing, typography } from '../../src/theme';
+import { colors, radius, spacing, typography } from '../../src/theme';
 
 function Avatar({ name, avatarUrl, uploading }: { name: string; avatarUrl?: string; uploading: boolean }) {
   const initials = name
@@ -25,11 +26,11 @@ function Avatar({ name, avatarUrl, uploading }: { name: string; avatarUrl?: stri
       )}
       {uploading ? (
         <View style={avatarStyles.overlay}>
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color={colors.onPrimary} />
         </View>
       ) : (
         <View style={avatarStyles.editBadge}>
-          <Ionicons name="camera" size={13} color="#fff" />
+          <Ionicons name="camera" size={13} color={colors.onPrimary} />
         </View>
       )}
     </View>
@@ -48,7 +49,7 @@ const avatarStyles = StyleSheet.create({
     overflow: 'hidden',
   },
   image: { width: '100%', height: '100%' },
-  text: { fontSize: 22, fontWeight: '800', color: '#fff', letterSpacing: 0.5 },
+  text: { fontSize: 22, fontWeight: '800', color: colors.onPrimary, letterSpacing: 0.5 },
   overlay: {
     ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.35)',
@@ -149,7 +150,7 @@ export default function ProfileScreen() {
       {branch ? (
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>BRANCH</Text>
-          <View style={styles.card}>
+          <Card style={styles.card}>
             <View style={styles.row}>
               <View style={[styles.iconWrap, { backgroundColor: colors.primaryLight }]}>
                 <Ionicons name="storefront-outline" size={18} color={colors.primary} />
@@ -161,25 +162,25 @@ export default function ProfileScreen() {
                 </Text>
               </View>
             </View>
-          </View>
+          </Card>
         </View>
       ) : null}
 
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>ACCOUNT</Text>
-        <View style={styles.card}>
+        <Card style={styles.card}>
           <Pressable
             style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
             onPress={handleLogout}
             accessibilityRole="button"
           >
-            <View style={[styles.iconWrap, { backgroundColor: '#FEF2F2' }]}>
+            <View style={[styles.iconWrap, { backgroundColor: colors.dangerLight }]}>
               <Ionicons name="log-out-outline" size={18} color={colors.destructive} />
             </View>
             <Text style={[styles.rowTitle, { color: colors.destructive }]}>Sign out</Text>
             <Ionicons name="chevron-forward" size={16} color={colors.destructive} />
           </Pressable>
-        </View>
+        </Card>
       </View>
     </Screen>
   );
@@ -211,12 +212,8 @@ const styles = StyleSheet.create({
   section: { marginBottom: spacing.lg },
   sectionLabel: { ...typography.label, marginBottom: spacing.sm },
   card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
+    padding: 0,
     paddingHorizontal: spacing.lg,
-    ...shadow.card,
   },
   row: {
     flexDirection: 'row',

@@ -1,6 +1,7 @@
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from './ui/button';
 import { colors, radius, spacing, typography } from '../theme';
 
@@ -40,22 +41,22 @@ export function QrScanner({ title, hint, onScan, onCancel }: QrScannerProps) {
 
   if (!permission) {
     return (
-      <View style={styles.centered}>
+      <SafeAreaView style={styles.centered} edges={['top', 'left', 'right', 'bottom']}>
         <ActivityIndicator color={colors.primary} />
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (!permission.granted) {
     return (
-      <View style={styles.centered}>
+      <SafeAreaView style={styles.centered} edges={['top', 'left', 'right', 'bottom']}>
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.hint}>Camera access is required to scan QR codes.</Text>
         <Button label="Allow camera" onPress={() => requestPermission()} style={styles.action} />
         {onCancel ? (
           <Button label="Cancel" variant="outline" onPress={onCancel} style={styles.action} />
         ) : null}
-      </View>
+      </SafeAreaView>
     );
   }
 
@@ -67,7 +68,7 @@ export function QrScanner({ title, hint, onScan, onCancel }: QrScannerProps) {
         barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
         onBarcodeScanned={busy ? undefined : handleScan}
       />
-      <View style={styles.overlay}>
+      <SafeAreaView style={styles.overlay} edges={['top', 'left', 'right', 'bottom']}>
         <Text style={styles.title}>{title}</Text>
         {hint ? <Text style={styles.hint}>{hint}</Text> : null}
         <View style={styles.frame} />
@@ -76,7 +77,7 @@ export function QrScanner({ title, hint, onScan, onCancel }: QrScannerProps) {
         {onCancel ? (
           <Button label="Cancel" variant="outline" onPress={onCancel} style={styles.cancel} />
         ) : null}
-      </View>
+      </SafeAreaView>
     </View>
   );
 }

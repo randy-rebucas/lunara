@@ -9,7 +9,7 @@
     "start": "node dist/main.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test src/modules/push/**/*.test.ts src/modules/riders/**/*.test.ts src/modules/sos/**/*.test.ts",
+    "test": "node --import tsx --test src/modules/push/**/*.test.ts src/modules/riders/**/*.test.ts src/modules/sos/**/*.test.ts src/modules/attendance/**/*.test.ts",
     "test:e2e": "node -r ts-node/register --test test/e2e/**/*.e2e.test.ts",
     "seed": "npx ts-node src/scripts/seed.ts",
     "seed:promotions": "npx ts-node src/scripts/seed-promotions.ts",

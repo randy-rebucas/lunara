@@ -13,6 +13,7 @@ import { TenancyModule } from './common/tenancy/tenancy.module';
 import { StorageModule } from './common/storage/storage.module';
 import { UPLOAD_ROOT } from './common/uploads/upload-paths';
 import { AddressesModule } from './modules/addresses/addresses.module';
+import { AttendanceModule } from './modules/attendance/attendance.module';
 import { FavoritesModule } from './modules/favorites/favorites.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { IncentiveCampaignsModule } from './modules/incentive-campaigns/incentive-campaigns.module';
@@ -82,6 +83,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
     CustomersModule,
     AddressesModule,
     FavoritesModule,
+    AttendanceModule,
     SubscriptionsModule,
     IncentiveCampaignsModule,
     BannersModule,
