@@ -20,8 +20,8 @@ const FAQ: { icon: IoniconName; q: string; a: string }[] = [
   },
   {
     icon: 'wallet-outline',
-    q: 'How do earnings reach my wallet?',
-    a: 'Pickup and delivery payouts are credited automatically after task completion.',
+    q: 'How and when do I get paid?',
+    a: 'Pay is managed entirely by your partner shop/employer, outside the app — contact them for your payout schedule and method.',
   },
   {
     icon: 'call-outline',

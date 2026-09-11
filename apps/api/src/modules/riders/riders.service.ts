@@ -31,6 +31,7 @@ import { UserProfile, UserProfileDocument } from '../users/schemas/user-profile.
 import { UpdateLocationDto, UpdateRiderEmploymentDto, UpdateRiderProfileDto } from './dto/rider.dto';
 import {
   isRiderCompliant,
+  isRiderEligibleForWork,
   isValidRiderDocumentType,
   serializeRiderDocuments,
   type RiderDocumentType,
@@ -173,7 +174,6 @@ export class RidersService {
     rider: RiderDocument,
     user: Pick<UserDocument, 'email' | 'phone'> | null,
     avatarUrl?: string,
-    feeRates?: { pickup: number; delivery: number } | null,
   ) {
     const compliance = isRiderCompliant(rider, user);
     const displayFirstName =
@@ -196,9 +196,11 @@ export class RidersService {
       employmentType: rider.employmentType,
       fixedWageAmount: rider.fixedWageAmount,
       wageFrequency: rider.wageFrequency,
-      // Flat per-leg fee rates come from the platform wallet, which only applies to platform-pooled
-      // riders paid per task — partner-owned riders are paid by their partner, outside this system.
-      feeRates: !rider.partnerId && rider.employmentType !== 'employee' ? (feeRates ?? null) : null,
+      employmentStatus: rider.employmentStatus,
+      hireDate: rider.hireDate ?? null,
+      // Every rider is now partner-owned and paid by their partner, outside the platform wallet —
+      // flat per-leg fee rates no longer apply to anyone.
+      feeRates: null,
       documents: serializeRiderDocuments(rider.documents),
       compliance: {
         isCompliant: compliance.isCompliant,
@@ -229,13 +231,9 @@ export class RidersService {
       .findOne({ userId: new Types.ObjectId(userId) })
       .select('avatarUrl')
       .lean();
-    const feeRates =
-      !rider.partnerId && rider.employmentType !== 'employee'
-        ? await this.settingsService.getRiderFeeAmounts()
-        : null;
     return {
       success: true,
-      data: this.serializeMePayload(userId, rider, user, profile?.avatarUrl, feeRates),
+      data: this.serializeMePayload(userId, rider, user, profile?.avatarUrl),
     };
   }
 
@@ -359,10 +357,8 @@ export class RidersService {
         'This rider is partner-managed — manual earnings/wage payments are handled by their partner, not the platform wallet',
       );
     }
-
-    if (type === 'wage' && rider.employmentType !== 'employee') {
-      throw new BadRequestException('Wage payments are only valid for employee riders');
-    }
+    // Every rider now has partnerId set, so the branch above always throws before reaching here —
+    // the wage/employmentType branch that used to live here is unreachable and was removed.
 
     const referenceId = new Types.ObjectId().toString();
     const label = RIDER_EARNING_TYPE_LABELS[type];
@@ -656,25 +652,51 @@ export class RidersService {
     return this.getMe(userId);
   }
 
-  async updateEmployment(userId: string, dto: UpdateRiderEmploymentDto) {
-    const rider = await this.findOrCreate(userId);
+  async updateEmployment(
+    userId: string,
+    dto: UpdateRiderEmploymentDto,
+    scope?: { partnerId: Types.ObjectId },
+  ) {
+    const rider = scope
+      ? await this.riderModel.findOne({ userId: new Types.ObjectId(userId), partnerId: scope.partnerId })
+      : await this.findOrCreate(userId);
+    if (!rider) throw new NotFoundException('Rider not found');
 
     if (dto.employmentType !== undefined) rider.employmentType = dto.employmentType;
     if (dto.fixedWageAmount !== undefined) rider.fixedWageAmount = dto.fixedWageAmount;
     if (dto.wageFrequency !== undefined) rider.wageFrequency = dto.wageFrequency;
+    if (dto.hireDate !== undefined) rider.hireDate = new Date(dto.hireDate);
+
+    if (dto.employmentStatus !== undefined) {
+      if (dto.employmentStatus === 'active' && rider.employmentStatus !== 'active') {
+        const requiredDocs = (rider.documents ?? []).filter((d) => d.fileUrl);
+        const hasUnapproved = requiredDocs.length === 0 || requiredDocs.some((d) => d.status !== 'approved');
+        if (hasUnapproved) {
+          throw new BadRequestException(
+            'All submitted documents must be approved before activating this rider',
+          );
+        }
+        if (!rider.payoutMethod) {
+          throw new BadRequestException('Payout method must be set before activating this rider');
+        }
+        if (!rider.hireDate) rider.hireDate = new Date();
+      }
+      rider.employmentStatus = dto.employmentStatus;
+    }
 
     await rider.save();
     return this.getMe(userId);
   }
 
-  async uploadDocument(userId: string, type: string, filename: string) {
+  async uploadDocumentForPartner(riderUserId: string, type: string, filename: string, partnerId: Types.ObjectId) {
     if (!isValidRiderDocumentType(type)) {
       throw new BadRequestException('Invalid document type');
     }
 
-    const rider = await this.findOrCreate(userId);
-    const fileUrl = riderDocumentPublicPath(filename);
+    const rider = await this.riderModel.findOne({ userId: new Types.ObjectId(riderUserId), partnerId });
+    if (!rider) throw new NotFoundException('Rider not found');
 
+    const fileUrl = riderDocumentPublicPath(filename);
     const previousDocument = (rider.documents ?? []).find((d) => d.type === type);
     const nextDocuments = (rider.documents ?? []).filter((d) => d.type !== type);
     nextDocuments.push({
@@ -689,14 +711,13 @@ export class RidersService {
     rider.documents = nextDocuments;
     await rider.save();
     if (previousDocument) {
-      // Best-effort cleanup of the superseded file: the new document is already saved and
-      // authoritative, so a failure to delete the old blob must not fail this request.
       await this.storageService
         .deleteFile('lunara/rider-documents', previousDocument.fileUrl, 'private')
         .catch(() => {});
     }
 
-    return this.getMe(userId);
+    const user = await this.userModel.findById(riderUserId).select('email phone');
+    return { success: true, data: this.serializeMePayload(riderUserId, rider, user) };
   }
 
   async reviewDocument(
@@ -705,6 +726,7 @@ export class RidersService {
     adminUserId: string,
     status: 'approved' | 'rejected',
     rejectionReason?: string,
+    scope?: { partnerId: Types.ObjectId },
   ) {
     if (!isValidRiderDocumentType(type)) {
       throw new BadRequestException('Invalid document type');
@@ -713,7 +735,10 @@ export class RidersService {
       throw new BadRequestException('Rejection reason is required');
     }
 
-    const rider = await this.riderModel.findOne({ userId: new Types.ObjectId(riderUserId) });
+    const rider = await this.riderModel.findOne({
+      userId: new Types.ObjectId(riderUserId),
+      ...(scope ? { partnerId: scope.partnerId } : {}),
+    });
     if (!rider) throw new NotFoundException('Rider not found');
 
     const doc = rider.documents?.find((d) => d.type === type);
@@ -747,9 +772,9 @@ export class RidersService {
     };
   }
 
-  async listPendingDocumentReviews() {
+  async listPendingDocumentReviews(scope?: { partnerId: Types.ObjectId }) {
     const riders = await this.riderModel
-      .find({ 'documents.status': 'pending' })
+      .find({ 'documents.status': 'pending', ...(scope ? { partnerId: scope.partnerId } : {}) })
       .sort({ updatedAt: -1 });
     const users = await this.userModel
       .find({ _id: { $in: riders.map((r) => r.userId) } })
@@ -840,6 +865,11 @@ export class RidersService {
     const rider = await this.findOrCreate(userId);
 
     if (isOnline) {
+      if (!isRiderEligibleForWork(rider)) {
+        throw new ForbiddenException({
+          message: `Your account is ${rider.employmentStatus} and cannot go online — contact your shop`,
+        });
+      }
       const user = await this.userModel.findById(userId).select('phone');
       const compliance = isRiderCompliant(rider, user);
       if (!compliance.isCompliant) {

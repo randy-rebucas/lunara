@@ -1,13 +1,39 @@
-import Constants, { ExecutionEnvironment } from 'expo-constants';
+import { isRunningInExpoGo } from 'expo';
 import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { PushPlatform } from '@lunara/types';
+
+type NotificationsModule = typeof import('expo-notifications');
+
+/**
+ * `expo-notifications` throws at import time on Android inside Expo Go (its
+ * auto-registration side effect calls a push API that SDK 53 removed from
+ * Expo Go). Load it lazily and fall back to a no-op stub there so the rest of
+ * the app — including local notifications on other platforms — keeps working.
+ */
+const Notifications: NotificationsModule = (() => {
+  if (Platform.OS === 'android' && isRunningInExpoGo()) {
+    return new Proxy({} as NotificationsModule, {
+      get: () =>
+        () =>
+          Promise.resolve(undefined),
+    });
+  }
+  try {
+    return require('expo-notifications');
+  } catch {
+    return new Proxy({} as NotificationsModule, {
+      get: () =>
+        () =>
+          Promise.resolve(undefined),
+    });
+  }
+})();
 
 /** FCM/APNs device tokens are unavailable in Expo Go since SDK 53 — use an EAS dev build. */
 export function isRemotePushSupported(): boolean {
   if (!Device.isDevice) return false;
-  if (Constants.executionEnvironment === ExecutionEnvironment.StoreClient) return false;
+  if (isRunningInExpoGo()) return false;
   return true;
 }
 
@@ -42,10 +68,6 @@ async function ensureAndroidChannels() {
   await Notifications.setNotificationChannelAsync('reminders', {
     name: 'Reminders',
     importance: Notifications.AndroidImportance.HIGH,
-  });
-  await Notifications.setNotificationChannelAsync('earnings', {
-    name: 'Earnings',
-    importance: Notifications.AndroidImportance.DEFAULT,
   });
   await Notifications.setNotificationChannelAsync('system', {
     name: 'System',

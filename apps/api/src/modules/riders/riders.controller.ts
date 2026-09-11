@@ -33,7 +33,6 @@ import { TriggerSosDto } from '../sos/dto/trigger-sos.dto';
 import { RiderSosService } from '../sos/rider-sos.service';
 import { HandoffQrService } from '../handoff/handoff-qr.service';
 import { RiderWalletService } from './rider-wallet.service';
-import { isValidRiderDocumentType } from './rider-compliance';
 
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/jpg']);
 
@@ -51,8 +50,7 @@ const imageMemoryUploadOptions = (maxSizeBytes: number) => ({
 
 const taskPhotoUploadOptions = imageMemoryUploadOptions(8 * 1024 * 1024);
 const remittanceProofUploadOptions = imageMemoryUploadOptions(8 * 1024 * 1024);
-const riderDocumentUploadOptions = imageMemoryUploadOptions(5 * 1024 * 1024);
-const avatarUploadOptions = imageMemoryUploadOptions(5 * 1024 * 1024);
+const avatarUploadOptions = imageMemoryUploadOptions(8 * 1024 * 1024);
 
 @Controller('riders')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -258,31 +256,6 @@ export class RidersController {
   @Roles(UserRole.RIDER)
   removeAvatar(@Req() req: { user: { sub: string } }) {
     return this.ridersService.removeAvatar(req.user.sub);
-  }
-
-  @Post('me/documents/:type')
-  @Roles(UserRole.RIDER)
-  @UseInterceptors(FileInterceptor('document', riderDocumentUploadOptions))
-  async uploadDocument(
-    @Param('type') type: string,
-    @Req() req: { user: { sub: string } },
-    @UploadedFile() file?: Express.Multer.File,
-  ) {
-    if (!isValidRiderDocumentType(type)) {
-      throw new BadRequestException('Invalid document type');
-    }
-    if (!file) {
-      throw new BadRequestException('Document image is required');
-    }
-    const publicId = `${req.user.sub}-${type}-${Date.now()}`;
-    const result = await this.storageService.uploadPrivateBuffer(
-      file.buffer,
-      'lunara/rider-documents',
-      publicId,
-      'image',
-      file.mimetype,
-    );
-    return this.ridersService.uploadDocument(req.user.sub, type, result.public_id);
   }
 
   @Get('notifications')

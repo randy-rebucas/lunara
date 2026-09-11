@@ -121,9 +121,10 @@ export class UpdateRiderProfileDto {
 }
 
 export class UpdateRiderEmploymentDto {
+  // Every rider is now a partner-owned employee — the only accepted value is 'employee'.
   @IsOptional()
-  @IsIn(['employee', 'independent_contractor'])
-  employmentType?: 'employee' | 'independent_contractor';
+  @IsIn(['employee'])
+  employmentType?: 'employee';
 
   @IsOptional()
   @IsNumber()
@@ -133,6 +134,14 @@ export class UpdateRiderEmploymentDto {
   @IsOptional()
   @IsIn(['daily', 'weekly', 'monthly'])
   wageFrequency?: 'daily' | 'weekly' | 'monthly';
+
+  @IsOptional()
+  @IsIn(['onboarding', 'active', 'suspended', 'terminated'])
+  employmentStatus?: 'onboarding' | 'active' | 'suspended' | 'terminated';
+
+  @IsOptional()
+  @IsString()
+  hireDate?: string;
 }
 
 export class ReviewRiderDocumentDto {

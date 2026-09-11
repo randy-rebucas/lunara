@@ -143,7 +143,7 @@ export default function LoginScreen() {
               <Text style={styles.heroAccent}>Rider!</Text>
             </Text>
             <Text style={styles.heroBody}>
-              Sign in to manage pickups,{'\n'}deliveries, and earnings on the go.
+              Sign in to manage pickups{'\n'}and deliveries on the go.
             </Text>
           </View>
 

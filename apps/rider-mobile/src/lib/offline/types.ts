@@ -50,6 +50,18 @@ export interface GpsQueueItem extends BaseQueueItem {
 
 export type QueueItem = StatusQueueItem | PhotoQueueItem | GpsQueueItem;
 
+/** A single file to multipart-upload. Uploaded via expo-file-system's native uploadAsync
+ * rather than fetch+FormData — RN's fetch bridges FormData file parts as base64/blob and sends
+ * the body chunked with no Content-Length, which the ngrok free-tier tunnel used for local dev
+ * intermittently resets mid-upload ("Network request failed") even though plain JSON requests
+ * over the same tunnel succeed. uploadAsync streams the file natively with a known length. */
+export interface UploadFile {
+  uri: string;
+  name: string;
+  type: string;
+  fieldName: string;
+}
+
 export interface QueuedResponse {
   queued: true;
   itemId: string;

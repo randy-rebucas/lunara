@@ -13,7 +13,7 @@ import {
   getQueueItems,
 } from './queue-store';
 import { loadTaskCache, saveTaskCache } from './task-cache';
-import type { GpsQueueItem, QueuedResponse, QueueItem, WorkflowStepKey } from './types';
+import type { GpsQueueItem, QueuedResponse, QueueItem, UploadFile, WorkflowStepKey } from './types';
 import type { RiderLocationPayload } from '@lunara/utils';
 import { locationPatchBody } from '../rider-location';
 
@@ -72,14 +72,14 @@ export async function offlineFetch<T>(path: string, init?: RequestInit): Promise
 
 export async function offlineUpload<T>(
   path: string,
-  formData: FormData,
+  file: UploadFile,
   orderId?: string,
 ): Promise<T | QueuedResponse> {
   const online = await isOnline();
   const resolvedOrderId = orderId ?? extractOrderId(path);
 
   if (online) {
-    return useAuthStore.getState().apiUpload<T>(path, formData);
+    return useAuthStore.getState().apiUpload<T>(path, file);
   }
 
   if (!resolvedOrderId) {
@@ -91,13 +91,7 @@ export async function offlineUpload<T>(
     throw new Error('Cannot queue this photo offline.');
   }
 
-  const photoPart = formData.get('photo') as { uri?: string } | null;
-  const sourceUri = photoPart?.uri;
-  if (!sourceUri) {
-    throw new Error('Photo data missing.');
-  }
-
-  const localUri = await persistPhoto(sourceUri, resolvedOrderId);
+  const localUri = await persistPhoto(file.uri, resolvedOrderId);
   const item: QueueItem = {
     id: createQueueId(),
     kind: 'photo',

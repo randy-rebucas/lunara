@@ -88,6 +88,7 @@ const nav: NavItem[] = [
   // Accounts: everyone → the fleet
   { section: 'People' },
   { href: '/users',        label: 'Users',        icon: Icons.users },
+  { href: '/riders',       label: 'Riders',       icon: Icons.riders },
 
   // Physical network → the catalog it sells → shop-floor tooling
   { section: 'Network' },
@@ -113,6 +114,7 @@ const nav: NavItem[] = [
   { href: '/billing-metrics',    label: 'Billing metrics',   icon: Icons.billingMetrics },
   { href: '/reconciliation',     label: 'Reconciliation',    icon: Icons.reconciliation },
   { href: '/refunds',            label: 'Refunds',           icon: Icons.refunds },
+  { href: '/riders/withdrawals', label: 'Rider withdrawals', icon: Icons.withdrawals },
 
   { section: 'Marketing' },
   { href: '/promotions',    label: 'Promotions',    icon: Icons.promotions },

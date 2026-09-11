@@ -26,6 +26,7 @@ import { LaundryTagsService } from '../laundry-tags/laundry-tags.service';
 import { RidersService } from './riders.service';
 import { RiderWalletService } from './rider-wallet.service';
 import { buildRiderTaskDetails } from './rider-task-summary';
+import { isRiderEligibleForWork } from './rider-compliance';
 
 function generateReceiptCode(orderId: string) {
   const short = orderId.slice(-6).toUpperCase();
@@ -121,6 +122,15 @@ export class PickupService {
     const rider = await this.ridersService.findOrCreate(riderUserId);
     if (!rider.isOnline) {
       throw new BadRequestException('Go online to accept pickup jobs');
+    }
+    // Mirrors RiderAssignmentService.assertRiderEligibleForAssignment — a suspended/terminated
+    // partner-owned rider must not be able to self-claim an open pickup offer even if they somehow
+    // still have isOnline=true (this is the direct-accept path, distinct from and not gated by the
+    // admin/dispatch assignment path's own eligibility check).
+    if (!isRiderEligibleForWork(rider)) {
+      throw new BadRequestException(
+        `Rider is not active (status: ${rider.employmentStatus}) and cannot accept tasks`,
+      );
     }
 
     const preCheck = await this.orderModel.findById(orderId);

@@ -12,7 +12,17 @@ export class RiderOfferPushService {
   ) {}
 
   async notifyOnlineRiders(payload: PushPayload): Promise<number> {
-    const riders = await this.riderModel.find({ isOnline: true }).select('userId').lean();
+    // Excludes suspended/terminated partner-owned riders from the broadcast — mirrors the same
+    // eligibility rule enforced at assignment time (RiderAssignmentService) and on the open-offer
+    // accept path (PickupService.acceptPickup) so a suspended rider isn't even pinged for an offer
+    // they're no longer allowed to claim.
+    const riders = await this.riderModel
+      .find({
+        isOnline: true,
+        $or: [{ employmentStatus: 'active' }, { employmentStatus: { $exists: false } }],
+      })
+      .select('userId')
+      .lean();
     const userIds = riders.map((r) => r.userId.toString());
     return this.pushNotificationService.sendToUsers(userIds, {
       ...payload,

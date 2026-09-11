@@ -160,6 +160,61 @@ profile or documents. No cross-role widening found — `[authz]` clean.
    settings) not in scope for this audit; removing them risks breaking a consumer not
    traced here. Flagging as dead-weight-if-truly-unused rather than removing blind.
 
+5. **Document upload's multer `fileSize` limit (5MB) too low for full-resolution phone
+   camera captures, causing uploads to fail at the network layer with a misleading
+   "Cannot reach API" error — `[fixed]`.** `captureRiderDocument`
+   (`apps/rider-mobile/src/lib/rider-document.ts:28-39`) captures at `quality: 0.85`
+   with no resize step, routinely producing a 5-10MB JPEG on a modern phone camera.
+   `riderDocumentUploadOptions` (`riders.controller.ts:54`) capped `fileSize` at 5MB —
+   lower than `taskPhotoUploadOptions`'s 8MB despite similar/larger image sizes. When
+   multer's limit is exceeded mid-stream it destroys the connection instead of
+   returning a clean error response; on the client this surfaces as a raw `fetch`
+   rejection caught by `authUpload`'s generic `catch { throw new Error('Cannot reach
+   API at ...') }` (`apps/rider-mobile/src/store/auth.ts:77-81`) — indistinguishable
+   in the UI from the API actually being unreachable, even though it was reachable and
+   every other request on the same screen succeeded. Full trace in
+   [documents.md](documents.md) Findings #4.
+   **Fix:** raised `riderDocumentUploadOptions`'s `fileSize` limit from 5MB to 8MB in
+   `apps/api/src/modules/riders/riders.controller.ts:54` and the identical copy in
+   `apps/api/src/modules/partner/partner.controller.ts:92` (partner-side upload on a
+   rider's behalf, same bug). Root cause (no client-side resize before upload, so the
+   server-side ceiling is always a guess against whatever resolution the device
+   produces) — **fixed**, see Finding 7.
+
+6. **Same multer file-size bug recurred on the profile avatar upload — `[fixed]`.**
+   `pickRiderAvatar` (`apps/rider-mobile/src/lib/rider-avatar.ts:11-14`) picks a photo at
+   `quality: 0.85` with no resize step, same pattern as Finding 5. The backend's
+   `avatarUploadOptions` (`apps/api/src/modules/riders/riders.controller.ts:53`,
+   pre-fix) was still capped at 5MB even after `taskPhotoUploadOptions` and
+   `remittanceProofUploadOptions` in the same file were raised to 8MB — so a
+   full-resolution library photo picked as an avatar hit the identical stream-abort
+   failure mode, surfacing to the rider as `authUpload`'s generic "Cannot reach API"
+   error (`auth.ts:77-81`) with no other symptom. This is very likely the "error on
+   upload" reported without a specific screen named, since it was the one remaining
+   upload path in this app still on the old 5MB cap.
+   **Fix:** raised `avatarUploadOptions` to 8MB — `riders.controller.ts:53`. Grepped all
+   other `imageMemoryUploadOptions(...)` call sites in this file — task photo and
+   remittance proof were already at 8MB, unaffected.
+
+7. **No client-side resize/compression before upload, on any capture path — `[fixed]`.**
+   Previously left as the "robust fix, out of scope" caveat on Findings 5-6: none of
+   `rider-avatar.ts`, `task-photo.ts`, or the wallet remittance-proof picker
+   (`apps/rider-mobile/app/wallet.tsx:295,302`) resized or recompressed a photo before
+   building the upload `FormData`, so every server-side `fileSize` cap was a guess
+   against whatever resolution the device's camera/library produced — raising 5MB to
+   8MB (Findings 5-6) only moved the ceiling, it didn't remove the dependency on
+   guessing right for every device.
+   **Fix:** added `apps/rider-mobile/src/lib/image-resize.ts` (`resizeForUpload`, using
+   `expo-image-manipulator`, newly added dependency) which resizes to a 1600px max
+   dimension and recompresses to JPEG at `compress: 0.7`, run before the FormData is
+   built in `rider-avatar.ts:19`, `task-photo.ts:29`, and `wallet.tsx:305` (the third
+   call site, found while fixing this — same `quality: 0.85`/no-resize pattern for
+   remittance proof photos, not previously flagged as its own finding since it shares
+   the multer cap already covered by Finding 5's fix). Typechecked
+   (`apps/rider-mobile`, `npx tsc --noEmit`) clean. This doesn't remove the multer
+   limits (still useful as a backstop) but means normal phone photos land well under
+   them instead of depending on the cap matching the device.
+
 ## Unused/dead fields
 - `RiderKycDocument.reviewedBy` — unused and sensitive; see Finding 1 (fixed, removed).
 - `RiderMe.fixedWageAmount`, `RiderMe.wageFrequency` — sent by the backend, not in the

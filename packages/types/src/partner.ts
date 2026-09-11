@@ -257,6 +257,16 @@ export interface PartnerBranchRider {
 
 /** A rider the partner has added and owns directly (see Rider.partnerId) — distinct from
  * PartnerAssignedRider, which is just a branch's single default pickup/delivery rider. */
+export interface PartnerOwnedRiderDocument {
+  type: string;
+  fileUrl?: string;
+  status?: 'pending' | 'approved' | 'rejected';
+  uploadedAt?: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+  rejectionReason?: string;
+}
+
 export interface PartnerOwnedRider {
   _id: string;
   userId: string;
@@ -265,15 +275,30 @@ export interface PartnerOwnedRider {
   isActive: boolean;
   firstName?: string;
   lastName?: string;
+  avatarUrl?: string;
   vehicleType?: string;
   plateNumber?: string;
   orCrNumber?: string;
   employmentType?: 'employee' | 'independent_contractor';
   fixedWageAmount?: number;
   wageFrequency?: 'daily' | 'weekly' | 'monthly';
+  employmentStatus?: 'onboarding' | 'active' | 'suspended' | 'terminated';
+  hireDate?: string;
+  documents?: PartnerOwnedRiderDocument[];
+  payoutMethod?: 'gcash' | 'maya' | 'bank';
   isOnline: boolean;
   shiftStatus?: string;
   verificationStatus?: string;
+}
+
+export interface PartnerRiderPendingDocument {
+  userId: string;
+  riderId: string;
+  email?: string;
+  phone?: string;
+  firstName?: string;
+  lastName?: string;
+  document: PartnerOwnedRiderDocument;
 }
 
 export interface PartnerInventoryItem {

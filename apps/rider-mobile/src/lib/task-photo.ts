@@ -1,9 +1,11 @@
 import * as ImagePicker from 'expo-image-picker';
 import { Alert } from 'react-native';
+import { resizeForUpload } from './image-resize';
+import type { UploadFile } from './offline/types';
 
 export interface CapturedPhoto {
   localUri: string;
-  formData: FormData;
+  upload: UploadFile;
 }
 
 export async function captureTaskPhoto(): Promise<CapturedPhoto | null> {
@@ -26,12 +28,15 @@ export async function captureTaskPhoto(): Promise<CapturedPhoto | null> {
 
   const asset = result.assets[0];
   const localUri = asset.uri;
-  const formData = new FormData();
-  formData.append('photo', {
-    uri: localUri,
-    name: asset.fileName ?? `task-${Date.now()}.jpg`,
-    type: asset.mimeType ?? 'image/jpeg',
-  } as unknown as Blob);
+  const uploadUri = await resizeForUpload(localUri);
 
-  return { localUri, formData };
+  return {
+    localUri,
+    upload: {
+      uri: uploadUri,
+      name: asset.fileName ?? `task-${Date.now()}.jpg`,
+      type: 'image/jpeg',
+      fieldName: 'photo',
+    },
+  };
 }

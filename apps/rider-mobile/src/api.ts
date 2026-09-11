@@ -5,7 +5,7 @@ import {
   offlineUpload,
   queueGps,
 } from './lib/offline/offline-api';
-import { isQueuedResponse } from './lib/offline/types';
+import { isQueuedResponse, type UploadFile } from './lib/offline/types';
 
 export async function riderFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const method = init?.method ?? 'GET';
@@ -21,10 +21,10 @@ export async function riderFetch<T>(path: string, init?: RequestInit): Promise<T
 
 export async function riderUpload<T>(
   path: string,
-  formData: FormData,
+  file: UploadFile,
   orderId?: string,
 ): Promise<T> {
-  const result = await offlineUpload<T>(path, formData, orderId);
+  const result = await offlineUpload<T>(path, file, orderId);
   if (isQueuedResponse(result)) {
     return result as unknown as T;
   }

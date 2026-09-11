@@ -112,14 +112,15 @@ Each case: **ID**, **Preconditions**, **Steps**, **Expected result**.
 
 ## 4. Rider pickup workflow
 
-### TC-RIDER-01: Cannot go online without verified KYC
-- **Preconditions:** Rider profile incomplete or documents not yet approved
+### TC-RIDER-01: Cannot go online with an incomplete profile
+- **Preconditions:** Rider profile missing a required field (name, home address, vehicle type, plate, OR/CR)
 - **Steps:** Tap "Go online"
-- **Expected:** `POST /riders/online` returns 403; UI shows verification-required message
+- **Expected:** `POST /riders/online` returns 403; UI shows a profile-completion message
 
-### TC-RIDER-02: KYC document upload and admin approval
-- **Steps:** Rider → `/documents` → upload license, OR/CR, NBI clearance, selfie. Admin → Riders → rider detail → review and approve
-- **Expected:** Documents marked approved; rider can now go online
+### TC-RIDER-02: Partner-owned rider blocked from going online until activated
+- **Preconditions:** Partner-owned rider with `employmentStatus` other than `active` (e.g. `onboarding`)
+- **Steps:** Tap "Go online". Partner or admin → rider detail → upload/review KYC documents (license, OR/CR, NBI clearance, selfie), set payout method, activate the rider
+- **Expected:** "Go online" is blocked with an account-pending message until activated; once `employmentStatus: active`, the rider can go online
 
 ### TC-RIDER-03: Go online and receive pickup offer
 - **Preconditions:** Rider verified

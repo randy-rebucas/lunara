@@ -137,7 +137,11 @@ export function isRiderCompliant(
   const verificationStatus = getVerificationStatus(profileGaps, rider.documents);
 
   return {
-    isCompliant: profileGaps.length === 0 && documentGaps.length === 0,
+    // Document approval no longer gates `isCompliant`/going online — riders are verified in
+    // person when they apply to a partner shop, not via in-app self-upload. `documentGaps` is
+    // still computed and returned for the partner/admin document-review dashboards, which remain
+    // a separate, partner-driven flow (see uploadDocumentForPartner/reviewDocument).
+    isCompliant: profileGaps.length === 0,
     profileGaps,
     documentGaps,
     approvedDocumentCount,
@@ -147,6 +151,21 @@ export function isRiderCompliant(
 
 export function isValidRiderDocumentType(type: string): type is RiderDocumentType {
   return (RIDER_DOCUMENT_TYPES as readonly string[]).includes(type);
+}
+
+/**
+ * A suspended/terminated partner-owned rider must not be able to receive or claim task offers —
+ * mirrors `RiderAssignmentService.assertRiderEligibleForAssignment`'s eligibility rule (platform
+ * riders with no partnerId, or a partnerId'd rider whose employmentStatus is 'active' or unset,
+ * are eligible). That check only guards the admin/dispatch-driven assign paths; this shared helper
+ * lets the rider's own self-service paths (go online, accept an open pickup offer, receive offer
+ * push notifications) enforce the identical rule so a suspension can't be bypassed by going through
+ * the open-offer flow instead of a direct assignment.
+ */
+export function isRiderEligibleForWork(
+  rider: Pick<RiderDocument, 'partnerId' | 'employmentStatus'>,
+): boolean {
+  return !rider.partnerId || !rider.employmentStatus || rider.employmentStatus === 'active';
 }
 
 export function serializeRiderDocuments(

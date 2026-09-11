@@ -1,11 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   DELIVERY_WORKFLOW_STEPS,
-  formatCurrency,
   getDeliveryWorkflowStepIndex,
 } from '@lunara/utils';
 import type { RiderCashPaymentInfo } from '@lunara/utils';
@@ -580,7 +578,7 @@ export default function DeliveryScreen() {
                       const captured = await captureTaskPhoto();
                       if (!captured) return;
                       applyLocalPhotoPreview(captured.localUri);
-                      return riderUpload(`/riders/delivery-tasks/${id}/photo-upload`, captured.formData, id);
+                      return riderUpload(`/riders/delivery-tasks/${id}/photo-upload`, captured.upload, id);
                     }, 'Photo proof saved')
                   }
                 />
@@ -621,13 +619,8 @@ export default function DeliveryScreen() {
                     run(async () => {
                       const res = await riderFetch<{
                         receiptCode: string;
-                        earnings?: { amount: number; todayEarnings: number };
                       }>(`/riders/delivery-tasks/${id}/complete`, { method: 'POST' });
-                      const earn = res.earnings;
-                      Alert.alert(
-                        'Completed',
-                        `${res.receiptCode}${earn ? `\n+${formatCurrency(earn.amount)} earned (today ${formatCurrency(earn.todayEarnings)})` : ''}`,
-                      );
+                      Alert.alert('Completed', res.receiptCode);
                       router.back();
                     })
                   }

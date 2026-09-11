@@ -5,6 +5,7 @@ import {
   getInfoAsync,
   makeDirectoryAsync,
 } from 'expo-file-system/legacy';
+import type { UploadFile } from './types';
 
 const PHOTO_DIR = `${documentDirectory ?? ''}offline-photos/`;
 
@@ -35,13 +36,12 @@ export async function deletePhoto(localUri: string): Promise<void> {
   }
 }
 
-export function buildPhotoFormData(localUri: string, orderId: string): FormData {
+export function buildPhotoUpload(localUri: string, orderId: string): UploadFile {
   const ext = localUri.toLowerCase().includes('.png') ? 'png' : 'jpg';
-  const formData = new FormData();
-  formData.append('photo', {
+  return {
     uri: localUri,
     name: `${orderId}-${Date.now()}.${ext}`,
     type: ext === 'png' ? 'image/png' : 'image/jpeg',
-  } as unknown as Blob);
-  return formData;
+    fieldName: 'photo',
+  };
 }

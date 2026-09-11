@@ -9,6 +9,13 @@ loadProjectEnv(monorepoRoot);
 
 const appJson = require('./app.json').expo;
 
+// Local dev hits the API over plain http:// (LAN IP, no TLS). Android blocks
+// cleartext traffic by default once the app targets a modern SDK, which
+// silently breaks every fetch/upload in a dev build unless we opt back in
+// here — Expo Go was unaffected because its own manifest already allows it.
+const apiUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
+const usesCleartextTraffic = !apiUrl || apiUrl.startsWith('http://');
+
 /** @type {import('expo/config').ExpoConfig} */
 module.exports = {
   ...appJson,
@@ -32,6 +39,7 @@ module.exports = {
       foregroundImage: icon,
       backgroundColor: '#ffffff',
     },
+    usesCleartextTraffic,
   },
   ios: {
     ...appJson.ios,

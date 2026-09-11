@@ -78,14 +78,11 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false, headerBackTitle: '' }} />
           <Stack.Screen name="pickup/[id]" options={{ title: 'Pickup task' }} />
           <Stack.Screen name="delivery/[id]" options={{ title: 'Delivery task' }} />
-          <Stack.Screen name="earnings" options={{ title: 'My earnings' }} />
-          <Stack.Screen name="wallet" options={{ title: 'Wallet' }} />
           <Stack.Screen name="notifications" options={{ title: 'Notifications' }} />
           <Stack.Screen name="history" options={{ title: 'Task history' }} />
           <Stack.Screen name="performance" options={{ title: 'Performance' }} />
           <Stack.Screen name="support" options={{ title: 'Help & support' }} />
           <Stack.Screen name="profile/edit" options={{ title: 'Edit profile' }} />
-          <Stack.Screen name="documents" options={{ title: 'Documents' }} />
           <Stack.Screen name="scan" options={{ title: 'Scan QR', headerShown: false }} />
         </Stack>
       </RiderOperationsProvider>

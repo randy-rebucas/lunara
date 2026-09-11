@@ -42,7 +42,25 @@ export class RiderAssignmentService {
     if (!order.branchId) return this.riderModel.find().limit(50);
     const branch = await this.branchModel.findById(order.branchId).select('partnerUserId');
     if (!branch?.partnerUserId) return this.riderModel.find().limit(50);
-    return this.riderModel.find({ partnerId: branch.partnerUserId }).limit(50);
+    return this.riderModel
+      .find({
+        partnerId: branch.partnerUserId,
+        $or: [{ employmentStatus: 'active' }, { employmentStatus: { $exists: false } }],
+      })
+      .limit(50);
+  }
+
+  /** Blocks direct/confirmed/reassign task assignment to a suspended or terminated partner-owned
+   * rider. The suggestion pool (getPartnerScopedRiderPool) and the branch-default short-circuit
+   * already filter these out, but assignPickupRider/assignDeliveryRider are also reachable with an
+   * admin/dispatcher-supplied riderId that bypasses that pool entirely (confirm-with-explicit-id,
+   * direct assign, reassign) — this is the actual enforcement point for all paths. */
+  private assertRiderEligibleForAssignment(rider: RiderDocument) {
+    if (rider.partnerId && rider.employmentStatus && rider.employmentStatus !== 'active') {
+      throw new BadRequestException(
+        `Rider is not active (status: ${rider.employmentStatus}) and cannot be assigned tasks`,
+      );
+    }
   }
 
   /**
@@ -59,7 +77,9 @@ export class RiderAssignmentService {
     if (!branch?.assignedRiderId) return { shortCircuitRiderId: null, riders };
 
     const defaultRider = await this.riderModel.findOne({ userId: branch.assignedRiderId });
-    if (defaultRider?.isOnline) {
+    const defaultRiderEligible =
+      !defaultRider?.partnerId || defaultRider.employmentStatus === 'active' || !defaultRider.employmentStatus;
+    if (defaultRider?.isOnline && defaultRiderEligible) {
       return { shortCircuitRiderId: branch.assignedRiderId.toString(), riders };
     }
 
@@ -90,7 +110,8 @@ export class RiderAssignmentService {
     if (!branch?.assignedRiderId) return false;
 
     const rider = await this.riderModel.findOne({ userId: branch.assignedRiderId });
-    if (!rider?.isOnline) {
+    const riderEligible = !rider?.partnerId || rider.employmentStatus === 'active' || !rider.employmentStatus;
+    if (!rider?.isOnline || !riderEligible) {
       await this.broadcastPickupOffer(order);
       return false;
     }
@@ -306,6 +327,12 @@ export class RiderAssignmentService {
     if (!order) throw new NotFoundException('Order not found');
     this.assertReadyForPickupAssignment(order);
 
+    // Validated before the atomic claim below so a rejection (not found / ineligible) never leaves
+    // the order half-claimed with no rider actually assignable.
+    const rider = await this.riderModel.findOne({ userId: new Types.ObjectId(riderUserId) });
+    if (!rider) throw new NotFoundException('Rider not found');
+    this.assertRiderEligibleForAssignment(rider);
+
     // Atomic claim: a plain read-then-write here would let two concurrent assignment calls (e.g.
     // manual dispatch racing auto-assign) both pass this check and overwrite each other on save().
     // findOneAndUpdate with pickupRiderId unset as part of the filter makes only one call win.
@@ -316,9 +343,6 @@ export class RiderAssignmentService {
     if (!claimed) {
       throw new BadRequestException('Pickup rider already assigned');
     }
-
-    const rider = await this.riderModel.findOne({ userId: new Types.ObjectId(riderUserId) });
-    if (!rider) throw new NotFoundException('Rider not found');
 
     const customer = await this.userModel.findById(order.customerId).select('phone');
     const now = new Date();
@@ -646,6 +670,11 @@ export class RiderAssignmentService {
     if (!order) throw new NotFoundException('Order not found');
     this.assertReadyForDeliveryAssignment(order);
 
+    // Validated before the atomic claim below — see assignPickupRider's matching comment.
+    const rider = await this.riderModel.findOne({ userId: new Types.ObjectId(riderUserId) });
+    if (!rider) throw new NotFoundException('Rider not found');
+    this.assertRiderEligibleForAssignment(rider);
+
     // Atomic claim — see assignPickupRider's comment on why this can't be a plain read-then-write.
     const claimed = await this.orderModel.findOneAndUpdate(
       { _id: order._id, deliveryRiderId: { $exists: false } },
@@ -654,9 +683,6 @@ export class RiderAssignmentService {
     if (!claimed) {
       throw new BadRequestException('Delivery rider already assigned');
     }
-
-    const rider = await this.riderModel.findOne({ userId: new Types.ObjectId(riderUserId) });
-    if (!rider) throw new NotFoundException('Rider not found');
 
     const now = new Date();
     order.deliveryRiderId = new Types.ObjectId(riderUserId);

@@ -22,7 +22,6 @@ import { getRouteProgressIndex } from '../lib/route-progress';
 import type {
   ActiveAssignment,
   DeliveryOffer,
-  EarningsData,
   PickupOffer,
   RiderMe,
   ShiftStatus,
@@ -44,8 +43,6 @@ interface RiderOperationsContextValue {
   online: boolean;
   shiftStatus: ShiftStatus;
   shiftBusy: boolean;
-  weekEarnings: number;
-  monthEarnings: number;
   routeProgressIndex: number;
   taskBadgeCount: number;
   refresh: () => void;
@@ -77,8 +74,6 @@ export function RiderOperationsProvider({ children }: { children: ReactNode }) {
   const [deliveryOffers, setDeliveryOffers] = useState<DeliveryOffer[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [activeAssignment, setActiveAssignment] = useState<ActiveAssignment | null>(null);
-  const [weekEarnings, setWeekEarnings] = useState(0);
-  const [monthEarnings, setMonthEarnings] = useState(0);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notificationsVersion, setNotificationsVersion] = useState(0);
@@ -136,17 +131,6 @@ export function RiderOperationsProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const loadEarnings = useCallback(async () => {
-    try {
-      const data = await riderFetch<EarningsData>('/riders/earnings');
-      setWeekEarnings(data.weekEarnings);
-      setMonthEarnings(data.monthEarnings);
-    } catch {
-      setWeekEarnings(0);
-      setMonthEarnings(0);
-    }
-  }, []);
-
   const loadNotifications = useCallback(async () => {
     try {
       // Same limit as the Notifications screen's own fetch (useNotifications(50)) so the tab
@@ -165,9 +149,8 @@ export function RiderOperationsProvider({ children }: { children: ReactNode }) {
     loadDeliveryOffers();
     loadTasks();
     loadActiveAssignment();
-    loadEarnings();
     loadNotifications();
-  }, [loadMe, loadOffers, loadDeliveryOffers, loadTasks, loadActiveAssignment, loadEarnings, loadNotifications]);
+  }, [loadMe, loadOffers, loadDeliveryOffers, loadTasks, loadActiveAssignment, loadNotifications]);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -254,7 +237,6 @@ export function RiderOperationsProvider({ children }: { children: ReactNode }) {
         loadDeliveryOffers(),
         loadTasks(),
         loadActiveAssignment(),
-        loadEarnings(),
         loadNotifications(),
       ]);
     } finally {
@@ -269,17 +251,28 @@ export function RiderOperationsProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    if (me?.partnerId && me.employmentStatus && me.employmentStatus !== 'active') {
+      const messages: Record<string, string> = {
+        onboarding: 'Your employer is still reviewing your documents and setup. Check back once they activate your account.',
+        suspended: 'Your employer has suspended your account. Contact them for details.',
+        terminated: 'Your employer has ended your employment with them.',
+      };
+      Alert.alert(
+        'Account pending',
+        messages[me.employmentStatus] ?? 'Your account is not yet active with your employer.',
+      );
+      return;
+    }
+
     const compliance = me?.compliance;
     if (compliance && !compliance.isCompliant) {
-      const gaps = [...compliance.profileGaps, ...compliance.documentGaps];
       Alert.alert(
-        'Complete verification first',
-        gaps.length > 0 ? gaps.join('\n') : 'Finish your profile and document uploads before going online.',
+        'Complete your profile first',
+        compliance.profileGaps.length > 0
+          ? compliance.profileGaps.join('\n')
+          : 'Finish your profile before going online.',
         [
-          ...(compliance.profileGaps.length > 0
-            ? [{ text: 'Edit profile', onPress: () => router.push('/profile/edit') }]
-            : []),
-          { text: 'Documents', onPress: () => router.push('/documents') },
+          { text: 'Edit profile', onPress: () => router.push('/profile/edit') },
           { text: 'Cancel', style: 'cancel' as const },
         ],
       );
@@ -457,8 +450,6 @@ export function RiderOperationsProvider({ children }: { children: ReactNode }) {
     online,
     shiftStatus,
     shiftBusy,
-    weekEarnings,
-    monthEarnings,
     routeProgressIndex,
     taskBadgeCount,
     refresh,

@@ -30,6 +30,12 @@ export interface CustomerProfile extends BaseDocument {
   loyaltyPoints: number;
 }
 
+export interface UserProfile extends BaseDocument {
+  userId: string;
+  displayName?: string;
+  avatarUrl?: string;
+}
+
 export interface Address extends BaseDocument {
   userId: string;
   label: string;

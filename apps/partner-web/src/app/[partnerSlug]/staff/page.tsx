@@ -15,6 +15,7 @@ import {
   listOwnedRiders,
   partnerFetch,
   removeOwnedRider,
+  resolveMediaUrl,
 } from '../../../lib/partner-api';
 import { usePartnerPath } from '../../../lib/partner-path';
 import { usePartnerQuery } from '../../../lib/use-partner-query';
@@ -244,7 +245,8 @@ export default function StaffTeamPage() {
     }
   }
 
-  async function handleRemoveRider(riderUserId: string) {
+  async function handleRemoveRider(riderUserId: string, riderLabel: string) {
+    if (!window.confirm(`Remove ${riderLabel} from your riders? They will no longer be assigned tasks.`)) return;
     setRiderActionError('');
     setRemovingRiderId(riderUserId);
     try {
@@ -708,7 +710,21 @@ export default function StaffTeamPage() {
                   {(ownedRiders ?? []).map((r) => (
                     <tr key={r._id}>
                       <td className="font-medium text-slate-900">
-                        {[r.firstName, r.lastName].filter(Boolean).join(' ') || r.email || r.userId}
+                        <div className="flex items-center gap-2.5">
+                          <span className="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                            {r.avatarUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={resolveMediaUrl(r.avatarUrl)}
+                                alt=""
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              (`${r.firstName ?? ''}${r.lastName ?? ''}` || 'R')[0]?.toUpperCase()
+                            )}
+                          </span>
+                          {[r.firstName, r.lastName].filter(Boolean).join(' ') || r.email || r.userId}
+                        </div>
                       </td>
                       <td className="text-muted">{[r.email, r.phone].filter(Boolean).join(' · ') || '—'}</td>
                       <td className="text-muted">
@@ -733,7 +749,12 @@ export default function StaffTeamPage() {
                             type="button"
                             className="btn-outline btn-sm"
                             disabled={removingRiderId === r.userId}
-                            onClick={() => void handleRemoveRider(r.userId)}
+                            onClick={() =>
+                              void handleRemoveRider(
+                                r.userId,
+                                [r.firstName, r.lastName].filter(Boolean).join(' ') || r.email || r.userId,
+                              )
+                            }
                           >
                             {removingRiderId === r.userId ? 'Removing…' : 'Remove'}
                           </button>

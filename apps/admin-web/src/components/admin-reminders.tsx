@@ -21,6 +21,11 @@ interface SosIncident {
   createdAt: string;
 }
 
+interface PendingDoc {
+  _id: string;
+  riderName?: string;
+}
+
 interface Reminder {
   id: string;
   level: 'urgent' | 'warning' | 'info';
@@ -43,6 +48,7 @@ function plural(n: number, word: string) {
 function buildReminders(
   dash: DashboardData | null,
   sos: SosIncident[],
+  docs: PendingDoc[],
 ): Reminder[] {
   const list: Reminder[] = [];
 
@@ -118,6 +124,18 @@ function buildReminders(
         linkLabel: 'View live tracking',
       });
     }
+  }
+
+  // Pending rider documents
+  if (docs.length > 0) {
+    list.push({
+      id: 'rider-docs',
+      level: 'info',
+      title: `${plural(docs.length, 'rider document')} pending review`,
+      body: 'Rider verification documents are waiting for approval.',
+      href: '/riders',
+      linkLabel: 'View riders',
+    });
   }
 
   return list;
@@ -214,15 +232,17 @@ export function AdminReminders() {
 
   const poll = useCallback(async () => {
     try {
-      const [dashRes, sosRes] = await Promise.allSettled([
+      const [dashRes, sosRes, docsRes] = await Promise.allSettled([
         adminFetch<DashboardData>('/admin/dashboard'),
         adminFetch<SosIncident[]>('/admin/sos/active'),
+        adminFetch<PendingDoc[]>('/admin/riders/documents/pending'),
       ]);
 
       const dash = dashRes.status === 'fulfilled' ? dashRes.value : null;
       const sos  = sosRes.status  === 'fulfilled' && Array.isArray(sosRes.value)  ? sosRes.value  : [];
+      const docs = docsRes.status === 'fulfilled' && Array.isArray(docsRes.value) ? docsRes.value : [];
 
-      const reminders = buildReminders(dash, sos);
+      const reminders = buildReminders(dash, sos, docs);
 
       // Only show reminders we haven't shown yet in this session
       // For urgent items, always re-show (in case count changed)

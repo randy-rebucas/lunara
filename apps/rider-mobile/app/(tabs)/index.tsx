@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import { formatCurrency } from '@lunara/utils';
 import { ActiveAssignmentCard } from '../../src/components/active-assignment-card';
 import { ComplianceBanner } from '../../src/components/compliance-banner';
 import { OfflineBanner } from '../../src/components/offline-banner';
@@ -29,59 +28,6 @@ function formatOfferTime(iso?: string): string | null {
   if (Number.isNaN(d.getTime())) return null;
   return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 }
-
-// ── Earnings card ─────────────────────────────────────────────────────────────
-interface EarnCardProps {
-  label: string;
-  value: number;
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-  iconBg: string;
-  iconColor: string;
-  valueColor: string;
-}
-
-function EarnCard({ label, value, icon, iconBg, iconColor, valueColor }: EarnCardProps) {
-  return (
-    <View style={earnStyles.card}>
-      <View style={[earnStyles.iconWrap, { backgroundColor: iconBg }]}>
-        <Ionicons name={icon} size={20} color={iconColor} />
-      </View>
-      <Text style={earnStyles.label}>{label}</Text>
-      <Text style={[earnStyles.value, { color: valueColor }]}>{formatCurrency(value)}</Text>
-    </View>
-  );
-}
-
-const earnStyles = StyleSheet.create({
-  card: {
-    width: '48%',
-    flexGrow: 1,
-    backgroundColor: colors.surface,
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  iconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.sm,
-  },
-  label: { ...typography.label },
-  value: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginTop: spacing.xs,
-  },
-});
 
 // ── Pickup offer card ─────────────────────────────────────────────────────────
 interface PickupOfferCardProps {
@@ -338,8 +284,6 @@ export default function HomeScreen() {
     online,
     shiftStatus,
     shiftBusy,
-    weekEarnings,
-    monthEarnings,
     refreshing,
     routeProgressIndex,
     offers,
@@ -405,47 +349,6 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
-      {/* ── Earnings grid ── */}
-      <View style={styles.earningsGrid}>
-        <EarnCard
-          label="TODAY'S EARNINGS"
-          value={me?.todayEarnings ?? 0}
-          icon="wallet-outline"
-          iconBg={colors.accentLight}
-          iconColor={colors.accentDark}
-          valueColor={colors.accentDark}
-        />
-        <EarnCard
-          label="THIS WEEK"
-          value={weekEarnings}
-          icon="calendar-outline"
-          iconBg={colors.primaryLight}
-          iconColor={colors.primary}
-          valueColor={colors.primary}
-        />
-        <EarnCard
-          label="THIS MONTH"
-          value={monthEarnings}
-          icon="bar-chart-outline"
-          iconBg="#EFF6FF"
-          iconColor="#3B82F6"
-          valueColor="#3B82F6"
-        />
-        <EarnCard
-          label="LIFETIME"
-          value={me?.totalEarnings ?? 0}
-          icon="star-outline"
-          iconBg={colors.warningBg}
-          iconColor={colors.warning}
-          valueColor={colors.warning}
-        />
-      </View>
-
-      <Pressable style={styles.earnLink} onPress={() => router.push('/earnings')}>
-        <Text style={styles.earnLinkText}>View earnings history</Text>
-        <Ionicons name="chevron-forward" size={14} color={colors.primary} />
-      </Pressable>
-
       <ComplianceBanner compliance={me?.compliance} />
       <LocationPermissionBanner
         denied={locationDenied && online}
@@ -473,13 +376,6 @@ export default function HomeScreen() {
           assignment={activeAssignment}
           onViewTask={() => openTask(activeAssignment.orderId, activeAssignment.status)}
           onNavigate={() => promptNavigate(activeAssignment.navigateTarget)}
-          feeAmount={
-            me?.feeRates
-              ? activeAssignment.leg === 'delivery'
-                ? me.feeRates.delivery
-                : me.feeRates.pickup
-              : undefined
-          }
         />
       ) : null}
 
@@ -584,25 +480,6 @@ const styles = StyleSheet.create({
   },
   onlinePillTextActive: { color: colors.accentDark },
   onlinePillTextOff: { color: colors.muted },
-
-  // ── Earnings ──
-  earningsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm + 2,
-  },
-  earnLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    paddingVertical: spacing.sm,
-    marginBottom: spacing.xs,
-  },
-  earnLinkText: {
-    color: colors.primary,
-    fontWeight: '600',
-    fontSize: 13,
-  },
 
   // ── Available tasks ──
   tasksSection: {

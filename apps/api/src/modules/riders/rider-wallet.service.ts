@@ -243,6 +243,52 @@ export class RiderWalletService {
     return { success: true, data: serializePayoutMethod(rider) };
   }
 
+  async getPayoutMethodForPartner(riderUserId: string, partnerId: Types.ObjectId) {
+    const rider = await this.riderModel.findOne({ userId: this.riderObjectId(riderUserId), partnerId });
+    if (!rider) throw new NotFoundException('Rider not found');
+    return { success: true, data: serializePayoutMethod(rider) };
+  }
+
+  async updatePayoutMethodForPartner(
+    riderUserId: string,
+    partnerId: Types.ObjectId,
+    dto: UpdatePayoutMethodDto,
+  ) {
+    const rider = await this.riderModel.findOne({ userId: this.riderObjectId(riderUserId), partnerId });
+    if (!rider) throw new NotFoundException('Rider not found');
+
+    if (dto.method === RIDER_PAYOUT_METHOD.GCASH) {
+      if (!dto.gcashNumber) throw new BadRequestException('GCash number is required');
+      rider.payoutMethod = dto.method;
+      rider.gcashNumber = dto.gcashNumber;
+      rider.mayaNumber = undefined;
+      rider.bankName = undefined;
+      rider.bankAccountName = undefined;
+      rider.bankAccountNumber = undefined;
+    } else if (dto.method === RIDER_PAYOUT_METHOD.MAYA) {
+      if (!dto.mayaNumber) throw new BadRequestException('Maya number is required');
+      rider.payoutMethod = dto.method;
+      rider.mayaNumber = dto.mayaNumber;
+      rider.gcashNumber = undefined;
+      rider.bankName = undefined;
+      rider.bankAccountName = undefined;
+      rider.bankAccountNumber = undefined;
+    } else {
+      if (!dto.bankName || !dto.bankAccountName || !dto.bankAccountNumber) {
+        throw new BadRequestException('Bank name, account name, and account number are required');
+      }
+      rider.payoutMethod = dto.method;
+      rider.bankName = dto.bankName;
+      rider.bankAccountName = dto.bankAccountName;
+      rider.bankAccountNumber = dto.bankAccountNumber;
+      rider.gcashNumber = undefined;
+      rider.mayaNumber = undefined;
+    }
+
+    await rider.save();
+    return { success: true, data: serializePayoutMethod(rider) };
+  }
+
   async creditFromTask(userId: string, orderId: string, type: RiderEarningType, amount: number) {
     const label = RIDER_EARNING_TYPE_LABELS[type];
     return this.creditEarning(userId, {

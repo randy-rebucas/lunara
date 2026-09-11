@@ -89,7 +89,7 @@ Role-by-role journeys through the Lunara platform. Each journey lists the steps,
 **Entry:** rider-mobile (Expo, port 8082), login `rider@lunara.dev` / `password123`
 
 1. **Login**
-2. **Complete profile + KYC documents** — driver's license, OR/CR, NBI clearance, selfie — required before going online (`POST /riders/online` returns 403 until admin-approved)
+2. **Complete profile** — required before going online (`POST /riders/online` returns 403 until profile-complete). A partner-owned rider applies and is verified in person at the shop; the partner (or admin) records ID/KYC documents and sets `employmentStatus: active` before the rider can go online — see [RIDER_OPERATIONS_PLAYBOOK.md](RIDER_OPERATIONS_PLAYBOOK.md)
 3. **Go online** — joins `riders:online` room, becomes eligible for offers
 4. **Pickup task** — accept offer/assignment → navigate → arrive → verify customer (last 4 of phone) → collect → photo → generate receipt → drop at shop (payout is admin-configurable via platform settings; fallback ₱35)
 5. **Delivery task** (after partner marks ready) — accept → navigate → pick up from shop → out for delivery → arrive → customer verifies/signs → photo → complete (payout is admin-configurable via platform settings; fallback ₱35)

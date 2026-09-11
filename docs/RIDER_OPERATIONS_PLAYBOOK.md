@@ -18,11 +18,11 @@ Submit `POST /rider-applications` with:
 The application starts as `PENDING`. Admin reviews and approves/rejects it (see [`ADMIN_OPERATIONS_PLAYBOOK.md`](./ADMIN_OPERATIONS_PLAYBOOK.md#7-rider-management)).
 
 ### First login & compliance
-Once an account exists, log in to rider-mobile via email/password or phone OTP. Logging in doesn't mean you can start working yet — the app runs a separate **compliance check** (`isRiderCompliant()`) requiring:
-- Complete profile: first/last name, phone, home address (line1/city/province/postal code), vehicle type, plate number, OR/CR number
-- All 4 documents (license, OR/CR, NBI clearance, selfie) uploaded **and** marked `approved`
+Once an account exists, log in to rider-mobile via email/password or phone OTP. Logging in doesn't mean you can start working yet — the app runs a **compliance check** (`isRiderCompliant()`) requiring a complete profile: first/last name, phone, home address (line1/city/province/postal code), vehicle type, plate number, OR/CR number.
 
-Until both are true, verification status shows `incomplete` or `pending_review`, a compliance banner appears on the home screen, and **"Go Online" stays disabled** with the hint: *"Complete profile and document verification on the Profile tab before going online."* Upload/manage documents from the **Documents** tab.
+Until that's true, a compliance banner appears on the home screen and **"Go Online" stays disabled** with a prompt to finish your profile on the Edit profile screen.
+
+KYC document verification (license, OR/CR, NBI clearance, selfie) is no longer a rider self-upload step in the app — riders are verified in person when they apply to a partner shop. For a partner-owned rider, the partner (or admin) records/reviews these documents and sets `employmentStatus: active`; until then, "Go Online" is blocked separately with an "Account pending" message naming the reason (`onboarding`/`suspended`/`terminated`).
 
 ---
 
@@ -31,7 +31,7 @@ Until both are true, verification status shows `incomplete` or `pending_review`,
 Tap the Online/Offline pill (or the shift panel) on the home screen.
 
 - The app requests **foreground location permission** — if denied, you'll see a "Location required" banner and can't go online.
-- Going online re-checks compliance server-side; if you've since lost compliance (e.g. a document expired), it's rejected with the specific gaps listed.
+- Going online re-checks compliance server-side; if you've since lost profile compliance, it's rejected with the specific gaps listed.
 - While online, your GPS location streams to the server on a fixed interval so dispatch and the customer tracking map stay current.
 - **Breaks**: Start Break (must be online first) pauses you (`shiftStatus: 'break'`, goes offline for assignment purposes) without a full logout; End Break flips you back online.
 

@@ -104,7 +104,7 @@ export class EmailService {
     await this.send({
       to,
       subject: "You've been invited to ride for Lunara",
-      text: `An account has been created for you on Lunara.\n\nEmail: ${to}\nTemporary password: ${password}\n\nSign in on the Lunara rider app, complete your profile, and upload your KYC documents to get started.`,
+      text: `An account has been created for you on Lunara.\n\nEmail: ${to}\nTemporary password: ${password}\n\nSign in on the Lunara rider app and complete your profile to get started.`,
     });
   }
 

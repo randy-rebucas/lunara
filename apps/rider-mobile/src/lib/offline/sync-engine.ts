@@ -6,7 +6,7 @@ import {
   type DeliveryTaskLike,
   type PickupTaskLike,
 } from './optimistic-task';
-import { buildPhotoFormData, deletePhoto } from './photo-store';
+import { buildPhotoUpload, deletePhoto } from './photo-store';
 import {
   collapseGpsItems,
   getQueueItems,
@@ -109,8 +109,8 @@ async function processPhotoItem(item: PhotoQueueItem): Promise<'done' | 'retry' 
   }
 
   try {
-    const formData = buildPhotoFormData(item.localUri, item.orderId);
-    await useAuthStore.getState().apiUpload(item.path, formData);
+    const file = buildPhotoUpload(item.localUri, item.orderId);
+    await useAuthStore.getState().apiUpload(item.path, file);
     await deletePhoto(item.localUri);
     await removeTaskCache(item.orderId);
     return 'done';

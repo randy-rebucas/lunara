@@ -4,6 +4,7 @@ import type {
   PartnerOwnedRider,
   PartnerOwnProfile,
   PartnerPlanOption,
+  PartnerRiderPendingDocument,
   PortalRole,
   PortalUser,
 } from '@lunara/types';
@@ -518,6 +519,9 @@ export interface CreateOwnedRiderInput {
   firstName?: string;
   lastName?: string;
   vehicleType?: string;
+  plateNumber?: string;
+  orCrNumber?: string;
+  homeAddress?: { line1?: string; line2?: string; city?: string; province?: string; postalCode?: string };
 }
 
 export async function createOwnedRider(input: CreateOwnedRiderInput): Promise<PartnerOwnedRider> {
@@ -550,6 +554,104 @@ export async function updateOwnedRider(
 
 export async function removeOwnedRider(riderUserId: string): Promise<void> {
   await partnerFetch(`/partner/riders/owned/${riderUserId}`, { method: 'DELETE' });
+}
+
+export async function listPendingRiderDocuments(): Promise<PartnerRiderPendingDocument[]> {
+  return partnerFetch<PartnerRiderPendingDocument[]>('/partner/riders/documents/pending');
+}
+
+export async function uploadOwnedRiderDocument(
+  riderUserId: string,
+  type: string,
+  file: File,
+): Promise<PartnerOwnedRider> {
+  const token = getPartnerToken();
+  const formData = new FormData();
+  formData.append('document', file);
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/partner/riders/owned/${riderUserId}/documents/${type}`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+  } catch {
+    throw new Error('Cannot reach API to upload document.');
+  }
+
+  const body = await res.json();
+  if (res.status === 401) {
+    clearPartnerToken();
+    redirectToLogin();
+    throw new Error('Session expired. Please sign in again.');
+  }
+  if (!body.success) throw new Error(parseApiError(body, 'Document upload failed'));
+  return body.data as PartnerOwnedRider;
+}
+
+export async function reviewOwnedRiderDocument(
+  riderUserId: string,
+  type: string,
+  input: { status: 'approved' | 'rejected'; rejectionReason?: string },
+): Promise<PartnerOwnedRider> {
+  return partnerFetch<PartnerOwnedRider>(`/partner/riders/owned/${riderUserId}/documents/${type}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+export interface UpdateRiderEmploymentInput {
+  employmentType?: 'employee' | 'independent_contractor';
+  fixedWageAmount?: number;
+  wageFrequency?: 'daily' | 'weekly' | 'monthly';
+  employmentStatus?: 'onboarding' | 'active' | 'suspended' | 'terminated';
+  hireDate?: string;
+}
+
+export async function updateOwnedRiderEmployment(
+  riderUserId: string,
+  input: UpdateRiderEmploymentInput,
+): Promise<PartnerOwnedRider> {
+  return partnerFetch<PartnerOwnedRider>(`/partner/riders/owned/${riderUserId}/employment`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+export interface RiderPayoutMethodInfo {
+  method: 'gcash' | 'maya' | 'bank' | null;
+  label?: string;
+  configured: boolean;
+  gcashNumber?: string;
+  mayaNumber?: string;
+  bankName?: string;
+  bankAccountName?: string;
+  bankAccountNumber?: string;
+}
+
+export async function getOwnedRiderPayoutMethod(riderUserId: string): Promise<RiderPayoutMethodInfo> {
+  return partnerFetch<RiderPayoutMethodInfo>(`/partner/riders/owned/${riderUserId}/payout-method`);
+}
+
+export interface UpdateRiderPayoutMethodInput {
+  method: 'gcash' | 'maya' | 'bank';
+  gcashNumber?: string;
+  mayaNumber?: string;
+  bankName?: string;
+  bankAccountName?: string;
+  bankAccountNumber?: string;
+}
+
+export async function updateOwnedRiderPayoutMethod(
+  riderUserId: string,
+  input: UpdateRiderPayoutMethodInput,
+): Promise<RiderPayoutMethodInfo> {
+  return partnerFetch<RiderPayoutMethodInfo>(`/partner/riders/owned/${riderUserId}/payout-method`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
 }
 
 export async function uploadStaffAvatar(staffId: string, file: File): Promise<PartnerOwnProfile> {

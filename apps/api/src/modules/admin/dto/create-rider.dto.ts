@@ -1,4 +1,6 @@
-import { IsEmail, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsEmail, IsIn, IsOptional, IsString, MaxLength, MinLength, ValidateNested } from 'class-validator';
+import { UpdateRiderHomeAddressDto } from '../../riders/dto/rider.dto';
 
 export class CreateRiderDto {
   @IsEmail()
@@ -28,4 +30,21 @@ export class CreateRiderDto {
   @IsOptional()
   @IsIn(['motorcycle', 'bicycle', 'car', 'van'])
   vehicleType?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(20)
+  plateNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(40)
+  orCrNumber?: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => UpdateRiderHomeAddressDto)
+  homeAddress?: UpdateRiderHomeAddressDto;
 }

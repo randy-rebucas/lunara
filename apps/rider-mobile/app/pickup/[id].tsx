@@ -1,10 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
-  formatCurrency,
   getPickupWorkflowStepIndex,
   PICKUP_WORKFLOW_STEPS,
 } from '@lunara/utils';
@@ -678,7 +676,7 @@ export default function PickupScreen() {
                       const captured = await captureTaskPhoto();
                       if (!captured) return;
                       applyLocalPhotoPreview(captured.localUri);
-                      return riderUpload(`/riders/pickup-tasks/${id}/photo-upload`, captured.formData, id);
+                      return riderUpload(`/riders/pickup-tasks/${id}/photo-upload`, captured.upload, id);
                     }, 'Photo proof saved')
                   }
                 />
@@ -734,17 +732,10 @@ export default function PickupScreen() {
                   disabled={loading}
                   onPress={() =>
                     run(async () => {
-                      const res = await riderFetch<{ earnings?: { amount: number; todayEarnings: number } }>(
-                        `/riders/pickup-tasks/${id}/drop-at-shop`,
-                        { method: 'POST' },
-                      );
-                      const earn = res.earnings;
-                      Alert.alert(
-                        'Delivered to shop',
-                        earn
-                          ? `in_transit_to_shop · +${formatCurrency(earn.amount)} (today ${formatCurrency(earn.todayEarnings)})`
-                          : 'in_transit_to_shop',
-                      );
+                      await riderFetch(`/riders/pickup-tasks/${id}/drop-at-shop`, {
+                        method: 'POST',
+                      });
+                      Alert.alert('Delivered to shop', 'in_transit_to_shop');
                       router.back();
                     })
                   }

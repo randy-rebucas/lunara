@@ -1,5 +1,4 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { formatCurrency } from '@lunara/utils';
 import type { ActiveAssignment } from '../lib/rider-types';
 import { riderTaskStatusLabel } from '../rider-labels';
 import { colors, spacing, typography } from '../theme';
@@ -11,8 +10,6 @@ interface ActiveAssignmentCardProps {
   assignment: ActiveAssignment;
   onViewTask: () => void;
   onNavigate: () => void;
-  /** Flat fee for this leg — shown only for a non-employee rider (see RiderMe.feeRates). */
-  feeAmount?: number;
 }
 
 function DetailRow({ label, value }: { label: string; value?: string | null }) {
@@ -29,7 +26,6 @@ export function ActiveAssignmentCard({
   assignment,
   onViewTask,
   onNavigate,
-  feeAmount,
 }: ActiveAssignmentCardProps) {
   return (
     <Card elevated style={styles.card}>
@@ -53,12 +49,6 @@ export function ActiveAssignmentCard({
           <Text style={styles.metricLabel}>ETA</Text>
           <Text style={styles.metricValue}>{assignment.etaLabel}</Text>
         </View>
-        {feeAmount != null ? (
-          <View style={styles.metric}>
-            <Text style={styles.metricLabel}>Fee</Text>
-            <Text style={styles.metricValue}>{formatCurrency(feeAmount)}</Text>
-          </View>
-        ) : null}
       </View>
       <Text style={styles.status}>{riderTaskStatusLabel(assignment.status)}</Text>
 

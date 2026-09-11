@@ -98,7 +98,10 @@ export class Rider {
   @Prop()
   orCrNumber?: string;
 
-  @Prop({ default: 'independent_contractor', enum: ['employee', 'independent_contractor'] })
+  // Every rider is now a partner-owned employee; kept as 'employee' | 'independent_contractor'
+  // for backward compatibility with existing documents (some legacy docs may still read
+  // 'independent_contractor') but nothing branches on the distinction anymore going forward.
+  @Prop({ default: 'employee', enum: ['employee', 'independent_contractor'] })
   employmentType!: 'employee' | 'independent_contractor';
 
   @Prop()
@@ -106,6 +109,14 @@ export class Rider {
 
   @Prop({ enum: ['daily', 'weekly', 'monthly'] })
   wageFrequency?: 'daily' | 'weekly' | 'monthly';
+
+  /** Gates task eligibility: only 'active' riders are offered tasks. New partner-onboarded
+   * riders start 'onboarding' until documents are approved and payout is configured. */
+  @Prop({ default: 'onboarding', enum: ['onboarding', 'active', 'suspended', 'terminated'] })
+  employmentStatus!: 'onboarding' | 'active' | 'suspended' | 'terminated';
+
+  @Prop()
+  hireDate?: Date;
 
   @Prop({ type: [RiderKycDocument], default: [] })
   documents!: RiderKycDocument[];

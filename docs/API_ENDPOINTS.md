@@ -339,9 +339,8 @@ Base: `/riders` — JWT + `rider` role unless noted.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/riders/me` | Rider profile, vehicle, KYC documents, compliance checklist |
+| GET | `/riders/me` | Rider profile, vehicle, KYC documents (partner/admin-uploaded), compliance checklist |
 | PATCH | `/riders/me` | Update profile (name, phone, home address, vehicle, plate/OR-CR) |
-| POST | `/riders/me/documents/:type` | Upload KYC document — multipart field `document` |
 | GET | `/riders/notifications` | Rider notifications |
 | PATCH | `/riders/notifications/:id/read` | Mark notification read |
 | GET | `/riders/tasks` | Active tasks |

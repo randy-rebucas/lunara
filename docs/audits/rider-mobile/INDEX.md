@@ -4,7 +4,7 @@
 |---|---|---|---|
 | Home dashboard | [home.md](home.md) | 2026-09-02 | 0 open / 5 fixed |
 | Tasks (+ pickup/delivery detail, scan) | [tasks.md](tasks.md) | 2026-09-02 | 1 open / 4 fixed |
-| Profile (+ Edit profile, Documents/KYC) | [profile.md](profile.md) | 2026-09-02 | 2 open / 2 fixed |
+| Profile (+ Edit profile, Documents/KYC) | [profile.md](profile.md) | 2026-09-11 | 2 open / 5 fixed |
 | Earnings (history + breakdown) | [earnings.md](earnings.md) | 2026-09-02 | 0 open / 2 fixed |
 | Wallet (balance, payout, remittance, withdrawals) | [wallet.md](wallet.md) | 2026-09-02 | 1 open / 3 fixed |
 | History (task history + cancelled list) | [history.md](history.md) | 2026-09-02 | 1 open / 2 fixed |
@@ -13,7 +13,7 @@
 | Support (+ Report issue, My reports) | [support.md](support.md) | 2026-09-02 | 3 open / 3 fixed |
 | Auth (Login + Forgot Password + session bootstrap) | [auth.md](auth.md) | 2026-09-02 | 3 open / 2 fixed |
 
-**Totals: 13 open / 27 fixed** across 10 modules.
+**Totals: 13 open / 30 fixed** across 10 modules.
 
 Superseded docs (kept for history, no longer authoritative): [documents.md](documents.md) → folded into `profile.md`; [scan.md](scan.md) → folded into `tasks.md`; [report-issue.md](report-issue.md) → folded into `support.md`.
 

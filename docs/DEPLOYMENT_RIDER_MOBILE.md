@@ -239,7 +239,7 @@ The app is uploaded to Google Play Console.
 
 Ensure the following are tested before release:
 
-- **Document verification:** Rider can upload KYC documents (license, insurance)
+- **Profile completeness gate:** Rider cannot go online until required profile fields are filled in; a partner-owned rider is also gated by `employmentStatus` until the shop verifies them in person
 - **Earnings tracking:** Realtime earnings display updates via WebSocket
 - **Performance metrics:** Historical performance and ratings display
 - **Task acceptance:** Push notifications trigger and task details load immediately

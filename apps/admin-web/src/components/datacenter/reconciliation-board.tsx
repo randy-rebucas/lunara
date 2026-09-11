@@ -452,6 +452,7 @@ export function ReconciliationBoard() {
                   <OpsPanel
                     title="Rider payouts"
                     description="Earnings, withdrawals, and cash remittances"
+                    headerAction={<Link href="/riders/withdrawals" className="link-primary text-xs font-medium">View withdrawals →</Link>}
                   >
                     <dl>
                       <DetailRow

@@ -142,9 +142,8 @@ Expo slug: `lunara-rider` · scheme: `lunara-rider` · requires **location** and
 | Login | `/login` | Email/password |
 | Home | `/(tabs)/` | Shift on/off, earnings summary, route guide |
 | Tasks | `/(tabs)/tasks` | Pickup offers, delivery queue, active tasks |
-| Profile | `/(tabs)/profile` | Verification summary, edit profile, documents, earnings, notifications |
+| Profile | `/(tabs)/profile` | Profile completeness summary, edit profile, earnings, notifications |
 | Edit profile | `/profile/edit` | Name, phone, home address, vehicle type, plate/OR-CR number |
-| Documents | `/documents` | Upload driver's license, OR/CR, NBI clearance, selfie for admin review |
 | Pickup task | `/pickup/[id]` | Arrive → verify customer → collect → photo → receipt → drop at shop |
 | Delivery task | `/delivery/[id]` | Pick up from shop → out for delivery → customer handoff → photo → complete |
 | Earnings | `/earnings` | Today & total earnings |
@@ -152,7 +151,7 @@ Expo slug: `lunara-rider` · scheme: `lunara-rider` · requires **location** and
 | Notifications | `/notifications` | Dispatch alerts with mark-read and tap-to-open task |
 | SOS | Pickup/delivery task screens | Emergency button — notify dispatch + share live location during active tasks |
 
-Real-time task offers and location updates use Socket.IO (`/tracking` namespace). **Dispatch notifications** cover pickup/delivery offers, assignments, order updates, and platform alerts (Socket.IO + in-app inbox + local banners; FCM when using an EAS build). **Riders must complete profile and get all KYC documents approved** before going online (`POST /riders/online` returns 403 until verified). Admins review documents at admin-web **Riders → rider detail**. Task photos upload to the API (`/riders/*/photo-upload`). See [Dispatch notifications](#dispatch-notifications-realtime), [Push notifications setup](#push-notifications-firebase--eas), and [Test dispatch notifications](#test-dispatch-notifications) for the full walkthrough.
+Real-time task offers and location updates use Socket.IO (`/tracking` namespace). **Dispatch notifications** cover pickup/delivery offers, assignments, order updates, and platform alerts (Socket.IO + in-app inbox + local banners; FCM when using an EAS build). **Riders must complete their profile** before going online (`POST /riders/online` returns 403 until profile-complete); a partner-owned rider is additionally gated by `employmentStatus` — their shop verifies identity/KYC documents in person (or via partner-web) and activates the account. Task photos upload to the API (`/riders/*/photo-upload`). See [Dispatch notifications](#dispatch-notifications-realtime), [Push notifications setup](#push-notifications-firebase--eas), and [Test dispatch notifications](#test-dispatch-notifications) for the full walkthrough.
 
 ### Troubleshooting (Metro / Expo)
 
@@ -234,7 +233,7 @@ Prerequisites: API running, seed completed, customer + rider mobile dev servers,
 #### Rider mobile (port 8082)
 
 1. Sign in as `rider@lunara.dev` / `password123`.
-2. Complete **profile + all KYC documents** (admin approves at admin-web → Riders → rider detail) if not already verified.
+2. Complete **profile** if not already filled in (partner-owned test riders also need `employmentStatus: active`, set by the partner/admin after in-person verification).
 3. Tap **Go online** on Home (joins `riders:online` room).
 4. From admin, **assign pickup** to this rider (or broadcast pickup request and accept in app).
 5. Rider should get a **local banner** (*New pickup offer* or *New assignment*) and Tasks list refreshes.

@@ -77,7 +77,7 @@ Any admin with access to `/refunds` can approve — there's no separate maker/ch
 ## 7. Rider management — `/riders`, `/applications/rider/[id]`, `/riders/withdrawals`
 
 - **Approve applications** at `/applications/rider/[id]` — approve or reject with a required reason on rejection.
-- **Invite a rider directly** from `/riders` (bypasses the application flow) — email, phone, temp password, name, vehicle type. Copy reminds you the rider still needs to log in, upload KYC documents, and get approved via the applications flow before they're fully compliant to go online.
+- **Invite a rider directly** from `/riders` (bypasses the application flow) — email, phone, temp password, name, vehicle type. Copy reminds you the rider still needs to log in and complete their profile; KYC documents are recorded and reviewed on the rider's detail page (or by their partner, for a partner-owned rider), not uploaded by the rider in the app.
 - **Send announcement** — broadcast a push notification to every rider (title + body).
 - **Withdrawals** — `/riders/withdrawals` is where you approve/reject rider cash-out requests (auto-approval under a threshold is configurable in Automation Settings).
 

@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router';
 import { DataLoadState } from '../src/components/data-load-state';
 import { NotificationListItem } from '../src/components/notification-list-item';
 import { Screen } from '../src/components/ui/screen';
@@ -21,7 +21,6 @@ const FILTERS: { key: FilterKey; label: string; icon: IoniconName }[] = [
   { key: 'all', label: 'All', icon: 'apps-outline' },
   { key: RIDER_NOTIFICATION_CATEGORY.ASSIGNMENT, label: 'Assignment', icon: 'bicycle-outline' },
   { key: RIDER_NOTIFICATION_CATEGORY.REMINDER, label: 'Reminder', icon: 'alarm-outline' },
-  { key: RIDER_NOTIFICATION_CATEGORY.EARNINGS, label: 'Earnings', icon: 'wallet-outline' },
   { key: RIDER_NOTIFICATION_CATEGORY.SYSTEM, label: 'System', icon: 'settings-outline' },
 ];
 
@@ -91,7 +90,7 @@ export default function NotificationsScreen() {
             </View>
           ) : null}
         </View>
-        <Text style={styles.pageSubtitle}>Assignments, reminders, earnings and system alerts.</Text>
+        <Text style={styles.pageSubtitle}>Assignments, reminders and system alerts.</Text>
       </View>
 
       {/* ── Filter chips ── */}
@@ -140,7 +139,7 @@ export default function NotificationsScreen() {
               {filter === 'all' ? 'No notifications yet' : `No ${filter} notifications`}
             </Text>
             <Text style={styles.emptyBody}>
-              Assignment updates, overdue reminders, earnings, and platform announcements appear here.
+              Assignment updates, overdue reminders, and platform announcements appear here.
             </Text>
           </View>
         }

@@ -1,16 +1,26 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Image, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import { formatCurrency } from '@lunara/utils';
+import {
+  ActionSheetIOS,
+  ActivityIndicator,
+  Alert,
+  Image,
+  Platform,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { ComplianceBanner } from '../../src/components/compliance-banner';
 import { useRiderOperations } from '../../src/context/rider-operations';
 import { LocationPermissionBanner } from '../../src/components/ui/location-permission-banner';
 import { Screen } from '../../src/components/ui/screen';
 import { StatusBadge } from '../../src/components/ui/status-badge';
 import { useTabScreenPadding } from '../../src/hooks/use-tab-bar-height';
-import { pickRiderAvatar } from '../../src/lib/rider-avatar';
-import { RIDER_DOCUMENT_TYPES, type RiderMe } from '../../src/lib/rider-types';
+import { pickRiderAvatar, type AvatarSource } from '../../src/lib/rider-avatar';
+import type { RiderMe } from '../../src/lib/rider-types';
 import { useAuthStore } from '../../src/store/auth';
 import { colors, radius, shadow, spacing, typography } from '../../src/theme';
 
@@ -233,21 +243,46 @@ export default function ProfileScreen() {
   const vehicleType = me?.vehicleType ?? 'Motorcycle';
   const plateNumber = me?.plateNumber ?? '—';
   const compliance = me?.compliance;
-  const approvedDocs = compliance?.approvedDocumentCount ?? 0;
 
-  async function handleAvatarPress() {
-    if (avatarUploading) return;
+  async function uploadAvatar(source: AvatarSource) {
     try {
-      const formData = await pickRiderAvatar();
-      if (!formData) return;
+      const file = await pickRiderAvatar(source);
+      if (!file) return;
       setAvatarUploading(true);
-      await apiUpload<RiderMe>('/riders/me/avatar', formData);
-      refresh();
+      await apiUpload<RiderMe>('/riders/me/avatar', file);
+      await refresh();
     } catch (e) {
-      Alert.alert('Upload failed', e instanceof Error ? e.message : 'Could not upload photo');
+      Alert.alert(
+        'Upload failed',
+        e instanceof Error ? e.message : 'Could not upload your photo. Check your connection and try again.',
+      );
     } finally {
       setAvatarUploading(false);
     }
+  }
+
+  function handleAvatarPress() {
+    if (avatarUploading) return;
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ['Cancel', 'Take Photo', 'Choose from Library'],
+          cancelButtonIndex: 0,
+        },
+        (index) => {
+          if (index === 1) uploadAvatar('camera');
+          if (index === 2) uploadAvatar('library');
+        },
+      );
+      return;
+    }
+
+    Alert.alert('Update profile photo', undefined, [
+      { text: 'Take Photo', onPress: () => uploadAvatar('camera') },
+      { text: 'Choose from Library', onPress: () => uploadAvatar('library') },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   }
 
   return (
@@ -279,23 +314,6 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      {/* ── Earnings summary ── */}
-      <View style={styles.earningsRow}>
-        <View style={styles.earnBox}>
-          <Text style={styles.earnLabel}>TODAY&apos;S EARNINGS</Text>
-          <Text style={[styles.earnValue, { color: colors.accentDark }]}>
-            {formatCurrency(me?.todayEarnings ?? 0)}
-          </Text>
-        </View>
-        <View style={styles.earnDivider} />
-        <View style={styles.earnBox}>
-          <Text style={styles.earnLabel}>ALL TIME</Text>
-          <Text style={[styles.earnValue, { color: colors.primary }]}>
-            {formatCurrency(me?.totalEarnings ?? 0)}
-          </Text>
-        </View>
-      </View>
-
       {/* ── Account ── */}
       <MenuSection label="ACCOUNT">
         <MenuRow
@@ -305,19 +323,6 @@ export default function ProfileScreen() {
           title="Edit profile"
           hint="Name, address, and contact info"
           onPress={() => router.push('/profile/edit')}
-        />
-        <SectionDivider />
-        <MenuRow
-          icon="document-text-outline"
-          iconBg={colors.primaryLight}
-          iconColor={colors.primary}
-          title="Documents"
-          hint={
-            compliance?.isCompliant
-              ? 'All documents verified'
-              : `${approvedDocs} of ${RIDER_DOCUMENT_TYPES.length} documents approved`
-          }
-          onPress={() => router.push('/documents')}
         />
         <SectionDivider />
         <MenuRow
@@ -353,39 +358,13 @@ export default function ProfileScreen() {
         />
         <SectionDivider />
         <MenuRow
-          icon="wallet-outline"
-          iconBg={colors.accentLight}
-          iconColor={colors.accentDark}
-          title="Earnings history"
-          hint="Daily breakdown and totals"
-          onPress={() => router.push('/earnings')}
+          icon="cash-outline"
+          iconBg={colors.surfaceMuted}
+          iconColor={colors.mutedForeground}
+          title="Pay & payouts"
+          hint="Managed by your shop, not through this app"
+          onPress={() => {}}
         />
-        {!me?.partnerId && (
-          <>
-            <SectionDivider />
-            <MenuRow
-              icon="cash-outline"
-              iconBg="#ECFDF5"
-              iconColor="#059669"
-              title="Wallet & withdrawals"
-              hint="Balance, payouts, and remittance"
-              onPress={() => router.push('/wallet' as import('expo-router').Href)}
-            />
-          </>
-        )}
-        {me?.partnerId && (
-          <>
-            <SectionDivider />
-            <MenuRow
-              icon="cash-outline"
-              iconBg={colors.surfaceMuted}
-              iconColor={colors.mutedForeground}
-              title="Pay & payouts"
-              hint="Managed by your shop, not through this app"
-              onPress={() => {}}
-            />
-          </>
-        )}
       </MenuSection>
 
       {/* ── More ── */}
@@ -441,33 +420,5 @@ const styles = StyleSheet.create({
   },
   heroStatus: {
     marginTop: spacing.md,
-  },
-
-  // ── Earnings ──
-  earningsRow: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface,
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: spacing.xl,
-    ...shadow.card,
-  },
-  earnBox: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: spacing.lg,
-  },
-  earnDivider: {
-    width: 1,
-    backgroundColor: colors.border,
-    marginVertical: spacing.md,
-  },
-  earnLabel: { ...typography.label },
-  earnValue: {
-    fontSize: 20,
-    fontWeight: '800',
-    marginTop: spacing.xs,
-    letterSpacing: -0.3,
   },
 });

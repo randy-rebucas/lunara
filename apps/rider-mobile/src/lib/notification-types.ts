@@ -1,7 +1,6 @@
 export const RIDER_NOTIFICATION_CATEGORY = {
   ASSIGNMENT: 'assignment',
   REMINDER: 'reminder',
-  EARNINGS: 'earnings',
   SYSTEM: 'system',
 } as const;
 
@@ -11,7 +10,6 @@ export type RiderNotificationCategory =
 export const RIDER_NOTIFICATION_CATEGORY_LABELS: Record<RiderNotificationCategory, string> = {
   assignment: 'Assignment',
   reminder: 'Reminder',
-  earnings: 'Earnings',
   system: 'System',
 };
 
@@ -28,15 +26,12 @@ export interface RiderNotification {
     orderId?: string;
     status?: string;
     branchName?: string;
-    amount?: number;
-    earningType?: string;
   };
 }
 
 export type RiderNotificationRoute =
   | { kind: 'pickup'; orderId: string }
-  | { kind: 'delivery'; orderId: string }
-  | { kind: 'earnings' };
+  | { kind: 'delivery'; orderId: string };
 
 export function resolveNotificationCategory(
   notification: RiderNotification,
@@ -57,8 +52,6 @@ function inferCategoryFromType(type?: string): RiderNotificationCategory {
       return RIDER_NOTIFICATION_CATEGORY.ASSIGNMENT;
     case 'pickup_overdue':
       return RIDER_NOTIFICATION_CATEGORY.REMINDER;
-    case 'earnings_credited':
-      return RIDER_NOTIFICATION_CATEGORY.EARNINGS;
     default:
       return RIDER_NOTIFICATION_CATEGORY.SYSTEM;
   }
@@ -67,12 +60,6 @@ function inferCategoryFromType(type?: string): RiderNotificationCategory {
 export function resolveRiderNotificationRoute(
   notification: RiderNotification,
 ): RiderNotificationRoute | null {
-  const category = resolveNotificationCategory(notification);
-
-  if (category === RIDER_NOTIFICATION_CATEGORY.EARNINGS) {
-    return { kind: 'earnings' };
-  }
-
   const orderId = notification.data?.orderId;
   if (!orderId) return null;
 
@@ -111,14 +98,12 @@ export function formatNotificationTime(iso: string): string {
 
 export function notificationCategoryIcon(
   category: RiderNotificationCategory,
-): 'bag-handle-outline' | 'alarm-outline' | 'cash-outline' | 'megaphone-outline' {
+): 'bag-handle-outline' | 'alarm-outline' | 'megaphone-outline' {
   switch (category) {
     case RIDER_NOTIFICATION_CATEGORY.ASSIGNMENT:
       return 'bag-handle-outline';
     case RIDER_NOTIFICATION_CATEGORY.REMINDER:
       return 'alarm-outline';
-    case RIDER_NOTIFICATION_CATEGORY.EARNINGS:
-      return 'cash-outline';
     case RIDER_NOTIFICATION_CATEGORY.SYSTEM:
     default:
       return 'megaphone-outline';

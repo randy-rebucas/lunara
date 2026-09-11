@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Alert } from 'react-native';
-import { formatCurrency, HANDOFF_QR_LABELS, type HandoffQrKind } from '@lunara/utils';
+import { HANDOFF_QR_LABELS, type HandoffQrKind } from '@lunara/utils';
 import { QrScanner } from '../src/components/qr-scanner';
 import { riderFetch } from '../src/api';
 
@@ -91,19 +91,11 @@ export default function ScanScreen() {
     }
 
     if (mode === 'order_handover') {
-      const res = await riderFetch<{
-        earnings?: { amount: number; todayEarnings: number };
-      }>(`/riders/pickup-tasks/${orderId}/drop-at-shop`, {
+      await riderFetch(`/riders/pickup-tasks/${orderId}/drop-at-shop`, {
         method: 'POST',
         body: JSON.stringify({ qrPayload: payload }),
       });
-      const earn = res.earnings;
-      Alert.alert(
-        'Delivered to shop',
-        earn
-          ? `Handover confirmed · +${formatCurrency(earn.amount)} (today ${formatCurrency(earn.todayEarnings)})`
-          : 'Handover confirmed',
-      );
+      Alert.alert('Delivered to shop', 'Handover confirmed');
       router.back();
       return;
     }

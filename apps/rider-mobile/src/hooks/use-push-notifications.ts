@@ -27,7 +27,6 @@ function routeFromPushData(data: Record<string, unknown>): Href | null {
   });
 
   if (!route) return null;
-  if (route.kind === 'earnings') return '/earnings';
   return route.kind === 'delivery' ? (`/delivery/${route.orderId}` as Href) : (`/pickup/${route.orderId}` as Href);
 }
 

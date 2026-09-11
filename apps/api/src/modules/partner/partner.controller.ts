@@ -30,6 +30,10 @@ import { LocalStorageService } from '../../common/storage/local-storage.service'
 import { taskPhotoPublicPath } from '../../common/uploads/upload-paths';
 import { Types } from 'mongoose';
 import { PickupService } from '../riders/pickup.service';
+import { RidersService } from '../riders/riders.service';
+import { RiderWalletService } from '../riders/rider-wallet.service';
+import { ReviewRiderDocumentDto, UpdateRiderEmploymentDto } from '../riders/dto/rider.dto';
+import { UpdatePayoutMethodDto } from '../riders/dto/rider-wallet.dto';
 import { LaundryService, LaundryServiceDocument } from '../catalog/schemas/laundry-service.schema';
 import { LaundryAddon, LaundryAddonDocument } from '../catalog/schemas/laundry-addon.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
@@ -83,6 +87,18 @@ import { PartnerDemoDataService } from '../partners/partner-demo-data.service';
 
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/jpg']);
 
+const riderDocumentUploadOptions = {
+  storage: memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter: (_req: unknown, file: Express.Multer.File, cb: (error: Error | null, ok: boolean) => void) => {
+    if (!ALLOWED_IMAGE_TYPES.has(file.mimetype)) {
+      cb(new BadRequestException('Only JPEG, PNG, and WebP images are allowed'), false);
+      return;
+    }
+    cb(null, true);
+  },
+};
+
 const processingPhotoUploadOptions = {
   storage: memoryStorage(),
   limits: { fileSize: 8 * 1024 * 1024 },
@@ -106,6 +122,8 @@ export class PartnerController {
     private readonly settingsService: PartnerSettingsService,
     private readonly profileService: PartnerProfileService,
     private readonly pickupService: PickupService,
+    private readonly ridersService: RidersService,
+    private readonly riderWalletService: RiderWalletService,
     @InjectModel(LaundryService.name)
     private readonly laundryServiceModel: Model<LaundryServiceDocument>,
     @InjectModel(LaundryAddon.name)
@@ -618,6 +636,88 @@ export class PartnerController {
     @Param('riderUserId') riderUserId: string,
   ) {
     return this.operationsService.removeOwnedRider(req.user.sub, req.user.role, tenantId, riderUserId);
+  }
+
+  @Get('riders/documents/pending')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  async listPendingRiderDocuments(@Req() req: { user: { sub: string; role: UserRole } }) {
+    const partnerId = await this.operationsService.resolvePartnerId(req.user.sub, req.user.role);
+    return this.ridersService.listPendingDocumentReviews({ partnerId });
+  }
+
+  @Post('riders/owned/:riderUserId/documents/:type')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  @UseInterceptors(FileInterceptor('document', riderDocumentUploadOptions))
+  async uploadOwnedRiderDocument(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('riderUserId') riderUserId: string,
+    @Param('type') type: string,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('Document image is required');
+    }
+    const partnerId = await this.operationsService.resolvePartnerId(req.user.sub, req.user.role);
+    const publicId = `${riderUserId}-${type}-${Date.now()}`;
+    const result = await this.storageService.uploadPrivateBuffer(
+      file.buffer,
+      'lunara/rider-documents',
+      publicId,
+      'image',
+      file.mimetype,
+    );
+    return this.ridersService.uploadDocumentForPartner(riderUserId, type, result.public_id, partnerId);
+  }
+
+  @Patch('riders/owned/:riderUserId/documents/:type')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  async reviewOwnedRiderDocument(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('riderUserId') riderUserId: string,
+    @Param('type') type: string,
+    @Body() dto: ReviewRiderDocumentDto,
+  ) {
+    const partnerId = await this.operationsService.resolvePartnerId(req.user.sub, req.user.role);
+    return this.ridersService.reviewDocument(
+      riderUserId,
+      type,
+      req.user.sub,
+      dto.status,
+      dto.rejectionReason,
+      { partnerId },
+    );
+  }
+
+  @Patch('riders/owned/:riderUserId/employment')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  async updateOwnedRiderEmployment(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('riderUserId') riderUserId: string,
+    @Body() dto: UpdateRiderEmploymentDto,
+  ) {
+    const partnerId = await this.operationsService.resolvePartnerId(req.user.sub, req.user.role);
+    return this.ridersService.updateEmployment(riderUserId, dto, { partnerId });
+  }
+
+  @Get('riders/owned/:riderUserId/payout-method')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  async getOwnedRiderPayoutMethod(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('riderUserId') riderUserId: string,
+  ) {
+    const partnerId = await this.operationsService.resolvePartnerId(req.user.sub, req.user.role);
+    return this.riderWalletService.getPayoutMethodForPartner(riderUserId, partnerId);
+  }
+
+  @Patch('riders/owned/:riderUserId/payout-method')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  async updateOwnedRiderPayoutMethod(
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @Param('riderUserId') riderUserId: string,
+    @Body() dto: UpdatePayoutMethodDto,
+  ) {
+    const partnerId = await this.operationsService.resolvePartnerId(req.user.sub, req.user.role);
+    return this.riderWalletService.updatePayoutMethodForPartner(riderUserId, partnerId, dto);
   }
 
   @Post('staff')

@@ -848,7 +848,7 @@ export class PartnerOperationsService {
 
   /** The partner account (User with role PARTNER) that owns riders/branches for this request —
    * riders are scoped to this id, shared across every branch the partner owns. */
-  private async resolvePartnerId(userId: string, role: UserRole): Promise<Types.ObjectId> {
+  async resolvePartnerId(userId: string, role: UserRole): Promise<Types.ObjectId> {
     if (role === UserRole.PARTNER) return new Types.ObjectId(userId);
     const branchId = await this.resolvePartnerBranchId(userId, role);
     const branch = await this.branchModel.findById(branchId).select('partnerUserId');
@@ -859,6 +859,7 @@ export class PartnerOperationsService {
   private formatOwnedRider(
     rider: RiderDocument,
     user?: Pick<UserDocument, '_id' | 'email' | 'phone' | 'isActive'> | null,
+    avatarUrl?: string,
   ) {
     return {
       _id: rider._id.toString(),
@@ -868,12 +869,17 @@ export class PartnerOperationsService {
       isActive: user?.isActive ?? true,
       firstName: rider.firstName,
       lastName: rider.lastName,
+      avatarUrl,
       vehicleType: rider.vehicleType,
       plateNumber: rider.plateNumber,
       orCrNumber: rider.orCrNumber,
       employmentType: rider.employmentType,
       fixedWageAmount: rider.fixedWageAmount,
       wageFrequency: rider.wageFrequency,
+      employmentStatus: rider.employmentStatus,
+      hireDate: rider.hireDate,
+      documents: rider.documents,
+      payoutMethod: rider.payoutMethod,
       isOnline: rider.isOnline,
       shiftStatus: rider.shiftStatus,
       verificationStatus: isRiderCompliant(rider, user ?? null).verificationStatus,
@@ -895,9 +901,16 @@ export class PartnerOperationsService {
       .select('email phone isActive');
     const userMap = new Map(users.map((u) => [u._id.toString(), u]));
 
+    const profiles = await this.userProfileModel
+      .find({ userId: { $in: riders.map((r) => r.userId) } })
+      .select('userId avatarUrl');
+    const profileMap = new Map(profiles.map((p) => [p.userId.toString(), p.avatarUrl]));
+
     return {
       success: true,
-      data: riders.map((r) => this.formatOwnedRider(r, userMap.get(r.userId.toString()))),
+      data: riders.map((r) =>
+        this.formatOwnedRider(r, userMap.get(r.userId.toString()), profileMap.get(r.userId.toString())),
+      ),
     };
   }
 
@@ -929,6 +942,10 @@ export class PartnerOperationsService {
       firstName: dto.firstName?.trim(),
       lastName: dto.lastName?.trim(),
       vehicleType: dto.vehicleType ?? 'motorcycle',
+      plateNumber: dto.plateNumber?.trim(),
+      orCrNumber: dto.orCrNumber?.trim(),
+      homeAddress: dto.homeAddress,
+      employmentStatus: 'onboarding',
       documents: [],
       isOnline: false,
       shiftStatus: 'offline',
@@ -958,13 +975,33 @@ export class PartnerOperationsService {
     if (dto.employmentType !== undefined) rider.employmentType = dto.employmentType;
     if (dto.fixedWageAmount !== undefined) rider.fixedWageAmount = dto.fixedWageAmount;
     if (dto.wageFrequency !== undefined) rider.wageFrequency = dto.wageFrequency;
+    if (dto.hireDate !== undefined) rider.hireDate = new Date(dto.hireDate);
     if (dto.homeAddress) {
       rider.homeAddress = { ...(rider.homeAddress ?? {}), ...dto.homeAddress };
     }
+
+    if (dto.employmentStatus !== undefined) {
+      if (dto.employmentStatus === 'active' && rider.employmentStatus !== 'active') {
+        const submittedDocs = (rider.documents ?? []).filter((d) => d.fileUrl);
+        const hasUnapproved = submittedDocs.length === 0 || submittedDocs.some((d) => d.status !== 'approved');
+        if (hasUnapproved) {
+          throw new BadRequestException(
+            'All submitted documents must be approved before activating this rider',
+          );
+        }
+        if (!rider.payoutMethod) {
+          throw new BadRequestException('Payout method must be set before activating this rider');
+        }
+        if (!rider.hireDate) rider.hireDate = new Date();
+      }
+      rider.employmentStatus = dto.employmentStatus;
+    }
+
     await rider.save();
 
     const user = await this.userModel.findById(riderUserId).select('email phone isActive');
-    return { success: true, data: this.formatOwnedRider(rider, user) };
+    const profile = await this.userProfileModel.findOne({ userId: rider.userId }).select('avatarUrl');
+    return { success: true, data: this.formatOwnedRider(rider, user, profile?.avatarUrl) };
   }
 
   async removeOwnedRider(userId: string, role: UserRole, tenantId: string | undefined, riderUserId: string) {
