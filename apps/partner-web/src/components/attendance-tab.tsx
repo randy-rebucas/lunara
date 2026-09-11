@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from 'react';
 import type { PartnerOwnedRider, PartnerStaffMember } from '@lunara/types';
 import { DataPageStatus } from './data-page-status';
 import { correctAttendanceRecord, getPartnerAttendanceSummary, listPartnerAttendance } from '../lib/partner-api';
+import { usePartnerAttendanceSocket } from '../lib/use-partner-attendance-socket';
 import { usePartnerQuery } from '../lib/use-partner-query';
 
 /** `<input type="datetime-local">` wants "YYYY-MM-DDTHH:mm" in local time, not an ISO string. */
@@ -46,7 +47,12 @@ export function AttendanceTab({ staff, riders }: AttendanceTabProps) {
   const [saving, setSaving] = useState(false);
 
   const loadSummary = useCallback(() => getPartnerAttendanceSummary(), []);
-  const { data: summary, loading: summaryLoading, error: summaryError } = usePartnerQuery(loadSummary, []);
+  const {
+    data: summary,
+    loading: summaryLoading,
+    error: summaryError,
+    reload: reloadSummary,
+  } = usePartnerQuery(loadSummary, []);
 
   const loadRecords = useCallback(() => {
     return listPartnerAttendance({
@@ -57,6 +63,13 @@ export function AttendanceTab({ staff, riders }: AttendanceTabProps) {
   }, [roleFilter, statusFilter]);
 
   const { data: records, loading, error, reload } = usePartnerQuery(loadRecords, [roleFilter, statusFilter]);
+
+  usePartnerAttendanceSocket({
+    onUpdate: () => {
+      void reload();
+      void reloadSummary();
+    },
+  });
 
   const nameByUserId = useMemo(() => {
     const map = new Map<string, string>();

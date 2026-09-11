@@ -339,6 +339,12 @@ export class TrackingGateway implements OnGatewayConnection {
     });
   }
 
+  /** Employee clocked in/out or a partner corrected a record — tells the partner portal's
+   * Attendance tab to refetch rather than poll. */
+  emitAttendanceUpdate(partnerId: string, payload: Record<string, unknown>) {
+    this.server.to(`partner:${partnerId}`).emit('attendanceUpdate', payload);
+  }
+
   /** Notify partner portal / branch rooms that laundry pipeline changed. */
   emitPartnerPipelineUpdated(params: {
     orderId: string;

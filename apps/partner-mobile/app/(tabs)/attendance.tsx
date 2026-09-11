@@ -21,12 +21,28 @@ function formatDuration(clockInAt: string, clockOutAt?: string) {
   return `${hours}h ${minutes}m`;
 }
 
+function pad2(n: number) {
+  return String(n).padStart(2, '0');
+}
+
+/** HH:MM:SS elapsed since clockInAt, against `now` — `now` is passed in so the caller's ticking
+ * clock (not Date.now() read at render time) drives re-renders every second. */
+function formatDurationHMS(clockInAt: string, now: number) {
+  const ms = Math.max(0, now - new Date(clockInAt).getTime());
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`;
+}
+
 export default function AttendanceScreen() {
   const [current, setCurrent] = useState<AttendanceRecordView | null>(null);
   const [history, setHistory] = useState<AttendanceRecordView[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
 
   const load = useCallback(async () => {
     try {
@@ -44,6 +60,12 @@ export default function AttendanceScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!current) return;
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [current]);
 
   async function onRefresh() {
     setRefreshing(true);
@@ -95,9 +117,10 @@ export default function AttendanceScreen() {
           <Text style={styles.statusLabel}>{current ? 'Clocked in' : 'Not clocked in'}</Text>
         </View>
         {current ? (
-          <Text style={styles.statusHint}>
-            Since {formatTime(current.clockInAt)} · {formatDuration(current.clockInAt)}
-          </Text>
+          <>
+            <Text style={styles.timer}>{formatDurationHMS(current.clockInAt, now)}</Text>
+            <Text style={styles.statusHint}>Since {formatTime(current.clockInAt)}</Text>
+          </>
         ) : (
           <Text style={styles.statusHint}>Clock in to start your shift.</Text>
         )}
@@ -147,6 +170,14 @@ const styles = StyleSheet.create({
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   statusDot: { width: 10, height: 10, borderRadius: 5 },
   statusLabel: { ...typography.subheading, fontSize: 17 },
+  timer: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: colors.foreground,
+    letterSpacing: 1,
+    marginTop: spacing.sm,
+    fontVariant: ['tabular-nums'],
+  },
   statusHint: { ...typography.bodySm, marginTop: spacing.xs, marginBottom: spacing.lg },
   actionButton: { alignSelf: 'stretch' },
   sectionLabel: { ...typography.label, marginBottom: spacing.sm },

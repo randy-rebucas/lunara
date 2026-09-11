@@ -5,6 +5,7 @@ import { UserRole } from '@lunara/types';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { Branch, BranchDocument } from '../branches/schemas/branch.schema';
 import { Rider, RiderDocument } from '../riders/schemas/rider.schema';
+import { TrackingGateway } from '../realtime/tracking.gateway';
 import { AttendanceRecord, AttendanceRecordDocument } from './schemas/attendance-record.schema';
 import { ClockInDto, ClockOutDto, CorrectAttendanceDto, QueryAttendanceDto } from './dto/attendance.dto';
 import { assertValidCorrection, computeSessionHours, InvalidAttendanceCorrectionError, workDateFor } from './attendance-logic';
@@ -16,7 +17,18 @@ export class AttendanceService {
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Branch.name) private branchModel: Model<BranchDocument>,
     @InjectModel(Rider.name) private riderModel: Model<RiderDocument>,
+    private trackingGateway: TrackingGateway,
   ) {}
+
+  /** Best-effort live push to the partner portal's Attendance tab — a failed/absent socket
+   * connection must never break the underlying clock-in/out/correction mutation. */
+  private notifyPartner(partnerId: Types.ObjectId, event: Record<string, unknown>) {
+    try {
+      this.trackingGateway.emitAttendanceUpdate(partnerId.toString(), event);
+    } catch {
+      // Realtime is a convenience layer; the dashboard still refetches on its own cadence.
+    }
+  }
 
   /** Resolves the employee's owning partner + role-specific scoping fields. Single source of
    * truth for "who does this employee work for" so clock-in can't be spoofed via request body. */
@@ -66,7 +78,9 @@ export class AttendanceService {
         clockInLocation: dto.location,
         source: 'mobile',
       });
-      return { success: true, data: this.toRecordView(record) };
+      const view = this.toRecordView(record);
+      this.notifyPartner(scope.partnerId, { type: 'clock_in', record: view });
+      return { success: true, data: view };
     } catch (err: unknown) {
       // Race: two concurrent clock-ins hit the partial-unique index at once.
       if (this.isDuplicateKeyError(err)) {
@@ -91,7 +105,9 @@ export class AttendanceService {
     if (dto.notes) record.notes = dto.notes;
     await record.save();
 
-    return { success: true, data: this.toRecordView(record) };
+    const view = this.toRecordView(record);
+    this.notifyPartner(record.partnerId, { type: 'clock_out', record: view });
+    return { success: true, data: view };
   }
 
   async getCurrent(userId: string) {
@@ -228,7 +244,9 @@ export class AttendanceService {
     record.correctedAt = new Date();
     await record.save();
 
-    return { success: true, data: this.toRecordView(record) };
+    const view = this.toRecordView(record);
+    this.notifyPartner(record.partnerId, { type: 'correction', record: view });
+    return { success: true, data: view };
   }
 
   private toRecordView(r: AttendanceRecordDocument) {

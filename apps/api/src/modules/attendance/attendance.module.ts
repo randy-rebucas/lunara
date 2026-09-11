@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { Branch, BranchSchema } from '../branches/schemas/branch.schema';
 import { Rider, RiderSchema } from '../riders/schemas/rider.schema';
+import { RealtimeModule } from '../realtime/realtime.module';
 import { AttendanceController } from './attendance.controller';
 import { PartnerAttendanceController } from './partner-attendance.controller';
 import { AttendanceService } from './attendance.service';
@@ -16,6 +17,7 @@ import { AttendanceRecord, AttendanceRecordSchema } from './schemas/attendance-r
       { name: Branch.name, schema: BranchSchema },
       { name: Rider.name, schema: RiderSchema },
     ]),
+    RealtimeModule,
   ],
   controllers: [AttendanceController, PartnerAttendanceController],
   providers: [AttendanceService],
