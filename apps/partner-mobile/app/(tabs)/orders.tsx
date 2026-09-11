@@ -259,11 +259,18 @@ export default function OrdersScreen() {
         contentContainerStyle={filtered.length === 0 ? styles.emptyContainer : styles.listContainer}
         ListEmptyComponent={
           <EmptyState
+            icon={query ? 'search-outline' : undefined}
+            image={query ? undefined : require('../../assets/empty-orders.png')}
             title={query ? 'No matching orders' : 'No orders here'}
             message={
               query
                 ? 'Try a different search term or clear the search.'
                 : 'Orders assigned to your shop will show up here as they move through the pipeline.'
+            }
+            tip={
+              query
+                ? undefined
+                : 'New orders from customers will appear here once they are assigned to your shop.'
             }
           />
         }

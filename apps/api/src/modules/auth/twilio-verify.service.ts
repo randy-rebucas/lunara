@@ -71,7 +71,11 @@ export class TwilioVerifyService {
       if (twilioError.code === 60202) {
         return new BadRequestException('Maximum verification attempts reached. Request a new code.');
       }
-      return new BadRequestException(twilioError.message || fallback);
+      if (twilioError.code === 20003 || twilioError.code === 20404 || (twilioError.status ?? 0) >= 500) {
+        this.logger.error(`Twilio account/service error ${twilioError.code}: ${twilioError.message}`);
+        return new ServiceUnavailableException('SMS verification is temporarily unavailable. Please try email sign-in instead.');
+      }
+      return new BadRequestException(fallback);
     }
 
     this.logger.error(fallback, error);

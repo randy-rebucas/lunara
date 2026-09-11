@@ -1,26 +1,41 @@
 {
   "source": {
-    "path": "image-extraction/source/login.png",
+    "file": "image-extraction/source/order-empty.png",
     "width": 853,
     "height": 1844,
-    "platform": "iOS (status bar shows signal/wifi/battery)",
-    "estimatedViewport": "~390x844pt @ ~2.19x (approximate iPhone screenshot)"
+    "platform": "iOS (status bar, home indicator)",
+    "estimatedDevice": "iPhone Pro Max class (390x844pt @ ~2.19x, or 428x926pt @ 2x)",
+    "screen": "Partner/Shop Ops app — Orders list, empty state"
   },
-  "existingImplementation": "apps/partner-mobile/app/login.tsx",
   "assets": [
     {
-      "name": "hero_towel_photo",
-      "sourceCrop": [500, 410, 853, 750],
-      "file": "image-extraction/crops/03_hero_towel_photo.png",
-      "category": "photography",
-      "recommendedFormat": "webp (with png fallback)",
-      "status": "reference extraction — NOT present in current login.tsx implementation",
-      "notes": "Stack of folded lavender/blue towels, soft-focus, bleeds off right edge. Currently the hero uses only two decorative CSS circle 'blobs' (heroBlobOuter/heroBlobInner) instead of this photo. This is the one genuine raster-asset gap between the screenshot and the shipped code."
+      "id": "01",
+      "name": "logo_icon",
+      "file": "crops/01_logo_icon.png",
+      "sourceCrop": [30, 135, 150, 215],
+      "category": "brand",
+      "recommendedFormat": "svg",
+      "reason": "App/brand mark (moon + sparkle). Should be rebuilt as SVG or use the original vector export for crisp scaling and white-label theming; this crop is reference-only."
+    },
+    {
+      "id": "02",
+      "name": "empty_state_illustration",
+      "file": "crops/02_empty_state_illustration.png",
+      "sourceCrop": [205, 715, 645, 1040],
+      "category": "illustration",
+      "recommendedFormat": "svg (preferred) or optimized PNG/WebP",
+      "reason": "Decorative empty-state artwork (open box + paper airplane). Not text, not a component. If a source vector exists in a design system/asset library, prefer that; otherwise export as an optimized static image reused across empty states app-wide."
     }
   ],
-  "nonAssets": {
-    "handwrittenDecoration": "Already implemented as live <Text> (styles.heroDecoration) with rotate transform — correctly NOT rasterized.",
-    "logoWordmark": "Already implemented via <BrandMark /> + <Text> — correctly NOT rasterized.",
-    "backgroundBlobs": "Already implemented as CSS circles (radius.full + opacity) — correctly NOT rasterized."
-  }
+  "explicitlyNotExtracted": [
+    "Header wordmark 'LUNARA' + 'PARTNER · SHOP OPS' label — live text",
+    "Bell icon, avatar initials badge, chevron — icon font/SVG icon set + live avatar component",
+    "'Orders' heading and subtitle — live text",
+    "Search input and filter/sliders button — live form control + icon button",
+    "Filter pills (All/Accept/Receive & Verify/Processing) with count badges — live segmented control component",
+    "Empty state card container, shadow, radius — CSS/layout, not an image",
+    "'No orders here' heading + description — live text",
+    "Tip callout box (lightbulb icon + text) — live component",
+    "Bottom tab bar (Orders/Scan/Profile) — live navigation component"
+  ]
 }

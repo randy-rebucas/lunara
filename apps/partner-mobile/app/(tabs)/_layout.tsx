@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { Platform, type ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AppHeader } from '../../src/components/ui/app-header';
 import { colors, spacing } from '../../src/theme';
 
 const TAB_BAR_CONTENT_HEIGHT = 52;
@@ -37,15 +38,7 @@ export default function TabsLayout() {
           marginBottom: Platform.OS === 'ios' ? 0 : 2,
         },
         tabBarItemStyle: { paddingTop: spacing.xs },
-        headerStyle: {
-          backgroundColor: colors.surfaceMuted,
-          shadowOpacity: 0,
-          elevation: 0,
-          borderBottomWidth: 1,
-          borderBottomColor: colors.border,
-        },
-        headerTitleStyle: { fontWeight: '700', fontSize: 17, color: colors.foreground },
-        headerTintColor: colors.primary,
+        header: () => <AppHeader />,
       }}
     >
       <Tabs.Screen name="index" options={{ href: null }} />
