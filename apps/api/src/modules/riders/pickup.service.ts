@@ -225,6 +225,7 @@ export class PickupService {
     });
     await order.save();
 
+    this.trackingGateway.emitOrderStatus(orderId, order.status);
     this.trackingGateway.emitDispatchQueueUpdated({
       reason: 'pickup_rider_rejected',
       orderId,

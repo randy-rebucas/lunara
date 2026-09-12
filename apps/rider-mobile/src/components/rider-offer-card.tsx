@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { DeliveryOffer, PickupOffer } from '../lib/rider-types';
-import { colors, radius, spacing, typography } from '../theme';
+import { colors, radius, shadow, spacing, typography } from '../theme';
 
 /** Shared by the Home tab's "available tasks" preview and the Tasks tab's "assigned" list —
  * both render the same pickup/delivery offer cards, so the shape lives in one place. A prior
@@ -249,11 +249,7 @@ const cardStyles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.lg,
     marginBottom: spacing.md,
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    elevation: 2,
+    ...shadow.card,
   },
   topRow: {
     flexDirection: 'row',

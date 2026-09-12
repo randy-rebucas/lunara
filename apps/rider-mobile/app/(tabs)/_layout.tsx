@@ -3,8 +3,7 @@ import { Tabs } from 'expo-router';
 import { Platform, StyleSheet, View, type ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRiderOperations } from '../../src/context/rider-operations';
-import { RiderAlertsBell } from '../../src/components/rider-alerts-bell';
-import { TasksHeaderActions } from '../../src/components/tasks-header-actions';
+import { AppHeader } from '../../src/components/ui/app-header';
 import { TAB_BAR_CONTENT_HEIGHT } from '../../src/hooks/use-tab-bar-height';
 import { colors, radius, spacing } from '../../src/theme';
 
@@ -72,19 +71,7 @@ function TabsNavigator() {
         tabBarItemStyle: {
           paddingTop: spacing.xs,
         },
-        headerStyle: {
-          backgroundColor: colors.surfaceMuted,
-          shadowOpacity: 0,
-          elevation: 0,
-          borderBottomWidth: 1,
-          borderBottomColor: colors.border,
-        },
-        headerTitleStyle: {
-          fontWeight: '700',
-          fontSize: 17,
-          color: colors.foreground,
-        },
-        headerTintColor: colors.primary,
+        header: () => <AppHeader />,
       }}
     >
       <Tabs.Screen
@@ -92,7 +79,6 @@ function TabsNavigator() {
         options={{
           title: 'Home',
           tabBarIcon: tabIcon('home-outline'),
-          headerRight: () => <RiderAlertsBell />,
         }}
       />
       <Tabs.Screen
@@ -101,7 +87,6 @@ function TabsNavigator() {
           title: 'Tasks',
           tabBarIcon: tabIcon('list-outline'),
           tabBarBadge: taskBadgeCount > 0 ? (taskBadgeCount > 9 ? '9+' : taskBadgeCount) : undefined,
-          headerRight: () => <TasksHeaderActions />,
         }}
       />
       <Tabs.Screen

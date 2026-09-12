@@ -31,7 +31,15 @@ import type {
   TaskHistoryItem,
 } from '../../src/lib/rider-types';
 import { riderTaskStatusLabel } from '../../src/rider-labels';
-import { colors, radius, spacing, typography } from '../../src/theme';
+import { colors, radius, shadow, spacing, typography } from '../../src/theme';
+
+const EMPTY_STATE_ICON: Record<TaskListFilter, React.ComponentProps<typeof Ionicons>['name']> = {
+  assigned: 'file-tray-outline',
+  accepted: 'checkmark-circle-outline',
+  in_progress: 'navigate-outline',
+  completed: 'checkmark-done-circle-outline',
+  cancelled: 'close-circle-outline',
+};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -64,6 +72,7 @@ const TaskCard = React.memo(function TaskCard({ item, onPress }: { item: Task; o
             <Text style={[cardStyles.typePillText, { color: typeColor }]}>{typeLabel}</Text>
           </View>
         </View>
+        <Text style={cardStyles.bookingType}>{formatBookingType(item.bookingType)}</Text>
         <RouteRow
           fromLabel={item.pickupAddress?.label ?? 'Pickup address'}
           fromCity={item.pickupAddress?.city}
@@ -128,11 +137,7 @@ const cardStyles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.lg,
     marginBottom: spacing.md,
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    elevation: 2,
+    ...shadow.card,
   },
   topRow: {
     flexDirection: 'row',
@@ -446,9 +451,14 @@ export default function TasksScreen() {
         onRetry={loadArchived}
       />
     ) : showOfflineGate ? (
-      <EmptyState title="Start your shift" message={taskListEmptyMessage(filter, online)} />
+      <EmptyState
+        icon="power-outline"
+        title="Start your shift"
+        message={taskListEmptyMessage(filter, online)}
+      />
     ) : (
       <EmptyState
+        icon={EMPTY_STATE_ICON[filter]}
         title={`No ${TASK_LIST_FILTERS.find((f) => f.id === filter)?.label ?? ''} tasks`}
         message={taskListEmptyMessage(filter, online)}
       />
