@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Alert } from 'react-native';
 import { HANDOFF_QR_LABELS, type HandoffQrKind } from '@lunara/utils';
+import type { LaundryTagLookupResult } from '@lunara/types';
 import { QrScanner } from '../src/components/qr-scanner';
 import { riderFetch } from '../src/api';
 
@@ -15,12 +16,6 @@ type ScanMode = (typeof SCAN_MODES)[number];
 
 function isScanMode(value: string | undefined): value is ScanMode {
   return SCAN_MODES.includes(value as ScanMode);
-}
-
-interface TagLookupResult {
-  tag: { code: string; status: string };
-  order: { id: string; shortCode: string; status: string; branchId?: string } | null;
-  customer: { firstName: string; lastName: string; phone?: string } | null;
 }
 
 export default function ScanScreen() {
@@ -55,7 +50,7 @@ export default function ScanScreen() {
 
   async function handleScan(payload: string) {
     if (mode === 'lookup_tag') {
-      const res = await riderFetch<TagLookupResult>(
+      const res = await riderFetch<LaundryTagLookupResult>(
         `/laundry-tags/lookup?code=${encodeURIComponent(payload)}`,
       );
       if (!res.order || !res.customer) {

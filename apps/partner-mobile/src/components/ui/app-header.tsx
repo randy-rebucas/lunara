@@ -1,15 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNotificationBadge } from '../../hooks/use-notification-badge';
 import { colors, radius, spacing, typography } from '../../theme';
 import { BrandMark } from './brand-mark';
 
-interface AppHeaderProps {
-  hasUnreadNotifications?: boolean;
-}
-
-export function AppHeader({ hasUnreadNotifications = false }: AppHeaderProps) {
+export function AppHeader() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const unreadCount = useNotificationBadge();
+  const hasUnread = unreadCount > 0;
 
   return (
     <View style={[styles.wrap, { paddingTop: insets.top + spacing.sm }]}>
@@ -23,13 +24,12 @@ export function AppHeader({ hasUnreadNotifications = false }: AppHeaderProps) {
 
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={
-          hasUnreadNotifications ? 'Notifications, unread' : 'Notifications'
-        }
+        accessibilityLabel={hasUnread ? 'Notifications, unread' : 'Notifications'}
         style={styles.bellButton}
+        onPress={() => router.push('/notifications')}
       >
         <Ionicons name="notifications-outline" size={20} color={colors.primary} />
-        {hasUnreadNotifications ? <View style={styles.badge} /> : null}
+        {hasUnread ? <View style={styles.badge} /> : null}
       </Pressable>
     </View>
   );

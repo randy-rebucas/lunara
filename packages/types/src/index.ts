@@ -4,4 +4,6 @@ export * from './auth.js';
 export * from './api.js';
 export * from './partner.js';
 export * from './attendance.js';
+export * from './laundry-tags.js';
+export * from './notifications.js';
 export * from './ai-agents.js';

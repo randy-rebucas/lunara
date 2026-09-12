@@ -8,6 +8,7 @@ import { Branch, BranchDocument } from '../branches/schemas/branch.schema';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
 import { TrackingGateway } from '../realtime/tracking.gateway';
+import { AuditLogService } from '../audit/audit-log.service';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { LaundryTag, LaundryTagDocument, LaundryTagStatus } from './schemas/laundry-tag.schema';
 import { CreateTagBatchDto } from './dto/create-batch.dto';
@@ -25,6 +26,7 @@ export class LaundryTagsService {
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
     private trackingGateway: TrackingGateway,
+    private auditLogService: AuditLogService,
   ) {}
 
   async generateBatch(dto: CreateTagBatchDto, adminUserId: string) {
@@ -259,11 +261,52 @@ export class LaundryTagsService {
   /** Resolves a scanned tag code/QR payload to its current order + owning customer, scoped by role. */
   async lookup(
     codeOrPayload: string,
+    actor: { sub: string; email?: string; role: UserRole },
+    tenantId?: string,
+    staffBranchId?: string,
+    ip?: string,
+  ) {
+    const code = resolveTagCode(codeOrPayload);
+    try {
+      const result = await this.performLookup(code, actor, tenantId, staffBranchId);
+      this.recordLookupAudit(actor, code, 'success', ip);
+      return result;
+    } catch (err) {
+      const outcome = err instanceof NotFoundException ? 'not_found' : err instanceof ForbiddenException ? 'denied' : 'error';
+      this.recordLookupAudit(actor, code, outcome, ip);
+      throw err;
+    }
+  }
+
+  /** Fire-and-forget audit trail of who looked up which tag and when — lookup has no side
+   * effects on the tag/order itself, so this is the only record of the scan ever happening. */
+  private recordLookupAudit(
+    actor: { sub: string; email?: string; role: UserRole },
+    code: string,
+    outcome: 'success' | 'not_found' | 'denied' | 'error',
+    ip?: string,
+  ) {
+    this.auditLogService
+      .record({
+        actorUserId: actor.sub,
+        actorEmail: actor.email ?? 'unknown',
+        actorRole: actor.role,
+        method: 'GET',
+        path: '/laundry-tags/lookup',
+        action: 'get.laundry-tags.lookup',
+        statusCode: outcome === 'success' ? 200 : outcome === 'not_found' ? 404 : outcome === 'denied' ? 403 : 500,
+        params: { code },
+        ip: ip ?? null,
+      })
+      .catch(() => {});
+  }
+
+  private async performLookup(
+    code: string,
     actor: { sub: string; role: UserRole },
     tenantId?: string,
     staffBranchId?: string,
   ) {
-    const code = resolveTagCode(codeOrPayload);
     const tag = await this.tagModel.findOne({ code });
     if (!tag) throw new NotFoundException('Tag not found');
 

@@ -11,15 +11,10 @@ import { EmptyState } from '../../src/components/ui/empty-state';
 import { QrScanner } from '../../src/components/qr-scanner';
 import { Screen } from '../../src/components/ui/screen';
 import { partnerFetch } from '../../src/api';
+import { NetworkUnreachableError } from '../../src/lib/network-error';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import { loadScanHistory, recordScan, type ScanHistoryEntry } from '../../src/lib/scan-history';
-
-/** Mirrors apps/partner-web/src/app/scan/page.tsx — GET /laundry-tags/lookup?code=... */
-interface TagLookupResult {
-  tag: { code: string; status: string };
-  order: { id: string; shortCode: string; status: string; branchId?: string } | null;
-  customer: { firstName: string; lastName: string; phone?: string } | null;
-}
+import type { LaundryTagLookupResult } from '@lunara/types';
 
 export default function ScanScreen() {
   const navigation = useNavigation();
@@ -38,7 +33,7 @@ export default function ScanScreen() {
   }, []);
 
   const lookup = useCallback(async (payload: string) => {
-    const res = await partnerFetch<TagLookupResult>(
+    const res = await partnerFetch<LaundryTagLookupResult>(
       `/laundry-tags/lookup?code=${encodeURIComponent(payload)}`,
     );
     const found = !!(res.order && res.customer);
@@ -74,7 +69,11 @@ export default function ScanScreen() {
       setManualCode('');
       setManualEntry(false);
     } catch (e) {
-      Alert.alert('Lookup failed', e instanceof Error ? e.message : 'Could not look up that code.');
+      if (e instanceof NetworkUnreachableError) {
+        Alert.alert('No connection', e.message);
+      } else {
+        Alert.alert('Lookup failed', e instanceof Error ? e.message : 'Could not look up that code.');
+      }
     } finally {
       setLooking(false);
     }

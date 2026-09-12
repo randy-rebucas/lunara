@@ -7,6 +7,14 @@ import { Card } from '../../src/components/ui/card';
 import { Screen } from '../../src/components/ui/screen';
 import { StatusPill } from '../../src/components/ui/status-pill';
 import { partnerFetch } from '../../src/api';
+import { getBestEffortLocation } from '../../src/lib/attendance-location';
+import {
+  clearPendingAttendanceAction,
+  getPendingAttendanceAction,
+  setPendingAttendanceAction,
+  type PendingAttendanceAction,
+} from '../../src/lib/attendance-queue';
+import { NetworkUnreachableError } from '../../src/lib/network-error';
 import { colors, radius, spacing, typography } from '../../src/theme';
 
 function formatTime(iso: string) {
@@ -43,6 +51,7 @@ export default function AttendanceScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [pending, setPending] = useState<PendingAttendanceAction | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -57,9 +66,40 @@ export default function AttendanceScreen() {
     }
   }, []);
 
+  /** Attempts to resend a clock action queued while offline. Left in place (and retried on
+   * every load/refresh) until it actually reaches the server — never dropped silently. */
+  const flushPending = useCallback(async () => {
+    const action = await getPendingAttendanceAction();
+    if (!action) {
+      setPending(null);
+      return false;
+    }
+    setPending(action);
+    try {
+      const path = action.type === 'clock-in' ? '/attendance/clock-in' : '/attendance/clock-out';
+      await partnerFetch(path, {
+        method: 'POST',
+        body: JSON.stringify(action.location ? { location: action.location } : {}),
+      });
+      await clearPendingAttendanceAction();
+      setPending(null);
+      return true;
+    } catch (e) {
+      if (e instanceof NetworkUnreachableError) return false;
+      // Server rejected the queued action (e.g. already clocked in from another device) —
+      // drop it rather than retrying forever; the next load() shows the real server state.
+      await clearPendingAttendanceAction();
+      setPending(null);
+      return false;
+    }
+  }, []);
+
   useEffect(() => {
-    void load();
-  }, [load]);
+    void (async () => {
+      await flushPending();
+      await load();
+    })();
+  }, [flushPending, load]);
 
   useEffect(() => {
     if (!current) return;
@@ -69,17 +109,32 @@ export default function AttendanceScreen() {
 
   async function onRefresh() {
     setRefreshing(true);
+    await flushPending().catch(() => {});
     await load().catch(() => {});
     setRefreshing(false);
   }
 
   async function clockIn() {
     setBusy(true);
+    const location = await getBestEffortLocation();
     try {
-      await partnerFetch('/attendance/clock-in', { method: 'POST', body: JSON.stringify({}) });
+      await partnerFetch('/attendance/clock-in', {
+        method: 'POST',
+        body: JSON.stringify(location ? { location } : {}),
+      });
       await load();
     } catch (e) {
-      Alert.alert('Could not clock in', e instanceof Error ? e.message : 'Please try again.');
+      if (e instanceof NetworkUnreachableError) {
+        const action: PendingAttendanceAction = {
+          type: 'clock-in',
+          location,
+          queuedAt: new Date().toISOString(),
+        };
+        await setPendingAttendanceAction(action);
+        setPending(action);
+      } else {
+        Alert.alert('Could not clock in', e instanceof Error ? e.message : 'Please try again.');
+      }
     } finally {
       setBusy(false);
     }
@@ -87,11 +142,25 @@ export default function AttendanceScreen() {
 
   async function clockOut() {
     setBusy(true);
+    const location = await getBestEffortLocation();
     try {
-      await partnerFetch('/attendance/clock-out', { method: 'POST', body: JSON.stringify({}) });
+      await partnerFetch('/attendance/clock-out', {
+        method: 'POST',
+        body: JSON.stringify(location ? { location } : {}),
+      });
       await load();
     } catch (e) {
-      Alert.alert('Could not clock out', e instanceof Error ? e.message : 'Please try again.');
+      if (e instanceof NetworkUnreachableError) {
+        const action: PendingAttendanceAction = {
+          type: 'clock-out',
+          location,
+          queuedAt: new Date().toISOString(),
+        };
+        await setPendingAttendanceAction(action);
+        setPending(action);
+      } else {
+        Alert.alert('Could not clock out', e instanceof Error ? e.message : 'Please try again.');
+      }
     } finally {
       setBusy(false);
     }
@@ -111,6 +180,16 @@ export default function AttendanceScreen() {
       scroll
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
+      {pending ? (
+        <Card muted style={styles.pendingCard}>
+          <Ionicons name="cloud-offline-outline" size={18} color={colors.mutedForeground} />
+          <Text style={styles.pendingText}>
+            {pending.type === 'clock-in' ? 'Clock-in' : 'Clock-out'} queued — will sync once
+            you&apos;re back online.
+          </Text>
+        </Card>
+      ) : null}
+
       <Card elevated primary={!!current} style={styles.statusCard}>
         <View style={styles.statusRow}>
           <View style={[styles.statusDot, { backgroundColor: current ? colors.accent : colors.mutedForeground }]} />
@@ -129,7 +208,7 @@ export default function AttendanceScreen() {
           variant={current ? 'outline' : 'primary'}
           size="lg"
           icon={current ? 'log-out-outline' : 'log-in-outline'}
-          disabled={busy}
+          disabled={busy || !!pending}
           onPress={current ? clockOut : clockIn}
           style={styles.actionButton}
         />
@@ -166,6 +245,13 @@ export default function AttendanceScreen() {
 }
 
 const styles = StyleSheet.create({
+  pendingCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  pendingText: { ...typography.bodySm, flex: 1 },
   statusCard: { marginBottom: spacing.lg, alignItems: 'flex-start' },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   statusDot: { width: 10, height: 10, borderRadius: 5 },

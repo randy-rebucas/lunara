@@ -38,12 +38,12 @@ export class LaundryTagsController {
   @Roles(UserRole.ADMIN, UserRole.PARTNER, UserRole.STAFF, UserRole.RIDER, UserRole.CUSTOMER)
   async lookup(
     @Query('code') code: string,
-    @Req() req: { user: { sub: string; role: UserRole } },
+    @Req() req: { user: { sub: string; email?: string; role: UserRole }; ip?: string },
     @CurrentTenantId() tenantId?: string,
     @CurrentStaffBranchId() staffBranchId?: string,
   ) {
     if (!code?.trim()) throw new BadRequestException('code is required');
-    const data = await this.laundryTagsService.lookup(code, req.user, tenantId, staffBranchId);
+    const data = await this.laundryTagsService.lookup(code, req.user, tenantId, staffBranchId, req.ip);
     return { success: true, data };
   }
 

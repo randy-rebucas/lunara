@@ -5,6 +5,7 @@ import { Branch, BranchSchema } from '../branches/schemas/branch.schema';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { Customer, CustomerSchema } from '../customers/schemas/customer.schema';
 import { RealtimeModule } from '../realtime/realtime.module';
+import { AuditLogModule } from '../audit/audit-log.module';
 import { LaundryTag, LaundryTagSchema } from './schemas/laundry-tag.schema';
 import { LaundryTagsController } from './laundry-tags.controller';
 import { LaundryTagsService } from './laundry-tags.service';
@@ -19,6 +20,7 @@ import { LaundryTagsService } from './laundry-tags.service';
       { name: Customer.name, schema: CustomerSchema },
     ]),
     RealtimeModule,
+    AuditLogModule,
   ],
   controllers: [LaundryTagsController],
   providers: [LaundryTagsService],

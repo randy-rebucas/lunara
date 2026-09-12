@@ -17,6 +17,15 @@
     "plugins": [
       "expo-router",
       [
+        "expo-notifications",
+        {
+          "icon": "../../packages/brand/assets/icon.png",
+          "color": "#6366f1",
+          "defaultChannel": "default",
+          "sounds": []
+        }
+      ],
+      [
         "expo-camera",
         {
           "cameraPermission": "Lunara Staff uses your camera to scan order and laundry-tag QR codes."
@@ -27,6 +36,12 @@
         {
           "cameraPermission": "Lunara Staff uses your camera to take a profile photo.",
           "photosPermission": "Lunara Staff can access photos when you choose a profile picture."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Lunara Staff records your location when you clock in or out."
         }
       ]
     ],

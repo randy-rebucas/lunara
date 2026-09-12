@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthLoadingScreen } from '../src/components/auth-loading';
+import { PushNotificationsBootstrap } from '../src/components/push-notifications-bootstrap';
 import { colors } from '../src/theme';
 import { useAuthStore } from '../src/store/auth';
 
@@ -57,12 +58,14 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />
+      <PushNotificationsBootstrap />
       <Stack screenOptions={stackHeaderOptions}>
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="order/[id]/index" options={{ title: 'Order' }} />
         <Stack.Screen name="order/[id]/receiving" options={{ title: 'Shop receiving' }} />
+        <Stack.Screen name="notifications" options={{ title: 'Notifications' }} />
       </Stack>
     </SafeAreaProvider>
   );

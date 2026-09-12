@@ -3,28 +3,14 @@
 import jsQR from 'jsqr';
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { UserRole, type PartnerShelf } from '@lunara/types';
+import { UserRole, type LaundryTagLookupResult, type PartnerShelf } from '@lunara/types';
 import { PageHeader } from '../../../components/ui/page-header';
 import { useProtectedPage } from '../../../hooks/use-protected-page';
 import { AuthLoading } from '../../../components/auth-loading';
 import { partnerFetch } from '../../../lib/partner-api';
 import { usePartnerPath } from '../../../lib/partner-path';
 
-interface TagLookupResult {
-  tag: { code: string; status: string };
-  order: {
-    id: string;
-    shortCode: string;
-    status: string;
-    branchId?: string;
-    bookingType?: string;
-    shelfSlot?: string;
-    items?: { serviceType: string; quantity: number; notes?: string }[];
-  } | null;
-  customer: { firstName: string; lastName: string; phone?: string } | null;
-}
-
-function AddToShelfPanel({ result, onClose }: { result: TagLookupResult; onClose: () => void }) {
+function AddToShelfPanel({ result, onClose }: { result: LaundryTagLookupResult; onClose: () => void }) {
   const [shelves, setShelves] = useState<PartnerShelf[] | null>(null);
   const [shelvesError, setShelvesError] = useState('');
   const [selectedShelfId, setSelectedShelfId] = useState('');
@@ -164,7 +150,7 @@ export default function ScanTagPage() {
   const scanningRef = useRef(false);
 
   const [cameraError, setCameraError] = useState('');
-  const [result, setResult] = useState<TagLookupResult | null>(null);
+  const [result, setResult] = useState<LaundryTagLookupResult | null>(null);
   const [lookupError, setLookupError] = useState('');
   const [loading, setLoading] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -174,7 +160,7 @@ export default function ScanTagPage() {
     setLoading(true);
     setLookupError('');
     try {
-      const data = await partnerFetch<TagLookupResult>(`/laundry-tags/lookup?code=${encodeURIComponent(code)}`);
+      const data = await partnerFetch<LaundryTagLookupResult>(`/laundry-tags/lookup?code=${encodeURIComponent(code)}`);
       setResult(data);
     } catch (e) {
       setResult(null);

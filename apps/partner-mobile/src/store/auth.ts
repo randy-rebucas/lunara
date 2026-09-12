@@ -5,7 +5,7 @@ import type { AuthTokens, User } from '@lunara/types';
 import { UserRole } from '@lunara/types';
 import { getApiV1BaseUrl } from '../api-config';
 import { parseApiError } from '../lib/api-error';
-import { apiUnreachableMessage } from '../lib/network-error';
+import { NetworkUnreachableError, apiUnreachableMessage } from '../lib/network-error';
 import type { UploadFile } from '../lib/upload-file';
 
 const STORAGE_KEY = 'lunara_partner_auth';
@@ -36,9 +36,7 @@ async function authRequest<T>(
         },
       });
     } catch {
-      throw new Error(
-        `Cannot reach API at ${baseUrl}. Start the API (npm run dev --workspace=@lunara/api) and use the same Wi‑Fi as your phone.`,
-      );
+      throw new NetworkUnreachableError(apiUnreachableMessage(baseUrl));
     }
   };
 
