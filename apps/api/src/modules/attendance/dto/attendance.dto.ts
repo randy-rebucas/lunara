@@ -1,4 +1,4 @@
-import { IsDateString, IsIn, IsLatitude, IsLongitude, IsMongoId, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
+import { IsDateString, IsIn, IsLatitude, IsLongitude, IsMongoId, IsNotEmpty, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
 import { Type } from 'class-transformer';
 
 class ClockLocationDto {
@@ -74,4 +74,32 @@ export class CorrectAttendanceDto {
   @IsString()
   @MaxLength(500)
   notes?: string;
+}
+
+export class CreateCorrectionRequestDto {
+  @IsMongoId()
+  recordId!: string;
+
+  @IsOptional()
+  @IsDateString()
+  requestedClockInAt?: string;
+
+  @IsOptional()
+  @IsDateString()
+  requestedClockOutAt?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(500)
+  reason!: string;
+}
+
+export class ReviewCorrectionRequestDto {
+  @IsIn(['approve', 'reject'])
+  action!: 'approve' | 'reject';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reviewNote?: string;
 }

@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { OrderStatus } from '@lunara/types';
 import {
   canTransitionOrderStatus,
@@ -87,12 +87,13 @@ export class DeliveryService {
     return { success: true, data: { dispatched: true, orderId } };
   }
 
-  async getDeliveryOffers() {
+  async getDeliveryOffers(riderUserId: string) {
     const orders = await this.orderModel
       .find({
         status: OrderStatus.READY_FOR_DELIVERY,
         deliveryRiderId: { $exists: false },
         'delivery.offeredAt': { $exists: true },
+        deliveryDeclinedByRiderIds: { $ne: new Types.ObjectId(riderUserId) },
       })
       .sort({ updatedAt: 1 })
       .limit(20);
@@ -142,6 +143,17 @@ export class DeliveryService {
   async rejectDelivery(orderId: string, riderUserId: string) {
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
+
+    const isOpenOffer = order.status === OrderStatus.READY_FOR_DELIVERY && !order.deliveryRiderId;
+    if (isOpenOffer) {
+      const riderObjectId = new Types.ObjectId(riderUserId);
+      await this.orderModel.updateOne(
+        { _id: order._id },
+        { $addToSet: { deliveryDeclinedByRiderIds: riderObjectId } },
+      );
+      return { success: true, data: { dismissed: true, orderId } };
+    }
+
     if (order.deliveryRiderId?.toString() !== riderUserId) {
       throw new ForbiddenException('Not your delivery assignment');
     }

@@ -1,4 +1,5 @@
 import type {
+  PartnerAttendanceCorrectionRequest,
   PartnerAttendanceRecord,
   PartnerAttendanceSummary,
   PartnerBranchRider,
@@ -547,6 +548,24 @@ export async function correctAttendanceRecord(
     method: 'PATCH',
     body: JSON.stringify(input),
   });
+}
+
+export async function listCorrectionRequests(
+  status?: 'pending' | 'approved' | 'rejected',
+): Promise<PartnerAttendanceCorrectionRequest[]> {
+  const qs = status ? `?status=${status}` : '';
+  return partnerFetch<PartnerAttendanceCorrectionRequest[]>(`/partner/attendance/correction-requests${qs}`);
+}
+
+export async function reviewCorrectionRequest(
+  requestId: string,
+  action: 'approve' | 'reject',
+  reviewNote?: string,
+): Promise<PartnerAttendanceCorrectionRequest> {
+  return partnerFetch<PartnerAttendanceCorrectionRequest>(
+    `/partner/attendance/correction-requests/${requestId}`,
+    { method: 'PATCH', body: JSON.stringify({ action, reviewNote }) },
+  );
 }
 
 export async function listOwnedRiders(): Promise<PartnerOwnedRider[]> {

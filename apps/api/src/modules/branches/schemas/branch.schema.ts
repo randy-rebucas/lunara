@@ -43,6 +43,12 @@ export class PartnerPortalSettings {
    * key. Never returned to the client as plaintext — see PartnerSettingsService.sanitizeSettingsForClient. */
   @Prop()
   aiApiKey?: string;
+
+  /** Expected hours per work day for staff/rider attendance — shown to employees as a progress
+   * target on their attendance screen. Purely informational; clocking out short of it is not
+   * blocked or flagged anywhere. */
+  @Prop({ default: 8 })
+  dailyAttendanceTargetHours!: number;
 }
 
 export const DEFAULT_PARTNER_PORTAL_SETTINGS: PartnerPortalSettings = {
@@ -55,6 +61,7 @@ export const DEFAULT_PARTNER_PORTAL_SETTINGS: PartnerPortalSettings = {
   allowStaffToRequestDelivery: true,
   requireWeightVerificationOnReceive: true,
   inventoryEnabled: true,
+  dailyAttendanceTargetHours: 8,
 };
 
 @Schema({ _id: false })

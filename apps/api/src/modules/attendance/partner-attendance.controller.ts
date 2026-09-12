@@ -6,7 +6,7 @@ import { TenantGuard } from '../../common/guards/tenant.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentTenantId } from '../../common/decorators/current-tenant.decorator';
 import { AttendanceService } from './attendance.service';
-import { CorrectAttendanceDto, QueryAttendanceDto } from './dto/attendance.dto';
+import { CorrectAttendanceDto, QueryAttendanceDto, ReviewCorrectionRequestDto } from './dto/attendance.dto';
 
 /** Partner-facing read/operational visibility for employee attendance — the "operations
  * overview" surface required by the feature-implementation skill's dashboard checklist.
@@ -36,5 +36,23 @@ export class PartnerAttendanceController {
     @Body() dto: CorrectAttendanceDto,
   ) {
     return this.attendanceService.correctRecord(tenantId!, id, req.user.sub, dto);
+  }
+
+  @Get('correction-requests')
+  listCorrectionRequests(
+    @CurrentTenantId() tenantId: string | undefined,
+    @Query('status') status?: 'pending' | 'approved' | 'rejected',
+  ) {
+    return this.attendanceService.listCorrectionRequestsForPartner(tenantId!, status);
+  }
+
+  @Patch('correction-requests/:id')
+  reviewCorrectionRequest(
+    @CurrentTenantId() tenantId: string | undefined,
+    @Param('id') id: string,
+    @Req() req: { user: { sub: string } },
+    @Body() dto: ReviewCorrectionRequestDto,
+  ) {
+    return this.attendanceService.reviewCorrectionRequest(tenantId!, id, req.user.sub, dto);
   }
 }

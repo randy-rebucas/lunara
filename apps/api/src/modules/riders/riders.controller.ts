@@ -67,8 +67,8 @@ export class RidersController {
 
   @Get('pickup-offers')
   @Roles(UserRole.RIDER)
-  getPickupOffers() {
-    return this.pickupService.getPickupOffers();
+  getPickupOffers(@Req() req: { user: { sub: string } }) {
+    return this.pickupService.getPickupOffers(req.user.sub);
   }
 
   @Get('pickup-tasks/:orderId')
@@ -278,8 +278,8 @@ export class RidersController {
 
   @Get('delivery-offers')
   @Roles(UserRole.RIDER)
-  getDeliveryOffers() {
-    return this.deliveryService.getDeliveryOffers();
+  getDeliveryOffers(@Req() req: { user: { sub: string } }) {
+    return this.deliveryService.getDeliveryOffers(req.user.sub);
   }
 
   @Get('delivery-tasks/:orderId')

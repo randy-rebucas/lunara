@@ -96,7 +96,7 @@ export class PickupService {
     return { success: true, data: { dispatched: true, orderId } };
   }
 
-  async getPickupOffers() {
+  async getPickupOffers(riderUserId: string) {
     const orders = await this.orderModel
       .find({
         status: { $in: [OrderStatus.SHOP_ASSIGNED, OrderStatus.CONFIRMED] },
@@ -105,6 +105,7 @@ export class PickupService {
         partnerAcceptedAt: { $exists: true, $ne: null },
         $or: [{ pickupRequestedAt: { $exists: true } }, { 'pickup.offeredAt': { $exists: true } }],
         pickupRiderId: { $exists: false },
+        pickupDeclinedByRiderIds: { $ne: new Types.ObjectId(riderUserId) },
       })
       .sort({ scheduledPickupAt: 1 })
       .limit(20);
@@ -194,6 +195,11 @@ export class PickupService {
       !order.pickupRiderId;
 
     if (isOpenOffer) {
+      const riderObjectId = new Types.ObjectId(riderUserId);
+      await this.orderModel.updateOne(
+        { _id: order._id },
+        { $addToSet: { pickupDeclinedByRiderIds: riderObjectId } },
+      );
       return { success: true, data: { dismissed: true, orderId } };
     }
 

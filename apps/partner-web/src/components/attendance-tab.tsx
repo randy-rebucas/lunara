@@ -3,7 +3,13 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { PartnerOwnedRider, PartnerStaffMember } from '@lunara/types';
 import { DataPageStatus } from './data-page-status';
-import { correctAttendanceRecord, getPartnerAttendanceSummary, listPartnerAttendance } from '../lib/partner-api';
+import {
+  correctAttendanceRecord,
+  getPartnerAttendanceSummary,
+  listCorrectionRequests,
+  listPartnerAttendance,
+  reviewCorrectionRequest,
+} from '../lib/partner-api';
 import { usePartnerAttendanceSocket } from '../lib/use-partner-attendance-socket';
 import { usePartnerQuery } from '../lib/use-partner-query';
 
@@ -46,6 +52,9 @@ export function AttendanceTab({ staff, riders }: AttendanceTabProps) {
   const [editError, setEditError] = useState('');
   const [saving, setSaving] = useState(false);
 
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const [reviewError, setReviewError] = useState('');
+
   const loadSummary = useCallback(() => getPartnerAttendanceSummary(), []);
   const {
     data: summary,
@@ -53,6 +62,13 @@ export function AttendanceTab({ staff, riders }: AttendanceTabProps) {
     error: summaryError,
     reload: reloadSummary,
   } = usePartnerQuery(loadSummary, []);
+
+  const loadPendingRequests = useCallback(() => listCorrectionRequests('pending'), []);
+  const {
+    data: pendingRequests,
+    loading: requestsLoading,
+    reload: reloadRequests,
+  } = usePartnerQuery(loadPendingRequests, []);
 
   const loadRecords = useCallback(() => {
     return listPartnerAttendance({
@@ -68,8 +84,22 @@ export function AttendanceTab({ staff, riders }: AttendanceTabProps) {
     onUpdate: () => {
       void reload();
       void reloadSummary();
+      void reloadRequests();
     },
   });
+
+  async function reviewRequest(requestId: string, action: 'approve' | 'reject') {
+    setReviewingId(requestId);
+    setReviewError('');
+    try {
+      await reviewCorrectionRequest(requestId, action);
+      await Promise.all([reloadRequests(), reload()]);
+    } catch (err) {
+      setReviewError(err instanceof Error ? err.message : 'Could not review this request');
+    } finally {
+      setReviewingId(null);
+    }
+  }
 
   const nameByUserId = useMemo(() => {
     const map = new Map<string, string>();
@@ -136,6 +166,58 @@ export function AttendanceTab({ staff, riders }: AttendanceTabProps) {
       {!summaryLoading && !summaryError && summary && (
         <p className="mt-2 text-xs text-muted">Workday: {summary.workDate} (Asia/Manila)</p>
       )}
+
+      {pendingRequests && pendingRequests.length > 0 && (
+        <div className="section-panel mt-6 p-4">
+          <h3 className="text-sm font-semibold text-slate-900">
+            Adjustment requests awaiting review ({pendingRequests.length})
+          </h3>
+          {reviewError && <div className="alert-error mt-2">{reviewError}</div>}
+          <div className="mt-3 space-y-3">
+            {pendingRequests.map((r) => (
+              <div key={r._id} className="rounded-lg border p-3 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-medium text-slate-900">
+                    {nameByUserId.get(r.userId) ?? r.employeeEmail ?? r.userId}
+                    <span className="ml-2 badge-neutral capitalize">{r.role}</span>
+                  </p>
+                  <p className="text-xs text-muted">{r.workDate}</p>
+                </div>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  <p className="text-muted">
+                    Current: {formatDateTime(r.originalClockInAt)} –{' '}
+                    {r.originalClockOutAt ? formatDateTime(r.originalClockOutAt) : 'now'}
+                  </p>
+                  <p className="text-slate-900">
+                    Requested: {r.requestedClockInAt ? formatDateTime(r.requestedClockInAt) : '—'} –{' '}
+                    {r.requestedClockOutAt ? formatDateTime(r.requestedClockOutAt) : '—'}
+                  </p>
+                </div>
+                <p className="mt-2 text-muted">&ldquo;{r.reason}&rdquo;</p>
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="btn-primary btn-sm"
+                    disabled={reviewingId === r._id}
+                    onClick={() => void reviewRequest(r._id, 'approve')}
+                  >
+                    Approve
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-outline btn-sm"
+                    disabled={reviewingId === r._id}
+                    onClick={() => void reviewRequest(r._id, 'reject')}
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {requestsLoading && <p className="mt-4 text-xs text-muted">Checking for adjustment requests…</p>}
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
         <select

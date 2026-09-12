@@ -9,13 +9,12 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import type { AttendanceCorrectionRequestView, AttendanceRecordView, PartnerAttendanceCorrectionRequest } from '@lunara/types';
-import { UserRole } from '@lunara/types';
+import type { AttendanceCorrectionRequestView, AttendanceRecordView } from '@lunara/types';
 import { Button } from '../../src/components/ui/button';
 import { Card } from '../../src/components/ui/card';
 import { Screen } from '../../src/components/ui/screen';
-import { StatusPill } from '../../src/components/ui/status-pill';
-import { partnerFetch } from '../../src/api';
+import { useTabScreenPadding } from '../../src/hooks/use-tab-bar-height';
+import { riderFetch } from '../../src/api';
 import { getBestEffortLocation } from '../../src/lib/attendance-location';
 import {
   clearPendingAttendanceAction,
@@ -23,8 +22,7 @@ import {
   setPendingAttendanceAction,
   type PendingAttendanceAction,
 } from '../../src/lib/attendance-queue';
-import { NetworkUnreachableError } from '../../src/lib/network-error';
-import { useAuthStore } from '../../src/store/auth';
+import { isOnline } from '../../src/lib/offline/network';
 import { colors, radius, spacing, typography } from '../../src/theme';
 
 const TIME_HH_MM = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -33,21 +31,26 @@ function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
 
-function formatDateTime(iso: string) {
-  return new Date(iso).toLocaleString(undefined, {
+function formatDay(iso: string) {
+  return new Date(iso).toLocaleDateString(undefined, {
+    weekday: 'short',
     month: 'short',
     day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
   });
 }
 
 function formatDuration(clockInAt: string, clockOutAt?: string) {
-  const end = clockOutAt ? new Date(clockOutAt) : new Date();
-  const ms = end.getTime() - new Date(clockInAt).getTime();
-  const hours = Math.floor(ms / 3_600_000);
-  const minutes = Math.floor((ms % 3_600_000) / 60_000);
-  return `${hours}h ${minutes}m`;
+  const start = new Date(clockInAt).getTime();
+  const end = clockOutAt ? new Date(clockOutAt).getTime() : Date.now();
+  const minutes = Math.max(0, Math.round((end - start) / 60000));
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h === 0) return `${m}m`;
+  return `${h}h ${m}m`;
+}
+
+function pad2(n: number) {
+  return String(n).padStart(2, '0');
 }
 
 function formatHoursShort(ms: number) {
@@ -59,7 +62,7 @@ function formatHoursShort(ms: number) {
 }
 
 /** Fallback used only until /attendance/me/target resolves — the real target is set by the
- * partner owner/admin via Settings (Branch.portalSettings.dailyAttendanceTargetHours). */
+ * partner owner/admin per shop (Branch.portalSettings.dailyAttendanceTargetHours). */
 const FALLBACK_TARGET_HOURS = 8;
 
 /** Sums ms worked across all records for `workDate`, counting an open session up to `now`. */
@@ -73,21 +76,6 @@ function sumMsForWorkDate(records: AttendanceRecordView[], workDate: string, now
     }, 0);
 }
 
-function timeFromIso(iso: string) {
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
-
-/** Combines a shift's calendar `workDate` (YYYY-MM-DD) with a "HH:mm" entry into an ISO instant.
- * Requests are same-day edits, so this is enough without a full date picker. */
-function isoFromWorkDateAndTime(workDate: string, hhmm: string): string {
-  return new Date(`${workDate}T${hhmm}:00`).toISOString();
-}
-
-function pad2(n: number) {
-  return String(n).padStart(2, '0');
-}
-
 /** HH:MM:SS elapsed since clockInAt, against `now` — `now` is passed in so the caller's ticking
  * clock (not Date.now() read at render time) drives re-renders every second. */
 function formatDurationHMS(clockInAt: string, now: number) {
@@ -97,6 +85,55 @@ function formatDurationHMS(clockInAt: string, now: number) {
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
   return `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`;
+}
+
+// ── Current status card ──────────────────────────────────────────────────────
+
+interface StatusCardProps {
+  current: AttendanceRecordView | null;
+  loading: boolean;
+  busy: boolean;
+  pending: boolean;
+  now: number;
+  onClockIn: () => void;
+  onClockOut: () => void;
+}
+
+function StatusCard({ current, loading, busy, pending, now, onClockIn, onClockOut }: StatusCardProps) {
+  return (
+    <Card style={styles.statusCard}>
+      {loading ? (
+        <ActivityIndicator color={colors.primary} />
+      ) : (
+        <>
+          <View style={styles.statusRow}>
+            <View
+              style={[
+                styles.statusDot,
+                { backgroundColor: current ? colors.accent : colors.mutedForeground },
+              ]}
+            />
+            <Text style={styles.statusText}>{current ? 'Clocked in' : 'Not clocked in'}</Text>
+          </View>
+          {current ? (
+            <>
+              <Text style={styles.timer}>{formatDurationHMS(current.clockInAt, now)}</Text>
+              <Text style={styles.statusHint}>Since {formatTime(current.clockInAt)}</Text>
+            </>
+          ) : (
+            <Text style={styles.statusHint}>Clock in to start your shift.</Text>
+          )}
+          <Button
+            label={current ? 'Clock out' : 'Clock in'}
+            variant={current ? 'outline' : 'primary'}
+            disabled={busy || pending}
+            onPress={current ? onClockOut : onClockIn}
+            style={styles.statusButton}
+          />
+        </>
+      )}
+    </Card>
+  );
 }
 
 // ── Daily total card ─────────────────────────────────────────────────────────
@@ -121,14 +158,18 @@ function DailyTotalCard({ todayMs, targetHours }: { todayMs: number; targetHours
 
 // ── History row ───────────────────────────────────────────────────────────────
 
-function RequestStatusPill({ status }: { status: AttendanceCorrectionRequestView['status'] }) {
-  const label =
-    status === 'pending' ? 'Adjustment pending' : status === 'approved' ? 'Adjustment approved' : 'Adjustment rejected';
-  const color = status === 'pending' ? colors.warning : status === 'approved' ? colors.accentDark : colors.destructive;
-  return <Text style={[styles.requestPill, { color }]}>{label}</Text>;
+function timeFromIso(iso: string) {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-interface HistoryEntryProps {
+/** Combines a shift's calendar `workDate` (YYYY-MM-DD) with a rider-entered "HH:mm" into an ISO
+ * instant. Requests are same-day edits, so this is enough without a full date picker. */
+function isoFromWorkDateAndTime(workDate: string, hhmm: string): string {
+  return new Date(`${workDate}T${hhmm}:00`).toISOString();
+}
+
+interface HistoryRowProps {
   record: AttendanceRecordView;
   request?: AttendanceCorrectionRequestView;
   expanded: boolean;
@@ -137,11 +178,18 @@ interface HistoryEntryProps {
   onSubmit: (clockIn: string, clockOut: string, reason: string) => Promise<boolean>;
 }
 
-function HistoryEntry({ record, request, expanded, submitting, onToggle, onSubmit }: HistoryEntryProps) {
+function RequestStatusPill({ status }: { status: AttendanceCorrectionRequestView['status'] }) {
+  const label = status === 'pending' ? 'Adjustment pending' : status === 'approved' ? 'Adjustment approved' : 'Adjustment rejected';
+  const color = status === 'pending' ? colors.warning : status === 'approved' ? colors.accentDark : colors.destructive;
+  return <Text style={[styles.requestPill, { color }]}>{label}</Text>;
+}
+
+function HistoryRow({ record, request, expanded, submitting, onToggle, onSubmit }: HistoryRowProps) {
+  const isActive = record.status === 'active';
   const [clockIn, setClockIn] = useState(timeFromIso(record.clockInAt));
   const [clockOut, setClockOut] = useState(record.clockOutAt ? timeFromIso(record.clockOutAt) : '');
   const [reason, setReason] = useState('');
-  const canRequest = record.status !== 'active' && !request;
+  const canRequest = !isActive && !request;
 
   async function handleSubmit() {
     const ok = await onSubmit(clockIn, clockOut, reason);
@@ -149,22 +197,23 @@ function HistoryEntry({ record, request, expanded, submitting, onToggle, onSubmi
   }
 
   return (
-    <>
-      <Card style={styles.historyRow}>
-        <View style={styles.iconWrap}>
-          <Ionicons name="time-outline" size={18} color={colors.primary} />
+    <View>
+      <View style={styles.historyRow}>
+        <View style={[styles.historyIcon, isActive && styles.historyIconActive]}>
+          <Ionicons
+            name={isActive ? 'time' : 'checkmark-circle'}
+            size={16}
+            color={isActive ? colors.accentDark : colors.primary}
+          />
         </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.historyDate}>{record.workDate}</Text>
-          <Text style={styles.historyTime}>
+        <View style={styles.historyText}>
+          <Text style={styles.historyDay}>{formatDay(record.workDate)}</Text>
+          <Text style={styles.historyRange}>
             {formatTime(record.clockInAt)} – {record.clockOutAt ? formatTime(record.clockOutAt) : 'now'}
           </Text>
           {request ? <RequestStatusPill status={request.status} /> : null}
         </View>
-        <StatusPill
-          label={record.status === 'active' ? 'Active' : formatDuration(record.clockInAt, record.clockOutAt)}
-          kind={record.status === 'active' ? 'accent' : 'neutral'}
-        />
+        <Text style={styles.historyDuration}>{formatDuration(record.clockInAt, record.clockOutAt)}</Text>
         {canRequest ? (
           <Ionicons
             name={expanded ? 'chevron-up' : 'create-outline'}
@@ -174,10 +223,10 @@ function HistoryEntry({ record, request, expanded, submitting, onToggle, onSubmi
             style={styles.historyRequestIcon}
           />
         ) : null}
-      </Card>
+      </View>
 
       {expanded && canRequest ? (
-        <Card style={styles.requestForm}>
+        <View style={styles.requestForm}>
           <View style={styles.requestFormRow}>
             <View style={styles.requestFormField}>
               <Text style={styles.requestFormLabel}>Clock in</Text>
@@ -214,113 +263,74 @@ function HistoryEntry({ record, request, expanded, submitting, onToggle, onSubmi
             <Button label="Cancel" variant="ghost" onPress={onToggle} disabled={submitting} />
             <Button label="Submit request" onPress={handleSubmit} disabled={submitting} />
           </View>
-        </Card>
+        </View>
       ) : null}
-    </>
+    </View>
   );
 }
 
-// ── Team requests (partner owner/admin only) ────────────────────────────────
-
-function TeamRequestCard({
-  request,
-  onApprove,
-  onReject,
-  busy,
-}: {
-  request: PartnerAttendanceCorrectionRequest;
-  onApprove: () => void;
-  onReject: () => void;
-  busy: boolean;
-}) {
-  return (
-    <Card style={styles.teamRequestCard}>
-      <View style={styles.teamRequestHeader}>
-        <Text style={styles.teamRequestName}>{request.employeeEmail ?? request.userId}</Text>
-        <Text style={styles.teamRequestDate}>{request.workDate}</Text>
-      </View>
-      <Text style={styles.teamRequestDetail}>
-        Current: {formatDateTime(request.originalClockInAt)} –{' '}
-        {request.originalClockOutAt ? formatDateTime(request.originalClockOutAt) : 'now'}
-      </Text>
-      <Text style={styles.teamRequestDetail}>
-        Requested: {request.requestedClockInAt ? formatDateTime(request.requestedClockInAt) : '—'} –{' '}
-        {request.requestedClockOutAt ? formatDateTime(request.requestedClockOutAt) : '—'}
-      </Text>
-      <Text style={styles.teamRequestReason}>&ldquo;{request.reason}&rdquo;</Text>
-      <View style={styles.requestFormActions}>
-        <Button label="Reject" variant="outline" onPress={onReject} disabled={busy} />
-        <Button label="Approve" onPress={onApprove} disabled={busy} />
-      </View>
-    </Card>
-  );
-}
+// ── Attendance screen ─────────────────────────────────────────────────────────
 
 export default function AttendanceScreen() {
-  const authUser = useAuthStore((s) => s.user);
-  const canReviewTeam = authUser?.role === UserRole.PARTNER;
+  const tabPadding = useTabScreenPadding();
   const [current, setCurrent] = useState<AttendanceRecordView | null>(null);
   const [history, setHistory] = useState<AttendanceRecordView[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  const [pending, setPending] = useState<PendingAttendanceAction | null>(null);
   const [targetHours, setTargetHours] = useState(FALLBACK_TARGET_HOURS);
   const [myRequests, setMyRequests] = useState<AttendanceCorrectionRequestView[]>([]);
   const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
   const [submittingRequest, setSubmittingRequest] = useState(false);
-  const [teamRequests, setTeamRequests] = useState<PartnerAttendanceCorrectionRequest[]>([]);
-  const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const [pending, setPending] = useState<PendingAttendanceAction | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [currentRes, historyRes, targetRes, requestsRes, teamRequestsRes] = await Promise.all([
-        partnerFetch<AttendanceRecordView | null>('/attendance/me/current'),
-        partnerFetch<AttendanceRecordView[]>('/attendance/me/history?limit=20'),
-        partnerFetch<{ dailyTargetHours: number }>('/attendance/me/target').catch(() => null),
-        partnerFetch<AttendanceCorrectionRequestView[]>('/attendance/me/correction-requests').catch(() => []),
-        canReviewTeam
-          ? partnerFetch<PartnerAttendanceCorrectionRequest[]>(
-              '/partner/attendance/correction-requests?status=pending',
-            ).catch(() => [])
-          : Promise.resolve([]),
+      const [currentRes, historyRes, targetRes, requestsRes] = await Promise.all([
+        riderFetch<AttendanceRecordView | null>('/attendance/me/current'),
+        riderFetch<AttendanceRecordView[]>('/attendance/me/history?limit=20'),
+        riderFetch<{ dailyTargetHours: number }>('/attendance/me/target').catch(() => null),
+        riderFetch<AttendanceCorrectionRequestView[]>('/attendance/me/correction-requests').catch(() => []),
       ]);
       setCurrent(currentRes);
-      setHistory(historyRes);
+      setHistory(historyRes ?? []);
       if (targetRes) setTargetHours(targetRes.dailyTargetHours);
       setMyRequests(requestsRes ?? []);
-      setTeamRequests(teamRequestsRes ?? []);
+    } catch {
+      setCurrent(null);
     } finally {
       setLoading(false);
     }
-  }, [canReviewTeam]);
+  }, []);
 
-  /** Attempts to resend a clock action queued while offline. Left in place (and retried on
-   * every load/refresh) until it actually reaches the server — never dropped silently. */
+  /** Attempts to resend a clock action queued while offline. Left in place (and retried on every
+   * load/refresh) until it actually reaches the server — never dropped silently, per the skill's
+   * offline-rider-behavior rule. */
   const flushPending = useCallback(async () => {
     const action = await getPendingAttendanceAction();
     if (!action) {
       setPending(null);
-      return false;
+      return;
     }
     setPending(action);
+    if (!(await isOnline())) return;
     try {
       const path = action.type === 'clock-in' ? '/attendance/clock-in' : '/attendance/clock-out';
-      await partnerFetch(path, {
+      await riderFetch(path, {
         method: 'POST',
         body: JSON.stringify(action.location ? { location: action.location } : {}),
       });
       await clearPendingAttendanceAction();
       setPending(null);
-      return true;
-    } catch (e) {
-      if (e instanceof NetworkUnreachableError) return false;
-      // Server rejected the queued action (e.g. already clocked in from another device) —
-      // drop it rather than retrying forever; the next load() shows the real server state.
-      await clearPendingAttendanceAction();
-      setPending(null);
-      return false;
+    } catch {
+      // Server rejected the queued action (e.g. already clocked in from another device) — drop
+      // it rather than retrying forever; the next load() shows the real server state. A network
+      // failure (still offline) leaves it queued for the next flush attempt.
+      if (await isOnline()) {
+        await clearPendingAttendanceAction();
+        setPending(null);
+      }
     }
   }, []);
 
@@ -339,8 +349,8 @@ export default function AttendanceScreen() {
 
   async function onRefresh() {
     setRefreshing(true);
-    await flushPending().catch(() => {});
-    await load().catch(() => {});
+    await flushPending();
+    await load();
     setRefreshing(false);
   }
 
@@ -348,13 +358,14 @@ export default function AttendanceScreen() {
     setBusy(true);
     const location = await getBestEffortLocation();
     try {
-      await partnerFetch('/attendance/clock-in', {
+      if (!(await isOnline())) throw new Error('offline');
+      await riderFetch('/attendance/clock-in', {
         method: 'POST',
         body: JSON.stringify(location ? { location } : {}),
       });
       await load();
     } catch (e) {
-      if (e instanceof NetworkUnreachableError) {
+      if (!(await isOnline())) {
         const action: PendingAttendanceAction = {
           type: 'clock-in',
           location,
@@ -370,17 +381,21 @@ export default function AttendanceScreen() {
     }
   }
 
+  const todayWorkDate = current?.workDate ?? new Date().toISOString().slice(0, 10);
+  const todayMs = sumMsForWorkDate(history, todayWorkDate, now);
+
   async function clockOut() {
     setBusy(true);
     const location = await getBestEffortLocation();
     try {
-      await partnerFetch('/attendance/clock-out', {
+      if (!(await isOnline())) throw new Error('offline');
+      await riderFetch('/attendance/clock-out', {
         method: 'POST',
         body: JSON.stringify(location ? { location } : {}),
       });
       await load();
     } catch (e) {
-      if (e instanceof NetworkUnreachableError) {
+      if (!(await isOnline())) {
         const action: PendingAttendanceAction = {
           type: 'clock-out',
           location,
@@ -396,8 +411,6 @@ export default function AttendanceScreen() {
     }
   }
 
-  const todayWorkDate = current?.workDate ?? new Date().toISOString().slice(0, 10);
-  const todayMs = sumMsForWorkDate(history, todayWorkDate, now);
   const requestByRecordId = new Map(myRequests.map((r) => [r.recordId, r]));
 
   async function submitCorrectionRequest(
@@ -417,7 +430,7 @@ export default function AttendanceScreen() {
 
     setSubmittingRequest(true);
     try {
-      await partnerFetch('/attendance/me/correction-requests', {
+      await riderFetch('/attendance/me/correction-requests', {
         method: 'POST',
         body: JSON.stringify({
           recordId: record._id,
@@ -430,34 +443,14 @@ export default function AttendanceScreen() {
       await load();
       return true;
     } catch (e) {
-      Alert.alert('Could not submit request', e instanceof Error ? e.message : 'Please try again.');
+      Alert.alert(
+        'Could not submit request',
+        e instanceof Error ? e.message : 'Please try again.',
+      );
       return false;
     } finally {
       setSubmittingRequest(false);
     }
-  }
-
-  async function reviewTeamRequest(requestId: string, action: 'approve' | 'reject') {
-    setReviewingId(requestId);
-    try {
-      await partnerFetch(`/partner/attendance/correction-requests/${requestId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ action }),
-      });
-      await load();
-    } catch (e) {
-      Alert.alert('Could not review request', e instanceof Error ? e.message : 'Please try again.');
-    } finally {
-      setReviewingId(null);
-    }
-  }
-
-  if (loading) {
-    return (
-      <Screen inTab centered>
-        <ActivityIndicator color={colors.primary} />
-      </Screen>
-    );
   }
 
   return (
@@ -465,9 +458,10 @@ export default function AttendanceScreen() {
       inTab
       scroll
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      contentStyle={{ paddingBottom: tabPadding }}
     >
       {pending ? (
-        <Card muted style={styles.pendingCard}>
+        <Card style={styles.pendingCard}>
           <Ionicons name="cloud-offline-outline" size={18} color={colors.mutedForeground} />
           <Text style={styles.pendingText}>
             {pending.type === 'clock-in' ? 'Clock-in' : 'Clock-out'} queued — will sync once
@@ -476,67 +470,47 @@ export default function AttendanceScreen() {
         </Card>
       ) : null}
 
-      <Card elevated primary={!!current} style={styles.statusCard}>
-        <View style={styles.statusRow}>
-          <View style={[styles.statusDot, { backgroundColor: current ? colors.accent : colors.mutedForeground }]} />
-          <Text style={styles.statusLabel}>{current ? 'Clocked in' : 'Not clocked in'}</Text>
-        </View>
-        {current ? (
-          <>
-            <Text style={styles.timer}>{formatDurationHMS(current.clockInAt, now)}</Text>
-            <Text style={styles.statusHint}>Since {formatTime(current.clockInAt)}</Text>
-          </>
+      <StatusCard
+        current={current}
+        loading={loading}
+        busy={busy}
+        pending={!!pending}
+        now={now}
+        onClockIn={clockIn}
+        onClockOut={clockOut}
+      />
+
+      {!loading ? <DailyTotalCard todayMs={todayMs} targetHours={targetHours} /> : null}
+
+      <View style={styles.historySection}>
+        <Text style={styles.historyLabel}>RECENT SHIFTS</Text>
+        {!loading && history.length === 0 ? (
+          <Card style={styles.emptyCard}>
+            <Ionicons name="calendar-outline" size={22} color={colors.mutedForeground} />
+            <Text style={styles.emptyText}>No shifts recorded yet.</Text>
+          </Card>
         ) : (
-          <Text style={styles.statusHint}>Clock in to start your shift.</Text>
+          <View style={styles.historyCard}>
+            {history.map((record, i) => (
+              <View key={record._id}>
+                <HistoryRow
+                  record={record}
+                  request={requestByRecordId.get(record._id)}
+                  expanded={expandedRecordId === record._id}
+                  submitting={submittingRequest}
+                  onToggle={() =>
+                    setExpandedRecordId((id) => (id === record._id ? null : record._id))
+                  }
+                  onSubmit={(clockIn, clockOut, reason) =>
+                    submitCorrectionRequest(record, clockIn, clockOut, reason)
+                  }
+                />
+                {i < history.length - 1 ? <View style={styles.divider} /> : null}
+              </View>
+            ))}
+          </View>
         )}
-        <Button
-          label={current ? 'Clock out' : 'Clock in'}
-          variant={current ? 'outline' : 'primary'}
-          size="lg"
-          icon={current ? 'log-out-outline' : 'log-in-outline'}
-          disabled={busy || !!pending}
-          onPress={current ? clockOut : clockIn}
-          style={styles.actionButton}
-        />
-      </Card>
-
-      <DailyTotalCard todayMs={todayMs} targetHours={targetHours} />
-
-      {canReviewTeam && teamRequests.length > 0 ? (
-        <View style={styles.teamRequestsSection}>
-          <Text style={styles.sectionLabel}>TEAM ADJUSTMENT REQUESTS ({teamRequests.length})</Text>
-          {teamRequests.map((r) => (
-            <TeamRequestCard
-              key={r._id}
-              request={r}
-              busy={reviewingId === r._id}
-              onApprove={() => void reviewTeamRequest(r._id, 'approve')}
-              onReject={() => void reviewTeamRequest(r._id, 'reject')}
-            />
-          ))}
-        </View>
-      ) : null}
-
-      <Text style={styles.sectionLabel}>RECENT SHIFTS</Text>
-      {history.length === 0 ? (
-        <Card muted>
-          <Text style={styles.emptyText}>No attendance history yet.</Text>
-        </Card>
-      ) : (
-        <View style={styles.list}>
-          {history.map((r) => (
-            <HistoryEntry
-              key={r._id}
-              record={r}
-              request={requestByRecordId.get(r._id)}
-              expanded={expandedRecordId === r._id}
-              submitting={submittingRequest}
-              onToggle={() => setExpandedRecordId((id) => (id === r._id ? null : r._id))}
-              onSubmit={(clockIn, clockOut, reason) => submitCorrectionRequest(r, clockIn, clockOut, reason)}
-            />
-          ))}
-        </View>
-      )}
+      </View>
     </Screen>
   );
 }
@@ -548,11 +522,11 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginBottom: spacing.md,
   },
-  pendingText: { ...typography.bodySm, flex: 1 },
-  statusCard: { marginBottom: spacing.lg, alignItems: 'flex-start' },
+  pendingText: { ...typography.caption, flex: 1 },
+  statusCard: { alignItems: 'flex-start', marginBottom: spacing.lg },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   statusDot: { width: 10, height: 10, borderRadius: 5 },
-  statusLabel: { ...typography.subheading, fontSize: 17 },
+  statusText: { fontSize: 15, fontWeight: '700', color: colors.foreground },
   timer: {
     fontSize: 32,
     fontWeight: '800',
@@ -561,23 +535,8 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     fontVariant: ['tabular-nums'],
   },
-  statusHint: { ...typography.bodySm, marginTop: spacing.xs, marginBottom: spacing.lg },
-  actionButton: { alignSelf: 'stretch' },
-  sectionLabel: { ...typography.label, marginBottom: spacing.sm },
-  emptyText: { ...typography.bodySm },
-  list: { gap: spacing.sm },
-  historyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.md,
-    backgroundColor: colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  historyDate: { ...typography.subheading, fontSize: 14 },
-  historyTime: { ...typography.caption, marginTop: 2 },
-  historyRequestIcon: { padding: spacing.xs, marginLeft: spacing.xs },
+  statusHint: { ...typography.caption, marginTop: spacing.xs, marginBottom: spacing.md },
+  statusButton: { alignSelf: 'stretch' },
 
   totalCard: { marginBottom: spacing.lg },
   totalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -603,8 +562,43 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
 
+  historySection: { marginBottom: spacing.lg },
+  historyLabel: { ...typography.label, marginBottom: spacing.sm },
+  historyCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.lg,
+  },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    gap: spacing.md,
+  },
+  historyIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primaryLight,
+  },
+  historyIconActive: { backgroundColor: colors.accentLight },
+  historyText: { flex: 1 },
+  historyDay: { fontSize: 14, fontWeight: '600', color: colors.foreground },
+  historyRange: { ...typography.caption, marginTop: 1 },
+  historyDuration: { fontSize: 13, fontWeight: '700', color: colors.mutedForeground },
+  historyRequestIcon: { padding: spacing.xs, marginLeft: spacing.xs },
+  divider: { height: 1, backgroundColor: colors.border, marginLeft: 44 },
+
   requestPill: { fontSize: 11, fontWeight: '700', marginTop: 3 },
-  requestForm: { gap: spacing.sm, marginTop: -spacing.xs },
+  requestForm: {
+    paddingHorizontal: spacing.xs,
+    paddingBottom: spacing.lg,
+    gap: spacing.sm,
+  },
   requestFormRow: { flexDirection: 'row', gap: spacing.md },
   requestFormField: { flex: 1 },
   requestFormLabel: { ...typography.caption, marginBottom: spacing.xs },
@@ -634,11 +628,6 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
 
-  teamRequestsSection: { marginBottom: spacing.lg },
-  teamRequestCard: { marginBottom: spacing.sm, gap: spacing.xs },
-  teamRequestHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  teamRequestName: { ...typography.subheading, fontSize: 14 },
-  teamRequestDate: { ...typography.caption },
-  teamRequestDetail: { ...typography.bodySm },
-  teamRequestReason: { ...typography.bodySm, fontStyle: 'italic', marginTop: spacing.xs },
+  emptyCard: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },
+  emptyText: { ...typography.caption },
 });

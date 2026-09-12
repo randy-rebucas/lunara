@@ -556,6 +556,7 @@ function PartnerSettingsContent() {
   const [newHolidayDate, setNewHolidayDate] = useState('');
   const [newHolidayLabel, setNewHolidayLabel] = useState('');
   const [newHolidayRecurring, setNewHolidayRecurring] = useState(false);
+  const [targetHoursDraft, setTargetHoursDraft] = useState('');
 
   const load = useCallback(() => partnerFetch<PartnerSettingsData>('/partner/settings'), []);
   const { data, loading, error, reload } = usePartnerQuery(load, [ready]);
@@ -601,6 +602,22 @@ function PartnerSettingsContent() {
       setHoursDraft(data.branch.operatingHours);
     }
   }, [data, hoursDraft]);
+
+  useEffect(() => {
+    if (data && !targetHoursDraft) {
+      setTargetHoursDraft(String(data.settings.dailyAttendanceTargetHours));
+    }
+  }, [data, targetHoursDraft]);
+
+  function saveTargetHours() {
+    const parsed = Number(targetHoursDraft);
+    if (!Number.isFinite(parsed) || parsed < 1 || parsed > 24) {
+      toast.error('Enter a target between 1 and 24 hours');
+      if (data) setTargetHoursDraft(String(data.settings.dailyAttendanceTargetHours));
+      return;
+    }
+    void saveSettings({ dailyAttendanceTargetHours: parsed }, 'Attendance target saved');
+  }
 
   useEffect(() => {
     if (data && holidaysDraft === null) {
@@ -1126,6 +1143,28 @@ function PartnerSettingsContent() {
                     disabled={!canEdit || saving}
                     onChange={(v) => updateSetting('inventoryEnabled', v)}
                   />
+                  <div className="flex items-center justify-between gap-4 py-3">
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">Daily attendance target</p>
+                      <p className="text-xs text-muted">
+                        Expected hours per work day, shown as a progress goal on staff/rider attendance screens.
+                        Purely informational — it isn&apos;t enforced.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={1}
+                        max={24}
+                        className="w-20 rounded-lg border px-3 py-2 text-sm"
+                        value={targetHoursDraft}
+                        disabled={!canEdit || saving}
+                        onChange={(e) => setTargetHoursDraft(e.target.value)}
+                        onBlur={saveTargetHours}
+                      />
+                      <span className="text-sm text-muted">hours</span>
+                    </div>
+                  </div>
                 </SectionPanel>
 
                 <SectionPanel

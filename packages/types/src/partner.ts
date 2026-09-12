@@ -60,6 +60,8 @@ export interface PartnerPortalSettings {
   /** True when this shop has its own AI Assistant API key configured — the key itself is never
    * sent to the client, only whether one is set. */
   aiApiKeyConfigured: boolean;
+  /** Expected hours per work day for staff/rider attendance progress targets. */
+  dailyAttendanceTargetHours: number;
 }
 
 export interface PartnerShopBranchSummary {

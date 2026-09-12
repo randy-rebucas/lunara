@@ -21,7 +21,7 @@ const stackHeaderOptions = {
     color: colors.foreground,
   },
   headerTintColor: colors.primary,
-  headerBackTitleVisible: false,
+  headerBackButtonDisplayMode: 'minimal' as const,
 };
 
 function isPublicRoute(segments: string[]): boolean {
@@ -83,6 +83,8 @@ export default function RootLayout() {
           <Stack.Screen name="performance" options={{ title: 'Performance' }} />
           <Stack.Screen name="support" options={{ title: 'Help & support' }} />
           <Stack.Screen name="profile/edit" options={{ title: 'Edit profile' }} />
+          <Stack.Screen name="profile/address" options={{ title: 'Home address' }} />
+          <Stack.Screen name="profile/vehicle" options={{ title: 'Vehicle info' }} />
           <Stack.Screen name="scan" options={{ title: 'Scan QR', headerShown: false }} />
         </Stack>
       </RiderOperationsProvider>

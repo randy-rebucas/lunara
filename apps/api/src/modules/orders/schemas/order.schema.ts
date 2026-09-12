@@ -351,6 +351,18 @@ export class Order {
   @Prop({ type: Types.ObjectId, index: true })
   deliveryRiderId?: Types.ObjectId;
 
+  /** Riders who declined this order's open pickup offer — excluded from future
+   * getPickupOffers() results for this order so a decline doesn't silently reappear on their
+   * next refresh. Cleared implicitly whenever the order moves past the offer stage (a new
+   * offer cycle, e.g. after a later reject-while-assigned, is a different pickupRiderId churn
+   * and does not need these entries removed). */
+  @Prop({ type: [Types.ObjectId], default: [] })
+  pickupDeclinedByRiderIds?: Types.ObjectId[];
+
+  /** Same as pickupDeclinedByRiderIds, for the open delivery offer pool in getDeliveryOffers(). */
+  @Prop({ type: [Types.ObjectId], default: [] })
+  deliveryDeclinedByRiderIds?: Types.ObjectId[];
+
   @Prop({ required: true, enum: OrderStatus, default: OrderStatus.PENDING, index: true })
   status!: OrderStatus;
 

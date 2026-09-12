@@ -3,21 +3,36 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { UserRole } from '@lunara/types';
 import { User, UserDocument } from '../users/schemas/user.schema';
-import { Branch, BranchDocument } from '../branches/schemas/branch.schema';
+import { Branch, BranchDocument, DEFAULT_PARTNER_PORTAL_SETTINGS } from '../branches/schemas/branch.schema';
 import { Rider, RiderDocument } from '../riders/schemas/rider.schema';
 import { TrackingGateway } from '../realtime/tracking.gateway';
+import { NotificationDispatchService } from '../push/notification-dispatch.service';
 import { AttendanceRecord, AttendanceRecordDocument } from './schemas/attendance-record.schema';
-import { ClockInDto, ClockOutDto, CorrectAttendanceDto, QueryAttendanceDto } from './dto/attendance.dto';
+import {
+  AttendanceCorrectionRequest,
+  AttendanceCorrectionRequestDocument,
+} from './schemas/attendance-correction-request.schema';
+import {
+  ClockInDto,
+  ClockOutDto,
+  CorrectAttendanceDto,
+  CreateCorrectionRequestDto,
+  QueryAttendanceDto,
+  ReviewCorrectionRequestDto,
+} from './dto/attendance.dto';
 import { assertValidCorrection, computeSessionHours, InvalidAttendanceCorrectionError, workDateFor } from './attendance-logic';
 
 @Injectable()
 export class AttendanceService {
   constructor(
     @InjectModel(AttendanceRecord.name) private attendanceModel: Model<AttendanceRecordDocument>,
+    @InjectModel(AttendanceCorrectionRequest.name)
+    private correctionRequestModel: Model<AttendanceCorrectionRequestDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Branch.name) private branchModel: Model<BranchDocument>,
     @InjectModel(Rider.name) private riderModel: Model<RiderDocument>,
     private trackingGateway: TrackingGateway,
+    private notificationDispatch: NotificationDispatchService,
   ) {}
 
   /** Best-effort live push to the partner portal's Attendance tab — a failed/absent socket
@@ -116,6 +131,27 @@ export class AttendanceService {
       status: 'active',
     });
     return { success: true, data: record ? this.toRecordView(record) : null };
+  }
+
+  /** Expected daily hours for this employee, resolved from their owning shop's settings — the
+   * "who can set the target" answer: only a partner owner/admin, via portalSettings. */
+  async getMyTarget(userId: string) {
+    const scope = await this.resolveEmployeeScope(userId);
+    const dailyTargetHours = await this.resolveTargetHours(scope.partnerId, scope.branchId);
+    return { success: true, data: { dailyTargetHours } };
+  }
+
+  private async resolveTargetHours(partnerId: Types.ObjectId, branchId?: Types.ObjectId): Promise<number> {
+    const branch = branchId
+      ? await this.branchModel.findById(branchId).select('portalSettings').lean()
+      : await this.branchModel
+          .findOne({ partnerUserId: partnerId })
+          .sort({ isMainShop: -1, name: 1 })
+          .select('portalSettings')
+          .lean();
+    return (
+      branch?.portalSettings?.dailyAttendanceTargetHours ?? DEFAULT_PARTNER_PORTAL_SETTINGS.dailyAttendanceTargetHours
+    );
   }
 
   async getMyHistory(userId: string, limit = 30) {
@@ -247,6 +283,166 @@ export class AttendanceService {
     const view = this.toRecordView(record);
     this.notifyPartner(record.partnerId, { type: 'correction', record: view });
     return { success: true, data: view };
+  }
+
+  /** Rider/staff self-service: request an amendment to one of their own sessions (e.g. forgot to
+   * clock out). Nothing on the record changes yet — a partner owner/admin must approve it via
+   * reviewCorrectionRequest, which is what actually calls correctRecord. */
+  async requestCorrection(userId: string, dto: CreateCorrectionRequestDto) {
+    const record = await this.attendanceModel.findOne({
+      _id: dto.recordId,
+      userId: new Types.ObjectId(userId),
+    });
+    if (!record) throw new NotFoundException('Attendance record not found');
+
+    if (!dto.requestedClockInAt && !dto.requestedClockOutAt) {
+      throw new BadRequestException('Provide a requested clock-in or clock-out time');
+    }
+
+    const existingPending = await this.correctionRequestModel.exists({
+      recordId: record._id,
+      status: 'pending',
+    });
+    if (existingPending) {
+      throw new ConflictException('This shift already has a pending adjustment request');
+    }
+
+    const requestedClockInAt = dto.requestedClockInAt ? new Date(dto.requestedClockInAt) : undefined;
+    const requestedClockOutAt = dto.requestedClockOutAt ? new Date(dto.requestedClockOutAt) : undefined;
+
+    try {
+      assertValidCorrection(requestedClockInAt ?? record.clockInAt, requestedClockOutAt ?? record.clockOutAt);
+    } catch (err) {
+      if (err instanceof InvalidAttendanceCorrectionError) throw new BadRequestException(err.message);
+      throw err;
+    }
+
+    const request = await this.correctionRequestModel.create({
+      recordId: record._id,
+      userId: record.userId,
+      partnerId: record.partnerId,
+      role: record.role,
+      workDate: record.workDate,
+      originalClockInAt: record.clockInAt,
+      originalClockOutAt: record.clockOutAt,
+      requestedClockInAt,
+      requestedClockOutAt,
+      reason: dto.reason,
+      status: 'pending',
+    });
+
+    const view = this.toCorrectionRequestView(request);
+    this.notifyPartner(record.partnerId, { type: 'correction_request', request: view });
+    return { success: true, data: view };
+  }
+
+  async listMyCorrectionRequests(userId: string) {
+    const requests = await this.correctionRequestModel
+      .find({ userId: new Types.ObjectId(userId) })
+      .sort({ createdAt: -1 })
+      .limit(50);
+    return { success: true, data: requests.map((r) => this.toCorrectionRequestView(r)) };
+  }
+
+  /** Partner-scoped review queue. Same tenant-isolation rule as listForPartner — `tenantId` must
+   * come from TenantGuard, never a client-supplied id. */
+  async listCorrectionRequestsForPartner(tenantId: string, status?: 'pending' | 'approved' | 'rejected') {
+    const filter: Record<string, unknown> = { partnerId: new Types.ObjectId(tenantId) };
+    if (status) filter.status = status;
+
+    const requests = await this.correctionRequestModel.find(filter).sort({ createdAt: -1 }).limit(200);
+    const userIds = [...new Set(requests.map((r) => r.userId.toString()))];
+    const users = await this.userModel.find({ _id: { $in: userIds } }).select('email phone').lean();
+    const userById = new Map(users.map((u) => [u._id.toString(), u]));
+
+    const data = requests.map((r) => ({
+      ...this.toCorrectionRequestView(r),
+      employeeEmail: userById.get(r.userId.toString())?.email,
+      employeePhone: userById.get(r.userId.toString())?.phone,
+    }));
+    return { success: true, data };
+  }
+
+  /** Partner owner/admin approves or rejects a rider/staff-filed correction request. Approval
+   * reuses correctRecord so the resulting AttendanceRecord edit is validated and audited exactly
+   * like a direct partner correction. */
+  async reviewCorrectionRequest(
+    tenantId: string,
+    requestId: string,
+    reviewerUserId: string,
+    dto: ReviewCorrectionRequestDto,
+  ) {
+    const request = await this.correctionRequestModel.findOne({
+      _id: requestId,
+      partnerId: new Types.ObjectId(tenantId),
+    });
+    if (!request) throw new NotFoundException('Correction request not found');
+    if (request.status !== 'pending') {
+      throw new ConflictException('This request has already been reviewed');
+    }
+
+    if (dto.action === 'approve') {
+      await this.correctRecord(tenantId, request.recordId.toString(), reviewerUserId, {
+        clockInAt: request.requestedClockInAt?.toISOString(),
+        clockOutAt: request.requestedClockOutAt ? request.requestedClockOutAt.toISOString() : undefined,
+      });
+    }
+
+    request.status = dto.action === 'approve' ? 'approved' : 'rejected';
+    request.reviewedBy = new Types.ObjectId(reviewerUserId);
+    request.reviewedAt = new Date();
+    if (dto.reviewNote !== undefined) request.reviewNote = dto.reviewNote;
+    await request.save();
+
+    const view = this.toCorrectionRequestView(request);
+    this.notifyPartner(request.partnerId, { type: 'correction_request_reviewed', request: view });
+    void this.notifyEmployeeOfReview(request);
+    return { success: true, data: view };
+  }
+
+  /** The partner-facing realtime event above only reaches the partner's own dashboard socket
+   * room — the rider/staff member who filed the request has no other way to learn the outcome
+   * short of reopening the attendance tab. Push/in-app notification is a best-effort side
+   * effect and must never fail the review mutation itself. */
+  private async notifyEmployeeOfReview(request: AttendanceCorrectionRequestDocument) {
+    try {
+      const approved = request.status === 'approved';
+      await this.notificationDispatch.dispatch({
+        userId: request.userId.toString(),
+        title: approved ? 'Shift adjustment approved' : 'Shift adjustment rejected',
+        body: approved
+          ? `Your ${request.workDate} shift adjustment was approved.`
+          : `Your ${request.workDate} shift adjustment was rejected.${request.reviewNote ? ` "${request.reviewNote}"` : ''}`,
+        data: {
+          type: 'attendance_correction_reviewed',
+          recordId: request.recordId.toString(),
+          status: request.status,
+          workDate: request.workDate,
+        },
+      });
+    } catch {
+      // Best-effort — the review itself already succeeded and is the authoritative outcome.
+    }
+  }
+
+  private toCorrectionRequestView(r: AttendanceCorrectionRequestDocument) {
+    return {
+      _id: r._id.toString(),
+      recordId: r.recordId.toString(),
+      userId: r.userId.toString(),
+      partnerId: r.partnerId.toString(),
+      role: r.role,
+      workDate: r.workDate,
+      originalClockInAt: r.originalClockInAt.toISOString(),
+      originalClockOutAt: r.originalClockOutAt?.toISOString(),
+      requestedClockInAt: r.requestedClockInAt?.toISOString(),
+      requestedClockOutAt: r.requestedClockOutAt?.toISOString(),
+      reason: r.reason,
+      status: r.status,
+      reviewedAt: r.reviewedAt?.toISOString(),
+      reviewNote: r.reviewNote,
+      createdAt: r.createdAt.toISOString(),
+    };
   }
 
   private toRecordView(r: AttendanceRecordDocument) {

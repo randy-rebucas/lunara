@@ -1,12 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import { Platform, type ColorValue } from 'react-native';
+import { Platform, StyleSheet, View, type ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRiderOperations } from '../../src/context/rider-operations';
 import { RiderAlertsBell } from '../../src/components/rider-alerts-bell';
 import { TasksHeaderActions } from '../../src/components/tasks-header-actions';
 import { TAB_BAR_CONTENT_HEIGHT } from '../../src/hooks/use-tab-bar-height';
-import { colors, spacing } from '../../src/theme';
+import { colors, radius, spacing } from '../../src/theme';
 
 type TabIcon = keyof typeof Ionicons.glyphMap;
 
@@ -15,6 +15,36 @@ function tabIcon(name: TabIcon) {
     <Ionicons name={name} size={size} color={color} />
   );
 }
+
+/** Raised circular button, always in the primary color, so the scan action reads as a distinct
+ * "do a thing" affordance rather than one more destination alongside Home/Tasks/etc. */
+function scanTabIcon({ focused }: { focused: boolean; color: ColorValue; size: number }) {
+  return (
+    <View style={[fabStyles.circle, focused && fabStyles.circleFocused]}>
+      <Ionicons name="qr-code" size={22} color={colors.onPrimary} />
+    </View>
+  );
+}
+
+const fabStyles = StyleSheet.create({
+  circle: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.full,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -18,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  circleFocused: {
+    backgroundColor: colors.primaryDark,
+  },
+});
 
 function TabsNavigator() {
   const insets = useSafeAreaInsets();
@@ -72,6 +102,21 @@ function TabsNavigator() {
           tabBarIcon: tabIcon('list-outline'),
           tabBarBadge: taskBadgeCount > 0 ? (taskBadgeCount > 9 ? '9+' : taskBadgeCount) : undefined,
           headerRight: () => <TasksHeaderActions />,
+        }}
+      />
+      <Tabs.Screen
+        name="scan-tag"
+        options={{
+          title: 'Scan',
+          tabBarIcon: scanTabIcon,
+          tabBarLabel: () => null,
+        }}
+      />
+      <Tabs.Screen
+        name="attendance"
+        options={{
+          title: 'Attendance',
+          tabBarIcon: tabIcon('time-outline'),
         }}
       />
       <Tabs.Screen

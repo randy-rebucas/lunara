@@ -5,9 +5,12 @@ import {
   IsArray,
   IsBoolean,
   IsIn,
+  IsNumber,
   IsOptional,
   IsString,
   Matches,
+  Max,
+  Min,
   ValidateNested,
 } from 'class-validator';
 
@@ -87,6 +90,13 @@ export class UpdatePartnerSettingsDto {
   @IsOptional()
   @IsString()
   aiApiKey?: string;
+
+  /** Expected hours per work day, shown as a progress target on staff/rider attendance screens. */
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(24)
+  dailyAttendanceTargetHours?: number;
 
   /** Weekly schedule, length 7, index = JS `Date.getDay()` (0 = Sunday … 6 = Saturday). */
   @IsOptional()

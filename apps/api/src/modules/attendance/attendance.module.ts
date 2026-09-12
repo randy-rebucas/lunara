@@ -8,11 +8,16 @@ import { AttendanceController } from './attendance.controller';
 import { PartnerAttendanceController } from './partner-attendance.controller';
 import { AttendanceService } from './attendance.service';
 import { AttendanceRecord, AttendanceRecordSchema } from './schemas/attendance-record.schema';
+import {
+  AttendanceCorrectionRequest,
+  AttendanceCorrectionRequestSchema,
+} from './schemas/attendance-correction-request.schema';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: AttendanceRecord.name, schema: AttendanceRecordSchema },
+      { name: AttendanceCorrectionRequest.name, schema: AttendanceCorrectionRequestSchema },
       { name: User.name, schema: UserSchema },
       { name: Branch.name, schema: BranchSchema },
       { name: Rider.name, schema: RiderSchema },

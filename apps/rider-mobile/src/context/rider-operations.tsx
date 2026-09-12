@@ -53,6 +53,8 @@ interface RiderOperationsContextValue {
   endBreak: () => Promise<void>;
   acceptingOfferId: string | null;
   acceptPickupOffer: (orderId: string) => Promise<void>;
+  declinePickupOffer: (orderId: string) => void;
+  declineDeliveryOffer: (orderId: string) => void;
   previewDeliveryQueue: (orderId: string) => void;
   openTask: (orderId: string, status: string, leg?: 'pickup' | 'delivery') => void;
   requestLocationPermission: () => Promise<void>;
@@ -373,6 +375,18 @@ export function RiderOperationsProvider({ children }: { children: ReactNode }) {
     router.push(`/pickup/${orderId}`);
   }
 
+  /** Fire-and-forget: the offer card hides itself immediately on the caller's side, this just
+   * makes that durable server-side (via pickupDeclinedByRiderIds) so it doesn't reappear on the
+   * next refresh/app restart. A failure here just means it may resurface later — not worth
+   * blocking or alerting the rider over, since they've already moved on. */
+  function declinePickupOffer(orderId: string) {
+    void riderFetch(`/riders/pickup-offers/${orderId}/reject`, { method: 'POST' }).catch(() => {});
+  }
+
+  function declineDeliveryOffer(orderId: string) {
+    void riderFetch(`/riders/delivery-tasks/${orderId}/reject`, { method: 'POST' }).catch(() => {});
+  }
+
   function previewDeliveryQueue(orderId: string) {
     Alert.alert(
       'Awaiting assignment',
@@ -460,6 +474,8 @@ export function RiderOperationsProvider({ children }: { children: ReactNode }) {
     endBreak,
     acceptingOfferId,
     acceptPickupOffer,
+    declinePickupOffer,
+    declineDeliveryOffer,
     previewDeliveryQueue,
     openTask,
     requestLocationPermission,

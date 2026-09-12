@@ -6,13 +6,13 @@ import { ActiveAssignmentCard } from '../../src/components/active-assignment-car
 import { ComplianceBanner } from '../../src/components/compliance-banner';
 import { OfflineBanner } from '../../src/components/offline-banner';
 import { useRiderOperations } from '../../src/context/rider-operations';
+import { PickupOfferCard, DeliveryOfferCard } from '../../src/components/rider-offer-card';
 import { RouteGuideCarousel } from '../../src/components/route-guide-carousel';
 import { LocationPermissionBanner } from '../../src/components/ui/location-permission-banner';
 import { Screen } from '../../src/components/ui/screen';
 import { ShiftPanel } from '../../src/components/ui/shift-panel';
 import { useTabScreenPadding } from '../../src/hooks/use-tab-bar-height';
 import { promptNavigate } from '../../src/lib/task-contact';
-import type { DeliveryOffer, PickupOffer } from '../../src/lib/rider-types';
 import { colors, radius, spacing, typography } from '../../src/theme';
 
 function getGreeting(): string {
@@ -21,258 +21,6 @@ function getGreeting(): string {
   if (h < 18) return 'Good afternoon';
   return 'Good evening';
 }
-
-function formatOfferTime(iso?: string): string | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-}
-
-// ── Pickup offer card ─────────────────────────────────────────────────────────
-interface PickupOfferCardProps {
-  offer: PickupOffer;
-  shopName: string;
-  accepting?: boolean;
-  onAccept: () => void;
-  onDecline: () => void;
-}
-
-function PickupOfferCard({ offer, shopName, accepting, onAccept, onDecline }: PickupOfferCardProps) {
-  const pickupTime = formatOfferTime(offer.scheduledPickupAt);
-  const fromLabel = offer.pickupAddress?.label ?? 'Customer address';
-  const fromCity = offer.pickupAddress?.city ?? '';
-
-  return (
-    <View style={offerStyles.card}>
-      <View style={offerStyles.topRow}>
-        <View style={offerStyles.typePill}>
-          <Text style={offerStyles.typePillText}>PICKUP</Text>
-        </View>
-      </View>
-
-      {/* Route visualization */}
-      <View style={offerStyles.route}>
-        <View style={offerStyles.routeLeft}>
-          <View style={offerStyles.routeDotOrigin} />
-          <View style={offerStyles.routeLine} />
-          <Ionicons name="location" size={16} color={colors.accent} />
-        </View>
-        <View style={offerStyles.routeAddresses}>
-          <View style={offerStyles.routeAddress}>
-            <Text style={offerStyles.routeAddressMain}>{fromLabel}</Text>
-            {fromCity ? <Text style={offerStyles.routeAddressCity}>{fromCity}</Text> : null}
-          </View>
-          <View style={offerStyles.routeAddress}>
-            <Text style={offerStyles.routeAddressMain}>{shopName}</Text>
-            <Text style={offerStyles.routeAddressCity}>Drop-off at shop</Text>
-          </View>
-        </View>
-      </View>
-
-      {pickupTime ? (
-        <View style={offerStyles.timePill}>
-          <Ionicons name="time-outline" size={13} color={colors.primary} />
-          <Text style={offerStyles.timePillText}>Pick up by {pickupTime}</Text>
-        </View>
-      ) : null}
-
-      <View style={offerStyles.actions}>
-        <Pressable
-          style={offerStyles.declineBtn}
-          onPress={onDecline}
-          disabled={accepting}
-          accessibilityRole="button"
-        >
-          <Text style={offerStyles.declineBtnText}>Decline</Text>
-        </Pressable>
-        <Pressable
-          style={[offerStyles.acceptBtn, accepting && offerStyles.acceptBtnDisabled]}
-          onPress={onAccept}
-          disabled={accepting}
-          accessibilityRole="button"
-        >
-          <Text style={offerStyles.acceptBtnText}>{accepting ? 'Accepting…' : 'Accept'}</Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
-// ── Delivery offer card ───────────────────────────────────────────────────────
-interface DeliveryOfferCardProps {
-  offer: DeliveryOffer;
-  shopName: string;
-  onAccept: () => void;
-  onDecline: () => void;
-}
-
-function DeliveryOfferCard({ offer, shopName, onAccept, onDecline }: DeliveryOfferCardProps) {
-  const toLabel = offer.deliveryAddress?.label ?? 'Customer address';
-  const toCity = offer.deliveryAddress?.city ?? '';
-
-  return (
-    <View style={offerStyles.card}>
-      <View style={offerStyles.topRow}>
-        <View style={[offerStyles.typePill, offerStyles.typePillDelivery]}>
-          <Text style={offerStyles.typePillText}>DELIVERY</Text>
-        </View>
-      </View>
-
-      <View style={offerStyles.route}>
-        <View style={offerStyles.routeLeft}>
-          <View style={offerStyles.routeDotOrigin} />
-          <View style={offerStyles.routeLine} />
-          <Ionicons name="location" size={16} color={colors.accent} />
-        </View>
-        <View style={offerStyles.routeAddresses}>
-          <View style={offerStyles.routeAddress}>
-            <Text style={offerStyles.routeAddressMain}>{shopName}</Text>
-            <Text style={offerStyles.routeAddressCity}>Pick up from shop</Text>
-          </View>
-          <View style={offerStyles.routeAddress}>
-            <Text style={offerStyles.routeAddressMain}>{toLabel}</Text>
-            {toCity ? <Text style={offerStyles.routeAddressCity}>{toCity}</Text> : null}
-          </View>
-        </View>
-      </View>
-
-      <View style={offerStyles.actions}>
-        <Pressable style={offerStyles.declineBtn} onPress={onDecline} accessibilityRole="button">
-          <Text style={offerStyles.declineBtnText}>Decline</Text>
-        </Pressable>
-        <Pressable style={offerStyles.acceptBtn} onPress={onAccept} accessibilityRole="button">
-          <Text style={offerStyles.acceptBtnText}>Accept</Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
-const offerStyles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  typePill: {
-    backgroundColor: colors.primaryLight,
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: 3,
-  },
-  typePillDelivery: {
-    backgroundColor: colors.accentLight,
-  },
-  typePillText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: colors.primary,
-    letterSpacing: 0.5,
-  },
-  route: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    marginBottom: spacing.md,
-  },
-  routeLeft: {
-    alignItems: 'center',
-    paddingTop: 3,
-    gap: 0,
-  },
-  routeDotOrigin: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    borderWidth: 2,
-    borderColor: colors.primary,
-    backgroundColor: colors.primaryLight,
-  },
-  routeLine: {
-    width: 2,
-    flex: 1,
-    backgroundColor: colors.border,
-    marginVertical: 3,
-    borderStyle: 'dashed',
-  },
-  routeAddresses: {
-    flex: 1,
-    gap: spacing.md + 4,
-  },
-  routeAddress: {},
-  routeAddressMain: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.foreground,
-  },
-  routeAddressCity: {
-    ...typography.caption,
-    marginTop: 1,
-  },
-  timePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    alignSelf: 'flex-start',
-    backgroundColor: colors.primaryLight,
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: 4,
-    marginBottom: spacing.md,
-  },
-  timePillText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.xs,
-  },
-  declineBtn: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: '#FECACA',
-    backgroundColor: '#FEF2F2',
-  },
-  declineBtnText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.destructive,
-  },
-  acceptBtn: {
-    flex: 2,
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-    borderRadius: radius.lg,
-    backgroundColor: colors.primary,
-  },
-  acceptBtnText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  acceptBtnDisabled: {
-    opacity: 0.6,
-  },
-});
 
 // ── Home screen ───────────────────────────────────────────────────────────────
 export default function HomeScreen() {
@@ -298,6 +46,8 @@ export default function HomeScreen() {
     activeAssignment,
     acceptingOfferId,
     acceptPickupOffer,
+    declinePickupOffer,
+    declineDeliveryOffer,
     previewDeliveryQueue,
     openTask,
   } = useRiderOperations();
@@ -399,21 +149,27 @@ export default function HomeScreen() {
           {visiblePickups.map((offer) => (
             <PickupOfferCard
               key={offer._id}
-              offer={offer}
+              item={offer}
               shopName={shopName}
               accepting={acceptingOfferId === offer._id}
               onAccept={() => acceptPickupOffer(offer._id)}
-              onDecline={() => setDismissedPickup((s) => new Set([...s, offer._id]))}
+              onDecline={() => {
+                setDismissedPickup((s) => new Set([...s, offer._id]));
+                declinePickupOffer(offer._id);
+              }}
             />
           ))}
 
           {visibleDeliveries.map((offer) => (
             <DeliveryOfferCard
               key={offer._id}
-              offer={offer}
+              item={offer}
               shopName={shopName}
               onAccept={() => previewDeliveryQueue(offer._id)}
-              onDecline={() => setDismissedDelivery((s) => new Set([...s, offer._id]))}
+              onDecline={() => {
+                setDismissedDelivery((s) => new Set([...s, offer._id]));
+                declineDeliveryOffer(offer._id);
+              }}
             />
           ))}
         </View>
