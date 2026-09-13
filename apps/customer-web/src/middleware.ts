@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { resolveApiV1BaseUrl } from '@lunara/hooks';
+import type { PartnerBrandConfig } from '@lunara/types';
+import { BRAND_CONFIG_HEADER } from './lib/brand-header';
 
 const TENANT_COOKIE = 'lunara_partner_id';
 const PARTNER_HEADER = 'x-lunara-partner-id';
@@ -10,14 +12,16 @@ interface BrandingResponse {
   data?: {
     isDefault: boolean;
     partnerId: string | null;
+    brandConfig?: PartnerBrandConfig;
   };
 }
 
 /**
  * Resolves the requesting Host to a partner brand via the public branding endpoint, and threads
- * the resolved partner id through to (a) downstream server components via a request header
- * (the root layout re-resolves full brand details itself, see app/layout.tsx), and (b) the
- * browser via a cookie the api-client reads to tag booking requests with the partner's tenant id.
+ * the result through to (a) downstream server components via request headers — the resolved
+ * partner id, and the full brand config base64-encoded so the root layout (app/layout.tsx) can
+ * reuse it instead of re-fetching /public/branding itself — and (b) the browser via a cookie the
+ * api-client reads to tag booking requests with the partner's tenant id.
  * On no match (default lunara.app/localhost) or any failure, the request passes through untouched.
  */
 export async function middleware(request: NextRequest) {
@@ -44,6 +48,12 @@ export async function middleware(request: NextRequest) {
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set(PARTNER_HEADER, branding.partnerId);
+  if (branding.brandConfig) {
+    requestHeaders.set(
+      BRAND_CONFIG_HEADER,
+      btoa(encodeURIComponent(JSON.stringify(branding.brandConfig))),
+    );
+  }
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.cookies.set(TENANT_COOKIE, branding.partnerId, {

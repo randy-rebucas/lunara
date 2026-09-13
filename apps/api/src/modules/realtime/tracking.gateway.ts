@@ -241,6 +241,7 @@ export class TrackingGateway implements OnGatewayConnection {
     this.server.to(`order:${orderId}`).emit('orderStatusUpdate', payload);
     this.server.to('admin:operations').emit('orderStatusUpdate', payload);
     void this.emitToCustomerRoom(orderId, 'orderStatusUpdate', payload);
+    void this.customerOrderNotifications.notifyOrderStatus(orderId, status);
     void this.partnerOrderNotifications.notifyOrderStatus(orderId, status);
   }
 
@@ -295,6 +296,14 @@ export class TrackingGateway implements OnGatewayConnection {
   emitDeliveryAssignment(riderUserId: string, payload: Record<string, unknown>) {
     this.server.to(`rider:${riderUserId}`).emit('deliveryAssignment', payload);
     this.server.to('riders:online').emit('deliveryAssignment', payload);
+  }
+
+  /** In-app notification for a customer outside the order-tracking flow (e.g. support ticket
+   * updates) — customer-web's CustomerTrackingSync listens for this on the `customer:<id>` room
+   * it already joins via `joinCustomer`, and bumps the notifications UI the same way
+   * orderStatusUpdate/orderEvent do. */
+  emitCustomerNotification(customerId: string, payload: Record<string, unknown>) {
+    this.server.to(`customer:${customerId}`).emit('customerNotification', payload);
   }
 
   /** In-app notification created for a rider (assignments, alerts). */

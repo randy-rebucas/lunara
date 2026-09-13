@@ -281,6 +281,9 @@ export class PaymentsService {
         );
         payment.status = PaymentStatus.FAILED;
         await payment.save();
+        // The synchronous HTTP error tells the requesting tab, but other open tabs/devices for
+        // this customer (and admin dispatch views) need the same signal the async paths get.
+        this.trackingGateway.emitOrderEvent(orderId, 'paymentFailed', {});
         throw err;
       }
       return {
@@ -580,6 +583,12 @@ export class PaymentsService {
     if (session.sessionStatus === 'expired' && payment.status === PaymentStatus.PENDING) {
       payment.status = PaymentStatus.FAILED;
       await payment.save();
+      // Async failure with no active request to respond to (the customer may not even have
+      // this tab open) — without this emit the order silently stays PENDING with no signal
+      // to the customer or admin that checkout needs to be retried.
+      if (payment.orderId) {
+        this.trackingGateway.emitOrderEvent(payment.orderId.toString(), 'paymentFailed', {});
+      }
     }
   }
 
@@ -723,6 +732,13 @@ export class PaymentsService {
         note: `Payment confirmed — awaiting admin approval (delivery distance ${order.deliveryDistanceKm?.toFixed(1)}km exceeds shop's service radius)`,
       });
       await order.save();
+      // Customer's payment did succeed here — without this the only fan-out is the admin
+      // alert below, leaving the customer with no signal their payment went through while
+      // dispatch is on hold pending admin review.
+      this.trackingGateway.emitOrderEvent(order._id.toString(), 'awaitingDispatch', {
+        message:
+          'Payment received. Your delivery distance needs a quick admin review before we assign a laundry partner.',
+      });
       this.trackingGateway.emitAdminDispatcherAlert({
         type: 'awaiting_shop',
         orderId: order._id.toString(),

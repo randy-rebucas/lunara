@@ -1,10 +1,11 @@
 import type { Metadata, Viewport } from 'next';
-import { Anton, Inter } from 'next/font/google';
+import { Anton, Caveat, Inter } from 'next/font/google';
 import { headers } from 'next/headers';
 import brandIcon from '@lunara/brand/icon';
 import { appConfig } from '@lunara/config';
 import type { PartnerBrandConfig } from '@lunara/types';
 import { resolveApiV1BaseUrl } from '@lunara/hooks';
+import { BRAND_CONFIG_HEADER } from '../lib/brand-header';
 import {
   DEFAULT_DESCRIPTION,
   DEFAULT_TITLE,
@@ -30,8 +31,28 @@ const anton = Anton({
   display: 'swap',
 });
 
+// Handwritten accent for the customer dashboard hero card only — see --font-script in globals.css.
+const caveat = Caveat({
+  subsets: ['latin'],
+  variable: '--font-caveat',
+  display: 'swap',
+});
+
 async function resolveBrandConfig(): Promise<PartnerBrandConfig | null> {
-  const host = (await headers()).get('host');
+  const headerList = await headers();
+
+  // Middleware already resolved this request's brand and threaded the full config through via
+  // header — reuse it instead of re-hitting /public/branding a second time for the same request.
+  const encoded = headerList.get(BRAND_CONFIG_HEADER);
+  if (encoded) {
+    try {
+      return JSON.parse(decodeURIComponent(atob(encoded))) as PartnerBrandConfig;
+    } catch {
+      // fall through to fetching directly
+    }
+  }
+
+  const host = headerList.get('host');
   if (!host) return null;
 
   try {
@@ -130,7 +151,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     : undefined;
 
   return (
-    <html lang="en" className={`${inter.variable} ${anton.variable}`} style={brandStyle}>
+    <html lang="en" className={`${inter.variable} ${anton.variable} ${caveat.variable}`} style={brandStyle}>
       <body className="min-h-screen font-sans antialiased">
         {/*
           DIRECTION CONTRACT — customer-web home page (seed 4fbe65fa, "Jeepney destination signage")

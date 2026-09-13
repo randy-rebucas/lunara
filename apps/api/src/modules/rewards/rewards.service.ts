@@ -4,6 +4,8 @@ import { Model, Types } from 'mongoose';
 import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
 import { CustomerPromo, CustomerPromoDocument } from '../promotions/schemas/customer-promo.schema';
 import { UserProfile, UserProfileDocument } from '../users/schemas/user-profile.schema';
+import { Order, OrderDocument } from '../orders/schemas/order.schema';
+import { OrderStatus } from '@lunara/types';
 import { NotificationDispatchService } from '../push/notification-dispatch.service';
 import { PointsTransaction, PointsTransactionDocument } from './schemas/points-transaction.schema';
 import {
@@ -27,6 +29,7 @@ export class RewardsService {
     private pointsTransactionModel: Model<PointsTransactionDocument>,
     @InjectModel(UserProfile.name)
     private userProfileModel: Model<UserProfileDocument>,
+    @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     private notificationDispatch: NotificationDispatchService,
   ) {}
 
@@ -120,6 +123,34 @@ export class RewardsService {
       'order',
       branchId,
     );
+  }
+
+  /**
+   * Single entry point for "an order just reached a terminal completed state" — called from
+   * every path that can complete an order (rider delivery, in-store customer pickup, manual
+   * admin status update) so points/referral crediting doesn't silently depend on which of those
+   * paths a given order happened to take. creditPoints' own reference-based dedup
+   * (`order-complete-${orderId}`) makes this safe to call more than once for the same order.
+   */
+  async creditForCompletedOrder(order: { _id: unknown; customerId: unknown; branchId?: unknown }) {
+    const orderId = String(order._id);
+    const customerId = String(order.customerId);
+    const branchId = order.branchId ? String(order.branchId) : undefined;
+
+    try {
+      await this.creditForOrderCompletion(orderId, customerId, branchId);
+
+      const priorCompletedOrders = await this.orderModel.countDocuments({
+        customerId: new Types.ObjectId(customerId),
+        status: { $in: [OrderStatus.COMPLETED, OrderStatus.DELIVERED] },
+        _id: { $ne: new Types.ObjectId(orderId) },
+      });
+      await this.maybeCreditReferralForFirstOrder(customerId, priorCompletedOrders === 0);
+    } catch (err) {
+      this.logger.warn(
+        `Rewards crediting failed for completed order ${orderId}: ${(err as Error).message}`,
+      );
+    }
   }
 
   async creditReferralBonus(referrerUserId: string, referredCustomerId: string) {

@@ -10,6 +10,7 @@ import { PageShell } from '../../../components/page-shell';
 import { ShareInviteCard } from '../../../components/share/share-sections';
 import { Card, CardBody } from '../../../components/ui/card';
 import { PageHeader } from '../../../components/ui/page-header';
+import { useDebouncedCallback } from '../../../hooks/use-debounced-callback';
 import { useProtectedPage } from '../../../hooks/use-protected-page';
 import { useCustomerQuery } from '../../../lib/use-customer-query';
 
@@ -105,6 +106,18 @@ export default function RewardsPage() {
 
   const { data, loading, error, reload } = useCustomerQuery(load, [ready, api]);
 
+  // Loyalty points are credited as a side effect of order completion (orderEvent 'completed'
+  // over the /tracking socket) — without this, a customer sitting on this page when their
+  // order completes would see stale balance/tier until they manually reload.
+  const scheduleReload = useDebouncedCallback(() => {
+    reload().catch(() => {});
+  }, 500);
+
+  useEffect(() => {
+    window.addEventListener('lunara-notifications-bump', scheduleReload);
+    return () => window.removeEventListener('lunara-notifications-bump', scheduleReload);
+  }, [scheduleReload]);
+
   async function redeem(item: RewardsCatalogItem) {
     setRedeemError('');
     setRedeemMessage('');
@@ -141,7 +154,7 @@ export default function RewardsPage() {
     : 1;
 
   return (
-    <PageShell>
+    <PageShell className="lg:max-w-6xl">
       <PageHeader
         title="Rewards"
         description="Earn points from completed orders and referrals, then redeem them for perks."
@@ -157,7 +170,7 @@ export default function RewardsPage() {
 
       {!loading && !error && (
         <>
-          <Card className="mt-6 overflow-hidden border-primary/15 bg-gradient-to-br from-indigo-50 via-white to-cyan-50/40">
+          <Card className="mt-6 overflow-hidden border-primary/15 bg-gradient-to-br from-primary/5 via-white to-secondary/10">
             <CardBody className="text-center">
               <p className="text-xs font-semibold uppercase tracking-wide text-primary/80">
                 Loyalty points

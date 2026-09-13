@@ -7,6 +7,7 @@ import { Branch, BranchDocument, PartnerPortalSettings } from '../branches/schem
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { NotificationDispatchService } from './notification-dispatch.service';
+import { NotificationDedupeService } from './notification-dedupe.service';
 import {
   inferPartnerNotificationCategory,
   partnerNotificationTypeFromEvent,
@@ -36,7 +37,6 @@ const STATUS_NOTIFY_FLAG: Record<string, keyof PartnerPortalSettings> = {
 @Injectable()
 export class PartnerOrderNotificationService {
   private readonly logger = new Logger(PartnerOrderNotificationService.name);
-  private readonly recent = new Map<string, number>();
   private readonly orderCache = new Map<
     string,
     { partnerId?: string; branchId?: string; branchName?: string; bookingType?: string }
@@ -47,6 +47,7 @@ export class PartnerOrderNotificationService {
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(Branch.name) private readonly branchModel: Model<BranchDocument>,
     private readonly notificationDispatch: NotificationDispatchService,
+    private readonly dedupe: NotificationDedupeService,
     @Inject(forwardRef(() => TrackingGateway))
     private readonly trackingGateway: TrackingGateway,
   ) {}
@@ -60,7 +61,7 @@ export class PartnerOrderNotificationService {
     if (event === 'partnerAccepted') return;
 
     const dedupeKey = `${orderId}:event:${event}`;
-    if (this.isDuplicate(dedupeKey)) return;
+    if (!(await this.dedupe.claim(dedupeKey, DEDUPE_MS))) return;
 
     const order = await this.resolveOrder(orderId);
     if (!order?.partnerId && !order?.branchId) return;
@@ -89,7 +90,7 @@ export class PartnerOrderNotificationService {
     if (!PARTNER_RELEVANT_ORDER_STATUSES.has(status)) return;
 
     const dedupeKey = `${orderId}:status:${status}`;
-    if (this.isDuplicate(dedupeKey)) return;
+    if (!(await this.dedupe.claim(dedupeKey, DEDUPE_MS))) return;
 
     const order = await this.resolveOrder(orderId);
     if (!order?.partnerId && !order?.branchId) return;
@@ -154,7 +155,7 @@ export class PartnerOrderNotificationService {
     if (branch.portalSettings?.notifyLowStock === false) return;
 
     const dedupeKey = `lowstock:${branchId}:${item.name}`;
-    if (this.isDuplicate(dedupeKey, LOW_STOCK_DEDUPE_MS)) return;
+    if (!(await this.dedupe.claim(dedupeKey, LOW_STOCK_DEDUPE_MS))) return;
 
     const recipientIds = await this.resolveRecipientUserIds(
       branch.partnerUserId?.toString(),
@@ -347,19 +348,4 @@ export class PartnerOrderNotificationService {
     return { orderId, ...snapshot };
   }
 
-  /** `recent` stores each key's own expiry timestamp (not a shared window) so mixing short-window
-   * (order event) and long-window (low-stock) dedupe keys can't cause one caller's eviction sweep
-   * to prematurely clear another caller's still-live key. */
-  private isDuplicate(key: string, windowMs = DEDUPE_MS) {
-    const now = Date.now();
-    const expiresAt = this.recent.get(key);
-    if (expiresAt && now < expiresAt) return true;
-    this.recent.set(key, now + windowMs);
-    if (this.recent.size > 500) {
-      for (const [k, exp] of this.recent) {
-        if (now > exp) this.recent.delete(k);
-      }
-    }
-    return false;
-  }
 }

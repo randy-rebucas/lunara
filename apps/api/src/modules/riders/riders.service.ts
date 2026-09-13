@@ -269,6 +269,13 @@ export class RidersService {
     return this.getMe(userId);
   }
 
+  /** Read-only earnings totals, for callers that already credited this task on a prior attempt
+   * and just need to report current totals on a retried request without crediting again. */
+  async getEarningsSnapshot(userId: string) {
+    const rider = await this.findOrCreate(userId);
+    return { amount: 0, totalEarnings: rider.totalEarnings, todayEarnings: rider.todayEarnings };
+  }
+
   async creditEarning(userId: string, orderId: string, type: Extract<RiderEarningType, 'pickup' | 'delivery'>) {
     const rider = await this.findOrCreate(userId);
 

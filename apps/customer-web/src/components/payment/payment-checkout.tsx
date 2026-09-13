@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { OrderStatus } from '@lunara/types';
 import { PaymentMethod } from '@lunara/types';
+import type { Wallet } from '@lunara/types';
 import { Button } from '@lunara/ui';
 import {
   CUSTOMER_PAYMENT_OPTIONS,
@@ -14,6 +15,7 @@ import {
   type CashTiming,
 } from '@lunara/utils';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
+import { getFriendlyErrorMessage } from '../../lib/format-error';
 
 interface CheckoutOrder {
   _id: string;
@@ -58,14 +60,14 @@ export function PaymentCheckout({ orderId }: PaymentCheckoutProps) {
           api.get<{ order: CheckoutOrder; payment: CheckoutPayment | null }>(
             `/payments/orders/${orderId}`,
           ),
-          api.get<{ balance: number }>('/wallets/me'),
+          api.get<Wallet>('/wallets/me'),
         ]);
 
         if (cancelled) return;
 
         let payment = checkout.data.payment;
         setOrder(checkout.data.order);
-        setWalletBalance((wallet.data as { balance?: number }).balance ?? 0);
+        setWalletBalance(wallet.data.balance ?? 0);
 
         if (payment?.status === 'pending' && payment._id) {
           try {
@@ -86,7 +88,7 @@ export function PaymentCheckout({ orderId }: PaymentCheckoutProps) {
         }
       } catch (e) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : 'Could not load checkout');
+          setError(getFriendlyErrorMessage(e, 'Could not load checkout'));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -113,7 +115,7 @@ export function PaymentCheckout({ orderId }: PaymentCheckoutProps) {
       await api.delete(`/orders/${orderId}`);
       router.push('/orders');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not delete order');
+      setError(getFriendlyErrorMessage(e, 'Could not delete order'));
     } finally {
       setDeleting(false);
     }
@@ -156,7 +158,7 @@ export function PaymentCheckout({ orderId }: PaymentCheckoutProps) {
       setError('Payment could not be started');
     } catch (e) {
       payingRef.current = false;
-      setError(e instanceof Error ? e.message : 'Payment failed');
+      setError(getFriendlyErrorMessage(e, 'Payment failed'));
     } finally {
       setPaying(false);
     }

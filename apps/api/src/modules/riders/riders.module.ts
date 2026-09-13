@@ -33,6 +33,7 @@ import { LedgerModule } from '../ledger/ledger.module';
 import { SettingsModule } from '../settings/settings.module';
 import { LaundryTagsModule } from '../laundry-tags/laundry-tags.module';
 import { AuditLogModule } from '../audit/audit-log.module';
+import { RewardsModule } from '../rewards/rewards.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { AuditLogModule } from '../audit/audit-log.module';
     SettingsModule,
     LaundryTagsModule,
     AuditLogModule,
+    RewardsModule,
   ],
   controllers: [RidersController],
   providers: [RidersService, PickupService, DeliveryService, RiderAssignmentService, RiderNotificationService, RiderWalletService],

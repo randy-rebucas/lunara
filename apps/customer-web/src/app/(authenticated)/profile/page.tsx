@@ -199,7 +199,7 @@ export default function ProfilePage() {
       : user?.email?.split('@')[0] ?? user?.phone ?? 'Customer';
 
   return (
-    <PageShell>
+    <PageShell className="lg:max-w-6xl">
       <PageHeader
         title="Profile"
         description="Manage your account, addresses, and preferences"

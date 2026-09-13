@@ -49,6 +49,7 @@ export function CustomerTrackingSync() {
 
     socket.on('orderStatusUpdate', onDispatchUpdate);
     socket.on('orderEvent', onDispatchUpdate);
+    socket.on('customerNotification', onDispatchUpdate);
 
     const onVisible = () => {
       if (document.visibilityState === 'visible') {

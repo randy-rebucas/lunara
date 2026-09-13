@@ -315,6 +315,12 @@ export class PickupService {
       this.trackingGateway.emitOrderEvent(orderId, 'pickedUp', {
         message: 'Your laundry has been picked up',
       });
+      this.trackingGateway.emitPartnerPipelineUpdated({
+        orderId,
+        status: order.status,
+        partnerId: order.partnerId?.toString(),
+        branchId: order.branchId?.toString(),
+      });
     }
     await order.save();
 
@@ -398,7 +404,8 @@ export class PickupService {
     order.pickup.inTransitToShopAt = order.pickup.inTransitToShopAt ?? now;
     order.pickup.droppedAtShop = now;
 
-    if (order.status === OrderStatus.PICKED_UP) {
+    const isFirstDrop = order.status === OrderStatus.PICKED_UP;
+    if (isFirstDrop) {
       order.status = OrderStatus.IN_TRANSIT_TO_SHOP;
       order.statusHistory.push({
         status: OrderStatus.IN_TRANSIT_TO_SHOP,
@@ -410,12 +417,27 @@ export class PickupService {
     }
     await order.save();
 
-    this.trackingGateway.emitOrderEvent(orderId, 'inTransitToShop', {
-      message: 'Laundry delivered to partner shop',
-      branchName: order.branchName,
-    });
+    // Guarded by isFirstDrop: these previously ran unconditionally on every call, so a
+    // retried/double-tapped drop-at-shop would re-notify the customer and — since
+    // ridersService.creditEarning's totalEarnings/todayEarnings increment has no dedup of its
+    // own (only the underlying wallet balance and ledger entry are guarded) — permanently
+    // inflate the rider's displayed earnings stats on each retry.
+    if (isFirstDrop) {
+      this.trackingGateway.emitOrderEvent(orderId, 'inTransitToShop', {
+        message: 'Laundry delivered to partner shop',
+        branchName: order.branchName,
+      });
+      this.trackingGateway.emitPartnerPipelineUpdated({
+        orderId,
+        status: order.status,
+        partnerId: order.partnerId?.toString(),
+        branchId: order.branchId?.toString(),
+      });
+    }
 
-    const earnings = await this.ridersService.creditEarning(riderUserId, orderId, 'pickup');
+    const earnings = isFirstDrop
+      ? await this.ridersService.creditEarning(riderUserId, orderId, 'pickup')
+      : await this.ridersService.getEarningsSnapshot(riderUserId);
 
     return {
       success: true,

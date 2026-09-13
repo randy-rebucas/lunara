@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { OrderStatus } from '@lunara/types';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
+import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
 import { NotificationDispatchService } from '../push/notification-dispatch.service';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { CreateReviewDto } from './dto/create-review.dto';
@@ -15,9 +16,20 @@ export class ReviewsService {
     @InjectModel(Review.name) private reviewModel: Model<ReviewDocument>,
     @InjectModel(Notification.name) private notificationModel: Model<NotificationDocument>,
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
+    @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
     private trackingGateway: TrackingGateway,
     private notificationDispatch: NotificationDispatchService,
   ) {}
+
+  /** Mirrors wallets.service.ts's wantsPush() so review-request pushes respect the same
+   * opt-out as order/wallet notifications instead of always pushing. */
+  private async wantsPush(userId: string): Promise<boolean> {
+    const customer = await this.customerModel
+      .findOne({ userId: new Types.ObjectId(userId) })
+      .select('notificationPreferences')
+      .lean();
+    return customer?.notificationPreferences?.push ?? true;
+  }
 
   async notifyOrderCompleted(orderId: string) {
     const order = await this.orderModel.findById(orderId);
@@ -30,11 +42,13 @@ export class ReviewsService {
     });
     if (existing) return;
 
+    const sendPush = await this.wantsPush(order.customerId.toString());
     const notification = await this.notificationDispatch.dispatch({
       userId: order.customerId.toString(),
       title: 'How was your laundry?',
       body: 'Your order is complete. Rate your experience to help us improve.',
       channelId: 'orders',
+      sendPush,
       data: { type: 'review_request', orderId },
     });
 

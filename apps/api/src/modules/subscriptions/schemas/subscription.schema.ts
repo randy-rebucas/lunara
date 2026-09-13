@@ -58,6 +58,12 @@ export class Subscription {
   @Prop()
   lastError?: string;
 
+  /** Consecutive auto-booking failures since the last success — resets to 0 on success.
+   * Used to auto-deactivate a subscription stuck on a permanently broken state (deleted
+   * address, invalid payment method) instead of retrying forever. */
+  @Prop({ default: 0 })
+  consecutiveFailures!: number;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

@@ -18,6 +18,8 @@
   --width-content: 36rem;
 
   --font-display: var(--font-anton), 'Arial Narrow', sans-serif;
+  /* Handwritten accent — dashboard hero only, e.g. "More time for what matters." */
+  --font-script: var(--font-caveat), cursive;
 }
 
 @layer base {

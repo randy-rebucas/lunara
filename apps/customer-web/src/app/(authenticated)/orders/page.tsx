@@ -19,6 +19,7 @@ import { DataPageStatus } from '../../../components/data-page-status';
 import { PageShell } from '../../../components/page-shell';
 import { Card, CardBody } from '../../../components/ui/card';
 import { PageHeader } from '../../../components/ui/page-header';
+import { useDebouncedCallback } from '../../../hooks/use-debounced-callback';
 import { useInfiniteScroll } from '../../../hooks/use-infinite-scroll';
 import { useProtectedPage } from '../../../hooks/use-protected-page';
 import { loadCustomerSettings } from '../../../lib/customer-settings';
@@ -124,6 +125,37 @@ export default function OrdersPage() {
     fetchPage(page + 1, true);
   }, [hasMore, loading, loadingMore, page, fetchPage]);
 
+  // Refetching page 1 and replacing `orders` on every realtime bump would truncate an
+  // infinite-scrolled list back to just page 1, losing every page the customer scrolled into —
+  // worse than the staleness. Instead, merge page 1's current field values (status, total,
+  // partnerCoverage, etc.) into whatever's already loaded, updating in place by _id and
+  // prepending any order that isn't in the list yet, without touching pagination/scroll state.
+  const refreshVisibleStatuses = useCallback(async () => {
+    if (!ready) return;
+    try {
+      const statusParam = statusFilter === 'all' ? '' : `&status=${statusFilter}`;
+      const res = await api.get<OrdersPageData>(`/orders?page=1&limit=${PAGE_SIZE}${statusParam}`);
+      const fresh = res.data.items;
+      setOrders((prev) => {
+        const freshById = new Map(fresh.map((o) => [o._id, o]));
+        const merged = prev.map((o) => freshById.get(o._id) ?? o);
+        const newOnes = fresh.filter((o) => !prev.some((p) => p._id === o._id));
+        return [...newOnes, ...merged];
+      });
+    } catch {
+      // Best-effort — the manual pull-to-refresh / filter switch path still covers a full reload.
+    }
+  }, [ready, api, statusFilter]);
+
+  const scheduleStatusRefresh = useDebouncedCallback(() => {
+    void refreshVisibleStatuses();
+  }, 500);
+
+  useEffect(() => {
+    window.addEventListener('lunara-notifications-bump', scheduleStatusRefresh);
+    return () => window.removeEventListener('lunara-notifications-bump', scheduleStatusRefresh);
+  }, [scheduleStatusRefresh]);
+
   async function cancelOrder(order: OrderSummary) {
     const isPending = order.status === OrderStatus.PENDING;
     const message = isPending
@@ -172,7 +204,7 @@ export default function OrdersPage() {
   }
 
   return (
-    <PageShell>
+    <PageShell className="lg:max-w-6xl">
       <PageHeader
         title="My orders"
         description="Select an order to view the full timeline and live status updates"

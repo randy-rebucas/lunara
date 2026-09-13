@@ -13,6 +13,25 @@ const NON_TERMINAL_ORDER_STATUSES = Object.values(OrderStatus).filter(
 );
 
 /**
+ * Fields that change where/how a rider physically finds this address or hands off the order.
+ * Edits to these are blocked while an order in progress still references the address, since
+ * riders/partners resolve pickup/deliveryAddressId live (no booking-time snapshot) — an
+ * unguarded edit would silently redirect an in-flight pickup/delivery. Metadata fields like
+ * `label`, `addressType`, and `isDefault` don't affect navigation and remain freely editable.
+ */
+const LOCATION_AFFECTING_FIELDS = [
+  'line1',
+  'line2',
+  'landmark',
+  'city',
+  'province',
+  'postalCode',
+  'latitude',
+  'longitude',
+  'deliveryInstructions',
+] as const;
+
+/**
  * Older customer-mobile builds JSON-encoded `landmark`/`notes` into `line2`
  * (`{"line2":"...","landmark":"...","notes":"..."}`) instead of using the real `landmark` and
  * `deliveryInstructions` fields. Detect and repair those on read so every consumer (rider/partner/
@@ -65,6 +84,19 @@ export class AddressesService {
       userId: new Types.ObjectId(userId),
     });
     if (!address) throw new NotFoundException('Address not found');
+
+    const editsLocation = LOCATION_AFFECTING_FIELDS.some((field) => dto[field] !== undefined);
+    if (editsLocation) {
+      const activeOrder = await this.orderModel.findOne({
+        $or: [{ pickupAddressId: id }, { deliveryAddressId: id }],
+        status: { $in: NON_TERMINAL_ORDER_STATUSES },
+      });
+      if (activeOrder) {
+        throw new BadRequestException(
+          'This address is used by an order that is still in progress and cannot be edited.',
+        );
+      }
+    }
 
     if (dto.isDefault) {
       await this.addressModel.updateMany(

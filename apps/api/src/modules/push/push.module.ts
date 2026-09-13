@@ -19,6 +19,11 @@ import {
   BroadcastNotification,
   BroadcastNotificationSchema,
 } from './schemas/broadcast-notification.schema';
+import {
+  NotificationDedupe,
+  NotificationDedupeSchema,
+} from './schemas/notification-dedupe.schema';
+import { NotificationDedupeService } from './notification-dedupe.service';
 
 @Global()
 @Module({
@@ -32,6 +37,7 @@ import {
       { name: Branch.name, schema: BranchSchema },
       { name: User.name, schema: UserSchema },
       { name: Customer.name, schema: CustomerSchema },
+      { name: NotificationDedupe.name, schema: NotificationDedupeSchema },
     ]),
     forwardRef(() => RealtimeModule),
   ],
@@ -40,6 +46,7 @@ import {
     FirebaseService,
     PushNotificationService,
     NotificationDispatchService,
+    NotificationDedupeService,
     RiderOfferPushService,
     CustomerOrderNotificationService,
     PartnerOrderNotificationService,
@@ -47,6 +54,7 @@ import {
   exports: [
     PushNotificationService,
     NotificationDispatchService,
+    NotificationDedupeService,
     RiderOfferPushService,
     CustomerOrderNotificationService,
     PartnerOrderNotificationService,

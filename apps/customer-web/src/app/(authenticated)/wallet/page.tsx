@@ -13,6 +13,7 @@ import { WalletTopupForm } from '../../../components/payment/wallet-topup-form';
 import { PageShell } from '../../../components/page-shell';
 import { Card, CardBody } from '../../../components/ui/card';
 import { PageHeader } from '../../../components/ui/page-header';
+import { useDebouncedCallback } from '../../../hooks/use-debounced-callback';
 import { useProtectedPage } from '../../../hooks/use-protected-page';
 import { useCustomerQuery } from '../../../lib/use-customer-query';
 
@@ -60,6 +61,19 @@ export default function WalletPage() {
 
   const { data, loading, error, reload } = useCustomerQuery(load, [ready, api]);
 
+  // Refund credits, cash-collection netting, and other server-side wallet adjustments fire an
+  // 'orderEvent'/'orderStatusUpdate' over the /tracking socket, which CustomerTrackingSync turns
+  // into this bump — without listening for it, balance/transactions here go stale until the
+  // customer hits the manual Refresh button.
+  const scheduleReload = useDebouncedCallback(() => {
+    reload().catch(() => {});
+  }, 500);
+
+  useEffect(() => {
+    window.addEventListener('lunara-notifications-bump', scheduleReload);
+    return () => window.removeEventListener('lunara-notifications-bump', scheduleReload);
+  }, [scheduleReload]);
+
   useEffect(() => {
     if (!topUpSuccess) return;
     const t = window.setTimeout(() => setTopUpSuccess(''), 5000);
@@ -86,6 +100,9 @@ export default function WalletPage() {
         if (!cancelled) {
           setTopUpSuccess("Couldn't confirm your payment right now — refreshing your balance. If it doesn't update, check back in a few minutes.");
           await reload();
+          // Clear ?topupPaymentId= on this path too — otherwise a refresh of this page
+          // silently re-fires the sync attempt against the same payment id forever.
+          window.history.replaceState({}, '', '/wallet');
         }
       }
     })();
@@ -112,7 +129,7 @@ export default function WalletPage() {
   const lowBalance = balance > 0 && balance < LOW_BALANCE_THRESHOLD;
 
   return (
-    <PageShell>
+    <PageShell className="lg:max-w-6xl">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <PageHeader
           title="Wallet"
@@ -141,7 +158,7 @@ export default function WalletPage() {
 
       {!loading && !error && (
         <>
-          <Card className="mt-6 overflow-hidden border-primary/15 bg-gradient-to-br from-indigo-50 via-white to-cyan-50/40">
+          <Card className="mt-6 overflow-hidden border-primary/15 bg-gradient-to-br from-primary/5 via-white to-secondary/10">
             <CardBody className="text-center">
               <p className="text-xs font-semibold uppercase tracking-wide text-primary/80">
                 Available balance

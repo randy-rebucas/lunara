@@ -3,7 +3,9 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AddressesModule } from '../addresses/addresses.module';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
+import { Customer, CustomerSchema } from '../customers/schemas/customer.schema';
 import { WalletsModule } from '../wallets/wallets.module';
+import { RealtimeModule } from '../realtime/realtime.module';
 import { SupportTicket, SupportTicketSchema } from './schemas/support-ticket.schema';
 import { SupportController } from './support.controller';
 import { SupportService } from './support.service';
@@ -16,11 +18,13 @@ import { SettingsModule } from '../settings/settings.module';
       { name: SupportTicket.name, schema: SupportTicketSchema },
       { name: Order.name, schema: OrderSchema },
       { name: User.name, schema: UserSchema },
+      { name: Customer.name, schema: CustomerSchema },
     ]),
     AddressesModule,
     WalletsModule,
     LedgerModule,
     SettingsModule,
+    RealtimeModule,
   ],
   controllers: [SupportController],
   providers: [SupportService],

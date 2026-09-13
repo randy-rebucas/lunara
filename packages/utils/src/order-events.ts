@@ -14,6 +14,8 @@ export const ORDER_EVENT_MESSAGES: Record<string, string> = {
   inTransitToShop: 'Your laundry is on the way to the partner shop.',
   laundryReceivedAtShop: 'Laundry received at the partner shop.',
   shopWeightVerified: 'The shop verified your laundry weight.',
+  orderTotalAdjusted:
+    'Your order total was updated after the shop weighed/counted your laundry.',
   receivedAtShop: 'Items confirmed at the partner shop.',
   partnerAccepted: 'Your laundry partner accepted your order.',
   staffAssigned: 'A staff member was assigned to process your laundry.',
@@ -35,6 +37,7 @@ export const ORDER_EVENT_MESSAGES: Record<string, string> = {
   delivered: 'Laundry delivered successfully.',
   completed: 'Order complete. Thank you!',
   paymentReceived: 'Cash payment received — thank you!',
+  paymentFailed: 'Your payment did not go through. Please try again to confirm your order.',
   reviewRequested: 'How was your experience? Leave a review when you have a moment.',
   reviewPublished: 'Thank you for your review!',
   refundProcessed: 'Your refund has been processed.',
@@ -73,6 +76,10 @@ export function orderEventTitle(event: string): string {
     case 'refundProcessed':
     case 'refundNotified':
       return 'Refund update';
+    case 'paymentFailed':
+      return 'Payment failed';
+    case 'orderTotalAdjusted':
+      return 'Order total updated';
     case 'reviewRequested':
       return 'Rate your order';
     default:

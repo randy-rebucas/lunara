@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { formatCurrency, formatRefundStatus } from '@lunara/utils';
 import { Button } from '@lunara/ui';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
@@ -11,6 +11,7 @@ import { PageShell } from '../../../components/page-shell';
 import { RefundRequestSection } from '../../../components/refund-request-section';
 import { Card, CardBody } from '../../../components/ui/card';
 import { PageHeader } from '../../../components/ui/page-header';
+import { useDebouncedCallback } from '../../../hooks/use-debounced-callback';
 import { useProtectedPage } from '../../../hooks/use-protected-page';
 import { useCustomerQuery } from '../../../lib/use-customer-query';
 import { formatRefundDate, refundStatusBadgeClass } from '../../../lib/refunds';
@@ -38,6 +39,19 @@ export default function RefundsListPage() {
 
   const { data: items, loading, error, reload } = useCustomerQuery(load, [ready, api]);
 
+  // CustomerTrackingSync fires this on every 'orderStatusUpdate'/'orderEvent' it receives over
+  // the /tracking socket — refund approval/processing (refundProcessed/refundNotified) included.
+  // Without this, a customer sitting on this page while admin processes their refund would only
+  // see the notification bell update, not this list, until they hit the manual Refresh button.
+  const scheduleReload = useDebouncedCallback(() => {
+    reload().catch(() => {});
+  }, 500);
+
+  useEffect(() => {
+    window.addEventListener('lunara-notifications-bump', scheduleReload);
+    return () => window.removeEventListener('lunara-notifications-bump', scheduleReload);
+  }, [scheduleReload]);
+
   if (isLoading || !ready) {
     return <AuthLoading message="Loading refunds…" />;
   }
@@ -54,7 +68,7 @@ export default function RefundsListPage() {
   const list = items ?? [];
 
   return (
-    <PageShell>
+    <PageShell className="lg:max-w-6xl">
       <PageHeader
         title="Refunds"
         description="Request a refund for wallet or online payments, or track requests through wallet payout. Cash on pickup or delivery is not refundable here."

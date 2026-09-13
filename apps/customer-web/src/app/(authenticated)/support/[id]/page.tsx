@@ -1,7 +1,7 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { ArrowRight, Check, Circle } from 'lucide-react';
 import { LOST_ITEM_FLOW, formatLostItemOutcome, lostItemFlowIndex } from '@lunara/utils';
 import { ButtonLink } from '../../../../components/ui/button-link';
@@ -10,6 +10,7 @@ import { AuthLoading } from '../../../../components/auth-loading';
 import { PageShell } from '../../../../components/page-shell';
 import { DataPageStatus } from '../../../../components/data-page-status';
 import { PageHeader } from '../../../../components/ui/page-header';
+import { useDebouncedCallback } from '../../../../hooks/use-debounced-callback';
 import { useProtectedPage } from '../../../../hooks/use-protected-page';
 import { useCustomerQuery } from '../../../../lib/use-customer-query';
 
@@ -49,7 +50,20 @@ export default function CustomerTicketPage() {
     } satisfies TicketData;
   }, [api, id]);
 
-  const { data, loading, error } = useCustomerQuery(load, [ready, api, id]);
+  const { data, loading, error, reload } = useCustomerQuery(load, [ready, api, id]);
+
+  // Staff investigation actions push a support_ticket_update event (see support.service.ts's
+  // notifyTicketUpdate) but this page had no auto-refresh at all — reuse the same bump signal
+  // the ticket list page listens to so a customer sitting on this page sees stage/outcome
+  // changes without reloading manually.
+  const scheduleReload = useDebouncedCallback(() => {
+    reload().catch(() => {});
+  }, 500);
+
+  useEffect(() => {
+    window.addEventListener('lunara-notifications-bump', scheduleReload);
+    return () => window.removeEventListener('lunara-notifications-bump', scheduleReload);
+  }, [scheduleReload]);
 
   if (isLoading || !ready) {
     return <AuthLoading message="Loading ticket…" />;

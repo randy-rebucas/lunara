@@ -2,7 +2,6 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
-  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -84,8 +83,6 @@ export interface BookingOrderPayload {
 
 @Injectable()
 export class OrdersService {
-  private readonly logger = new Logger(OrdersService.name);
-
   constructor(
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
@@ -104,37 +101,6 @@ export class OrdersService {
     private paymongoService: PaymongoService,
     private riderNotificationService: RiderNotificationService,
   ) {}
-
-  private readonly COMPLETED_ORDER_STATUSES = [OrderStatus.COMPLETED, OrderStatus.DELIVERED];
-
-  /** Points/referral crediting is a side effect of order completion, not the completion itself —
-   * a rewards-side failure (e.g. missing customer profile) must not undo or error out an already
-   * -saved order status transition, so it's caught and logged rather than propagated. */
-  private async awardPointsForCompletedOrder(order: OrderDocument) {
-    const customerId = order.customerId.toString();
-
-    try {
-      await this.rewardsService.creditForOrderCompletion(
-        order._id.toString(),
-        customerId,
-        order.branchId?.toString(),
-      );
-
-      const priorCompletedOrders = await this.orderModel.countDocuments({
-        customerId: order.customerId,
-        status: { $in: this.COMPLETED_ORDER_STATUSES },
-        _id: { $ne: order._id },
-      });
-      await this.rewardsService.maybeCreditReferralForFirstOrder(
-        customerId,
-        priorCompletedOrders === 0,
-      );
-    } catch (err) {
-      this.logger.warn(
-        `Rewards crediting failed for completed order ${order._id.toString()}: ${(err as Error).message}`,
-      );
-    }
-  }
 
   private isBranchAssigned(order: OrderDocument) {
     return Boolean(order.branchId || order.branchName);
@@ -797,8 +763,8 @@ export class OrdersService {
 
     this.trackingGateway.emitOrderStatus(order._id.toString(), nextStatus);
 
-    if (this.COMPLETED_ORDER_STATUSES.includes(nextStatus)) {
-      await this.awardPointsForCompletedOrder(order);
+    if (nextStatus === OrderStatus.COMPLETED || nextStatus === OrderStatus.DELIVERED) {
+      await this.rewardsService.creditForCompletedOrder(order);
     }
 
     const updated = await this.orderModel.findById(id);
@@ -882,7 +848,7 @@ export class OrdersService {
     await this.laundryTagsService.releaseFromOrder(id, 'delivered');
 
     this.trackingGateway.emitOrderStatus(order._id.toString(), OrderStatus.COMPLETED);
-    await this.awardPointsForCompletedOrder(order);
+    await this.rewardsService.creditForCompletedOrder(order);
 
     return { success: true, data: await this.orderModel.findById(id) };
   }

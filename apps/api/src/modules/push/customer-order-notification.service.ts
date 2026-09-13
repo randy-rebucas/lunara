@@ -6,6 +6,7 @@ import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
 import { NotificationDispatchService } from './notification-dispatch.service';
+import { NotificationDedupeService } from './notification-dedupe.service';
 import { EmailService } from '../../common/email/email.service';
 
 const EMAIL_EVENTS = new Set(['paymentConfirmed', 'dispatched', 'delivered']);
@@ -15,7 +16,6 @@ const DEDUPE_MS = 45_000;
 @Injectable()
 export class CustomerOrderNotificationService {
   private readonly logger = new Logger(CustomerOrderNotificationService.name);
-  private readonly recent = new Map<string, number>();
   private readonly customerIdByOrderId = new Map<string, string>();
 
   constructor(
@@ -23,6 +23,7 @@ export class CustomerOrderNotificationService {
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(Customer.name) private readonly customerModel: Model<CustomerDocument>,
     private readonly notificationDispatch: NotificationDispatchService,
+    private readonly dedupe: NotificationDedupeService,
     private readonly emailService: EmailService,
   ) {}
 
@@ -52,7 +53,7 @@ export class CustomerOrderNotificationService {
     }
 
     const dedupeKey = `${orderId}:event:${event}`;
-    if (this.isDuplicate(dedupeKey)) return;
+    if (!(await this.dedupe.claim(dedupeKey, DEDUPE_MS))) return;
 
     const customerId = await this.resolveCustomerId(orderId);
     if (!customerId) return;
@@ -97,7 +98,7 @@ export class CustomerOrderNotificationService {
 
   async notifyOrderStatus(orderId: string, status: string) {
     const dedupeKey = `${orderId}:status:${status}`;
-    if (this.isDuplicate(dedupeKey)) return;
+    if (!(await this.dedupe.claim(dedupeKey, DEDUPE_MS))) return;
 
     const customerId = await this.resolveCustomerId(orderId);
     if (!customerId) return;
@@ -116,19 +117,6 @@ export class CustomerOrderNotificationService {
     } catch (err) {
       this.logger.warn(`Customer status notification failed for ${orderId}: ${err}`);
     }
-  }
-
-  private isDuplicate(key: string) {
-    const now = Date.now();
-    const prev = this.recent.get(key);
-    if (prev && now - prev < DEDUPE_MS) return true;
-    this.recent.set(key, now);
-    if (this.recent.size > 500) {
-      for (const [k, ts] of this.recent) {
-        if (now - ts > DEDUPE_MS * 2) this.recent.delete(k);
-      }
-    }
-    return false;
   }
 
   private async resolveCustomerId(orderId: string): Promise<string | undefined> {

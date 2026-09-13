@@ -18,6 +18,7 @@ import {
   formatOrderStatusLabel,
   formatPaymentMethodLabel,
   formatPaymentStatusLabel,
+  resolveOrderEventMessage,
   type PartnerCoverageInfo,
 } from '@lunara/utils';
 import { PaymentReceipt, type PaymentReceiptData } from '../../../../components/payment/payment-receipt';
@@ -96,41 +97,6 @@ interface DeliveryUiState {
   needsVerify: boolean;
   needsSign: boolean;
 }
-
-const ORDER_EVENT_MESSAGES: Record<string, string> = {
-  awaitingDispatch:
-    'Payment received. Your order is pending dispatch to a laundry partner.',
-  shopAssigned: 'Your order was assigned to a laundry partner shop.',
-  riderAssignedPickup: 'A pickup rider has been assigned to your order.',
-  branchAssigned: 'Your order was assigned to a laundry partner branch.',
-  findingRider: 'Finding a nearby rider for your pickup…',
-  riderAssigned: 'A rider accepted your pickup and is on the way.',
-  riderArrived: 'Your rider has arrived at your address.',
-  pickedUp: 'Laundry collected from your address.',
-  pickupReceiptGenerated: 'Pickup receipt generated for your order.',
-  inTransitToShop: 'Your laundry is on the way to the partner shop.',
-  laundryReceivedAtShop: 'Laundry received at the partner shop.',
-  shopWeightVerified: 'The shop verified your laundry weight.',
-  receivedAtShop: 'Items confirmed at the partner shop.',
-  processingAdvanced: 'Your laundry is being processed at the shop.',
-  awaitingDeliveryDispatch:
-    'Your laundry is ready. Lunara operations is assigning a delivery rider.',
-  findingDeliveryRider: 'Looking for a rider to deliver your laundry…',
-  riderAssignedDelivery: 'A delivery rider has been assigned to your order.',
-  deliveryRiderAssigned: 'Your delivery rider is on the way.',
-  riderPickedUpFromShop: 'Your laundry was picked up from the partner shop.',
-  outForDelivery: 'Your clean laundry is on the way.',
-  customerReceivedDelivery: 'You received your laundry from the rider.',
-  deliveryPhotoProof: 'Delivery photo proof was captured.',
-  deliveryRiderArrived: 'Your delivery rider has arrived.',
-  customerVerifiedDelivery: 'You verified the delivery.',
-  customerSignedDelivery: 'You signed for your delivery.',
-  delivered: 'Laundry delivered successfully.',
-  completed: 'Order complete. Thank you!',
-  paymentReceived: 'Cash payment received — thank you!',
-  reviewRequested: 'How was your experience? Leave a review when you have a moment.',
-  reviewPublished: 'Thank you for your review!',
-};
 
 function formatTime() {
   return new Date().toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' });
@@ -257,7 +223,7 @@ export default function OrderTrackPage() {
     socket.on(
       'orderEvent',
       (data: { event: string; message?: string }) => {
-        const msg = data.message ?? ORDER_EVENT_MESSAGES[data.event];
+        const msg = resolveOrderEventMessage(data.event, { message: data.message });
         if (msg) pushNotification(msg);
         scheduleReload();
       },
@@ -361,7 +327,7 @@ export default function OrderTrackPage() {
 
   if (pageLoading) {
     return (
-      <PageShell>
+      <PageShell className="lg:max-w-6xl">
         <PageHeader title="Track order" backHref="/orders" backLabel="My orders" />
         <DataPageStatus loading error={''} loadingMessage="Loading order…" />
       </PageShell>
@@ -370,7 +336,7 @@ export default function OrderTrackPage() {
 
   if (loadError || !order) {
     return (
-      <PageShell>
+      <PageShell className="lg:max-w-6xl">
         <PageHeader title="Track order" backHref="/orders" backLabel="My orders" />
         <DataPageStatus loading={false} error={loadError || 'Order not found'} loadingMessage="" />
       </PageShell>
@@ -404,7 +370,7 @@ export default function OrderTrackPage() {
   const canReschedule = RESCHEDULABLE_STATUSES.includes(order.status);
 
   return (
-    <PageShell>
+    <PageShell className="lg:max-w-6xl">
       <PageHeader title="Track order" backHref="/orders" backLabel="My orders" />
 
         <div className="flex items-start justify-between gap-4">

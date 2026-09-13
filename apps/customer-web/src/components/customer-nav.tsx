@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useState } from 'react';
 import {
   Home,
   ShoppingBag,
@@ -12,11 +12,12 @@ import {
   LifeBuoy,
   Undo2,
   MoreHorizontal,
-  ChevronDown,
+  Plus,
   X,
 } from 'lucide-react';
 import { appConfig } from '@lunara/config';
 import { BrandMark } from '@lunara/ui';
+import { ButtonLink } from './ui/button-link';
 import { CustomerHeaderMenu } from './customer-header-menu';
 import { NotificationBell } from './notification-bell';
 
@@ -25,6 +26,15 @@ const tabLinks = [
   { href: '/book', label: 'Book', icon: ShoppingBag },
   { href: '/orders', label: 'Orders', icon: Receipt },
   { href: '/wallet', label: 'Wallet', icon: Wallet },
+];
+
+// Desktop header nav — the booking action lives in its own "Book pickup" button, so it's omitted here.
+const desktopLinks = [
+  { href: '/dashboard', label: 'Home', icon: Home },
+  { href: '/orders', label: 'Orders', icon: Receipt },
+  { href: '/wallet', label: 'Wallet', icon: Wallet },
+  { href: '/rewards', label: 'Rewards', icon: Gift },
+  { href: '/support', label: 'Help', icon: LifeBuoy },
 ];
 
 const moreLinks = [
@@ -37,80 +47,6 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function DesktopMoreMenu({ pathname }: { pathname: string }) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const menuId = useId();
-  const close = useCallback(() => setOpen(false), []);
-  const active = moreLinks.some((link) => isActive(pathname, link.href));
-
-  useEffect(() => {
-    if (!open) return;
-    function onPointerDown(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) close();
-    }
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') close();
-    }
-    document.addEventListener('mousedown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [open, close]);
-
-  useEffect(() => {
-    close();
-  }, [pathname, close]);
-
-  return (
-    <div ref={rootRef} className="relative">
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-haspopup="menu"
-        aria-controls={menuId}
-        onClick={() => setOpen((v) => !v)}
-        className={`flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-          active || open
-            ? 'bg-primary/10 text-primary'
-            : 'text-muted hover:bg-slate-100 hover:text-slate-900'
-        }`}
-      >
-        More
-        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
-      </button>
-
-      {open && (
-        <div
-          id={menuId}
-          role="menu"
-          className="absolute left-0 z-50 mt-2 w-48 origin-top-left rounded-xl border border-border/80 bg-surface py-1 shadow-[var(--shadow-elevated)]"
-        >
-          {moreLinks.map((link) => {
-            const linkActive = isActive(pathname, link.href);
-            const Icon = link.icon;
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                role="menuitem"
-                className={`flex items-center gap-2.5 px-3 py-2.5 text-sm transition-colors hover:bg-slate-50 ${
-                  linkActive ? 'font-medium text-primary' : 'text-slate-800'
-                }`}
-              >
-                <Icon className="h-4 w-4 shrink-0" aria-hidden />
-                {link.label}
-              </Link>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function CustomerNav() {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -120,22 +56,28 @@ export function CustomerNav() {
   return (
     <>
       <header className="sticky top-0 z-40 bg-surface/95 shadow-[var(--shadow-card)] backdrop-blur-sm">
-        <div className="page-container flex items-center justify-between gap-4 py-3">
-          <Link href="/dashboard" className="flex items-center gap-2.5">
+        <div className="page-container flex items-center justify-between gap-4 py-3 lg:max-w-6xl">
+          <Link href="/dashboard" className="flex shrink-0 items-center gap-2.5">
             <BrandMark variant="customer" compact size="sm" />
-            <span className="hidden font-bold tracking-tight text-primary sm:inline">{appConfig.name}</span>
+            <span className="hidden sm:block">
+              <span className="block font-bold leading-tight tracking-tight text-primary">
+                {appConfig.name}
+              </span>
+              <span className="hidden text-xs leading-tight text-muted lg:block">{appConfig.tagline}</span>
+            </span>
           </Link>
 
-          <nav className="hidden items-center gap-0.5 md:flex">
-            {tabLinks.map((link) => {
+          <nav className="hidden items-center gap-1 md:flex" aria-label="Primary">
+            {desktopLinks.map((link) => {
               const Icon = link.icon;
               const active = isActive(pathname, link.href);
               return (
                 <Link
                   key={link.href}
                   href={link.href}
+                  aria-current={active ? 'page' : undefined}
                   className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                    active ? 'bg-primary/10 text-primary' : 'text-muted hover:bg-slate-100 hover:text-slate-900'
+                    active ? 'bg-primary text-white' : 'text-muted hover:bg-slate-100 hover:text-slate-900'
                   }`}
                 >
                   <Icon className="h-4 w-4" aria-hidden />
@@ -143,10 +85,13 @@ export function CustomerNav() {
                 </Link>
               );
             })}
-            <DesktopMoreMenu pathname={pathname} />
           </nav>
 
-          <div className="flex items-center gap-1 sm:gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <ButtonLink href="/book" size="sm" className="hidden rounded-full px-4 sm:inline-flex">
+              <Plus className="h-4 w-4" aria-hidden />
+              Book pickup
+            </ButtonLink>
             <NotificationBell />
             <CustomerHeaderMenu />
           </div>

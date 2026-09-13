@@ -697,6 +697,19 @@ export class RefundsService {
     return { success: true, data: { chargebackAmount, purpose: 'order' as const, orderId: order._id.toString() } };
   }
 
+  /** Mirrors wallets.service.ts's wantsPush()/getPreferences() so refund notifications respect
+   * the same push/email opt-out as order/wallet notifications instead of always sending. */
+  private async getNotificationPreferences(userId: string) {
+    const customer = await this.customerModel
+      .findOne({ userId: new Types.ObjectId(userId) })
+      .select('notificationPreferences')
+      .lean();
+    return {
+      push: customer?.notificationPreferences?.push ?? true,
+      email: customer?.notificationPreferences?.email ?? true,
+    };
+  }
+
   private async notifyCustomer(refund: RefundRequestDocument) {
     const isRejected = refund.status === RefundStatus.REJECTED;
     const isProcessed = refund.status === RefundStatus.PROCESSED;
@@ -721,11 +734,14 @@ export class RefundsService {
       body = 'Your refund request is being reviewed by our team.';
     }
 
+    const preferences = await this.getNotificationPreferences(refund.customerId.toString());
+
     const notification = await this.notificationDispatch.dispatch({
       userId: refund.customerId.toString(),
       title,
       body,
       channelId: 'orders',
+      sendPush: preferences.push,
       data: {
         type: 'refund_update',
         refundId: refund._id.toString(),
@@ -740,7 +756,7 @@ export class RefundsService {
       refundId: refund._id.toString(),
     });
 
-    if (isApproved || isProcessed) {
+    if ((isApproved || isProcessed) && preferences.email) {
       void this.sendRefundEmail(refund);
     }
   }

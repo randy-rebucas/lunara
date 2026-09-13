@@ -5,9 +5,6 @@ import { buildAppSharePayload, buildReferralSharePayload } from '@lunara/utils';
 import { Card, CardBody } from '../ui/card';
 import { SocialSharePanel } from '../share/social-share-panel';
 
-/** @deprecated Use DealsCarousel — kept for backwards compatibility */
-export { DealsCarousel as DashboardDeals } from '../deals/deals-carousel';
-
 function shareBaseUrl() {
   if (typeof window !== 'undefined') return window.location.origin;
   return getShareWebsiteUrl();
@@ -17,19 +14,21 @@ interface ShareInviteCardProps {
   title?: string;
   description?: string;
   referralCode?: string | null;
+  className?: string;
 }
 
 export function ShareInviteCard({
   title = 'Share Lunara',
   description = 'Tell friends about pickup & delivery laundry in Metro Manila.',
   referralCode,
+  className = 'mt-10',
 }: ShareInviteCardProps) {
   const payload = referralCode
     ? buildReferralSharePayload(referralCode, shareBaseUrl(), appConfig.name)
     : buildAppSharePayload(shareBaseUrl(), appConfig.name);
 
   return (
-    <Card className="mt-10 border-secondary/20 bg-cyan-50/40">
+    <Card className={`border-secondary/20 bg-cyan-50/40 ${className}`.trim()}>
       <CardBody className="space-y-3">
         <div>
           <h2 className="text-lg font-semibold tracking-tight text-slate-900">{title}</h2>

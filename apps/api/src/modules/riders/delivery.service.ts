@@ -26,6 +26,7 @@ import { LaundryTagsService } from '../laundry-tags/laundry-tags.service';
 import { VerifyQrDto } from './dto/pickup.dto';
 import { RidersService } from './riders.service';
 import { RiderWalletService } from './rider-wallet.service';
+import { RewardsService } from '../rewards/rewards.service';
 import { buildRiderTaskDetails } from './rider-task-summary';
 
 function generateDeliveryReceipt(orderId: string) {
@@ -55,6 +56,7 @@ export class DeliveryService {
     private paymentsService: PaymentsService,
     private riderWalletService: RiderWalletService,
     private laundryTagsService: LaundryTagsService,
+    private rewardsService: RewardsService,
   ) {}
 
   async dispatchDeliverySearch(orderId: string) {
@@ -243,6 +245,12 @@ export class DeliveryService {
     this.trackingGateway.emitOrderStatus(orderId, OrderStatus.OUT_FOR_DELIVERY);
     this.trackingGateway.emitOrderEvent(orderId, 'outForDelivery', {
       message: 'Your laundry is on the way',
+    });
+    this.trackingGateway.emitPartnerPipelineUpdated({
+      orderId,
+      status: order.status,
+      partnerId: order.partnerId?.toString(),
+      branchId: order.branchId?.toString(),
     });
 
     return { success: true, data: await this.buildDeliverySummary(order, riderUserId) };
@@ -443,23 +451,49 @@ export class DeliveryService {
 
     const receiptCode = generateDeliveryReceipt(orderId);
     const now = new Date();
-    if (!order.delivery) order.delivery = {};
-    order.delivery.receiptCode = receiptCode;
-    order.delivery.deliveredAt = now;
-    order.status = OrderStatus.DELIVERED;
-    order.statusHistory.push({
-      status: OrderStatus.DELIVERED,
-      timestamp: now,
-      note: `Delivered · receipt ${receiptCode}`,
-      updatedBy: riderUserId,
-    });
-    await order.save();
+
+    // Atomic compare-and-swap on the status read above (rather than mutate-then-save) — closes
+    // the race where two concurrent completeDelivery calls both pass the canTransitionOrderStatus
+    // check against the same stale status and both proceed to credit earnings / release tags.
+    // Whichever request's update actually matches wins; the loser gets null and errors out
+    // instead of silently double-processing.
+    const claimed = await this.orderModel.findOneAndUpdate(
+      { _id: order._id, status: order.status },
+      {
+        $set: {
+          status: OrderStatus.DELIVERED,
+          'delivery.receiptCode': receiptCode,
+          'delivery.deliveredAt': now,
+        },
+        $push: {
+          statusHistory: {
+            status: OrderStatus.DELIVERED,
+            timestamp: now,
+            note: `Delivered · receipt ${receiptCode}`,
+            updatedBy: riderUserId,
+          },
+        },
+      },
+      { new: true },
+    );
+    if (!claimed) {
+      throw new BadRequestException('This delivery was already completed by another request');
+    }
+    order.status = claimed.status;
+    order.delivery = claimed.delivery;
+    order.statusHistory = claimed.statusHistory;
     await this.laundryTagsService.releaseFromOrder(orderId, 'delivered');
 
     this.trackingGateway.emitOrderStatus(orderId, OrderStatus.DELIVERED);
     this.trackingGateway.emitOrderEvent(orderId, 'delivered', {
       message: 'Laundry delivered',
       receiptCode,
+    });
+    this.trackingGateway.emitPartnerPipelineUpdated({
+      orderId,
+      status: order.status,
+      partnerId: order.partnerId?.toString(),
+      branchId: order.branchId?.toString(),
     });
 
     if (canTransitionOrderStatus(OrderStatus.DELIVERED, OrderStatus.COMPLETED)) {
@@ -476,6 +510,10 @@ export class DeliveryService {
         message: 'Order complete. Thank you!',
       });
       await this.reviewsService.notifyOrderCompleted(orderId);
+      // This is the normal rider-delivery completion path — the vast majority of orders — yet it
+      // was the one path that never credited loyalty points/first-order referral bonus (only the
+      // in-store customer-pickup and manual admin-status-update paths in orders.service.ts did).
+      await this.rewardsService.creditForCompletedOrder(order);
     }
 
     const earnings = await this.ridersService.creditEarning(

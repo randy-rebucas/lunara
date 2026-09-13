@@ -18,7 +18,7 @@ export default function NotificationsPage() {
   }
 
   return (
-    <PageShell>
+    <PageShell className="lg:max-w-6xl">
       <div className="flex items-start justify-between gap-3">
         <PageHeader
           title="Notifications"

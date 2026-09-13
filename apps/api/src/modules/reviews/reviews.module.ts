@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
+import { Customer, CustomerSchema } from '../customers/schemas/customer.schema';
 import { PartnersModule } from '../partners/partners.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { PublicReviewsController, ReviewsController } from './reviews.controller';
@@ -14,6 +15,7 @@ import { Review, ReviewSchema } from './schemas/review.schema';
       { name: Review.name, schema: ReviewSchema },
       { name: Notification.name, schema: NotificationSchema },
       { name: Order.name, schema: OrderSchema },
+      { name: Customer.name, schema: CustomerSchema },
     ]),
     RealtimeModule,
     PartnersModule,

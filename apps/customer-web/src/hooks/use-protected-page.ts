@@ -34,9 +34,30 @@ export function useProtectedPage(options: ProtectedPageOptions = {}) {
 
     let cancelled = false;
     setOnboardingChecked(false);
-    fetchOnboardingStatus(api)
+
+    // A transient failure here (network blip, 5xx) previously fell straight through to
+    // "treat as complete" — letting a customer who hasn't finished onboarding (no address yet)
+    // straight into pages that assume one exists, purely because one request hiccupped. Retry
+    // once before falling back to fail-open, so a real outage still doesn't brick the app but a
+    // one-off blip doesn't misclassify onboarding state either.
+    const check = async () => {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          return await fetchOnboardingStatus(api);
+        } catch (err) {
+          if (attempt === 0) {
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            continue;
+          }
+          throw err;
+        }
+      }
+      return undefined;
+    };
+
+    check()
       .then((status) => {
-        if (cancelled) return;
+        if (cancelled || !status) return;
         if (!status.isComplete) {
           router.replace(status.needsProfile ? '/onboarding/profile' : '/onboarding/address');
         } else {

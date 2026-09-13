@@ -18,7 +18,7 @@ export default function BookPage() {
   }
 
   return (
-    <PageShell>
+    <PageShell className="lg:max-w-6xl">
       <PageHeader
         title="Book laundry"
         description="Schedule pickup, check partner coverage for your area, and get a price estimate"

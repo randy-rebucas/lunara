@@ -12,8 +12,11 @@ import { getProcessingStep, LAUNDRY_PROCESSING_STEPS, LOST_ITEM_FLOW } from '@lu
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { AddressesService } from '../addresses/addresses.service';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
 import { WalletsService } from '../wallets/wallets.service';
 import { LedgerService } from '../ledger/ledger.service';
+import { NotificationDispatchService } from '../push/notification-dispatch.service';
+import { TrackingGateway } from '../realtime/tracking.gateway';
 import { EmailService } from '../../common/email/email.service';
 import { SettingsService } from '../settings/settings.service';
 import { CreateLostItemDto } from './dto/create-lost-item.dto';
@@ -70,12 +73,52 @@ export class SupportService {
     @InjectModel(SupportTicket.name) private ticketModel: Model<SupportTicketDocument>,
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
     private addressesService: AddressesService,
     private walletsService: WalletsService,
     private ledgerService: LedgerService,
+    private notificationDispatch: NotificationDispatchService,
+    private trackingGateway: TrackingGateway,
     private emailService: EmailService,
     private settingsService: SettingsService,
   ) {}
+
+  /** Mirrors wallets.service.ts's wantsPush() so ticket-update pushes respect the same
+   * opt-out as order/wallet notifications instead of always pushing. */
+  private async wantsPush(userId: string): Promise<boolean> {
+    const customer = await this.customerModel
+      .findOne({ userId: new Types.ObjectId(userId) })
+      .select('notificationPreferences')
+      .lean();
+    return customer?.notificationPreferences?.push ?? true;
+  }
+
+  /** Support tickets have no realtime/socket channel of their own (unlike orders/refunds), so
+   * this push is the only signal a customer gets that their ticket moved — without it, a
+   * customer whose lost-item report is denied or resolved without compensation has no way to
+   * find out short of manually reopening the ticket page. */
+  private notifyTicketUpdate(ticket: SupportTicketDocument, title: string, body: string) {
+    if (!ticket.customerId) return;
+    const userId = ticket.customerId.toString();
+    void this.wantsPush(userId)
+      .then((sendPush) =>
+        this.notificationDispatch.dispatch({
+          userId,
+          title,
+          body,
+          channelId: 'support',
+          sendPush,
+          data: { type: 'support_ticket_update', ticketId: ticket._id.toString() },
+        }),
+      )
+      .catch(() => {});
+    this.trackingGateway.emitCustomerNotification(userId, {
+      type: 'support_ticket_update',
+      ticketId: ticket._id.toString(),
+      title,
+      message: body,
+    });
+  }
 
   private async notifyAdminNewTicket(ticketId: string, subject: string) {
     try {
@@ -438,6 +481,15 @@ export class SupportService {
           `Outcome: ${dto.outcome}`,
           dto.outcomeNotes ?? dto.adminNote,
         );
+        if (dto.outcome !== TicketOutcome.COMPENSATED) {
+          // Compensated outcomes get their own notification once the wallet credit lands
+          // (below); other outcomes (found/no_action/denied) have no other signal at all.
+          this.notifyTicketUpdate(
+            ticket,
+            'Support ticket update',
+            `Your lost-item report was reviewed: ${dto.outcomeNotes ?? `outcome — ${dto.outcome}`}`,
+          );
+        }
         break;
 
       case InvestigateAction.COMPENSATE:
@@ -489,6 +541,13 @@ export class SupportService {
           ],
         );
         pushTimeline('compensation', `₱${amount} credited to wallet`, dto.adminNote);
+        // WalletsService.credit() above already pushes a generic "Wallet credited" notification;
+        // this adds the ticket-specific context so the customer connects it to their report.
+        this.notifyTicketUpdate(
+          ticket,
+          'Lost item compensated',
+          `₱${amount} was credited to your wallet for your lost-item report.`,
+        );
         break;
 
       case InvestigateAction.CLOSE:
@@ -496,6 +555,7 @@ export class SupportService {
         ticket.investigationStage = LostItemStage.CLOSED;
         if (dto.adminNote) ticket.adminNote = dto.adminNote;
         pushTimeline('closed', 'Ticket closed', dto.adminNote);
+        this.notifyTicketUpdate(ticket, 'Support ticket closed', 'Your support ticket has been closed.');
         break;
 
       default:
@@ -512,10 +572,18 @@ export class SupportService {
   async updateTicket(id: string, dto: UpdateTicketDto) {
     const ticket = await this.ticketModel.findById(id);
     if (!ticket) throw new NotFoundException('Ticket not found');
+    const statusChanged = dto.status && dto.status !== ticket.status;
     if (dto.status) ticket.status = dto.status;
     if (dto.priority) ticket.priority = dto.priority;
     if (dto.adminNote != null) ticket.adminNote = dto.adminNote;
     await ticket.save();
+    if (statusChanged) {
+      this.notifyTicketUpdate(
+        ticket,
+        'Support ticket update',
+        `Your ticket "${ticket.subject}" is now ${ticket.status.replace(/_/g, ' ')}.`,
+      );
+    }
     return { success: true, data: this.serializeTicket(ticket) };
   }
 

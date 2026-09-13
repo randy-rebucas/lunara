@@ -115,6 +115,7 @@ export class ShopReceivingService {
     // PER_KG/PER_LOAD/PER_PIECE orders were only estimated at booking time — finalize the real
     // price now that the shop has physically weighed/counted the laundry, using the rates
     // snapshotted at booking time (not the branch's possibly-since-changed live rates).
+    const originalTotal = order.total;
     if (order.pricingMode && order.pricingMode !== BranchPricingMode.FLAT_BAG) {
       const finalServiceSubtotal = computeServiceSubtotal(order.pricingMode, order.pricingSnapshot, {
         weightKg: dto.verifiedWeightKg,
@@ -162,6 +163,16 @@ export class ShopReceivingService {
       verifiedWeightKg: dto.verifiedWeightKg,
       finalTotal: order.finalTotal,
     });
+    // Distinct from the generic 'shopWeightVerified' event above: this is the one signal that
+    // explicitly tells the customer their bill changed, with old/new amounts, rather than
+    // leaving it buried as a "finalTotal" field on a message about weight verification.
+    if (order.finalTotal != null && Math.round(order.finalTotal) !== Math.round(originalTotal)) {
+      this.trackingGateway.emitOrderEvent(orderId, 'orderTotalAdjusted', {
+        message: `Your order total was updated from ₱${originalTotal.toFixed(2)} to ₱${order.finalTotal.toFixed(2)} based on the verified weight/count.`,
+        previousTotal: originalTotal,
+        newTotal: order.finalTotal,
+      });
+    }
     this.emitPipeline(order);
 
     return { success: true, data: await this.buildView(order) };

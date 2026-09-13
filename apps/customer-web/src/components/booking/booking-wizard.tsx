@@ -33,6 +33,7 @@ import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { OrderPartnerCoverageNotice } from '../order-partner-coverage-notice';
 import { ScheduleSupportPrompt } from '../schedule-support-prompt';
 import { formatAvailabilityLoadError } from '../../lib/booking-availability-error';
+import { getFriendlyErrorMessage } from '../../lib/format-error';
 import { loadCustomerSettings } from '../../lib/customer-settings';
 import {
   initialBookingForm,
@@ -98,6 +99,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
   const [config, setConfig] = useState<BookingConfig | null>(null);
   const [configLoading, setConfigLoading] = useState(true);
   const [addresses, setAddresses] = useState<AddressOption[]>([]);
+  const [addressesLoaded, setAddressesLoaded] = useState(false);
   const [operatingHours, setOperatingHours] = useState<OperatingHours | null>(null);
   const [holidays, setHolidays] = useState<BranchHoliday[]>([]);
   const [serverNow, setServerNow] = useState<string | undefined>(undefined);
@@ -138,28 +140,47 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
   const selectedAddressIdRef = useRef(form.addressId);
 
   useEffect(() => {
+    let cancelled = false;
+
     setConfigLoading(true);
     api
       .get<BookingConfig>('/booking/config')
-      .then((res) => setConfig(res.data))
-      .catch((err) =>
-        setError(err instanceof Error ? err.message : 'Could not load booking options'),
-      )
-      .finally(() => setConfigLoading(false));
+      .then((res) => {
+        if (!cancelled) setConfig(res.data);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(getFriendlyErrorMessage(err, 'Could not load booking options'));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setConfigLoading(false);
+      });
 
     api
       .get<AddressOption[]>('/addresses')
-      .then((res) => setAddresses(res.data))
-      .catch((err) =>
-        setAddressesError(
-          err instanceof Error ? err.message : 'Could not load your saved addresses',
-        ),
-      );
+      .then((res) => {
+        if (!cancelled) setAddresses(res.data);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setAddressesError(getFriendlyErrorMessage(err, 'Could not load your saved addresses'));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setAddressesLoaded(true);
+      });
 
     api
       .get<{ branchId: string }[]>('/favorites')
-      .then((res) => setFavoriteBranchIds(new Set(res.data.map((f) => f.branchId))))
+      .then((res) => {
+        if (!cancelled) setFavoriteBranchIds(new Set(res.data.map((f) => f.branchId)));
+      })
       .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
   }, [api]);
 
   async function toggleFavoriteBranch(branchId: string) {
@@ -193,8 +214,14 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
   // "Book again" from order history: prefill the same shop, service, bag size, and add-ons once
   // addresses have loaded (needed to check the order's old pickup address is still valid).
   useEffect(() => {
-    if (!reorderOrderId || reorderAppliedRef.current || addresses.length === 0) return;
+    if (!reorderOrderId || reorderAppliedRef.current || !addressesLoaded) return;
     reorderAppliedRef.current = true;
+    if (addresses.length === 0) {
+      setReorderNotice(
+        "We couldn't prefill your last order because you don't have any saved addresses yet — please add one.",
+      );
+      return;
+    }
     api
       .get<ReorderSourceOrder>(`/orders/${reorderOrderId}`)
       .then((res) => {
@@ -227,7 +254,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
       .catch(() =>
         setReorderNotice('Could not load your previous order. Please build a new booking.'),
       );
-  }, [reorderOrderId, addresses, api]);
+  }, [reorderOrderId, addresses, addressesLoaded, api]);
 
   // Once shops for the (re-)resolved address have loaded, confirm the rebooked shop is still
   // available before letting the customer skip past the shop step with a stale selection.
@@ -432,7 +459,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
         try {
           await refreshServerQuote();
         } catch (err) {
-          setError(err instanceof Error ? err.message : 'Could not calculate price');
+          setError(getFriendlyErrorMessage(err, 'Could not calculate price'));
           return;
         }
       }
@@ -469,7 +496,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
       });
       router.push(`/checkout/${res.data._id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Booking failed');
+      setError(getFriendlyErrorMessage(err, 'Booking failed'));
       creatingOrderRef.current = false;
     } finally {
       setLoading(false);

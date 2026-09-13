@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@lunara/ui';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { AuthLoading } from '../../../components/auth-loading';
@@ -10,6 +10,7 @@ import { PageShell } from '../../../components/page-shell';
 import { SupportCreateSection } from '../../../components/support-create-section';
 import { Card, CardBody } from '../../../components/ui/card';
 import { PageHeader } from '../../../components/ui/page-header';
+import { useDebouncedCallback } from '../../../hooks/use-debounced-callback';
 import { useProtectedPage } from '../../../hooks/use-protected-page';
 import { useCustomerQuery } from '../../../lib/use-customer-query';
 import {
@@ -40,6 +41,19 @@ export default function SupportTicketsPage() {
 
   const { data: tickets, loading, error, reload } = useCustomerQuery(load, [ready, api]);
 
+  // Ticket status/investigation updates push a notification (support_ticket_update) but have no
+  // dedicated socket channel — reuse the same 'lunara-notifications-bump' signal the refunds/
+  // rewards pages listen to (fired by CustomerTrackingSync on any push/tracking event) so this
+  // list refreshes without the customer having to hit the manual Refresh button.
+  const scheduleReload = useDebouncedCallback(() => {
+    reload().catch(() => {});
+  }, 500);
+
+  useEffect(() => {
+    window.addEventListener('lunara-notifications-bump', scheduleReload);
+    return () => window.removeEventListener('lunara-notifications-bump', scheduleReload);
+  }, [scheduleReload]);
+
   if (isLoading || !ready) {
     return <AuthLoading message="Loading support…" />;
   }
@@ -56,7 +70,7 @@ export default function SupportTicketsPage() {
   const list = tickets ?? [];
 
   return (
-    <PageShell>
+    <PageShell className="lg:max-w-6xl">
       <PageHeader
         title="Support"
         description="Submit a request or track open tickets. General questions, missing items, and pickup-area requests all appear here."
