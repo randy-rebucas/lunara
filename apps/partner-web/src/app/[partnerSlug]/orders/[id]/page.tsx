@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import type { PartnerSettingsData, PartnerStaffMember } from '@lunara/types';
 import { UserRole } from '@lunara/types';
+import type { RiderPickupSuggestion } from '@lunara/utils';
 import { AuthLoading } from '../../../../components/auth-loading';
 import { DataPageStatus } from '../../../../components/data-page-status';
 import { ProcessingPhotoUpload } from '../../../../components/processing-photo-upload';
@@ -72,6 +73,16 @@ export default function StaffOrderProcessingPage() {
   const [staffError, setStaffError] = useState('');
   const [assignStaffId, setAssignStaffId] = useState('');
   const [allowStaffDelivery, setAllowStaffDelivery] = useState(true);
+  const [pickupRiders, setPickupRiders] = useState<RiderPickupSuggestion[]>([]);
+  const [pickupRidersLoading, setPickupRidersLoading] = useState(false);
+  const [pickupRidersError, setPickupRidersError] = useState('');
+  const [selectedPickupRiderId, setSelectedPickupRiderId] = useState('');
+  const [assigningPickupRider, setAssigningPickupRider] = useState(false);
+  const [deliveryRiders, setDeliveryRiders] = useState<RiderPickupSuggestion[]>([]);
+  const [deliveryRidersLoading, setDeliveryRidersLoading] = useState(false);
+  const [deliveryRidersError, setDeliveryRidersError] = useState('');
+  const [selectedDeliveryRiderId, setSelectedDeliveryRiderId] = useState('');
+  const [assigningDeliveryRider, setAssigningDeliveryRider] = useState(false);
   const toPath = usePartnerPath();
   const partner = isPartnerRole();
   const canDispatchDelivery = partner || allowStaffDelivery;
@@ -128,6 +139,74 @@ export default function StaffOrderProcessingPage() {
       setError(e instanceof Error ? e.message : 'Assign failed');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadPickupRiderCandidates() {
+    if (!id) return;
+    setPickupRidersLoading(true);
+    setPickupRidersError('');
+    try {
+      const data = await partnerFetch<{ suggestions: RiderPickupSuggestion[]; suggestedRiderId: string | null }>(
+        `/partner/orders/${id}/pickup-rider-candidates`,
+      );
+      setPickupRiders(data.suggestions);
+      setSelectedPickupRiderId(data.suggestedRiderId ?? '');
+    } catch (e) {
+      setPickupRidersError(e instanceof Error ? e.message : 'Failed to load riders');
+    } finally {
+      setPickupRidersLoading(false);
+    }
+  }
+
+  async function assignPickupRider() {
+    if (!id || !selectedPickupRiderId) return;
+    setAssigningPickupRider(true);
+    try {
+      await partnerFetch(`/partner/orders/${id}/pickup-rider`, {
+        method: 'POST',
+        body: JSON.stringify({ riderUserId: selectedPickupRiderId }),
+      });
+      await reload();
+      setPickupRidersError('');
+    } catch (e) {
+      setPickupRidersError(e instanceof Error ? e.message : 'Assign failed');
+    } finally {
+      setAssigningPickupRider(false);
+    }
+  }
+
+  async function loadDeliveryRiderCandidates() {
+    if (!id) return;
+    setDeliveryRidersLoading(true);
+    setDeliveryRidersError('');
+    try {
+      const data = await partnerFetch<{ suggestions: RiderPickupSuggestion[]; suggestedRiderId: string | null }>(
+        `/partner/orders/${id}/delivery-rider-candidates`,
+      );
+      setDeliveryRiders(data.suggestions);
+      setSelectedDeliveryRiderId(data.suggestedRiderId ?? '');
+    } catch (e) {
+      setDeliveryRidersError(e instanceof Error ? e.message : 'Failed to load riders');
+    } finally {
+      setDeliveryRidersLoading(false);
+    }
+  }
+
+  async function assignDeliveryRider() {
+    if (!id || !selectedDeliveryRiderId) return;
+    setAssigningDeliveryRider(true);
+    try {
+      await partnerFetch(`/partner/orders/${id}/delivery-rider`, {
+        method: 'POST',
+        body: JSON.stringify({ riderUserId: selectedDeliveryRiderId }),
+      });
+      await reload();
+      setDeliveryRidersError('');
+    } catch (e) {
+      setDeliveryRidersError(e instanceof Error ? e.message : 'Assign failed');
+    } finally {
+      setAssigningDeliveryRider(false);
     }
   }
 
@@ -368,6 +447,66 @@ export default function StaffOrderProcessingPage() {
       {preProcessing && view.order.pickup?.receiptCode && !view.order.pickup?.droppedAtShop && (
         <OrderHandoffQr orderId={view.order._id} receiptCode={view.order.pickup.receiptCode} />
       )}
+
+      {partner &&
+        preProcessing &&
+        view.order.partnerAcceptedAt &&
+        !view.order.pickup?.droppedAtShop && (
+          <ActionCard
+            icon={ICONS.truck}
+            title="Pickup rider"
+            description={
+              view.order.pickupRiderId
+                ? 'A pickup rider is assigned. You can reassign to a different rider below.'
+                : 'Assign a rider yourself instead of waiting for dispatch to broadcast an offer.'
+            }
+          >
+            {pickupRiders.length === 0 ? (
+              <button
+                type="button"
+                disabled={pickupRidersLoading}
+                className="btn-secondary min-h-[2.75rem]"
+                onClick={loadPickupRiderCandidates}
+              >
+                {pickupRidersLoading ? 'Loading riders…' : 'Show available riders'}
+              </button>
+            ) : (
+              <div className="flex flex-wrap gap-3">
+                <select
+                  className="input-field min-h-[2.75rem] flex-1 sm:flex-none"
+                  value={selectedPickupRiderId}
+                  onChange={(e) => setSelectedPickupRiderId(e.target.value)}
+                >
+                  <option value="">Select rider…</option>
+                  {pickupRiders.map((r) => (
+                    <option key={r.userId} value={r.userId}>
+                      {(r.email ?? r.userId) +
+                        (r.isOnline ? ' · online' : ' · offline') +
+                        ` · ${r.distanceLabel}`}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  disabled={assigningPickupRider || !selectedPickupRiderId}
+                  className="btn-primary min-h-[2.75rem]"
+                  onClick={assignPickupRider}
+                >
+                  {view.order.pickupRiderId ? 'Reassign' : 'Assign'}
+                </button>
+                <button
+                  type="button"
+                  disabled={pickupRidersLoading}
+                  className="text-sm text-slate-500 hover:text-primary"
+                  onClick={loadPickupRiderCandidates}
+                >
+                  Refresh
+                </button>
+              </div>
+            )}
+            {pickupRidersError && <p className="mt-2 text-sm text-red-500">{pickupRidersError}</p>}
+          </ActionCard>
+        )}
 
       {needsReceiving && (
         <InfoBanner icon={ICONS.alert} tone="amber" title="Shop receiving required">
@@ -624,7 +763,7 @@ export default function StaffOrderProcessingPage() {
 
       {inProcessing && view.isComplete && view.order.fulfillmentType !== 'customer_pickup' && canDispatchDelivery && (
         <InfoBanner icon={ICONS.truck} tone="accent" title="Ready for delivery">
-          Riders are notified automatically. Re-broadcast if needed.
+          Riders are notified automatically. Re-broadcast if needed, or assign a rider yourself below.
           <button
             type="button"
             disabled={loading}
@@ -648,6 +787,55 @@ export default function StaffOrderProcessingPage() {
           </button>
           {dispatchMessage && <p className="mt-3 text-sm text-emerald-700">{dispatchMessage}</p>}
           {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+
+          {partner && (
+            <div className="mt-4 border-t border-accent/20 pt-4">
+              {deliveryRiders.length === 0 ? (
+                <button
+                  type="button"
+                  disabled={deliveryRidersLoading}
+                  className="btn-secondary min-h-[2.75rem]"
+                  onClick={loadDeliveryRiderCandidates}
+                >
+                  {deliveryRidersLoading ? 'Loading riders…' : 'Show available riders'}
+                </button>
+              ) : (
+                <div className="flex flex-wrap gap-3">
+                  <select
+                    className="input-field min-h-[2.75rem] flex-1 sm:flex-none"
+                    value={selectedDeliveryRiderId}
+                    onChange={(e) => setSelectedDeliveryRiderId(e.target.value)}
+                  >
+                    <option value="">Select rider…</option>
+                    {deliveryRiders.map((r) => (
+                      <option key={r.userId} value={r.userId}>
+                        {(r.email ?? r.userId) +
+                          (r.isOnline ? ' · online' : ' · offline') +
+                          ` · ${r.distanceLabel}`}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    disabled={assigningDeliveryRider || !selectedDeliveryRiderId}
+                    className="btn-primary min-h-[2.75rem]"
+                    onClick={assignDeliveryRider}
+                  >
+                    {view.order.deliveryRiderId ? 'Reassign' : 'Assign'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={deliveryRidersLoading}
+                    className="text-sm text-slate-500 hover:text-primary"
+                    onClick={loadDeliveryRiderCandidates}
+                  >
+                    Refresh
+                  </button>
+                </div>
+              )}
+              {deliveryRidersError && <p className="mt-2 text-sm text-red-500">{deliveryRidersError}</p>}
+            </div>
+          )}
         </InfoBanner>
       )}
 

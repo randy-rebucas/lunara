@@ -54,6 +54,7 @@ import { UpdateBranchHiddenCatalogDto } from '../branches/dto/update-branch-hidd
 import { CreateOwnBranchDto } from '../branches/dto/create-own-branch.dto';
 import { UpdateOwnBranchDto } from '../branches/dto/update-own-branch.dto';
 import { AssignStaffDto } from './dto/assign-staff.dto';
+import { AssignRiderDto } from './dto/assign-rider.dto';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { AssignStaffBranchDto } from './dto/assign-staff-branch.dto';
 import { AdvanceProcessingDto, MoveProcessingStepDto, SetShelfSlotDto } from './dto/processing.dto';
@@ -1137,6 +1138,60 @@ export class PartnerController {
   @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
   dispatchDelivery(@Param('orderId') orderId: string) {
     return this.operationsService.notifyDeliveryDispatch(orderId);
+  }
+
+  @Get('orders/:orderId/pickup-rider-candidates')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  listPickupRiderCandidates(
+    @Param('orderId') orderId: string,
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
+  ) {
+    return this.operationsService.listPickupRiderCandidates(orderId, req.user.sub, req.user.role, staffBranchId);
+  }
+
+  @Post('orders/:orderId/pickup-rider')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  assignPickupRiderManually(
+    @Param('orderId') orderId: string,
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
+    @Body() dto: AssignRiderDto,
+  ) {
+    return this.operationsService.assignPickupRiderManually(
+      orderId,
+      dto.riderUserId,
+      req.user.sub,
+      req.user.role,
+      staffBranchId,
+    );
+  }
+
+  @Get('orders/:orderId/delivery-rider-candidates')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  listDeliveryRiderCandidates(
+    @Param('orderId') orderId: string,
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
+  ) {
+    return this.operationsService.listDeliveryRiderCandidates(orderId, req.user.sub, req.user.role, staffBranchId);
+  }
+
+  @Post('orders/:orderId/delivery-rider')
+  @Roles(UserRole.PARTNER, UserRole.ADMIN)
+  assignDeliveryRiderManually(
+    @Param('orderId') orderId: string,
+    @Req() req: { user: { sub: string; role: UserRole } },
+    @CurrentStaffBranchId() staffBranchId: string | undefined,
+    @Body() dto: AssignRiderDto,
+  ) {
+    return this.operationsService.assignDeliveryRiderManually(
+      orderId,
+      dto.riderUserId,
+      req.user.sub,
+      req.user.role,
+      staffBranchId,
+    );
   }
 
   @Get('services')

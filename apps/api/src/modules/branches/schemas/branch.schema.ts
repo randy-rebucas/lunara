@@ -31,6 +31,13 @@ export class PartnerPortalSettings {
   @Prop({ default: true })
   allowStaffToRequestDelivery!: boolean;
 
+  /** When true and no fixed default rider (assignedRiderId) is configured or available, the
+   * best-ranked online rider is assigned automatically instead of just broadcasting an open
+   * offer to all online riders. See RiderAssignmentService.autoAssignPickupRiderIfConfigured /
+   * notifyAwaitingDeliveryDispatch. */
+  @Prop({ default: false })
+  autoAssignRider!: boolean;
+
   /** Require weight verification step during shop receiving */
   @Prop({ default: true })
   requireWeightVerificationOnReceive!: boolean;
@@ -59,6 +66,7 @@ export const DEFAULT_PARTNER_PORTAL_SETTINGS: PartnerPortalSettings = {
   notifyLowStock: true,
   notifyReadyForDelivery: true,
   allowStaffToRequestDelivery: true,
+  autoAssignRider: false,
   requireWeightVerificationOnReceive: true,
   inventoryEnabled: true,
   dailyAttendanceTargetHours: 8,

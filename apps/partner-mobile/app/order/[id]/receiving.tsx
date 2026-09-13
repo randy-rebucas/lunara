@@ -9,6 +9,7 @@ import { Card } from '../../../src/components/ui/card';
 import { Input } from '../../../src/components/ui/input';
 import { Screen } from '../../../src/components/ui/screen';
 import { partnerFetch } from '../../../src/api';
+import { usePartnerOrderSocket } from '../../../src/hooks/use-partner-realtime-socket';
 import { colors, radius, spacing, typography } from '../../../src/theme';
 
 /** Mirrors apps/partner-web/src/app/orders/[id]/receiving/page.tsx (weight/item shop-intake checklist). */
@@ -54,6 +55,12 @@ export default function ShopReceivingScreen() {
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'))
       .finally(() => setLoading(false));
   }, [load]);
+
+  usePartnerOrderSocket(id, {
+    onOrderUpdated: () => {
+      load().catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'));
+    },
+  });
 
   async function run(step: string, body?: object) {
     setBusy(true);
@@ -151,8 +158,8 @@ export default function ShopReceivingScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.waitingTitle}>Waiting for rider</Text>
               <Text style={styles.waitingDesc}>
-                The laundry is on its way to your shop. This unlocks once the rider drops it off —
-                check back shortly or pull to refresh.
+                The laundry is on its way to your shop. This screen updates automatically once the
+                rider drops it off.
               </Text>
             </View>
           </Card>

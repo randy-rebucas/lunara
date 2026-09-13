@@ -81,6 +81,12 @@ export class UpdatePartnerSettingsDto {
   @IsBoolean()
   allowStaffToRequestDelivery?: boolean;
 
+  /** When enabled, orders awaiting a pickup/delivery rider are assigned automatically to the
+   * best-ranked online rider instead of only broadcasting an open offer. */
+  @IsOptional()
+  @IsBoolean()
+  autoAssignRider?: boolean;
+
   @IsOptional()
   @IsBoolean()
   requireWeightVerificationOnReceive?: boolean;

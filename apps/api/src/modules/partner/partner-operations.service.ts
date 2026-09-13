@@ -728,6 +728,85 @@ export class PartnerOperationsService {
     return this.riderAssignmentService.notifyAwaitingDeliveryDispatch(orderId);
   }
 
+  async listPickupRiderCandidates(
+    orderId: string,
+    partnerUserId: string,
+    role: UserRole,
+    staffBranchId?: string,
+  ) {
+    const order = await this.orderModel.findById(orderId);
+    if (!order) throw new NotFoundException('Order not found');
+    const branchId = staffBranchId ? new Types.ObjectId(staffBranchId) : undefined;
+    assertOrderPortalAccess(order, partnerUserId, role, branchId);
+
+    return this.riderAssignmentService.suggestPickupRider(orderId);
+  }
+
+  async listDeliveryRiderCandidates(
+    orderId: string,
+    partnerUserId: string,
+    role: UserRole,
+    staffBranchId?: string,
+  ) {
+    const order = await this.orderModel.findById(orderId);
+    if (!order) throw new NotFoundException('Order not found');
+    const branchId = staffBranchId ? new Types.ObjectId(staffBranchId) : undefined;
+    assertOrderPortalAccess(order, partnerUserId, role, branchId);
+
+    return this.riderAssignmentService.suggestDeliveryRider(orderId);
+  }
+
+  /** Confirms partner ownership of a rider before letting a portal user hand them a task.
+   * partnerId is only set on partner-owned riders — legacy/platform riders (no partnerId) are
+   * open pool and remain assignable by any shop, same as the existing dispatch flow. */
+  private async assertRiderBelongsToPartner(riderUserId: string, partnerId: Types.ObjectId) {
+    const rider = await this.riderModel.findOne({ userId: new Types.ObjectId(riderUserId) });
+    if (!rider) throw new NotFoundException('Rider not found');
+    if (rider.partnerId && rider.partnerId.toString() !== partnerId.toString()) {
+      throw new ForbiddenException('This rider does not belong to your shop');
+    }
+  }
+
+  async assignPickupRiderManually(
+    orderId: string,
+    riderUserId: string,
+    partnerUserId: string,
+    role: UserRole,
+    staffBranchId?: string,
+  ) {
+    const order = await this.orderModel.findById(orderId);
+    if (!order) throw new NotFoundException('Order not found');
+    const branchId = staffBranchId ? new Types.ObjectId(staffBranchId) : undefined;
+    assertOrderPortalAccess(order, partnerUserId, role, branchId);
+
+    const partnerId = await this.resolvePartnerId(partnerUserId, role);
+    await this.assertRiderBelongsToPartner(riderUserId, partnerId);
+
+    return order.pickupRiderId
+      ? this.riderAssignmentService.reassignPickupRider(orderId, riderUserId, partnerUserId, 'partner_direct')
+      : this.riderAssignmentService.assignPickupRider(orderId, riderUserId, partnerUserId, 'partner_direct');
+  }
+
+  async assignDeliveryRiderManually(
+    orderId: string,
+    riderUserId: string,
+    partnerUserId: string,
+    role: UserRole,
+    staffBranchId?: string,
+  ) {
+    const order = await this.orderModel.findById(orderId);
+    if (!order) throw new NotFoundException('Order not found');
+    const branchId = staffBranchId ? new Types.ObjectId(staffBranchId) : undefined;
+    assertOrderPortalAccess(order, partnerUserId, role, branchId);
+
+    const partnerId = await this.resolvePartnerId(partnerUserId, role);
+    await this.assertRiderBelongsToPartner(riderUserId, partnerId);
+
+    return order.deliveryRiderId
+      ? this.riderAssignmentService.reassignDeliveryRider(orderId, riderUserId, partnerUserId, 'partner_direct')
+      : this.riderAssignmentService.assignDeliveryRider(orderId, riderUserId, partnerUserId, 'partner_direct');
+  }
+
   async getIncomingOrders(
     partnerUserId?: string,
     role?: UserRole,

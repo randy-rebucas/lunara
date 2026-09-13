@@ -640,6 +640,9 @@ export class ProcessingService {
         paymentLabel: buildPartnerPaymentLabel(paymentSummary),
         customerName: customer?.customerName,
         customerPhone: customer?.customerPhone,
+        partnerAcceptedAt: order.partnerAcceptedAt,
+        pickupRiderId: order.pickupRiderId?.toString(),
+        deliveryRiderId: order.deliveryRiderId?.toString(),
       },
       processing: order.laundryProcessing,
       currentStep: {
@@ -693,6 +696,9 @@ export class ProcessingService {
         paymentLabel: buildPartnerPaymentLabel(paymentSummary),
         customerName: customer?.customerName,
         customerPhone: customer?.customerPhone,
+        partnerAcceptedAt: order.partnerAcceptedAt,
+        pickupRiderId: order.pickupRiderId?.toString(),
+        deliveryRiderId: order.deliveryRiderId?.toString(),
       },
       processing: {
         ...(order.laundryProcessing as unknown as Record<string, unknown>),

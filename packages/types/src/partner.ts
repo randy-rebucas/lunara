@@ -55,6 +55,9 @@ export interface PartnerPortalSettings {
   notifyLowStock: boolean;
   notifyReadyForDelivery: boolean;
   allowStaffToRequestDelivery: boolean;
+  /** When true, orders awaiting a pickup/delivery rider are assigned automatically to the
+   * best-ranked online rider instead of only broadcasting an open offer. */
+  autoAssignRider: boolean;
   requireWeightVerificationOnReceive: boolean;
   inventoryEnabled: boolean;
   /** True when this shop has its own AI Assistant API key configured — the key itself is never
@@ -631,6 +634,9 @@ export interface PartnerProcessingView {
     paymentLabel?: string;
     customerName?: string;
     customerPhone?: string;
+    partnerAcceptedAt?: string;
+    pickupRiderId?: string;
+    deliveryRiderId?: string;
   };
   currentStep: { id: string; label: string; description?: string; orderStatus?: string };
   nextStep: { id: string; label: string } | null;

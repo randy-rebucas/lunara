@@ -60,3 +60,48 @@ export function usePartnerRealtimeSocket(handlers: PartnerRealtimeHandlers) {
 
   return { connected };
 }
+
+interface PartnerOrderRealtimeHandlers {
+  /** Fired for any status/event update on this specific order (e.g. rider drop-off at shop). */
+  onOrderUpdated?: () => void;
+}
+
+/**
+ * Subscribes to live updates for a single order. Mirrors apps/partner-web's
+ * usePartnerOrderSocket — joins the order's `/tracking` room and refreshes on
+ * `orderStatusUpdate`/`orderEvent`, which already fire today (e.g. PickupService.dropAtShop),
+ * unlike the pipeline-level hook above which only fires on a narrower set of transitions.
+ */
+export function usePartnerOrderSocket(orderId: string | undefined, handlers: PartnerOrderRealtimeHandlers) {
+  const accessToken = useAuthStore((s) => s.tokens?.accessToken);
+  const [connected, setConnected] = useState(false);
+  const handlersRef = useRef(handlers);
+  handlersRef.current = handlers;
+
+  useEffect(() => {
+    if (!orderId || !accessToken) return;
+
+    const apiUrl = getApiOrigin();
+    const socket: Socket = io(`${apiUrl}/tracking`, {
+      transports: ['websocket'],
+      auth: { token: accessToken },
+    });
+
+    socket.on('connect', () => {
+      socket.emit('joinOrder', { orderId });
+      setConnected(true);
+    });
+    socket.on('disconnect', () => setConnected(false));
+
+    const onOrderUpdated = () => handlersRef.current.onOrderUpdated?.();
+    socket.on('orderStatusUpdate', onOrderUpdated);
+    socket.on('orderEvent', onOrderUpdated);
+
+    return () => {
+      setConnected(false);
+      socket.disconnect();
+    };
+  }, [orderId, accessToken]);
+
+  return { connected };
+}

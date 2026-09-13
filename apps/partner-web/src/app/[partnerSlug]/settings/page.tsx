@@ -1075,6 +1075,14 @@ function PartnerSettingsContent() {
                       onChange={(v) => updateSetting('autoAcceptIncoming', v)}
                     />
                   ) : null}
+                  <SettingToggle
+                    id="auto-assign-rider"
+                    label="Auto-assign rider"
+                    description="When a default rider isn't set or available, automatically assign the best-ranked online rider instead of waiting for Lunara dispatch to broadcast an offer."
+                    checked={settings.autoAssignRider}
+                    disabled={!canEdit || saving}
+                    onChange={(v) => updateSetting('autoAssignRider', v)}
+                  />
                 </SectionPanel>
 
                 <SectionPanel

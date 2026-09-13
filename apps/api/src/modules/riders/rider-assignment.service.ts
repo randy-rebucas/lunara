@@ -107,22 +107,44 @@ export class RiderAssignmentService {
     if (!order || !order.branchId || order.pickupRiderId) return false;
 
     const branch = await this.branchModel.findById(order.branchId);
-    if (!branch?.assignedRiderId) return false;
+    if (!branch) return false;
 
-    const rider = await this.riderModel.findOne({ userId: branch.assignedRiderId });
-    const riderEligible = !rider?.partnerId || rider.employmentStatus === 'active' || !rider.employmentStatus;
-    if (!rider?.isOnline || !riderEligible) {
-      await this.broadcastPickupOffer(order);
-      return false;
+    if (branch.assignedRiderId) {
+      const rider = await this.riderModel.findOne({ userId: branch.assignedRiderId });
+      const riderEligible =
+        !rider?.partnerId || rider.employmentStatus === 'active' || !rider.employmentStatus;
+      if (rider?.isOnline && riderEligible) {
+        try {
+          await this.assignPickupRider(
+            orderId,
+            branch.assignedRiderId.toString(),
+            undefined,
+            'branch_default_rider',
+          );
+          return true;
+        } catch {
+          return false;
+        }
+      }
     }
 
+    if (branch.portalSettings?.autoAssignRider && (await this.autoAssignBestRankedPickupRider(orderId))) {
+      return true;
+    }
+
+    await this.broadcastPickupOffer(order);
+    return false;
+  }
+
+  /** Assigns the top-ranked online rider directly, skipping the admin suggest/confirm step —
+   * used only when the shop has opted into autoAssignRider. Falls through (returns false) when
+   * no online rider is ranked, leaving the caller to broadcast an open offer instead. */
+  private async autoAssignBestRankedPickupRider(orderId: string): Promise<boolean> {
     try {
-      await this.assignPickupRider(
-        orderId,
-        branch.assignedRiderId.toString(),
-        undefined,
-        'branch_default_rider',
-      );
+      const suggestion = await this.suggestPickupRider(orderId);
+      const best = suggestion.data.suggestions.find((s) => s.isOnline);
+      if (!best) return false;
+      await this.assignPickupRider(orderId, best.userId, undefined, 'auto_assign_ranked');
       return true;
     } catch {
       return false;
@@ -321,7 +343,12 @@ export class RiderAssignmentService {
     orderId: string,
     riderUserId: string,
     assignedByUserId?: string,
-    source: 'admin_direct' | 'confirmed_suggestion' | 'branch_default_rider' = 'admin_direct',
+    source:
+      | 'admin_direct'
+      | 'partner_direct'
+      | 'confirmed_suggestion'
+      | 'branch_default_rider'
+      | 'auto_assign_ranked' = 'admin_direct',
   ) {
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
@@ -362,7 +389,11 @@ export class RiderAssignmentService {
           ? 'Pickup rider assigned (admin confirmed system suggestion)'
           : source === 'branch_default_rider'
             ? "Pickup rider assigned automatically (shop's default rider)"
-            : 'Pickup rider assigned by Lunara operations',
+            : source === 'auto_assign_ranked'
+              ? 'Pickup rider assigned automatically (best-ranked available rider)'
+              : source === 'partner_direct'
+                ? 'Pickup rider assigned manually by the shop'
+                : 'Pickup rider assigned by Lunara operations',
       updatedBy: assignedByUserId,
     });
     await order.save();
@@ -391,7 +422,12 @@ export class RiderAssignmentService {
     };
   }
 
-  async reassignPickupRider(orderId: string, newRiderUserId: string, adminUserId?: string) {
+  async reassignPickupRider(
+    orderId: string,
+    newRiderUserId: string,
+    adminUserId?: string,
+    source: 'admin_direct' | 'partner_direct' = 'admin_direct',
+  ) {
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
 
@@ -427,7 +463,7 @@ export class RiderAssignmentService {
     });
     await this.riderNotificationService.notifyAssignmentReassigned(previousRiderId, order, 'pickup');
 
-    return this.assignPickupRider(orderId, newRiderUserId, adminUserId, 'admin_direct');
+    return this.assignPickupRider(orderId, newRiderUserId, adminUserId, source);
   }
 
   private assertReadyForPickupAssignment(order: OrderDocument) {
@@ -458,6 +494,29 @@ export class RiderAssignmentService {
       throw new BadRequestException('Delivery rider already assigned');
     }
 
+    // Prefer the rider who already picked this order up from the customer — they're already
+    // carrying it and know the route, so this is a safe default ahead of the branch default rider
+    // or a broadcast to strangers. Always tried first, independent of the autoAssignRider setting.
+    if (order.pickupRiderId) {
+      const pickupRider = await this.riderModel.findOne({ userId: order.pickupRiderId });
+      const pickupRiderEligible =
+        !pickupRider?.partnerId ||
+        pickupRider.employmentStatus === 'active' ||
+        !pickupRider.employmentStatus;
+      if (pickupRider?.isOnline && pickupRiderEligible) {
+        try {
+          return await this.assignDeliveryRider(
+            orderId,
+            order.pickupRiderId.toString(),
+            undefined,
+            'pickup_rider_continuity',
+          );
+        } catch {
+          // fall through to the branch default / auto-assign / broadcast flow below
+        }
+      }
+    }
+
     const branch = order.branchId ? await this.branchModel.findById(order.branchId) : null;
     if (branch?.assignedRiderId) {
       const rider = await this.riderModel.findOne({ userId: branch.assignedRiderId });
@@ -475,6 +534,9 @@ export class RiderAssignmentService {
       } else {
         await this.broadcastDeliveryOffer(order);
       }
+    } else if (branch?.portalSettings?.autoAssignRider) {
+      const assigned = await this.autoAssignBestRankedDeliveryRider(orderId);
+      if (assigned) return assigned;
     }
 
     const now = new Date();
@@ -512,6 +574,18 @@ export class RiderAssignmentService {
         awaitingDeliveryDispatchAt: order.awaitingDeliveryDispatchAt,
       },
     };
+  }
+
+  /** Delivery equivalent of autoAssignBestRankedPickupRider — see its comment. */
+  private async autoAssignBestRankedDeliveryRider(orderId: string) {
+    try {
+      const suggestion = await this.suggestDeliveryRider(orderId);
+      const best = suggestion.data.suggestions.find((s) => s.isOnline);
+      if (!best) return null;
+      return await this.assignDeliveryRider(orderId, best.userId, undefined, 'auto_assign_ranked');
+    } catch {
+      return null;
+    }
   }
 
   async suggestDeliveryRider(orderId: string) {
@@ -664,7 +738,13 @@ export class RiderAssignmentService {
     orderId: string,
     riderUserId: string,
     assignedByUserId?: string,
-    source: 'admin_direct' | 'confirmed_suggestion' | 'branch_default_rider' = 'admin_direct',
+    source:
+      | 'admin_direct'
+      | 'partner_direct'
+      | 'confirmed_suggestion'
+      | 'branch_default_rider'
+      | 'auto_assign_ranked'
+      | 'pickup_rider_continuity' = 'admin_direct',
   ) {
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
@@ -700,7 +780,13 @@ export class RiderAssignmentService {
           ? 'Delivery rider assigned (admin confirmed suggestion)'
           : source === 'branch_default_rider'
             ? "Delivery rider assigned automatically (shop's default rider)"
-            : 'Delivery rider assigned by Lunara operations',
+            : source === 'auto_assign_ranked'
+              ? 'Delivery rider assigned automatically (best-ranked available rider)'
+              : source === 'pickup_rider_continuity'
+                ? 'Delivery rider assigned automatically (same rider who picked it up)'
+                : source === 'partner_direct'
+                  ? 'Delivery rider assigned manually by the shop'
+                  : 'Delivery rider assigned by Lunara operations',
       updatedBy: assignedByUserId,
     });
     await order.save();
@@ -728,7 +814,12 @@ export class RiderAssignmentService {
     };
   }
 
-  async reassignDeliveryRider(orderId: string, newRiderUserId: string, adminUserId?: string) {
+  async reassignDeliveryRider(
+    orderId: string,
+    newRiderUserId: string,
+    adminUserId?: string,
+    source: 'admin_direct' | 'partner_direct' = 'admin_direct',
+  ) {
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
 
@@ -763,7 +854,7 @@ export class RiderAssignmentService {
     });
     await this.riderNotificationService.notifyAssignmentReassigned(previousRiderId, order, 'delivery');
 
-    return this.assignDeliveryRider(orderId, newRiderUserId, adminUserId, 'admin_direct');
+    return this.assignDeliveryRider(orderId, newRiderUserId, adminUserId, source);
   }
 
   private assertReadyForDeliveryAssignment(order: OrderDocument) {
