@@ -15,6 +15,8 @@ export const RIDER_NOTIFICATION_TITLES = {
   EARNINGS_CREDITED: 'Earnings Credited',
   PLATFORM_ANNOUNCEMENT: 'Platform Announcement',
   ASSIGNMENT_REASSIGNED: 'Assignment Reassigned',
+  ORDER_REFUNDED: 'Order Refunded',
+  ORDER_CANCELLED: 'Order Cancelled',
 } as const;
 
 export const RIDER_NOTIFICATION_TYPES = {
@@ -24,6 +26,8 @@ export const RIDER_NOTIFICATION_TYPES = {
   EARNINGS_CREDITED: 'earnings_credited',
   PLATFORM_ANNOUNCEMENT: 'platform_announcement',
   ASSIGNMENT_REASSIGNED: 'assignment_reassigned',
+  ORDER_REFUNDED: 'order_refunded',
+  ORDER_CANCELLED: 'order_cancelled',
 } as const;
 
 export function inferRiderNotificationCategory(
@@ -40,6 +44,8 @@ export function inferRiderNotificationCategory(
     case RIDER_NOTIFICATION_TYPES.EARNINGS_CREDITED:
       return RIDER_NOTIFICATION_CATEGORY.EARNINGS;
     case RIDER_NOTIFICATION_TYPES.PLATFORM_ANNOUNCEMENT:
+    case RIDER_NOTIFICATION_TYPES.ORDER_REFUNDED:
+    case RIDER_NOTIFICATION_TYPES.ORDER_CANCELLED:
       return RIDER_NOTIFICATION_CATEGORY.SYSTEM;
     default:
       return RIDER_NOTIFICATION_CATEGORY.SYSTEM;

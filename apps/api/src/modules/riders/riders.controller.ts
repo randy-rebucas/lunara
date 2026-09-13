@@ -218,15 +218,6 @@ export class RidersController {
     }));
   }
 
-  @Post('pickup-tasks/:orderId/complete')
-  @Roles(UserRole.RIDER)
-  completePickup(
-    @Param('orderId') orderId: string,
-    @Req() req: { user: { sub: string } },
-  ) {
-    return this.pickupService.completePickup(orderId, req.user.sub);
-  }
-
   @Get('me')
   @Roles(UserRole.RIDER)
   getMe(@Req() req: { user: { sub: string } }) {
@@ -327,15 +318,6 @@ export class RidersController {
     return this.deliveryService.outForDelivery(orderId, req.user.sub);
   }
 
-  @Post('delivery-tasks/:orderId/start')
-  @Roles(UserRole.RIDER)
-  startDelivery(
-    @Param('orderId') orderId: string,
-    @Req() req: { user: { sub: string } },
-  ) {
-    return this.deliveryService.startDelivery(orderId, req.user.sub);
-  }
-
   @Post('delivery-tasks/:orderId/customer-received')
   @Roles(UserRole.RIDER)
   markCustomerReceived(
@@ -353,15 +335,6 @@ export class RidersController {
     @Body() dto: VerifyQrDto,
   ) {
     return this.deliveryService.verifyCustomerByQr(orderId, req.user.sub, dto);
-  }
-
-  @Post('delivery-tasks/:orderId/arrive')
-  @Roles(UserRole.RIDER)
-  markDeliveryArrived(
-    @Param('orderId') orderId: string,
-    @Req() req: { user: { sub: string } },
-  ) {
-    return this.deliveryService.markArrived(orderId, req.user.sub);
   }
 
   @Post('delivery-tasks/:orderId/photo')

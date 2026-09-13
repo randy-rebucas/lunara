@@ -107,6 +107,9 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const creatingOrderRef = useRef(false);
+  // One key per wizard mount, reused across retries of the same submission so a network retry
+  // or double-tap dedupes server-side instead of creating a second order.
+  const idempotencyKeyRef = useRef(crypto.randomUUID());
   const [stepping, setStepping] = useState(false);
   const [shopOptions, setShopOptions] = useState<ShopOption[]>([]);
   const [shopsLoading, setShopsLoading] = useState(false);
@@ -462,6 +465,7 @@ export function BookingWizard({ initialCouponCode, reorderOrderId }: BookingWiza
         scheduledPickupAt: form.scheduledPickupAt,
         ...(form.couponCode.trim() ? { couponCode: form.couponCode.trim() } : {}),
         ...(form.customerNotes.trim() ? { customerNotes: form.customerNotes.trim() } : {}),
+        idempotencyKey: idempotencyKeyRef.current,
       });
       router.push(`/checkout/${res.data._id}`);
     } catch (err) {

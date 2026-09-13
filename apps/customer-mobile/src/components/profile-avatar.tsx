@@ -10,6 +10,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { resizeForUpload } from '../lib/image-resize';
 import { resolveMediaUrl } from '../lib/media-url';
 import { colors, shadow, spacing, typography } from '../theme';
 
@@ -53,11 +54,12 @@ export function ProfileAvatar({ name, avatarUrl, uploading, onUpload }: ProfileA
       if (result.canceled || !result.assets[0]) return;
 
       const asset = result.assets[0];
+      const uploadUri = await resizeForUpload(asset.uri);
       const formData = new FormData();
       formData.append('avatar', {
-        uri: asset.uri,
-        name: asset.fileName ?? `avatar-${Date.now()}.jpg`,
-        type: asset.mimeType ?? 'image/jpeg',
+        uri: uploadUri,
+        name: `avatar-${Date.now()}.jpg`,
+        type: 'image/jpeg',
       } as unknown as Blob);
 
       await onUpload(formData);

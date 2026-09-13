@@ -3,6 +3,7 @@ import { useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAsyncResource } from '../../src/hooks/use-async-resource';
 import {
+  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -12,7 +13,7 @@ import {
   type DimensionValue,
 } from 'react-native';
 import { OrderStatus } from '@lunara/types';
-import { buildCustomerTimeline, formatCurrency } from '@lunara/utils';
+import { buildCustomerTimeline } from '@lunara/utils';
 import { Card } from '../../src/components/ui/card';
 import { Screen } from '../../src/components/ui/screen';
 import { colors, radius, spacing, typography } from '../../src/theme';
@@ -21,12 +22,14 @@ import { useTabScreenPadding } from '../../src/hooks/use-tab-bar-height';
 import { useOrderRealtimeStore } from '../../src/store/order-realtime';
 import { useAuthStore } from '../../src/store/auth';
 import { formatOrderNumber, isActiveOrderStatus } from '../../src/lib/active-order';
+import { toErrorMessage } from '../../src/lib/api-error';
 
 interface OrderRow {
   _id: string;
   status: string;
   total: number;
   bookingType: string;
+  branchId?: string;
   branchName?: string;
   branchCode?: string;
   estimatedWeightKg?: number;
@@ -67,6 +70,14 @@ function isCompletedStatus(status: string) {
 
 function isCancelledStatus(status: string) {
   return status === OrderStatus.CANCELLED || status === OrderStatus.REFUNDED;
+}
+
+function canCancelOrder(order: OrderRow) {
+  if (order.status === OrderStatus.PENDING) return true;
+  if (order.status === OrderStatus.PENDING_DISPATCH) {
+    return !order.branchId && !order.branchName;
+  }
+  return false;
 }
 
 function formatItemsSummary(order: OrderRow): string {
@@ -165,6 +176,7 @@ export default function OrdersScreen() {
   const apiFetch = useAuthStore((s) => s.apiFetch);
   const realtimeTick = useOrderRealtimeStore((s) => s.tick);
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   const fetchOrders = useCallback(
     async () => (await apiFetch<{ items: OrderRow[] }>('/orders')).items,
@@ -185,6 +197,35 @@ export default function OrdersScreen() {
     load().catch(() => {});
   }, [realtimeTick, load]);
 
+  function handleCancelOrder(order: OrderRow) {
+    if (cancellingId) return;
+    const isPending = order.status === OrderStatus.PENDING;
+    Alert.alert(
+      isPending ? 'Delete this order?' : 'Cancel this order?',
+      isPending
+        ? 'You can book again anytime. This cannot be undone.'
+        : 'Wallet and online payments are refunded to your Lunara wallet. Cash orders are cancelled with no charge.',
+      [
+        { text: 'Keep order', style: 'cancel' },
+        {
+          text: isPending ? 'Delete' : 'Cancel order',
+          style: 'destructive',
+          onPress: async () => {
+            setCancellingId(order._id);
+            try {
+              await apiFetch(`/orders/${order._id}`, { method: 'DELETE' });
+              await load();
+            } catch (e) {
+              Alert.alert('Could not cancel order', toErrorMessage(e, 'Please try again'));
+            } finally {
+              setCancellingId(null);
+            }
+          },
+        },
+      ],
+    );
+  }
+
   const ongoingOrders = useMemo(() => orders.filter((o) => isActiveOrderStatus(o.status)), [orders]);
   const pastOrders = useMemo(
     () => orders.filter((o) => !isActiveOrderStatus(o.status)),
@@ -198,13 +239,6 @@ export default function OrdersScreen() {
     if (activeTab === 'cancelled') return pastOrders.filter((o) => isCancelledStatus(o.status));
     return pastOrders;
   }, [pastOrders, activeTab]);
-
-  const spendTowardFreePickup = useMemo(
-    () => orders.reduce((sum, o) => sum + (isCancelledStatus(o.status) ? 0 : o.total), 0) % 150,
-    [orders],
-  );
-  const freePickupProgress = Math.min(1, spendTowardFreePickup / 150);
-  const freePickupRemaining = Math.max(0, 150 - spendTowardFreePickup);
 
   const isEmpty =
     !loading &&
@@ -268,6 +302,8 @@ export default function OrdersScreen() {
               {ongoingOrders.map((order) => {
                 const { currentStepLabel } = buildCustomerTimeline(order.status, order.statusHistory);
                 const showRiderActions = RIDER_VISIBLE_STATUSES.has(order.status as OrderStatus);
+                const showCancelAction = canCancelOrder(order);
+                const isCancellingThis = cancellingId === order._id;
                 return (
                   <Pressable
                     key={order._id}
@@ -306,21 +342,48 @@ export default function OrdersScreen() {
                             style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
                             onPress={() => router.push('/support' as Href)}
                             accessibilityRole="button"
-                            accessibilityLabel="Contact rider"
+                            accessibilityLabel="Get help"
                             hitSlop={4}
                           >
                             <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.primary} />
-                            <Text style={styles.actionBtnText}>Contact rider</Text>
+                            <Text style={styles.actionBtnText}>Get help</Text>
                           </Pressable>
                           <Pressable
                             style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
                             onPress={() => router.push(`/orders/${order._id}` as Href)}
                             accessibilityRole="button"
-                            accessibilityLabel="View map"
+                            accessibilityLabel="Order details"
                             hitSlop={4}
                           >
                             <Ionicons name="location-outline" size={16} color={colors.primary} />
-                            <Text style={styles.actionBtnText}>View map</Text>
+                            <Text style={styles.actionBtnText}>Order details</Text>
+                          </Pressable>
+                        </View>
+                      ) : null}
+
+                      {showCancelAction ? (
+                        <View style={styles.actionsRow}>
+                          <Pressable
+                            style={({ pressed }) => [
+                              styles.cancelBtn,
+                              pressed && styles.actionBtnPressed,
+                            ]}
+                            disabled={isCancellingThis}
+                            onPress={() => handleCancelOrder(order)}
+                            accessibilityRole="button"
+                            accessibilityLabel={
+                              order.status === OrderStatus.PENDING ? 'Delete order' : 'Cancel order'
+                            }
+                            hitSlop={4}
+                          >
+                            <Ionicons name="close-circle-outline" size={16} color={colors.destructive} />
+                            <Text style={styles.cancelBtnText}>
+                              {isCancellingThis
+                                ? 'Cancelling…'
+                                : order.status === OrderStatus.PENDING
+                                  ? 'Delete order'
+                                  : 'Cancel order'}
+                            </Text>
                           </Pressable>
                         </View>
                       ) : null}
@@ -413,35 +476,6 @@ export default function OrdersScreen() {
                 );
               })}
             </View>
-
-            {activeTab === 'all' ? (
-              <Pressable
-                onPress={() => router.push('/book' as Href)}
-                accessibilityRole="button"
-                accessibilityLabel="Enjoy free pickup on your next order"
-              >
-                {({ pressed }) => (
-                  <Card style={[styles.promoBanner, pressed && styles.cardPressed]}>
-                    <View style={styles.promoIcon}>
-                      <Ionicons name="sparkles" size={18} color={colors.onPrimary} />
-                    </View>
-                    <View style={styles.promoTextCol}>
-                      <Text style={styles.promoTitle}>Enjoy free pickup on your next order!</Text>
-                      <Text style={styles.promoHint}>
-                        You&apos;re only {formatCurrency(freePickupRemaining)} away from unlocking free pickup.
-                      </Text>
-                      <View style={styles.promoTrack}>
-                        <View style={[styles.promoFill, { width: `${freePickupProgress * 100}%` }]} />
-                      </View>
-                      <Text style={styles.promoAmounts}>
-                        {formatCurrency(spendTowardFreePickup)} / {formatCurrency(150)}
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
-                  </Card>
-                )}
-              </Pressable>
-            ) : null}
           </>
         ) : null}
       </ScrollView>
@@ -555,6 +589,18 @@ const styles = StyleSheet.create({
   },
   actionBtnPressed: { opacity: 0.85 },
   actionBtnText: { fontSize: 13, fontWeight: '600', color: colors.primary },
+  cancelBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.destructive,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.sm + 2,
+  },
+  cancelBtnText: { fontSize: 13, fontWeight: '600', color: colors.destructive },
   cardPressed: { opacity: 0.92 },
   pastCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   pastMain: { flex: 1, gap: 2 },
@@ -575,33 +621,6 @@ const styles = StyleSheet.create({
   },
   reorderBtnPressed: { opacity: 0.85 },
   reorderBtnText: { fontSize: 12, fontWeight: '700', color: colors.primary },
-  promoBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.primaryLight,
-    borderColor: colors.primaryBorder,
-    marginBottom: spacing.lg,
-  },
-  promoIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.full,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  promoTextCol: { flex: 1 },
-  promoTitle: { fontSize: 13, fontWeight: '700', color: colors.foreground },
-  promoHint: { ...typography.caption, marginTop: 2, marginBottom: spacing.sm },
-  promoTrack: {
-    height: 6,
-    borderRadius: radius.full,
-    backgroundColor: colors.surface,
-    overflow: 'hidden',
-  },
-  promoFill: { height: '100%', borderRadius: radius.full, backgroundColor: colors.primary },
-  promoAmounts: { ...typography.caption, marginTop: spacing.xs, textAlign: 'right' },
   emptyCard: { alignItems: 'center', paddingVertical: spacing.xxxl, borderWidth: 0 },
   emptyTitle: { ...typography.subheading, marginBottom: spacing.xs },
   empty: { ...typography.bodySm, textAlign: 'center' },

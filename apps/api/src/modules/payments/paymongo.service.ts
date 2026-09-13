@@ -366,4 +366,47 @@ export class PaymongoService {
 
     return { id: json.data.id, status: json.data.attributes.status };
   }
+
+  /** Issues a refund against a PayMongo payment id (pay_xxx) back to the original payment method.
+   * `idempotencyKey` should be stable per local refund attempt (e.g. the RefundRequest id) so a
+   * retried call reuses PayMongo's own idempotency handling instead of issuing a second refund. */
+  async createRefund(
+    paymentId: string,
+    amountPhp: number,
+    reason: 'requested_by_customer' | 'duplicate' | 'fraudulent' | 'others',
+    idempotencyKey: string,
+  ): Promise<{ id: string; status: string }> {
+    const body = {
+      data: {
+        attributes: {
+          amount: this.toCentavos(amountPhp),
+          payment_id: paymentId,
+          reason,
+        },
+      },
+    };
+
+    const res = await fetch(`${PAYMONGO_API}/refunds`, {
+      method: 'POST',
+      headers: {
+        Authorization: this.authHeader(),
+        'Content-Type': 'application/json',
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify(body),
+    });
+
+    const json = (await res.json()) as {
+      data?: { id: string; attributes: { status: string } };
+      errors?: { detail: string }[];
+    };
+
+    if (!res.ok || !json.data) {
+      const detail = json.errors?.map((e) => e.detail).join('; ') || 'PayMongo refund failed';
+      this.logger.error(`PayMongo refund failed for payment ${paymentId}: ${detail}`);
+      throw new Error(detail);
+    }
+
+    return { id: json.data.id, status: json.data.attributes.status };
+  }
 }

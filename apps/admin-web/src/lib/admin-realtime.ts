@@ -9,6 +9,8 @@ type AlertListener = (alert: DispatcherAlert) => void;
 type LocationListener = (update: SosLocationUpdate) => void;
 type ConnectedListener = (connected: boolean) => void;
 type NewMessageListener = (msg: ChatMessage) => void;
+type OrderStatusListener = (update: { orderId: string; status: string }) => void;
+type OrderEventListener = (update: { orderId: string; event: string; [key: string]: unknown }) => void;
 
 let socket: Socket | null = null;
 let subscriberCount = 0;
@@ -20,6 +22,8 @@ const sosLocationListeners = new Set<LocationListener>();
 const connectedListeners = new Set<ConnectedListener>();
 const newMessageListeners = new Set<NewMessageListener>();
 const laundryTagsListeners = new Set<VoidListener>();
+const orderStatusListeners = new Set<OrderStatusListener>();
+const orderEventListeners = new Set<OrderEventListener>();
 const joinedConversations = new Set<string>();
 
 function setConnected(next: boolean) {
@@ -48,6 +52,14 @@ function emitLaundryTagsUpdated() {
   for (const listener of laundryTagsListeners) listener();
 }
 
+function emitOrderStatusUpdate(update: { orderId: string; status: string }) {
+  for (const listener of orderStatusListeners) listener(update);
+}
+
+function emitOrderEvent(update: { orderId: string; event: string; [key: string]: unknown }) {
+  for (const listener of orderEventListeners) listener(update);
+}
+
 function ensureSocket() {
   const token = getAdminToken();
   if (!token) return;
@@ -74,6 +86,8 @@ function ensureSocket() {
   socket.on('sosLocationUpdate', emitSosLocationUpdate);
   socket.on('newMessage', emitNewMessage);
   socket.on('laundryTagsUpdated', emitLaundryTagsUpdated);
+  socket.on('orderStatusUpdate', emitOrderStatusUpdate);
+  socket.on('orderEvent', emitOrderEvent);
 }
 
 export function joinAdminConversation(conversationId: string) {
@@ -102,6 +116,8 @@ export function subscribeAdminRealtime(handlers: {
   onConnected?: ConnectedListener;
   onNewMessage?: NewMessageListener;
   onLaundryTagsUpdated?: VoidListener;
+  onOrderStatusUpdate?: OrderStatusListener;
+  onOrderEvent?: OrderEventListener;
 }): () => void {
   subscriberCount += 1;
   ensureSocket();
@@ -125,6 +141,12 @@ export function subscribeAdminRealtime(handlers: {
   if (handlers.onLaundryTagsUpdated) {
     laundryTagsListeners.add(handlers.onLaundryTagsUpdated);
   }
+  if (handlers.onOrderStatusUpdate) {
+    orderStatusListeners.add(handlers.onOrderStatusUpdate);
+  }
+  if (handlers.onOrderEvent) {
+    orderEventListeners.add(handlers.onOrderEvent);
+  }
 
   return () => {
     if (handlers.onDispatchQueueUpdated) {
@@ -144,6 +166,12 @@ export function subscribeAdminRealtime(handlers: {
     }
     if (handlers.onLaundryTagsUpdated) {
       laundryTagsListeners.delete(handlers.onLaundryTagsUpdated);
+    }
+    if (handlers.onOrderStatusUpdate) {
+      orderStatusListeners.delete(handlers.onOrderStatusUpdate);
+    }
+    if (handlers.onOrderEvent) {
+      orderEventListeners.delete(handlers.onOrderEvent);
     }
 
     subscriberCount = Math.max(0, subscriberCount - 1);

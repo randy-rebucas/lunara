@@ -651,8 +651,6 @@ export class PartnerOperationsService {
     return { success: true, data: await this.summarizeIncoming(order) };
   }
 
-  // FLAG: this method never scoped STAFF at all (only a PARTNER ownership check exists below) —
-  // preserved exactly; tenantId/staffBranchId are accepted for signature consistency but unused.
   async requestPickup(
     orderId: string,
     partnerUserId: string,
@@ -661,13 +659,11 @@ export class PartnerOperationsService {
     staffBranchId?: string,
   ) {
     void tenantId;
-    void staffBranchId;
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
 
-    if (role === UserRole.PARTNER && order.partnerId?.toString() !== partnerUserId) {
-      throw new BadRequestException('Not your order');
-    }
+    const branchId = staffBranchId ? new Types.ObjectId(staffBranchId) : undefined;
+    assertOrderPortalAccess(order, partnerUserId, role, branchId);
     if (!order.partnerAcceptedAt) {
       throw new BadRequestException('Accept the order before requesting pickup');
     }
@@ -709,6 +705,9 @@ export class PartnerOperationsService {
     assertOrderPortalAccess(order, partnerUserId, role, branchId);
     if (order.status !== OrderStatus.READY_FOR_DELIVERY) {
       throw new BadRequestException('Order must be ready for delivery');
+    }
+    if (order.deliveryRequestedAt) {
+      throw new BadRequestException('Delivery already requested for this order');
     }
 
     order.deliveryRequestedAt = new Date();

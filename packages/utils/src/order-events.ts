@@ -7,6 +7,7 @@ export const ORDER_EVENT_MESSAGES: Record<string, string> = {
   branchAssigned: 'Your order was assigned to a laundry partner branch.',
   findingRider: 'Finding a nearby rider for your pickup…',
   riderAssigned: 'A rider accepted your pickup and is on the way.',
+  pickupRiderReassigned: 'Your pickup rider is unavailable — finding you a new one.',
   riderArrived: 'Your rider has arrived at your address.',
   pickedUp: 'Laundry collected from your address.',
   pickupReceiptGenerated: 'Pickup receipt generated for your order.',
@@ -23,6 +24,7 @@ export const ORDER_EVENT_MESSAGES: Record<string, string> = {
   findingDeliveryRider: 'Looking for a rider to deliver your laundry…',
   riderAssignedDelivery: 'A delivery rider has been assigned to your order.',
   deliveryRiderAssigned: 'Your delivery rider is on the way.',
+  deliveryRiderReassigned: 'Your delivery rider is unavailable — finding you a new one.',
   riderPickedUpFromShop: 'Your laundry was picked up from the partner shop.',
   outForDelivery: 'Your clean laundry is on the way.',
   customerReceivedDelivery: 'You received your laundry from the rider.',
@@ -54,6 +56,9 @@ export function orderEventTitle(event: string): string {
     case 'riderAssignedDelivery':
     case 'deliveryRiderAssigned':
       return 'Rider assigned';
+    case 'pickupRiderReassigned':
+    case 'deliveryRiderReassigned':
+      return 'Finding a new rider';
     case 'riderArrived':
     case 'deliveryRiderArrived':
       return 'Rider arrived';

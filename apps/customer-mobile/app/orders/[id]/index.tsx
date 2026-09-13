@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   Image,
   Linking,
   Platform,
@@ -125,10 +126,15 @@ export default function OrderTrackScreen() {
   const [subscribed, setSubscribed] = useState(false);
   const [subscribeError, setSubscribeError] = useState('');
   const [subscribeDismissed, setSubscribeDismissed] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const justBooked = booked === '1';
 
   const notificationSeq = useRef(0);
   const bookedBannerShown = useRef(false);
+  // Guards against out-of-order responses: a socket-triggered refetch and a slightly earlier
+  // in-flight one (or a reconnect replay) can resolve in reverse order over the network. Only
+  // the response from the most recently *started* load() is applied.
+  const loadSeqRef = useRef(0);
 
   const pushNotification = useCallback((message: string) => {
     notificationSeq.current += 1;
@@ -141,9 +147,11 @@ export default function OrderTrackScreen() {
 
   const load = useCallback(async () => {
     if (!id) return;
+    const seq = ++loadSeqRef.current;
     setLoadError('');
     try {
       const data = await apiFetch<OrderDetail>(`/orders/${id}`);
+      if (seq !== loadSeqRef.current) return; // a newer load() already started; drop this stale response
       setOrder(data);
 
       if (
@@ -152,9 +160,10 @@ export default function OrderTrackScreen() {
       ) {
         try {
           const ui = await apiFetch<DeliveryUiState>(`/orders/${id}/delivery`);
+          if (seq !== loadSeqRef.current) return;
           setDeliveryUi(ui);
         } catch {
-          setDeliveryUi(null);
+          if (seq === loadSeqRef.current) setDeliveryUi(null);
         }
       } else {
         setDeliveryUi(null);
@@ -164,17 +173,21 @@ export default function OrderTrackScreen() {
         const reviewRes = await apiFetch<{ canReview: boolean; review: { _id: string } | null }>(
           `/reviews/orders/${id}`,
         );
+        if (seq !== loadSeqRef.current) return;
         setCanReview(reviewRes.canReview);
         setHasReview(Boolean(reviewRes.review));
       } catch {
-        setCanReview(false);
-        setHasReview(false);
+        if (seq === loadSeqRef.current) {
+          setCanReview(false);
+          setHasReview(false);
+        }
       }
     } catch (e) {
+      if (seq !== loadSeqRef.current) return;
       setLoadError(toErrorMessage(e, 'Failed to load order'));
       setOrder(null);
     } finally {
-      setPageLoading(false);
+      if (seq === loadSeqRef.current) setPageLoading(false);
     }
   }, [apiFetch, id]);
 
@@ -273,6 +286,35 @@ export default function OrderTrackScreen() {
     pushNotification('Pickup rescheduled');
   }
 
+  function handleCancelOrder() {
+    if (!id || !order || cancelling) return;
+    const isPending = order.status === OrderStatus.PENDING;
+    Alert.alert(
+      isPending ? 'Delete this order?' : 'Cancel this order?',
+      isPending
+        ? 'You can book again anytime. This cannot be undone.'
+        : 'Wallet and online payments are refunded to your Lunara wallet. Cash orders are cancelled with no charge.',
+      [
+        { text: 'Keep order', style: 'cancel' },
+        {
+          text: isPending ? 'Delete' : 'Cancel order',
+          style: 'destructive',
+          onPress: async () => {
+            setCancelling(true);
+            try {
+              await apiFetch(`/orders/${id}`, { method: 'DELETE' });
+              router.replace('/(tabs)/orders' as Href);
+            } catch (e) {
+              Alert.alert('Could not cancel order', toErrorMessage(e, 'Please try again'));
+            } finally {
+              setCancelling(false);
+            }
+          },
+        },
+      ],
+    );
+  }
+
   async function handleSubscribe() {
     if (!order?.scheduledPickupAt || !order.pickupAddressId) return;
     setSubscribing(true);
@@ -340,6 +382,9 @@ export default function OrderTrackScreen() {
   const showLostItemHint =
     order.status === OrderStatus.DELIVERED || order.status === OrderStatus.COMPLETED;
   const canReschedule = RESCHEDULABLE_STATUSES.includes(order.status);
+  const canCancel =
+    order.status === OrderStatus.PENDING ||
+    (order.status === OrderStatus.PENDING_DISPATCH && !order.branchId && !order.branchName);
   const isCashPending =
     order.paymentMethod === PaymentMethod.CASH &&
     order.paymentStatus === PaymentStatus.PENDING;
@@ -405,6 +450,25 @@ export default function OrderTrackScreen() {
           >
             <Ionicons name="time-outline" size={14} color={colors.primary} />
             <Text style={styles.rescheduleLinkText}>Reschedule pickup</Text>
+          </Pressable>
+        ) : null}
+        {canCancel ? (
+          <Pressable
+            onPress={handleCancelOrder}
+            disabled={cancelling}
+            style={[styles.rescheduleLink, cancelling && styles.rescheduleLinkDisabled]}
+            hitSlop={4}
+            accessibilityRole="button"
+            accessibilityLabel={order.status === OrderStatus.PENDING ? 'Delete order' : 'Cancel order'}
+          >
+            <Ionicons name="close-circle-outline" size={14} color={colors.destructive} />
+            <Text style={styles.cancelLinkText}>
+              {cancelling
+                ? 'Cancelling…'
+                : order.status === OrderStatus.PENDING
+                  ? 'Delete order'
+                  : 'Cancel order'}
+            </Text>
           </Pressable>
         ) : null}
         {isPriceFinalized && order.finalTotal == null ? (
@@ -785,6 +849,8 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   rescheduleLinkText: { color: colors.primary, fontSize: 13, fontWeight: '600' },
+  rescheduleLinkDisabled: { opacity: 0.6 },
+  cancelLinkText: { color: colors.destructive, fontSize: 13, fontWeight: '600' },
   progressTrack: {
     marginTop: spacing.md,
     height: 8,

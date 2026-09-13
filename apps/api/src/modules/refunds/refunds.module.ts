@@ -13,6 +13,8 @@ import { LedgerModule } from '../ledger/ledger.module';
 import { PartnerModule } from '../partner/partner.module';
 import { SettingsModule } from '../settings/settings.module';
 import { AuditLogModule } from '../audit/audit-log.module';
+import { RidersModule } from '../riders/riders.module';
+import { PaymentsModule } from '../payments/payments.module';
 
 @Module({
   imports: [
@@ -29,6 +31,8 @@ import { AuditLogModule } from '../audit/audit-log.module';
     PartnerModule,
     SettingsModule,
     AuditLogModule,
+    RidersModule,
+    PaymentsModule,
   ],
   controllers: [RefundsController],
   providers: [RefundsService],

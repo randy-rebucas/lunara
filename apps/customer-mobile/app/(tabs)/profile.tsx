@@ -26,7 +26,6 @@ import { DataLoadState } from '../../src/components/data-load-state';
 import { useTabScreenPadding } from '../../src/hooks/use-tab-bar-height';
 import {
   addressToForm,
-  encodeAddressLine2,
   type AddressFormValues,
   type BusinessSummary,
   type CustomerAddress,
@@ -95,7 +94,7 @@ export default function ProfileScreen() {
   }, [apiFetch]);
 
   async function toggleBusiness() {
-    if (!profile) return;
+    if (!profile || profileSaving) return;
     const next = !profile.isBusiness;
     setBusinessSaving(true);
     try {
@@ -196,7 +195,9 @@ export default function ProfileScreen() {
         label: values.label.trim(),
         addressType: values.addressType,
         line1: values.line1.trim(),
-        line2: encodeAddressLine2(values),
+        line2: values.line2.trim() || undefined,
+        landmark: values.landmark.trim() || undefined,
+        deliveryInstructions: values.notes.trim() || undefined,
         city: values.city.trim(),
         province: values.province.trim(),
         postalCode: values.postalCode.trim(),
@@ -320,7 +321,7 @@ export default function ProfileScreen() {
           }}
         />
 
-        {!loading && !error ? (
+        {!loading && (profile !== null || !error) ? (
           <>
             <Card style={styles.heroCard}>
               <ProfileAvatar

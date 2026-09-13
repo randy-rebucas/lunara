@@ -28,6 +28,9 @@ export const PARTNER_NOTIFICATION_TYPES = {
   OUT_FOR_DELIVERY: 'out_for_delivery',
   DELIVERED: 'delivered',
   ORDER_STATUS: 'order_status',
+  REFUNDED: 'refunded',
+  PICKUP_RIDER_REASSIGNED: 'pickup_rider_reassigned',
+  DELIVERY_RIDER_REASSIGNED: 'delivery_rider_reassigned',
 } as const;
 
 /** Order events that should create partner/staff in-app notifications. */
@@ -48,6 +51,9 @@ export const PARTNER_RELEVANT_ORDER_EVENTS = new Set([
   'outForDelivery',
   'delivered',
   'completed',
+  'refundProcessed',
+  'pickupRiderReassigned',
+  'deliveryRiderReassigned',
 ]);
 
 export const PARTNER_RELEVANT_ORDER_STATUSES = new Set([
@@ -61,6 +67,8 @@ export const PARTNER_RELEVANT_ORDER_STATUSES = new Set([
   'out_for_delivery',
   'delivered',
   'completed',
+  'refunded',
+  'cancelled',
 ]);
 
 export function inferPartnerNotificationCategory(
@@ -87,6 +95,8 @@ export function inferPartnerNotificationCategory(
     case PARTNER_NOTIFICATION_TYPES.OUT_FOR_DELIVERY:
     case PARTNER_NOTIFICATION_TYPES.DELIVERED:
       return PARTNER_NOTIFICATION_CATEGORY.DELIVERY;
+    case PARTNER_NOTIFICATION_TYPES.REFUNDED:
+      return PARTNER_NOTIFICATION_CATEGORY.SYSTEM;
     default:
       return PARTNER_NOTIFICATION_CATEGORY.SYSTEM;
   }
@@ -124,6 +134,12 @@ export function partnerNotificationTypeFromEvent(event: string): string {
     case 'delivered':
     case 'completed':
       return PARTNER_NOTIFICATION_TYPES.DELIVERED;
+    case 'refundProcessed':
+      return PARTNER_NOTIFICATION_TYPES.REFUNDED;
+    case 'pickupRiderReassigned':
+      return PARTNER_NOTIFICATION_TYPES.PICKUP_RIDER_REASSIGNED;
+    case 'deliveryRiderReassigned':
+      return PARTNER_NOTIFICATION_TYPES.DELIVERY_RIDER_REASSIGNED;
     default:
       return PARTNER_NOTIFICATION_TYPES.ORDER_STATUS;
   }
@@ -162,6 +178,12 @@ export function partnerOrderEventTitle(event: string): string {
     case 'delivered':
     case 'completed':
       return 'Order delivered';
+    case 'refundProcessed':
+      return 'Order refunded';
+    case 'pickupRiderReassigned':
+      return 'Pickup rider unavailable';
+    case 'deliveryRiderReassigned':
+      return 'Delivery rider unavailable';
     default:
       return 'Order update';
   }
@@ -188,6 +210,10 @@ export function partnerOrderStatusTitle(status: string): string {
     case 'delivered':
     case 'completed':
       return 'Order completed';
+    case 'refunded':
+      return 'Order refunded';
+    case 'cancelled':
+      return 'Order cancelled';
     default:
       return 'Status updated';
   }

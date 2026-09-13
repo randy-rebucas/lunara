@@ -7,6 +7,7 @@ import {
   PICKUP_WORKFLOW_STEPS,
 } from '@lunara/utils';
 import type { RiderCashPaymentInfo } from '@lunara/utils';
+import { OrderStatus } from '@lunara/types';
 import { OpsStepper } from '../../src/components/ops-stepper';
 import { CashPaymentCard } from '../../src/components/cash-payment-card';
 import { TaskDetailsCard } from '../../src/components/task-details-card';
@@ -327,7 +328,12 @@ export default function PickupScreen() {
 
   const isActivePickup = useMemo(() => {
     if (!task) return false;
-    return ['rider_assigned_pickup', 'rider_assigned', 'picked_up', 'in_transit_to_shop'].includes(task.status);
+    return [
+      OrderStatus.RIDER_ASSIGNED_PICKUP,
+      OrderStatus.RIDER_ASSIGNED,
+      OrderStatus.PICKED_UP,
+      OrderStatus.IN_TRANSIT_TO_SHOP,
+    ].includes(task.status as OrderStatus);
   }, [task]);
 
   if (!task) {
@@ -342,8 +348,13 @@ export default function PickupScreen() {
   const cash = task.cashPayment;
   const pickupCashDue = cash?.collectAt === 'pickup' && !cash.collected && !!p.customerVerifiedAt;
   const canCollectLaundry = !!p.customerVerifiedAt && !p.collectedAt && !pickupCashDue && !cashPendingSync;
-  const isOffer = (task.status === 'shop_assigned' || task.status === 'confirmed') && !p.acceptedAt;
-  const done = task.status === 'in_transit_to_shop' || task.status === 'received_at_shop' || task.status === 'received';
+  const isOffer =
+    (task.status === OrderStatus.SHOP_ASSIGNED || task.status === OrderStatus.CONFIRMED) &&
+    !p.acceptedAt;
+  const done =
+    task.status === OrderStatus.IN_TRANSIT_TO_SHOP ||
+    task.status === OrderStatus.RECEIVED_AT_SHOP ||
+    task.status === OrderStatus.RECEIVED;
   const shop = task.shopLocation;
   const bookingLabel = task.bookingType.replace(/_/g, ' ');
   const statusLabel = task.status.replace(/_/g, ' ');
@@ -659,7 +670,7 @@ export default function PickupScreen() {
             )}
 
             {/* ── Take photo ── */}
-            {p.collectedAt && !p.photoUrl && task.status === 'picked_up' && (
+            {p.collectedAt && !p.photoUrl && task.status === OrderStatus.PICKED_UP && (
               <StepCard
                 icon="camera-outline"
                 iconBg={colors.primaryLight}
@@ -684,7 +695,7 @@ export default function PickupScreen() {
             )}
 
             {/* ── Generate receipt ── */}
-            {p.photoUrl && !p.receiptCode && task.status === 'picked_up' && (
+            {p.photoUrl && !p.receiptCode && task.status === OrderStatus.PICKED_UP && (
               <StepCard
                 icon="document-text-outline"
                 iconBg={colors.primaryLight}
@@ -710,7 +721,7 @@ export default function PickupScreen() {
             )}
 
             {/* ── Deliver to shop ── */}
-            {p.receiptCode && !p.droppedAtShop && task.status === 'picked_up' && shop && (
+            {p.receiptCode && !p.droppedAtShop && task.status === OrderStatus.PICKED_UP && shop && (
               <StepCard
                 icon="receipt-outline"
                 iconBg={colors.primaryLight}

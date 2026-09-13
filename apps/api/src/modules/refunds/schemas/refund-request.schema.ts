@@ -48,6 +48,12 @@ export class RefundRequest {
   @Prop({ type: Types.ObjectId })
   paymentId?: Types.ObjectId;
 
+  /** Mirrors orderId only while this refund is in a non-terminal status (unset once
+   * rejected/processed/closed) — backs a unique partial index so two concurrent createRequest
+   * calls for the same order can't both create an "open" refund; see refunds.service.ts. */
+  @Prop({ type: Types.ObjectId })
+  openOrderId?: Types.ObjectId;
+
   @Prop({ required: true })
   reason!: string;
 
@@ -91,3 +97,9 @@ export class RefundRequest {
 export const RefundRequestSchema = SchemaFactory.createForClass(RefundRequest);
 // Backs date-range queries used by admin reports.
 RefundRequestSchema.index({ createdAt: -1 });
+// Enforces "at most one open refund per order" atomically at the DB level, closing the race where
+// two concurrent createRequest calls both pass the pre-insert findOne check.
+RefundRequestSchema.index(
+  { openOrderId: 1 },
+  { unique: true, partialFilterExpression: { openOrderId: { $exists: true } } },
+);

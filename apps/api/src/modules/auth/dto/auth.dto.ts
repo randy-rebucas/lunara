@@ -103,3 +103,10 @@ export class ChangePasswordDto {
   @MinLength(8)
   newPassword!: string;
 }
+
+export class SetEmailDto {
+  @IsEmail()
+  @MaxLength(254)
+  @Matches(NOT_SPAM_EMAIL, { message: 'email is not allowed' })
+  email!: string;
+}

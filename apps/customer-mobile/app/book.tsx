@@ -94,6 +94,9 @@ export default function BookScreen() {
   const [walletBalance, setWalletBalance] = useState(0);
   const [loading, setLoading] = useState(false);
   const placingOrderRef = useRef(false);
+  // One key per screen mount, reused across retries of the same submission so a network retry
+  // or double-tap dedupes server-side instead of creating a second order.
+  const idempotencyKeyRef = useRef(`${Date.now()}-${Math.random().toString(36).slice(2)}`);
   const [error, setError] = useState('');
   const [configLoading, setConfigLoading] = useState(true);
   const [addressesError, setAddressesError] = useState('');
@@ -741,6 +744,7 @@ export default function BookScreen() {
           pickupAddressId: form.addressId,
           scheduledPickupAt: form.scheduledPickupAt,
           ...(form.couponCode.trim() ? { couponCode: form.couponCode.trim() } : {}),
+          idempotencyKey: idempotencyKeyRef.current,
         }),
       });
       createdOrderId = order._id;

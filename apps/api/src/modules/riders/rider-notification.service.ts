@@ -103,6 +103,38 @@ export class RiderNotificationService {
     await this.dispatch(riderUserId, title, body, data, 'earnings_credited');
   }
 
+  async notifyOrderRefunded(
+    riderUserId: string,
+    order: Pick<OrderDocument, '_id' | 'branchName'>,
+  ) {
+    const title = RIDER_NOTIFICATION_TITLES.ORDER_REFUNDED;
+    const body = `Order ${order._id.toString().slice(-6).toUpperCase()} was refunded — stop pickup/delivery for this order.`;
+    const data = {
+      category: RIDER_NOTIFICATION_CATEGORY.SYSTEM,
+      type: RIDER_NOTIFICATION_TYPES.ORDER_REFUNDED,
+      orderId: order._id.toString(),
+      branchName: order.branchName,
+    };
+
+    await this.dispatch(riderUserId, title, body, data, 'order_refunded');
+  }
+
+  async notifyOrderCancelled(
+    riderUserId: string,
+    order: Pick<OrderDocument, '_id' | 'branchName'>,
+  ) {
+    const title = RIDER_NOTIFICATION_TITLES.ORDER_CANCELLED;
+    const body = `Order ${order._id.toString().slice(-6).toUpperCase()} was cancelled — stop pickup/delivery for this order.`;
+    const data = {
+      category: RIDER_NOTIFICATION_CATEGORY.SYSTEM,
+      type: RIDER_NOTIFICATION_TYPES.ORDER_CANCELLED,
+      orderId: order._id.toString(),
+      branchName: order.branchName,
+    };
+
+    await this.dispatch(riderUserId, title, body, data, 'order_cancelled');
+  }
+
   async notifyPickupOverdue(riderUserId: string, order: OrderDocument) {
     const orderId = order._id.toString();
     const dedupeSince = new Date(Date.now() - REMINDER_DEDUPE_HOURS * 60 * 60 * 1000);

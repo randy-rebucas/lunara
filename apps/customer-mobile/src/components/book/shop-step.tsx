@@ -3,7 +3,7 @@ import { Image, Pressable, Text, View } from 'react-native';
 import type { Dispatch, SetStateAction } from 'react';
 import { getTodayScheduleSummary } from '@lunara/utils';
 import { resolveMediaUrl } from '../../lib/media-url';
-import { brandName, colors } from '../../theme';
+import { colors } from '../../theme';
 import { getPartnerId } from '../../store/auth';
 import type { BookingFormState } from '../../lib/booking-flow';
 import {
@@ -47,41 +47,6 @@ export function ShopStep({
     <View>
       <StepHeading step="shop" title="Choose a laundry shop" />
       {reorderNotice ? <Text style={styles.optionGpsMissing}>{reorderNotice}</Text> : null}
-      {!shopsLoading && shopOptions.length > 0 && !getPartnerId() ? (
-        <Pressable
-          style={({ pressed }) => [
-            styles.shopCard,
-            styles.autoDispatchCard,
-            form.autoDispatch && styles.shopCardSelected,
-            pressed && styles.shopCardPressed,
-          ]}
-          onPress={() => {
-            setReorderNotice('');
-            setForm((f) => ({ ...f, autoDispatch: true, branchId: '' }));
-          }}
-          accessibilityRole="radio"
-          accessibilityState={{ selected: form.autoDispatch }}
-        >
-          <View style={styles.shopHeaderRow}>
-            <View style={styles.shopTitleGroup}>
-              <View style={styles.autoDispatchIcon}>
-                <Ionicons name="flash" size={18} color={colors.primary} />
-              </View>
-              <View style={styles.shopTitleTextGroup}>
-                <Text style={styles.shopName}>Let {brandName} pick for you</Text>
-                <Text style={styles.shopMetaText}>
-                  Best available shop nearby — handy when your usual spot is full.
-                </Text>
-              </View>
-            </View>
-            {form.autoDispatch ? (
-              <View style={styles.shopCheckBadge}>
-                <Ionicons name="checkmark" size={14} color={colors.onPrimary} />
-              </View>
-            ) : null}
-          </View>
-        </Pressable>
-      ) : null}
       {shopsLoading ? (
         <Text style={styles.sub}>Finding nearby shops…</Text>
       ) : shopOptions.length === 0 ? (

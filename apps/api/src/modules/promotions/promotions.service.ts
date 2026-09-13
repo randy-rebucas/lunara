@@ -404,6 +404,7 @@ export class PromotionsService implements OnModuleInit {
       expiresAt: p.endsAt?.toISOString(),
       isPersonal: false,
       audience: p.audience,
+      partnerId: p.partnerUserId?.toString(),
     };
   }
 
@@ -421,10 +422,11 @@ export class PromotionsService implements OnModuleInit {
       endsAt: p.expiresAt.toISOString(),
       isPersonal: true,
       audience: PromotionAudience.ALL,
+      partnerId: undefined,
     };
   }
 
-  async listDealsForCustomer(userId: string) {
+  async listDealsForCustomer(userId: string, partnerId?: string) {
     const now = new Date();
     const user = await this.userModel.findById(userId);
     if (!user) return [];
@@ -462,7 +464,16 @@ export class PromotionsService implements OnModuleInit {
             );
           }
         }
-        return true;
+        // Same eligibility rule as applyCouponToQuote: a partner-brand build only ever shows deals
+        // that partner could actually honor — its own approved promos, or platform promos it has
+        // opted into. A partner-scoped promo never leaks into another partner's (or the default) app.
+        if (partnerId) {
+          if (p.partnerUserId) {
+            return p.partnerUserId.toString() === partnerId && p.approvalStatus === 'approved';
+          }
+          return p.optedInPartnerIds.some((id) => id.toString() === partnerId);
+        }
+        return !p.partnerUserId;
       })
       .map((p) => this.serializeDealFromPromotion(p));
 

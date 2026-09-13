@@ -60,13 +60,23 @@ export default function OrderReviewScreen() {
         setComment(data.review.comment ?? '');
       }
 
+    } catch (e) {
+      setError(toErrorMessage(e, 'Could not load review'));
+      setLoading(false);
+      return;
+    }
+
+    // Best-effort side effect, isolated from the review load above: a failure here (e.g. the
+    // notifications endpoint hiccups) must not surface as "Could not load review" in the form —
+    // the review itself loaded fine.
+    try {
       const notifications = await apiFetch<AppNotification[]>('/notifications/me?limit=20');
       const unread = notifications.find((n: AppNotification) => !n.read && n.data?.orderId === id);
       if (unread) {
         await apiFetch(`/notifications/${unread._id}/read`, { method: 'PATCH' });
       }
-    } catch (e) {
-      setError(toErrorMessage(e, 'Could not load review'));
+    } catch {
+      // non-critical, ignore
     } finally {
       setLoading(false);
     }

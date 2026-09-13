@@ -19,8 +19,16 @@ export class BookingController {
 
   @Get('config')
   @Roles(UserRole.CUSTOMER)
-  async getConfig() {
-    return this.bookingService.getConfig();
+  async getConfig(
+    @Req() req: { headers: Record<string, string | undefined> },
+  ) {
+    // Same stale/malformed-header guard as quote/createOrder — never crash the config fetch.
+    const rawPartnerContextId = req.headers['x-lunara-partner-id']?.trim() || undefined;
+    const partnerContextId =
+      rawPartnerContextId && Types.ObjectId.isValid(rawPartnerContextId)
+        ? rawPartnerContextId
+        : undefined;
+    return this.bookingService.getConfig(partnerContextId);
   }
 
   @Get('availability')

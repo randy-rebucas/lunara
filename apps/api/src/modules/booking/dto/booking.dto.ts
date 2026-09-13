@@ -129,4 +129,11 @@ export class CreateBookingOrderDto extends BookingQuoteDto {
 
   @IsDateString()
   declare scheduledPickupAt: string;
+
+  /** Client-generated key, one per booking-wizard submission (e.g. a UUID minted when the
+   * wizard mounts). Lets the server dedupe a retried/duplicated submit into a single order. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  idempotencyKey?: string;
 }

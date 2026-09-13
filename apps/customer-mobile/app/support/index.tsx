@@ -30,12 +30,14 @@ export default function SupportListScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
     setError('');
     try {
       const data = await apiFetch<Ticket[]>('/support/tickets');
       setTickets(data);
+      setLoaded(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load tickets');
     } finally {
@@ -76,7 +78,7 @@ export default function SupportListScreen() {
         }}
       />
 
-      {!loading && !error ? (
+      {!loading && (loaded || !error) ? (
         tickets.length === 0 ? (
           <Card muted style={styles.empty}>
             <View style={styles.emptyIcon}>

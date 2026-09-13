@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -36,6 +37,8 @@ import { Address, AddressDocument } from '../addresses/schemas/address.schema';
 import { Rider, RiderDocument } from '../riders/schemas/rider.schema';
 import { Order, OrderDocument } from './schemas/order.schema';
 import { EntitlementService } from '../billing/entitlement.service';
+import { PaymongoService } from '../payments/paymongo.service';
+import { RiderNotificationService } from '../riders/rider-notification.service';
 
 export interface BookingOrderItem {
   serviceType: BookingType;
@@ -76,10 +79,13 @@ export interface BookingOrderPayload {
   subscriptionId?: string;
   deliveryDistanceKm?: number;
   requiresDeliveryApproval?: boolean;
+  idempotencyKey?: string;
 }
 
 @Injectable()
 export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name);
+
   constructor(
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
@@ -95,28 +101,39 @@ export class OrdersService {
     private laundryTagsService: LaundryTagsService,
     private rewardsService: RewardsService,
     private entitlementService: EntitlementService,
+    private paymongoService: PaymongoService,
+    private riderNotificationService: RiderNotificationService,
   ) {}
 
   private readonly COMPLETED_ORDER_STATUSES = [OrderStatus.COMPLETED, OrderStatus.DELIVERED];
 
+  /** Points/referral crediting is a side effect of order completion, not the completion itself —
+   * a rewards-side failure (e.g. missing customer profile) must not undo or error out an already
+   * -saved order status transition, so it's caught and logged rather than propagated. */
   private async awardPointsForCompletedOrder(order: OrderDocument) {
     const customerId = order.customerId.toString();
 
-    await this.rewardsService.creditForOrderCompletion(
-      order._id.toString(),
-      customerId,
-      order.branchId?.toString(),
-    );
+    try {
+      await this.rewardsService.creditForOrderCompletion(
+        order._id.toString(),
+        customerId,
+        order.branchId?.toString(),
+      );
 
-    const priorCompletedOrders = await this.orderModel.countDocuments({
-      customerId: order.customerId,
-      status: { $in: this.COMPLETED_ORDER_STATUSES },
-      _id: { $ne: order._id },
-    });
-    await this.rewardsService.maybeCreditReferralForFirstOrder(
-      customerId,
-      priorCompletedOrders === 0,
-    );
+      const priorCompletedOrders = await this.orderModel.countDocuments({
+        customerId: order.customerId,
+        status: { $in: this.COMPLETED_ORDER_STATUSES },
+        _id: { $ne: order._id },
+      });
+      await this.rewardsService.maybeCreditReferralForFirstOrder(
+        customerId,
+        priorCompletedOrders === 0,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Rewards crediting failed for completed order ${order._id.toString()}: ${(err as Error).message}`,
+      );
+    }
   }
 
   private isBranchAssigned(order: OrderDocument) {
@@ -254,8 +271,21 @@ export class OrdersService {
       await this.entitlementService.assertNotSuspended(payload.partnerId);
     }
 
-    const order = await this.orderModel.create({
+    if (payload.idempotencyKey) {
+      const existing = await this.orderModel.findOne({
+        customerId: new Types.ObjectId(customerId),
+        idempotencyKey: payload.idempotencyKey,
+      });
+      if (existing) {
+        return { success: true, data: existing };
+      }
+    }
+
+    let order: OrderDocument;
+    try {
+      order = await this.orderModel.create({
       customerId: new Types.ObjectId(customerId),
+      idempotencyKey: payload.idempotencyKey,
       partnerId: payload.partnerId ? new Types.ObjectId(payload.partnerId) : undefined,
       subscriptionId: payload.subscriptionId ? new Types.ObjectId(payload.subscriptionId) : undefined,
       branchId: payload.branchId ? new Types.ObjectId(payload.branchId) : undefined,
@@ -291,7 +321,21 @@ export class OrdersService {
       deliveryDistanceKm: payload.deliveryDistanceKm,
       requiresDeliveryApproval: payload.requiresDeliveryApproval ?? false,
       statusHistory: [{ status: OrderStatus.PENDING, timestamp: new Date() }],
-    });
+      });
+    } catch (err) {
+      // Duplicate key on (customerId, idempotencyKey) means a concurrent request already won —
+      // return that order instead of surfacing a 500 for what is really a successful retry.
+      if (payload.idempotencyKey && (err as { code?: number }).code === 11000) {
+        const winner = await this.orderModel.findOne({
+          customerId: new Types.ObjectId(customerId),
+          idempotencyKey: payload.idempotencyKey,
+        });
+        if (winner) {
+          return { success: true, data: winner };
+        }
+      }
+      throw err;
+    }
 
     if (payload.couponCode) {
       await this.promotionsService.recordRedemption(
@@ -490,6 +534,88 @@ export class OrdersService {
     );
   }
 
+  /**
+   * Refunds a cancelled order's payment, reversing to the original payment method via PayMongo
+   * when it was actually processed there (mirrors refunds.service.ts's executeRefund), falling
+   * back to wallet credit for wallet-originated payments. Cash payments are never passed in here
+   * (callers gate on WALLET/paymongo methods before calling).
+   *
+   * The payment claim (`PAID` -> `REFUNDED`) is a single atomic findOneAndUpdate so two concurrent
+   * cancel calls for the same order (double-tap, or customer+admin racing) can't both pass and
+   * both credit/refund — the loser's update returns null and it skips silently.
+   */
+  private async refundCancelledOrderPayment(
+    orderId: string,
+    customerId: string,
+    paymentId: Types.ObjectId,
+    description: string,
+  ): Promise<boolean> {
+    const claimed = await this.paymentModel.findOneAndUpdate(
+      { _id: paymentId, status: PaymentStatus.PAID },
+      { status: PaymentStatus.REFUNDED },
+      { new: true },
+    );
+    if (!claimed) return false;
+
+    const refundToPaymongo = isPaymongoMethod(claimed.method) && Boolean(claimed.externalId);
+
+    try {
+      if (refundToPaymongo) {
+        await this.paymongoService.createRefund(
+          claimed.externalId!,
+          claimed.amount,
+          'requested_by_customer',
+          `refund-order-${orderId}`,
+        );
+      } else {
+        await this.walletsService.credit(customerId, claimed.amount, `refund-order-${orderId}`, description);
+      }
+    } catch (err) {
+      // Roll back the claim so the payment isn't stuck "refunded" with no money moved.
+      await this.paymentModel.updateOne({ _id: claimed._id }, { status: PaymentStatus.PAID });
+      throw err;
+    }
+
+    await this.ledgerService.post(`cancel-refund:${claimed._id.toString()}`, 'refund', claimed._id.toString(), [
+      {
+        accountType: 'order_revenue_clearing',
+        direction: 'debit',
+        amount: claimed.amount,
+        description: `Refund reverses recognized revenue for cancelled order ${orderId.slice(-6)}`,
+      },
+      refundToPaymongo
+        ? {
+            accountType: 'cash_out',
+            direction: 'credit',
+            amount: claimed.amount,
+            description: `Refund returned to original payment method for cancelled order ${orderId.slice(-6)}`,
+          }
+        : {
+            accountType: 'customer_wallet_liability',
+            accountSubject: customerId,
+            direction: 'credit',
+            amount: claimed.amount,
+            description: `Refund credited to wallet for cancelled order ${orderId.slice(-6)}`,
+          },
+    ]);
+
+    return true;
+  }
+
+  /** Notifies any rider still assigned to pickup/delivery that the order was cancelled — the
+   * order's status flip already removes it from `getTasks`/`getActiveAssignment` queries, but an
+   * active rider needs a push/socket nudge since they may already be en route. */
+  private notifyAssignedRidersOfCancellation(order: OrderDocument) {
+    const riderIds = new Set(
+      [order.pickupRiderId?.toString(), order.deliveryRiderId?.toString()].filter(
+        (id): id is string => Boolean(id),
+      ),
+    );
+    for (const riderId of riderIds) {
+      void this.riderNotificationService.notifyOrderCancelled(riderId, order).catch(() => {});
+    }
+  }
+
   async cancelByCustomer(customerId: string, orderId: string) {
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
@@ -529,37 +655,12 @@ export class OrdersService {
         paidPayment.status !== PaymentStatus.REFUNDED &&
         (paidPayment.method === PaymentMethod.WALLET || isPaymongoMethod(paidPayment.method))
       ) {
-        await this.walletsService.credit(
+        refunded = await this.refundCancelledOrderPayment(
+          orderId,
           customerId,
-          paidPayment.amount,
-          `refund-order-${orderId}`,
+          paidPayment._id,
           `Refund for cancelled order ${orderId}`,
         );
-        paidPayment.status = PaymentStatus.REFUNDED;
-        await paidPayment.save();
-
-        await this.ledgerService.post(
-          `cancel-refund:${paidPayment._id.toString()}`,
-          'refund',
-          paidPayment._id.toString(),
-          [
-            {
-              accountType: 'order_revenue_clearing',
-              direction: 'debit',
-              amount: paidPayment.amount,
-              description: `Refund reverses recognized revenue for cancelled order ${orderId.slice(-6)}`,
-            },
-            {
-              accountType: 'customer_wallet_liability',
-              accountSubject: customerId,
-              direction: 'credit',
-              amount: paidPayment.amount,
-              description: `Refund credited to wallet for cancelled order ${orderId.slice(-6)}`,
-            },
-          ],
-        );
-
-        refunded = true;
       }
 
       order.status = OrderStatus.CANCELLED;
@@ -604,37 +705,12 @@ export class OrdersService {
       paidPayment.status !== PaymentStatus.REFUNDED &&
       (paidPayment.method === PaymentMethod.WALLET || isPaymongoMethod(paidPayment.method))
     ) {
-      await this.walletsService.credit(
+      refunded = await this.refundCancelledOrderPayment(
+        orderId,
         customerId,
-        paidPayment.amount,
-        `refund-order-${orderId}`,
+        paidPayment._id,
         `Refund for order ${orderId} cancelled by admin: ${reason}`,
       );
-      paidPayment.status = PaymentStatus.REFUNDED;
-      await paidPayment.save();
-
-      await this.ledgerService.post(
-        `cancel-refund:${paidPayment._id.toString()}`,
-        'refund',
-        paidPayment._id.toString(),
-        [
-          {
-            accountType: 'order_revenue_clearing',
-            direction: 'debit',
-            amount: paidPayment.amount,
-            description: `Refund reverses recognized revenue for order ${orderId.slice(-6)} cancelled by admin`,
-          },
-          {
-            accountType: 'customer_wallet_liability',
-            accountSubject: customerId,
-            direction: 'credit',
-            amount: paidPayment.amount,
-            description: `Refund credited to wallet for order ${orderId.slice(-6)} cancelled by admin`,
-          },
-        ],
-      );
-
-      refunded = true;
     }
 
     order.status = OrderStatus.CANCELLED;
@@ -651,6 +727,7 @@ export class OrdersService {
       reason: 'admin_cancelled',
       orderId: order._id.toString(),
     });
+    this.notifyAssignedRidersOfCancellation(order);
 
     return { success: true, data: { cancelled: true, refunded } };
   }

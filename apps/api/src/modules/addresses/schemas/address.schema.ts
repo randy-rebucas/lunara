@@ -20,6 +20,9 @@ export class Address {
   @Prop()
   line2?: string;
 
+  @Prop()
+  landmark?: string;
+
   @Prop({ required: true })
   city!: string;
 

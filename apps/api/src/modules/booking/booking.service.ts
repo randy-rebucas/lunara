@@ -48,11 +48,14 @@ export class BookingService {
     private readonly serviceAreasService: ServiceAreasService,
   ) {}
 
-  async getConfig() {
-    const [services, addons, serviceAreas] = await Promise.all([
+  async getConfig(partnerContextId?: string) {
+    const [services, addons, serviceAreas, partnerServiceTypes] = await Promise.all([
       this.catalogService.listActiveServices(),
       this.catalogService.listActiveAddons(),
       this.serviceAreasService.listActive(),
+      partnerContextId
+        ? this.branchesService.getServiceTypesForPartner(partnerContextId)
+        : Promise.resolve(undefined),
     ]);
     return {
       success: true,
@@ -71,6 +74,10 @@ export class BookingService {
         // default rather than deliveryFees.data.deliveryFee (that setting is the partner's own cost).
         deliveryFee: 0,
         garmentCatalog: GARMENT_CATALOG,
+        // Only set for a white-label build (partnerContextId present) — the union of service types
+        // that partner's active branches actually offer, for scoping home-screen recommendations.
+        // Undefined for the default app, which recommends the full platform catalog.
+        partnerServiceTypes,
       },
     };
   }
@@ -654,6 +661,7 @@ export class BookingService {
         pricingModel,
         deliveryDistanceKm: quote.deliveryDistanceKm,
         requiresDeliveryApproval: quote.requiresDeliveryApproval,
+        idempotencyKey: dto.idempotencyKey,
     };
   }
 

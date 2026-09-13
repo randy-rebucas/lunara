@@ -269,6 +269,12 @@ export class Order {
   @Prop({ type: Types.ObjectId, required: true, index: true })
   customerId!: Types.ObjectId;
 
+  /** Client-supplied key (one per booking-wizard submission) used to make order creation
+   * idempotent — a retried/duplicated create request with the same key returns the original
+   * order instead of creating a second one. Unset on legacy orders. */
+  @Prop()
+  idempotencyKey?: string;
+
   /** Free-text note from the customer for the rider/shop — gate code, "leave with guard",
    * detergent preference, etc. */
   @Prop()
@@ -548,6 +554,12 @@ OrderSchema.index(
 OrderSchema.index(
   { 'laundryProcessing.tagId': 1 },
   { partialFilterExpression: { 'laundryProcessing.tagId': { $exists: true } } },
+);
+// Enforces order-creation idempotency: a customer can never have two orders with the same
+// client-supplied idempotencyKey. Sparse because legacy orders have no key.
+OrderSchema.index(
+  { customerId: 1, idempotencyKey: 1 },
+  { unique: true, partialFilterExpression: { idempotencyKey: { $exists: true } } },
 );
 // Backs date-range queries and sorting used by admin reports/dashboards (e.g. AdminService.getReports).
 OrderSchema.index({ createdAt: -1 });

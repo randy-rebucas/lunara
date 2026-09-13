@@ -16,7 +16,7 @@ import {
 import type { Deal } from '@lunara/types';
 import { appConfig, getShareWebsiteUrl } from '@lunara/config';
 import { buildDealSharePayload, formatCurrency, formatDealExpiry, formatDealMinimum } from '@lunara/utils';
-import { useAuthStore } from '../store/auth';
+import { getPartnerId, useAuthStore } from '../store/auth';
 import { shareNative } from '../lib/share';
 import { colors, radius, shadow, spacing, typography } from '../theme';
 
@@ -37,12 +37,13 @@ export function DealsCarousel({ onDealPress }: DealsCarouselProps) {
   const apiFetch = useAuthStore((s) => s.apiFetch);
   const { width: screenWidth } = useWindowDimensions();
   const listRef = useRef<FlatList<Deal>>(null);
+  const isPartnerBuild = !!getPartnerId();
 
   const cardWidth = screenWidth - spacing.xl * 2;
   const snapInterval = cardWidth + CARD_GAP;
 
   const [deals, setDeals] = useState<Deal[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(isPartnerBuild);
   const [error, setError] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
 
@@ -61,9 +62,15 @@ export function DealsCarousel({ onDealPress }: DealsCarouselProps) {
   }, [apiFetch]);
 
   useEffect(() => {
+    // This carousel only ever shows a partner's own deals (see partnerId filtering in
+    // listDealsForCustomer) — the default Lunara app has no partner context to scope by, so
+    // never fetch or render it there.
+    if (!isPartnerBuild) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional fetch/update-on-mount, not a synchronous render loop
     load();
-  }, [load]);
+  }, [isPartnerBuild, load]);
+
+  if (!isPartnerBuild) return null;
 
   function handleMomentumScrollEnd(e: NativeSyntheticEvent<NativeScrollEvent>) {
     const index = Math.round(e.nativeEvent.contentOffset.x / snapInterval);

@@ -5,6 +5,7 @@ import { EmptyState } from '../src/components/ui/empty-state';
 import { NotificationListItem } from '../src/components/notification-list-item';
 import { Screen } from '../src/components/ui/screen';
 import { useNotifications } from '../src/hooks/use-notifications';
+import { usePartnerRealtimeSocket } from '../src/hooks/use-partner-realtime-socket';
 import type { StaffNotification } from '../src/lib/notification-types';
 import { colors, radius, spacing, typography } from '../src/theme';
 
@@ -19,6 +20,12 @@ export default function NotificationsScreen() {
       void refresh();
     }, [refresh]),
   );
+
+  usePartnerRealtimeSocket({
+    onPartnerNotification: () => {
+      void refresh();
+    },
+  });
 
   const renderNotification = useCallback(
     ({ item }: { item: StaffNotification }) => (

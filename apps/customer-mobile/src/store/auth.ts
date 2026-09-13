@@ -5,6 +5,7 @@ import type { AuthTokens, User } from '@lunara/types';
 import { UserRole } from '@lunara/types';
 import { formatPhone } from '@lunara/utils';
 import { authRequest } from '../lib/api-client';
+import { acquireDevicePushToken, unregisterPushToken } from '../lib/push-notifications';
 
 // Re-exported for compatibility — `getPartnerId` is a generic client utility (not auth-specific)
 // but many screens already import it alongside `useAuthStore` from this module.
@@ -110,6 +111,22 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   logout: async () => {
     const { tokens } = get();
     if (tokens?.accessToken) {
+      // Unregister this device's push token while the access token is still valid — done here
+      // (before clearing session) rather than relying on usePushNotifications' effect cleanup,
+      // since that cleanup fires after tokens are already cleared and apiFetch would just throw
+      // "Please sign in to continue" instead of reaching the server. Otherwise a stale token can
+      // keep receiving pushes meant for whoever logs into this device next.
+      try {
+        const deviceToken = await acquireDevicePushToken();
+        if (deviceToken) {
+          await unregisterPushToken(
+            (path, init) => authRequest(path, { kind: 'json', init }, tokens.accessToken),
+            deviceToken,
+          );
+        }
+      } catch {
+        // best-effort — never block logout on push-token cleanup
+      }
       await authRequest(
         '/auth/logout',
         { kind: 'json', init: { method: 'POST', headers: { Authorization: `Bearer ${tokens.accessToken}` } } },

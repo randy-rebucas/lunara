@@ -52,11 +52,6 @@ export default function OnboardingProfileScreen() {
     setError('');
     setSubmitting(true);
     try {
-      // `email` is intentionally NOT sent here: UpdateCustomerDto has no email field (email lives
-      // on the User model, a different module), and the API's global ValidationPipe uses
-      // forbidNonWhitelisted — sending it rejects the entire request with a 400, which was
-      // blocking onboarding completion outright for anyone who filled in this optional field.
-      // See docs/audits/customer-mobile/onboarding.md, Finding #1.
       await apiFetch('/customers/me', {
         method: 'PATCH',
         body: JSON.stringify({
@@ -64,6 +59,21 @@ export default function OnboardingProfileScreen() {
           lastName: lastName.trim(),
         }),
       });
+      // Email lives on the User model, a separate module from Customer, and doubles as a login
+      // credential — so it goes through its own endpoint (uniqueness check + re-verification),
+      // not the customer profile PATCH. See docs/audits/customer-mobile/onboarding.md, Finding #1.
+      if (email.trim()) {
+        try {
+          await apiFetch('/auth/email', {
+            method: 'POST',
+            body: JSON.stringify({ email: email.trim() }),
+          });
+        } catch (e) {
+          setError(e instanceof Error ? e.message : 'Could not save email address');
+          setSubmitting(false);
+          return;
+        }
+      }
       const status = await fetchOnboardingStatus(apiFetch);
       router.replace(getOnboardingPath(status));
     } catch (e) {

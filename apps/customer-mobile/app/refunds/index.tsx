@@ -30,12 +30,14 @@ export default function RefundsListScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
     setError('');
     try {
       const data = await apiFetch<RefundRow[]>('/refunds');
       setItems(data);
+      setLoaded(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load refunds');
     } finally {
@@ -76,7 +78,7 @@ export default function RefundsListScreen() {
         }}
       />
 
-      {!loading && !error ? (
+      {!loading && (loaded || !error) ? (
         items.length === 0 ? (
           <Card muted style={styles.empty}>
             <View style={styles.emptyIcon}>

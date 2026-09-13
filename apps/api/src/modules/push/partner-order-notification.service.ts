@@ -318,6 +318,8 @@ export class PartnerOrderNotificationService {
       case 'delivered':
       case 'completed':
         return 'The customer received their laundry. Order complete.';
+      case 'refundProcessed':
+        return `This order was refunded — stop any pickup/delivery in progress for ${shop}.`;
       default:
         return `Update for ${shop}.`;
     }

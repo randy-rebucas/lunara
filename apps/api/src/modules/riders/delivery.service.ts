@@ -180,6 +180,9 @@ export class DeliveryService {
     await order.save();
 
     this.trackingGateway.emitOrderStatus(orderId, OrderStatus.READY_FOR_DELIVERY);
+    this.trackingGateway.emitOrderEvent(orderId, 'deliveryRiderReassigned', {
+      message: 'Your delivery rider is unavailable — finding you a new one',
+    });
     this.trackingGateway.emitDispatchQueueUpdated({
       reason: 'delivery_rider_rejected',
       orderId,
@@ -210,15 +213,6 @@ export class DeliveryService {
     });
 
     return { success: true, data: await this.buildDeliverySummary(order, riderUserId) };
-  }
-
-  /** @deprecated use pickupFromShop + outForDelivery */
-  async startDelivery(orderId: string, riderUserId: string) {
-    const order = await this.getAssignedDeliveryOrder(orderId, riderUserId);
-    if (!order.delivery?.pickedUpFromShopAt) {
-      await this.pickupFromShop(orderId, riderUserId);
-    }
-    return this.outForDelivery(orderId, riderUserId);
   }
 
   async outForDelivery(orderId: string, riderUserId: string) {
@@ -252,11 +246,6 @@ export class DeliveryService {
     });
 
     return { success: true, data: await this.buildDeliverySummary(order, riderUserId) };
-  }
-
-  /** @deprecated use markCustomerReceived */
-  async markArrived(orderId: string, riderUserId: string) {
-    return this.markCustomerReceived(orderId, riderUserId);
   }
 
   async markCustomerReceived(orderId: string, riderUserId: string) {

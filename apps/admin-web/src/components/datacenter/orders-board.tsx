@@ -277,6 +277,12 @@ export function OrdersBoard() {
     onDispatcherAlert: () => {
       void reload();
     },
+    onOrderStatusUpdate: () => {
+      void reload();
+    },
+    onOrderEvent: () => {
+      void reload();
+    },
   });
 
   useEffect(() => {

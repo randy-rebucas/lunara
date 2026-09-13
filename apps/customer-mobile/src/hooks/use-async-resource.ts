@@ -42,7 +42,10 @@ export function useAsyncResource<T>(
       setData(result);
     } catch (e) {
       setError(toErrorMessage(e, errorFallback));
-      setData(null);
+      // Deliberately don't clear `data` here: a failed refresh/retry of an already-loaded list
+      // shouldn't discard what's already on screen — see docs/audits/customer-mobile/subscriptions.md,
+      // Finding #3. Consumers that gate rendering on `!error` still need their own fix to actually
+      // show the preserved data during a transient error; this at least stops silently losing it.
     } finally {
       setLoading(false);
     }

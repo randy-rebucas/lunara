@@ -18,6 +18,8 @@ import { TrackingGateway } from '../realtime/tracking.gateway';
 import { WalletsService } from '../wallets/wallets.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { PartnerOperationsService } from '../partner/partner-operations.service';
+import { RiderNotificationService } from '../riders/rider-notification.service';
+import { PaymongoService } from '../payments/paymongo.service';
 import { EmailService } from '../../common/email/email.service';
 import { SettingsService } from '../settings/settings.service';
 import { AuditLogService } from '../audit/audit-log.service';
@@ -71,6 +73,8 @@ export class RefundsService {
     private partnerOperationsService: PartnerOperationsService,
     private settingsService: SettingsService,
     private auditLogService: AuditLogService,
+    private riderNotificationService: RiderNotificationService,
+    private paymongoService: PaymongoService,
   ) {}
 
   async createRequest(customerId: string, dto: CreateRefundDto) {
@@ -116,22 +120,31 @@ export class RefundsService {
       throw new BadRequestException('Requested amount cannot exceed order total');
     }
 
-    const refund = await this.refundModel.create({
-      orderId: order._id,
-      customerId: new Types.ObjectId(customerId),
-      paymentId: payment._id,
-      reason: dto.reason,
-      status: RefundStatus.PENDING,
-      stage: RefundStage.SUBMITTED,
-      requestedAmount,
-      timeline: [
-        {
-          stage: RefundStage.SUBMITTED,
-          label: 'Refund request submitted',
-          at: new Date(),
-        },
-      ],
-    });
+    let refund: RefundRequestDocument;
+    try {
+      refund = await this.refundModel.create({
+        orderId: order._id,
+        customerId: new Types.ObjectId(customerId),
+        paymentId: payment._id,
+        openOrderId: order._id,
+        reason: dto.reason,
+        status: RefundStatus.PENDING,
+        stage: RefundStage.SUBMITTED,
+        requestedAmount,
+        timeline: [
+          {
+            stage: RefundStage.SUBMITTED,
+            label: 'Refund request submitted',
+            at: new Date(),
+          },
+        ],
+      });
+    } catch (err) {
+      if ((err as { code?: number }).code === 11000) {
+        throw new BadRequestException('A refund request is already open for this order');
+      }
+      throw err;
+    }
 
     void this.tryAutoApprove(refund);
 
@@ -401,8 +414,9 @@ export class RefundsService {
         if (!claimed) {
           throw new BadRequestException('Approve the refund before processing');
         }
+        let refundedToPaymongo: boolean;
         try {
-          await this.executeRefund(refund);
+          refundedToPaymongo = await this.executeRefund(refund);
         } catch (err) {
           // Roll back the claim so the refund isn't stuck "processed" with no money moved.
           await this.refundModel.updateOne(
@@ -416,7 +430,9 @@ export class RefundsService {
         refund.processedAt = processedAt;
         pushTimeline(
           'processed',
-          `₱${refund.approvedAmount} refunded to wallet`,
+          refundedToPaymongo
+            ? `₱${refund.approvedAmount} refunded to original payment method`
+            : `₱${refund.approvedAmount} refunded to wallet`,
           dto.adminNote,
         );
         break;
@@ -439,11 +455,19 @@ export class RefundsService {
     if (dto.adminNote && dto.action !== RefundReviewAction.REJECT) {
       refund.adminNote = dto.adminNote;
     }
+    // Terminal statuses free up the order for a new refund request — clear the unique-index field.
+    if (
+      refund.status === RefundStatus.REJECTED ||
+      refund.status === RefundStatus.PROCESSED ||
+      refund.status === RefundStatus.CLOSED
+    ) {
+      refund.openOrderId = undefined;
+    }
     await refund.save();
     return this.getAdminRefund(refundId);
   }
 
-  private async executeRefund(refund: RefundRequestDocument) {
+  private async executeRefund(refund: RefundRequestDocument): Promise<boolean> {
     const amount = refund.approvedAmount ?? refund.requestedAmount;
     if (!amount || amount <= 0) {
       throw new BadRequestException('Invalid refund amount');
@@ -464,12 +488,29 @@ export class RefundsService {
       );
     }
 
-    await this.walletsService.credit(
-      refund.customerId.toString(),
-      amount,
-      `refund-${refund._id}`,
-      `Refund for order ${order._id.toString().slice(-6)}`,
-    );
+    // Reverse to the original payment method via PayMongo when the customer actually paid
+    // through PayMongo (GCash/Maya/card) and we have their PayMongo payment id on file;
+    // everything else (e.g. an order originally paid from the wallet) is refunded to wallet.
+    const refundToPaymongo = isPaymongoMethod(payment.method) && Boolean(payment.externalId);
+
+    if (refundToPaymongo) {
+      // Idempotency-Key is stable per refund doc, so a retried PROCESS call (after a transient
+      // failure below rolls the claim back to APPROVED) reuses PayMongo's own dedupe instead of
+      // issuing a second refund against the same payment.
+      await this.paymongoService.createRefund(
+        payment.externalId!,
+        amount,
+        'requested_by_customer',
+        `refund-${refund._id}`,
+      );
+    } else {
+      await this.walletsService.credit(
+        refund.customerId.toString(),
+        amount,
+        `refund-${refund._id}`,
+        `Refund for order ${order._id.toString().slice(-6)}`,
+      );
+    }
 
     if (payment && payment.status === PaymentStatus.PAID) {
       payment.status = PaymentStatus.REFUNDED;
@@ -487,16 +528,24 @@ export class RefundsService {
           amount,
           description: `Refund reverses recognized revenue for order ${order._id.toString().slice(-6)}`,
         },
-        {
-          accountType: 'customer_wallet_liability',
-          accountSubject: refund.customerId.toString(),
-          direction: 'credit',
-          amount,
-          description: `Refund credited to wallet for order ${order._id.toString().slice(-6)}`,
-        },
+        refundToPaymongo
+          ? {
+              accountType: 'cash_out',
+              direction: 'credit',
+              amount,
+              description: `Refund returned to original payment method for order ${order._id.toString().slice(-6)}`,
+            }
+          : {
+              accountType: 'customer_wallet_liability',
+              accountSubject: refund.customerId.toString(),
+              direction: 'credit',
+              amount,
+              description: `Refund credited to wallet for order ${order._id.toString().slice(-6)}`,
+            },
       ],
     );
 
+    const statusBeforeRefund = order.status;
     if (order.status !== OrderStatus.REFUNDED) {
       order.status = OrderStatus.REFUNDED;
       order.statusHistory.push({
@@ -514,10 +563,38 @@ export class RefundsService {
     }
 
     this.trackingGateway.emitOrderEvent(order._id.toString(), 'refundProcessed', {
-      message: `Refund of ₱${amount} credited to your wallet`,
+      message: refundToPaymongo
+        ? `Refund of ₱${amount} sent back to your original payment method`
+        : `Refund of ₱${amount} credited to your wallet`,
       refundId: refund._id.toString(),
       amount,
     });
+
+    // A refund can be approved while a rider is still mid-pickup/delivery (see
+    // REFUNDABLE_ORDER_STATUSES) — tell any assigned rider to stop working the order, since
+    // TrackingGateway's emitOrderEvent only fans out to customer/partner notifications.
+    const unfinishedRiderStatuses = new Set([
+      OrderStatus.RIDER_ASSIGNED_PICKUP,
+      OrderStatus.RIDER_ASSIGNED,
+      OrderStatus.PICKED_UP,
+      OrderStatus.IN_TRANSIT_TO_SHOP,
+      OrderStatus.RIDER_ASSIGNED_DELIVERY,
+      OrderStatus.OUT_FOR_DELIVERY,
+    ]);
+    if (unfinishedRiderStatuses.has(statusBeforeRefund)) {
+      const riderIds = new Set(
+        [order.pickupRiderId?.toString(), order.deliveryRiderId?.toString()].filter(
+          (id): id is string => Boolean(id),
+        ),
+      );
+      for (const riderId of riderIds) {
+        void this.riderNotificationService
+          .notifyOrderRefunded(riderId, order)
+          .catch(() => {});
+      }
+    }
+
+    return refundToPaymongo;
   }
 
   /**

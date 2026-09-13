@@ -1,47 +1,13 @@
 import { AddressType } from '@lunara/types';
+import type {
+  BusinessSummary,
+  BusinessSummaryMonth,
+  CustomerAddress,
+  FavoriteBranch,
+  ImpactSummary,
+} from '@lunara/types';
 
-export interface CustomerAddress {
-  _id: string;
-  label: string;
-  addressType?: AddressType | string;
-  line1: string;
-  line2?: string;
-  landmark?: string;
-  notes?: string;
-  city: string;
-  province: string;
-  postalCode: string;
-  latitude?: number;
-  longitude?: number;
-  isDefault: boolean;
-}
-
-export interface FavoriteBranch {
-  branchId: string;
-  code: string;
-  name: string;
-  city: string;
-  logoUrl?: string;
-  favoritedAt: string;
-}
-
-export interface BusinessSummaryMonth {
-  month: string;
-  orderCount: number;
-  totalSpend: number;
-}
-
-export interface BusinessSummary {
-  months: BusinessSummaryMonth[];
-  totalOrders: number;
-  totalSpend: number;
-}
-
-export interface ImpactSummary {
-  totalWeightKg: number;
-  orderCount: number;
-  estimatedCo2SavedKg: number;
-}
+export type { BusinessSummary, BusinessSummaryMonth, CustomerAddress, FavoriteBranch, ImpactSummary };
 
 export interface CustomerProfile {
   firstName: string;
@@ -79,40 +45,14 @@ export const emptyAddressForm = (): AddressFormValues => ({
   isDefault: false,
 });
 
-function parseLegacyLine2(line2?: string): { line2: string; landmark: string; notes: string } {
-  if (!line2) return { line2: '', landmark: '', notes: '' };
-  try {
-    if (line2.startsWith('{')) {
-      const parsed = JSON.parse(line2) as { line2?: string; landmark?: string; notes?: string };
-      return {
-        line2: parsed.line2 ?? '',
-        landmark: parsed.landmark ?? '',
-        notes: parsed.notes ?? '',
-      };
-    }
-  } catch {
-    // fall through to plain text line2
-  }
-  return { line2, landmark: '', notes: '' };
-}
-
-export function encodeAddressLine2(values: Pick<AddressFormValues, 'line2' | 'landmark' | 'notes'>): string | undefined {
-  const line2 = values.line2.trim();
-  const landmark = values.landmark.trim();
-  const notes = values.notes.trim();
-  if (!line2 && !landmark && !notes) return undefined;
-  return JSON.stringify({ line2, landmark, notes });
-}
-
 export function addressToForm(address: CustomerAddress): AddressFormValues {
-  const parsed = parseLegacyLine2(address.line2);
   return {
     label: address.label,
     addressType: (address.addressType as AddressType) ?? AddressType.HOME,
     line1: address.line1,
-    line2: parsed.line2,
-    landmark: parsed.landmark,
-    notes: parsed.notes,
+    line2: address.line2 ?? '',
+    landmark: address.landmark ?? '',
+    notes: address.deliveryInstructions ?? '',
     city: address.city,
     province: address.province,
     postalCode: address.postalCode,

@@ -99,21 +99,22 @@ export class AuthService {
 
     const role = UserRole.CUSTOMER;
 
-    const user = await this.userModel.create({
-
-      email: dto.email,
-
-      phone: dto.phone,
-
-      passwordHash,
-
-      role,
-
-      isActive: true,
-
-      isEmailVerified: dto.email ? false : true,
-
-    });
+    let user;
+    try {
+      user = await this.userModel.create({
+        email: dto.email,
+        phone: dto.phone,
+        passwordHash,
+        role,
+        isActive: true,
+        isEmailVerified: dto.email ? false : true,
+      });
+    } catch (err) {
+      if ((err as { code?: number }).code === 11000) {
+        throw new ConflictException('User already exists');
+      }
+      throw err;
+    }
 
 
 
@@ -167,18 +168,30 @@ export class AuthService {
       if (!valid) throw new UnauthorizedException('Invalid OTP');
 
       if (!user) {
-        user = await this.userModel.create({
-          phone,
-          role: UserRole.CUSTOMER,
-          isActive: true,
-        });
+        try {
+          user = await this.userModel.create({
+            phone,
+            role: UserRole.CUSTOMER,
+            isActive: true,
+          });
 
-        await this.customersService.create(
-          user._id.toString(),
-          OTP_PROFILE_PLACEHOLDER_FIRST_NAME,
-          OTP_PROFILE_PLACEHOLDER_LAST_NAME,
-        );
-        await this.promotionsService.grantSignupPromo(user._id.toString());
+          await this.customersService.create(
+            user._id.toString(),
+            OTP_PROFILE_PLACEHOLDER_FIRST_NAME,
+            OTP_PROFILE_PLACEHOLDER_LAST_NAME,
+          );
+          await this.promotionsService.grantSignupPromo(user._id.toString());
+        } catch (err) {
+          if ((err as { code?: number }).code === 11000) {
+            // Lost a concurrent OTP-registration race for this phone — the other
+            // request already created the account, so fall back to it instead of
+            // double-creating a customer profile/signup promo.
+            user = await this.userModel.findOne({ phone });
+            if (!user) throw err;
+          } else {
+            throw err;
+          }
+        }
       }
 
       user.lastLoginAt = new Date();
@@ -301,6 +314,34 @@ export class AuthService {
     }
 
     return this.buildAuthResponse(user);
+  }
+
+  /** Lets an already-authenticated user (typically a phone-OTP-onboarded customer with no email
+   * on file) add one later, e.g. from the onboarding profile screen. Requires re-verification
+   * since email doubles as a login credential. */
+  async setEmail(userId: string, email: string) {
+    const user = await this.userModel.findById(userId);
+    if (!user) throw new UnauthorizedException();
+
+    if (user.email === email) {
+      return { success: true, data: { requiresEmailVerification: !user.isEmailVerified } };
+    }
+
+    const existing = await this.userModel.findOne({ email, _id: { $ne: user._id } });
+    if (existing) throw new ConflictException('Email already in use');
+
+    user.email = email;
+    user.isEmailVerified = false;
+    await user.save();
+    await this.sendVerificationEmail(user);
+
+    return {
+      success: true,
+      data: {
+        requiresEmailVerification: true,
+        message: `We've sent a verification link to ${email}.`,
+      },
+    };
   }
 
   async resendVerification(email: string) {

@@ -32,13 +32,15 @@ Same already-fully-traced endpoints — no new backend behavior. Every method st
 ## Mutations
 | Action | Destructive? | Confirmed? | Double-submit guard? | Failure visible? |
 |---|---|---|---|---|
-| Redeem reward | no (spends points, atomically guarded server-side) | n/a — same reasoning already documented for the web equivalent (atomic guard + clear voucher-code confirmation makes an accidental double-spend a non-issue) | yes — `disabled={redeemingId !== null}` blocks redeeming *any* catalog item while one is in flight, matching the strong guard already praised on customer-web's rewards page | yes (`Alert.alert`) |
+| Redeem reward | no (spends points, atomically guarded server-side) | n/a — same reasoning already documented for the web equivalent (atomic guard + clear voucher-code confirmation makes an accidental double-spend a non-issue) | yes — `disabled={redeemingId !== null}` blocks redeeming *any* catalog item while one is in flight, matching the strong guard already praised on customer-web's rewards page | yes (`Alert.alert`) — **[FIXED]** the post-redemption refetch failing no longer blanks the whole screen, see Finding #1 |
 
 ## Authorization
 Same already-confirmed pattern (no `RolesGuard` on `RewardsController`, but every method requires a real `Customer` document). No `[authz]` issue distinct from what's already documented.
 
 ## Findings
-No issues found.
+
+1. **[FIXED] A failed post-redemption refetch wiped the entire screen, right after a successful redemption.** The render gate was `!loading && !error && rewards` — but `loading` is only ever set back to `true` by the initial mount effect; `redeem()`'s `await load()` (fired after a successful `POST /rewards/redeem`) runs with `loading` already `false`, so if that refetch failed (transient network issue, unrelated to the redemption itself, which had already succeeded and shown its own `Alert.alert` confirmation), `load()`'s catch set `error`, and the gate immediately hid the points card, tier card, and entire rewards catalog — replacing everything with just the `DataLoadState` error banner. A customer who just redeemed a reward would see their whole rewards screen disappear right after. Same root-cause family as `docs/audits/customer-mobile/subscriptions.md` Finding #3 (stale-but-valid data hidden behind an unrelated `!error` gate), independently present here since this screen predates and doesn't use the shared `useAsyncResource` hook.
+   **Fix:** dropped `!error` from the gate — content now renders whenever `rewards` is non-null (i.e., at least one successful load has happened), regardless of a later refresh/reload failure. `DataLoadState`'s error banner still renders above the (now-preserved) stale content when `error` is set, giving the same "banner + old data" behavior as the subscriptions-screen fix.
 
 ## Unused/dead fields
 None found.

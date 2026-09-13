@@ -98,7 +98,7 @@ export default function SubscriptionsListScreen() {
         }}
       />
 
-      {!loading && !error ? (
+      {!loading && (itemsData !== null || !error) ? (
         items.length === 0 ? (
           <Card muted style={styles.empty}>
             <View style={styles.emptyIcon}>

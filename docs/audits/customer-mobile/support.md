@@ -47,10 +47,12 @@ None on either screen — both read-only.
 Same already-confirmed scoping. No `[authz]` issues.
 
 ## Findings
-No issues found.
+
+1. **[FIXED] A failed pull-to-refresh on the list screen hid the previously-loaded tickets, not just a banner.** Same cross-cutting pattern as `docs/audits/customer-mobile/subscriptions.md` Finding #3 — the render gate was `!loading && !error`, so a refresh failure after a successful initial load unmounted the whole ticket list in favor of the error banner alone. Missed in the original 2026-07-24 pass, which only checked mutations and data-shape correctness, not this render-gate family of bug found across several sibling screens in a later pass.
+   **Fix:** added a `loaded` flag set after the first successful `GET /support/tickets`, changed the gate to `!loading && (loaded || !error)` — the list now survives a later failed refresh, with the error banner shown above it.
 
 ## Unused/dead fields
 None found.
 
 ## Loading/error/realtime behavior
-List uses `DataLoadState` with retry + pull-to-refresh. Detail uses `DataLoadState` for its single load with retry. No polling or realtime subscription on either screen.
+List uses `DataLoadState` with retry + pull-to-refresh. Detail uses `DataLoadState` for its single load with retry. No polling or realtime subscription on either screen. See Finding #1 for the failed-refresh content-hiding fix on the list screen.

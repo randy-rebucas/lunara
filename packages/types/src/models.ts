@@ -1,7 +1,5 @@
 import type {
-  BookingType,
   NotificationChannel,
-  OrderStatus,
   PaymentMethod,
   PaymentStatus,
   UserRole,
@@ -50,38 +48,49 @@ export interface Address extends BaseDocument {
   isDefault: boolean;
 }
 
-export interface OrderItem {
-  serviceType: BookingType;
-  quantity: number;
-  unitPrice: number;
-  notes?: string;
+/** Shape returned by GET/POST/PATCH /addresses — a raw Mongoose document (`_id`, no `id` alias). */
+export interface CustomerAddress {
+  _id: string;
+  label: string;
+  addressType?: string;
+  line1: string;
+  line2?: string;
+  landmark?: string;
+  /** Default note for the rider/shop at this address (gate code, "leave with guard", etc). */
+  deliveryInstructions?: string;
+  city: string;
+  province: string;
+  postalCode: string;
+  latitude?: number;
+  longitude?: number;
+  isDefault: boolean;
 }
 
-export interface Order extends BaseDocument {
-  customerId: string;
-  partnerId?: string;
-  pickupRiderId?: string;
-  deliveryRiderId?: string;
-  status: OrderStatus;
-  bookingType: BookingType;
-  items: OrderItem[];
-  pickupAddressId: string;
-  deliveryAddressId: string;
-  scheduledPickupAt: string;
-  scheduledDeliveryAt?: string;
-  subtotal: number;
-  discount: number;
-  deliveryFee: number;
-  total: number;
-  couponCode?: string;
-  statusHistory: OrderStatusEvent[];
+export interface FavoriteBranch {
+  branchId: string;
+  code: string;
+  name: string;
+  city: string;
+  logoUrl?: string;
+  favoritedAt: string;
 }
 
-export interface OrderStatusEvent {
-  status: OrderStatus;
-  timestamp: string;
-  note?: string;
-  updatedBy?: string;
+export interface BusinessSummaryMonth {
+  month: string;
+  orderCount: number;
+  totalSpend: number;
+}
+
+export interface BusinessSummary {
+  months: BusinessSummaryMonth[];
+  totalOrders: number;
+  totalSpend: number;
+}
+
+export interface ImpactSummary {
+  totalWeightKg: number;
+  orderCount: number;
+  estimatedCo2SavedKg: number;
 }
 
 export interface Wallet extends BaseDocument {
@@ -144,6 +153,8 @@ export interface Deal {
   expiresAt?: string;
   isPersonal?: boolean;
   audience?: 'all' | 'new_customers';
+  /** Set only for a partner-created deal — undefined for a platform-wide one. */
+  partnerId?: string;
 }
 
 export interface RiderCashRemittance {

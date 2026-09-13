@@ -135,7 +135,7 @@ export default function RewardsScreen() {
 
       <DataLoadState loading={loading} error={error} loadingMessage="Loading rewards…" onRetry={load} />
 
-      {!loading && !error && rewards ? (
+      {!loading && rewards ? (
         <>
           <Pressable
             accessibilityRole="button"

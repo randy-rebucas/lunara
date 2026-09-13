@@ -32,6 +32,8 @@ export function useAdminOperationsSocket(handlers: {
   onDispatcherAlert?: (alert: DispatcherAlert) => void;
   onSosLocationUpdate?: (update: SosLocationUpdate) => void;
   onLaundryTagsUpdated?: () => void;
+  onOrderStatusUpdate?: (update: { orderId: string; status: string }) => void;
+  onOrderEvent?: (update: { orderId: string; event: string; [key: string]: unknown }) => void;
 }) {
   const [connected, setConnected] = useState(isAdminRealtimeConnected);
   const handlersRef = useRef(handlers);
@@ -47,6 +49,8 @@ export function useAdminOperationsSocket(handlers: {
       onDispatcherAlert: (alert) => handlersRef.current.onDispatcherAlert?.(alert),
       onSosLocationUpdate: (update) => handlersRef.current.onSosLocationUpdate?.(update),
       onLaundryTagsUpdated: () => handlersRef.current.onLaundryTagsUpdated?.(),
+      onOrderStatusUpdate: (update) => handlersRef.current.onOrderStatusUpdate?.(update),
+      onOrderEvent: (update) => handlersRef.current.onOrderEvent?.(update),
     });
   }, []);
 

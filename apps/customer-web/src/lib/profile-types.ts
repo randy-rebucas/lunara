@@ -1,46 +1,13 @@
 import { AddressType } from '@lunara/types';
+import type {
+  BusinessSummary,
+  BusinessSummaryMonth,
+  CustomerAddress,
+  FavoriteBranch,
+  ImpactSummary,
+} from '@lunara/types';
 
-export interface CustomerAddress {
-  _id: string;
-  label: string;
-  addressType?: AddressType | string;
-  line1: string;
-  line2?: string;
-  city: string;
-  province: string;
-  postalCode: string;
-  latitude?: number;
-  longitude?: number;
-  isDefault: boolean;
-  deliveryInstructions?: string;
-}
-
-export interface FavoriteBranch {
-  branchId: string;
-  code: string;
-  name: string;
-  city: string;
-  logoUrl?: string;
-  favoritedAt: string;
-}
-
-export interface BusinessSummaryMonth {
-  month: string;
-  orderCount: number;
-  totalSpend: number;
-}
-
-export interface BusinessSummary {
-  months: BusinessSummaryMonth[];
-  totalOrders: number;
-  totalSpend: number;
-}
-
-export interface ImpactSummary {
-  totalWeightKg: number;
-  orderCount: number;
-  estimatedCo2SavedKg: number;
-}
+export type { BusinessSummary, BusinessSummaryMonth, CustomerAddress, FavoriteBranch, ImpactSummary };
 
 export interface NotificationPreferences {
   push: boolean;

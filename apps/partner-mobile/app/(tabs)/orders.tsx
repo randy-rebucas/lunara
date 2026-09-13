@@ -19,6 +19,7 @@ import { FilterChips } from '../../src/components/ui/filter-chips';
 import { Screen } from '../../src/components/ui/screen';
 import { StatusPill, type PillKind } from '../../src/components/ui/status-pill';
 import { partnerFetch } from '../../src/api';
+import { usePartnerRealtimeSocket } from '../../src/hooks/use-partner-realtime-socket';
 import { colors, radius, spacing, typography } from '../../src/theme';
 
 const AUTO_REFRESH_MS = 25000;
@@ -162,6 +163,12 @@ export default function OrdersScreen() {
       };
     }, [load]),
   );
+
+  usePartnerRealtimeSocket({
+    onPipelineUpdated: () => {
+      void load(true);
+    },
+  });
 
   async function onRefresh() {
     setRefreshing(true);

@@ -186,6 +186,8 @@ export default function AdminOrderOpsPage() {
   useAdminOperationsSocket({
     onDispatchQueueUpdated: () => { void reload(); },
     onDispatcherAlert: (alert) => { if (alert.orderId === id) void reload(); },
+    onOrderStatusUpdate: (update) => { if (update.orderId === id) void reload(); },
+    onOrderEvent: (update) => { if (update.orderId === id) void reload(); },
   });
 
   async function run(action: () => Promise<unknown>) {

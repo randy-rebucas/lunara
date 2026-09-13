@@ -1,6 +1,6 @@
 {
   "name": "@lunara/partner-mobile",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
@@ -37,6 +37,7 @@
     "react-native": "0.86.3",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
+    "socket.io-client": "^4.8.3",
     "zustand": "^5.0.5"
   },
   "devDependencies": {

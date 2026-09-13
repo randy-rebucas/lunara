@@ -2,7 +2,8 @@ import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 
 /** Resizes and recompresses a captured/picked photo before upload so its size doesn't depend on
  * guessing a server-side multer limit against whatever resolution the device's camera produces
- * (a 12MP+ phone camera at quality 0.85 with no resize can easily exceed 8MB). */
+ * (a 12MP+ phone camera at quality 0.85 with no resize can easily exceed 5MB), and normalizes
+ * formats like HEIC (which the backend's mimetype filter rejects) to JPEG. */
 export async function resizeForUpload(uri: string, maxDimension = 1600): Promise<string> {
   const context = ImageManipulator.manipulate(uri);
   const rendered = await context.resize({ width: maxDimension }).renderAsync();

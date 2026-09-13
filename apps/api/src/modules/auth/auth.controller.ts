@@ -11,6 +11,7 @@ import {
   RefreshTokenDto,
   ResendVerificationDto,
   ResetPasswordDto,
+  SetEmailDto,
   VerifyEmailDto,
 } from './dto/auth.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -102,6 +103,13 @@ export class AuthController {
   @Throttle(AUTH_THROTTLE)
   changePassword(@Req() req: { user: { sub: string } }, @Body() dto: ChangePasswordDto) {
     return this.authService.changePassword(req.user.sub, dto);
+  }
+
+  @Post('email')
+  @UseGuards(JwtAuthGuard)
+  @Throttle(AUTH_THROTTLE)
+  setEmail(@Req() req: { user: { sub: string } }, @Body() dto: SetEmailDto) {
+    return this.authService.setEmail(req.user.sub, dto.email);
   }
 
   @Post('refresh')

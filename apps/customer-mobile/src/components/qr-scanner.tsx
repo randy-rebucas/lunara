@@ -29,9 +29,13 @@ export function QrScanner({ title, hint, onScan, onCancel }: QrScannerProps) {
       try {
         await onScan(payload);
       } catch (e) {
-        scannedRef.current = false;
         setError(e instanceof Error ? e.message : 'Scan failed');
       } finally {
+        // Reset unconditionally, not just on error: a caller whose `onScan` resolves without
+        // navigating away (e.g. "this tag isn't linked to your order") must still be able to
+        // scan again — only the error path used to re-arm the scanner, silently freezing it
+        // after any other non-navigating outcome.
+        scannedRef.current = false;
         setBusy(false);
       }
     },

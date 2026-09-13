@@ -15,6 +15,7 @@ import { LedgerModule } from '../ledger/ledger.module';
 import { LaundryTagsModule } from '../laundry-tags/laundry-tags.module';
 import { RewardsModule } from '../rewards/rewards.module';
 import { BillingModule } from '../billing/billing.module';
+import { PaymentsModule } from '../payments/payments.module';
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 import { Order, OrderSchema } from './schemas/order.schema';
@@ -39,6 +40,7 @@ import { Order, OrderSchema } from './schemas/order.schema';
     LaundryTagsModule,
     RewardsModule,
     BillingModule,
+    PaymentsModule,
   ],
   controllers: [OrdersController],
   providers: [OrdersService],

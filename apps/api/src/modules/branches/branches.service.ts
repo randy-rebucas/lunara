@@ -787,6 +787,22 @@ export class BranchesService {
     };
   }
 
+  /** Union of service types actually offered across a partner's active branches — for scoping
+   * white-label home-screen recommendations to what that partner can actually fulfill, since a
+   * partner may run several shops with different service menus. */
+  async getServiceTypesForPartner(partnerUserId: string): Promise<BookingType[]> {
+    const branches = await this.branchModel
+      .find({ partnerUserId: new Types.ObjectId(partnerUserId), isActive: true })
+      .select('servicePricing.serviceType');
+    const types = new Set<BookingType>();
+    for (const branch of branches) {
+      for (const pricing of branch.servicePricing ?? []) {
+        types.add(pricing.serviceType);
+      }
+    }
+    return Array.from(types);
+  }
+
   /** Ownership-checked variant of getShopPricing/updateServicePricing/updateAddonPricing for the partner portal. */
   async getOwnBranchOrThrow(branchId: string, partnerUserId: string) {
     const branch = await this.branchModel.findById(branchId);

@@ -16,6 +16,7 @@ import {
 } from '@lunara/utils';
 import { RiderAssignmentService } from '../riders/rider-assignment.service';
 import { TrackingGateway } from '../realtime/tracking.gateway';
+import { CustomerOrderNotificationService } from '../push/customer-order-notification.service';
 import { LaundryTagsService } from '../laundry-tags/laundry-tags.service';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
@@ -39,7 +40,27 @@ export class ProcessingService {
     private trackingGateway: TrackingGateway,
     private riderAssignmentService: RiderAssignmentService,
     private laundryTagsService: LaundryTagsService,
+    private customerOrderNotifications: CustomerOrderNotificationService,
   ) {}
+
+  // Serializes advance() calls per order so a double-tap or retry can't read-then-save
+  // the same laundryProcessing.completedSteps array twice and duplicate a step.
+  private advanceLocks = new Map<string, Promise<unknown>>();
+
+  private async withOrderLock<T>(orderId: string, fn: () => Promise<T>): Promise<T> {
+    const previous = this.advanceLocks.get(orderId) ?? Promise.resolve();
+    const settled = previous.catch(() => undefined);
+    const run = settled.then(fn);
+    const tracked = run.catch(() => undefined);
+    this.advanceLocks.set(orderId, tracked);
+    try {
+      return await run;
+    } finally {
+      if (this.advanceLocks.get(orderId) === tracked) {
+        this.advanceLocks.delete(orderId);
+      }
+    }
+  }
 
   getConfig() {
     return {
@@ -199,6 +220,18 @@ export class ProcessingService {
     staffBranchId: string | undefined,
     dto: AdvanceProcessingDto,
   ) {
+    return this.withOrderLock(orderId, () =>
+      this.advanceLocked(orderId, userId, role, staffBranchId, dto),
+    );
+  }
+
+  private async advanceLocked(
+    orderId: string,
+    userId: string,
+    role: UserRole,
+    staffBranchId: string | undefined,
+    dto: AdvanceProcessingDto,
+  ) {
     const order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
 
@@ -277,6 +310,7 @@ export class ProcessingService {
 
     if (order.status === OrderStatus.READY_FOR_DELIVERY) {
       await this.riderAssignmentService.notifyAwaitingDeliveryDispatch(orderId);
+      void this.customerOrderNotifications.notifyOrderStatus(orderId, order.status);
     }
 
     return { success: true, data: await this.buildProcessingView(order) };

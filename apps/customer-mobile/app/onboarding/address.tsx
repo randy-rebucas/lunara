@@ -66,6 +66,9 @@ export default function OnboardingAddressScreen() {
   }
 
   function selectMethod(m: InputMethod) {
+    // Re-tapping the already-active "Manual" tab must not wipe whatever the customer has typed —
+    // only an actual switch *into* manual entry (from location/map) should reset the form.
+    if (m === 'manual' && method === 'manual') return;
     setMethod(m);
     if (m === 'manual') clearAddressFields();
     if (m === 'location') handleUseLocation();

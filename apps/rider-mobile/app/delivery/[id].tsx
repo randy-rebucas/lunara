@@ -7,6 +7,7 @@ import {
   getDeliveryWorkflowStepIndex,
 } from '@lunara/utils';
 import type { RiderCashPaymentInfo } from '@lunara/utils';
+import { OrderStatus } from '@lunara/types';
 import { OpsStepper } from '../../src/components/ops-stepper';
 import { CashPaymentCard } from '../../src/components/cash-payment-card';
 import { TaskDetailsCard } from '../../src/components/task-details-card';
@@ -294,9 +295,9 @@ export default function DeliveryScreen() {
   const stepIndex =
     task.deliveryWorkflowStep ??
     getDeliveryWorkflowStepIndex({ status: task.status, delivery: d });
-  const isAssigned = task.status === 'rider_assigned_delivery';
-  const isOffer = task.status === 'ready_for_delivery' && !d.acceptedAt && !isAssigned;
-  const done = task.status === 'delivered' || task.status === 'completed';
+  const isAssigned = task.status === OrderStatus.RIDER_ASSIGNED_DELIVERY;
+  const isOffer = task.status === OrderStatus.READY_FOR_DELIVERY && !d.acceptedAt && !isAssigned;
+  const done = task.status === OrderStatus.DELIVERED || task.status === OrderStatus.COMPLETED;
   const isActiveDelivery = Boolean(d.acceptedAt && !done && !isOffer);
   const shop = task.shopLocation;
   const bookingLabel = task.bookingType.replace(/_/g, ' ');
@@ -479,7 +480,7 @@ export default function DeliveryScreen() {
             )}
 
             {/* ── Cash collection ── */}
-            {task.cashPayment?.collectAt === 'delivery' && task.status === 'out_for_delivery' && (
+            {task.cashPayment?.collectAt === 'delivery' && task.status === OrderStatus.OUT_FOR_DELIVERY && (
               <CashPaymentCard
                 cashPayment={task.cashPayment}
                 loading={loading}

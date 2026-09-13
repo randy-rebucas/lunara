@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { NotificationChannel } from '@lunara/types';
@@ -21,6 +21,8 @@ export interface DispatchNotificationInput {
 
 @Injectable()
 export class NotificationDispatchService {
+  private readonly logger = new Logger(NotificationDispatchService.name);
+
   constructor(
     @InjectModel(Notification.name)
     private notificationModel: Model<NotificationDocument>,
@@ -44,7 +46,9 @@ export class NotificationDispatchService {
         data: input.data,
         channelId: input.channelId,
       };
-      void this.pushNotificationService.sendToUser(input.userId, pushPayload);
+      this.pushNotificationService.sendToUser(input.userId, pushPayload).catch((err) => {
+        this.logger.warn(`Push send failed for user ${input.userId}: ${(err as Error).message}`);
+      });
     }
 
     return notification;

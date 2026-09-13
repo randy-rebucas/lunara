@@ -239,6 +239,7 @@ export class TrackingGateway implements OnGatewayConnection {
   emitOrderStatus(orderId: string, status: string) {
     const payload = { orderId, status };
     this.server.to(`order:${orderId}`).emit('orderStatusUpdate', payload);
+    this.server.to('admin:operations').emit('orderStatusUpdate', payload);
     void this.emitToCustomerRoom(orderId, 'orderStatusUpdate', payload);
     void this.partnerOrderNotifications.notifyOrderStatus(orderId, status);
   }
@@ -246,6 +247,7 @@ export class TrackingGateway implements OnGatewayConnection {
   emitOrderEvent(orderId: string, event: string, payload: Record<string, unknown>) {
     const full = { orderId, event, ...payload };
     this.server.to(`order:${orderId}`).emit('orderEvent', full);
+    this.server.to('admin:operations').emit('orderEvent', full);
     void this.emitToCustomerRoom(orderId, 'orderEvent', full);
     void this.customerOrderNotifications.notifyOrderEvent(orderId, event, payload);
     void this.partnerOrderNotifications.notifyOrderEvent(orderId, event, payload);

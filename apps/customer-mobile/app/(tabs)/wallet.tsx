@@ -57,6 +57,7 @@ export default function WalletScreen() {
   const [topUpLoading, setTopUpLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [topUpMethod, setTopUpMethod] = useState<PaymentMethod>(PaymentMethod.GCASH);
+  const [loaded, setLoaded] = useState(false);
   const pendingTopupIdRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
@@ -66,9 +67,9 @@ export default function WalletScreen() {
       setBalance(wallet.balance ?? 0);
       const txns = await apiFetch<WalletTransaction[]>('/wallets/me/transactions');
       setTransactions(Array.isArray(txns) ? txns : []);
+      setLoaded(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load wallet');
-      setTransactions([]);
     } finally {
       setLoading(false);
     }
@@ -155,7 +156,7 @@ export default function WalletScreen() {
         }}
       />
 
-      {!loading && !error ? (
+      {!loading && (loaded || !error) ? (
         <Card elevated style={styles.balanceCard}>
           <View style={styles.balanceGlowPrimary} />
           <View style={styles.balanceGlowSecondary} />
@@ -182,7 +183,7 @@ export default function WalletScreen() {
         </Card>
       ) : null}
 
-      {!loading && !error ? (
+      {!loading && (loaded || !error) ? (
         <Card style={styles.topUpCard}>
           <Text style={styles.topUpLabel}>TOP UP VIA</Text>
           <View style={styles.methodRow}>
@@ -241,7 +242,7 @@ export default function WalletScreen() {
         </Card>
       ) : null}
 
-      {!loading && !error ? (
+      {!loading && (loaded || !error) ? (
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>Transaction history</Text>
         </View>
@@ -252,7 +253,7 @@ export default function WalletScreen() {
   return (
     <Screen inTab padded={false}>
       <FlatList
-        data={loading || error ? [] : transactions}
+        data={loading || (error && !loaded) ? [] : transactions}
         keyExtractor={(item, index) => `${item.createdAt}-${index}`}
         style={styles.list}
         contentContainerStyle={[styles.listContent, { paddingBottom: tabPadding }]}
@@ -261,7 +262,7 @@ export default function WalletScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
         ListEmptyComponent={
-          !loading && !error ? (
+          !loading && (loaded || !error) ? (
             <Card muted style={styles.emptyCard}>
               <Text style={styles.emptyText}>No transactions yet</Text>
               <Text style={styles.emptyHint}>Top-ups and order payments will appear here</Text>
@@ -303,7 +304,7 @@ export default function WalletScreen() {
           </Card>
         )}
         ListFooterComponent={
-          !loading && !error ? (
+          !loading && (loaded || !error) ? (
             <Card
               style={styles.secureCard}
               accessible

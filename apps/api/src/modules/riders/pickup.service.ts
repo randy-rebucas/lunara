@@ -226,6 +226,9 @@ export class PickupService {
     await order.save();
 
     this.trackingGateway.emitOrderStatus(orderId, order.status);
+    this.trackingGateway.emitOrderEvent(orderId, 'pickupRiderReassigned', {
+      message: 'Your pickup rider is unavailable — finding you a new one',
+    });
     this.trackingGateway.emitDispatchQueueUpdated({
       reason: 'pickup_rider_rejected',
       orderId,
@@ -421,17 +424,6 @@ export class PickupService {
         earnings,
       },
     };
-  }
-
-  /** @deprecated Shop confirms intake via partner receiving workflow */
-  async completePickup(orderId: string, riderUserId: string) {
-    const order = await this.getActivePickupOrder(orderId, riderUserId);
-    if (order.status !== OrderStatus.IN_TRANSIT_TO_SHOP) {
-      throw new BadRequestException('Deliver laundry to shop first');
-    }
-    throw new BadRequestException(
-      'Partner shop must receive laundry (receive → verify weight → confirm items)',
-    );
   }
 
   private async getOrderForRider(orderId: string, riderUserId: string) {

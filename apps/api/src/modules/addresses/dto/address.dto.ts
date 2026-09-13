@@ -21,6 +21,11 @@ export class CreateAddressDto {
   @IsString()
   line2?: string;
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  landmark?: string;
+
   @IsString()
   city!: string;
 
@@ -64,6 +69,11 @@ export class UpdateAddressDto {
   @IsOptional()
   @IsString()
   line2?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  landmark?: string;
 
   @IsOptional()
   @IsString()
