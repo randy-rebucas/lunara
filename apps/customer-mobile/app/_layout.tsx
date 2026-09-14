@@ -528,6 +528,29 @@ export default function RootLayout() {
 
         <Stack.Screen
 
+          name="messages"
+
+          options={{
+
+            ...stackHeaderOptions,
+
+            headerShown: true,
+
+            title: 'Messages',
+
+            presentation: 'card',
+            headerLeft: () => (
+              <Pressable onPress={handleHeaderBack} hitSlop={10}>
+                <Ionicons name="chevron-back" size={26} color={colors.primary} />
+              </Pressable>
+            ),
+
+          }}
+
+        />
+
+        <Stack.Screen
+
           name="notifications"
 
           options={{

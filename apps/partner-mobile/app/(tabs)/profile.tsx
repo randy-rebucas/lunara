@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { PartnerOwnProfile } from '@lunara/types';
@@ -162,6 +163,25 @@ export default function ProfileScreen() {
                 </Text>
               </View>
             </View>
+          </Card>
+        </View>
+      ) : null}
+
+      {user?.role === 'partner' ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>TEAM</Text>
+          <Card style={styles.card}>
+            <Pressable
+              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+              onPress={() => router.push('/workforce-messages')}
+              accessibilityRole="button"
+            >
+              <View style={[styles.iconWrap, { backgroundColor: colors.primaryLight }]}>
+                <Ionicons name="chatbubbles-outline" size={18} color={colors.primary} />
+              </View>
+              <Text style={styles.rowTitle}>Team &amp; rider messages</Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
+            </Pressable>
           </Card>
         </View>
       ) : null}

@@ -37,6 +37,7 @@ interface AuthStore {
   hydrate: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   loginWithEmail: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: (idToken: string) => Promise<void>;
   loginWithOtp: (phone: string, otp: string) => Promise<void>;
   signupWithOtp: (phone: string, otp: string) => Promise<void>;
   requestOtp: (phone: string) => Promise<{ phone: string }>;
@@ -76,6 +77,18 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     const data = await authRequest<{ user: User; tokens: AuthTokens }>('/auth/login', {
       kind: 'json',
       init: { method: 'POST', body: JSON.stringify({ email, password }) },
+    });
+    if (data.user.role !== UserRole.CUSTOMER) {
+      throw new Error('This account is not a customer account.');
+    }
+    await persistSession(data.user, data.tokens);
+    set({ user: data.user, tokens: data.tokens });
+  },
+
+  loginWithGoogle: async (idToken) => {
+    const data = await authRequest<{ user: User; tokens: AuthTokens }>('/auth/google', {
+      kind: 'json',
+      init: { method: 'POST', body: JSON.stringify({ idToken }) },
     });
     if (data.user.role !== UserRole.CUSTOMER) {
       throw new Error('This account is not a customer account.');

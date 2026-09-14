@@ -44,6 +44,7 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: (idToken: string) => Promise<void>;
   loginWithOtp: (phone: string, otp: string) => Promise<void>;
   signupWithOtp: (phone: string, otp: string) => Promise<void>;
   register: (data: {
@@ -219,6 +220,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [persist],
   );
 
+  const loginWithGoogle = useCallback(
+    async (idToken: string) => {
+      const res = await fetch(`${getApiUrl()}/auth/google`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken }),
+      });
+      const body = await res.json();
+      if (!body.success) throw new Error(parseAuthError(body, 'Google sign-in failed'));
+      if (body.data.user.role !== UserRole.CUSTOMER) {
+        throw new Error('This account is not a customer account. Use the app for your account type.');
+      }
+      persist(authDataFromSession(body.data.user, body.data.tokens));
+    },
+    [persist],
+  );
+
   const loginWithOtp = useCallback(
     async (phone: string, otp: string) => {
       const res = await fetch(`${getApiUrl()}/auth/login`, {
@@ -320,6 +338,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isAuthenticated: !!auth,
     isLoading,
     login,
+    loginWithGoogle,
     loginWithOtp,
     signupWithOtp,
     register,

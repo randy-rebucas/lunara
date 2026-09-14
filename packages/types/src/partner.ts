@@ -600,12 +600,45 @@ export interface ChatMessage {
   readAt?: string;
 }
 
+export type ConversationCounterpartyType = 'admin' | 'employer';
+
 export interface PartnerConversation {
   _id: string;
   partnerId: string;
+  /** 'admin' = thread with Lunara support (default/legacy). 'employer' = a rider/staff member's
+   * direct thread with their connected partner. */
+  counterpartyType?: ConversationCounterpartyType;
+  /** Set only when counterpartyType === 'employer' — the partner userId this thread is with. */
+  employerId?: string | null;
   subject?: string;
   lastMessage?: ChatMessage;
   unreadCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Wire shape is identical to PartnerConversation (the backend reuses the same conversation
+ * collection, keyed by the rider's own user id in the `partnerId` field) — kept as a distinct
+ * type alias so rider-mobile code doesn't read as importing a partner-specific type. */
+export type RiderConversation = PartnerConversation;
+
+/** Wire shape is identical to PartnerConversation — see RiderConversation above. Kept as a
+ * distinct alias so customer-mobile code doesn't read as importing a partner-specific type. */
+export type CustomerConversation = PartnerConversation;
+
+/** One row in a partner/employer's combined workforce inbox (staff + riders). */
+export interface EmployerWorkforceConversation {
+  _id: string;
+  partnerId: string;
+  counterpartyType: 'employer';
+  subject?: string;
+  lastMessage?: ChatMessage;
+  unreadCount: number;
+  recipient: {
+    role: 'staff' | 'rider';
+    name: string | null;
+    phone: string | null;
+  };
   createdAt: string;
   updatedAt: string;
 }

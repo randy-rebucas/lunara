@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -14,19 +15,15 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import type { ChatMessage, MessageAttachment, PartnerConversation } from '@lunara/types';
-import { partnerFetch, partnerUpload } from '../src/api';
-import { getApiOrigin } from '../src/api-config';
-import { Screen } from '../src/components/ui/screen';
-import { usePartnerMessagingSocket } from '../src/hooks/use-partner-messaging-socket';
-import { pickMessageImage } from '../src/lib/message-attachment';
-import type { UploadFile } from '../src/lib/upload-file';
-import { useAuthStore } from '../src/store/auth';
-import { colors, radius, spacing, typography } from '../src/theme';
+import type { ChatMessage, MessageAttachment } from '@lunara/types';
+import { partnerFetch, partnerUpload } from '../../src/api';
+import { getApiOrigin } from '../../src/api-config';
+import { Screen } from '../../src/components/ui/screen';
+import { pickMessageImage } from '../../src/lib/message-attachment';
+import type { UploadFile } from '../../src/lib/upload-file';
+import { useAuthStore } from '../../src/store/auth';
+import { colors, radius, spacing, typography } from '../../src/theme';
 
-// LocalStorageService.uploadBuffer already returns a full absolute URL for message attachments
-// (they're served publicly under /uploads/public, no auth header needed) — resolving a relative
-// path here only matters for defensiveness against a future/legacy relative value.
 function resolveMediaUrl(path: string) {
   if (!path) return '';
   if (path.startsWith('http://') || path.startsWith('https://')) return path;
@@ -47,11 +44,7 @@ function AttachmentView({ attachment }: { attachment: MessageAttachment }) {
     );
   }
   return (
-    <Pressable
-      onPress={() => void Linking.openURL(url)}
-      accessibilityRole="button"
-      style={styles.fileChip}
-    >
+    <Pressable onPress={() => void Linking.openURL(url)} accessibilityRole="button" style={styles.fileChip}>
       <Ionicons name="document-text-outline" size={16} color={colors.primary} />
       <Text style={styles.fileChipText} numberOfLines={1}>
         {attachment.filename}
@@ -78,18 +71,9 @@ function MessageBubble({ msg, myId }: { msg: ChatMessage; myId: string }) {
   );
 }
 
-type Channel = 'employer' | 'admin';
-
-const CHANNEL_BASE: Record<Channel, string> = {
-  employer: '/staff/employer-messages',
-  admin: '/partner/messages',
-};
-
-export default function MessagesScreen() {
+export default function WorkforceThreadScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
   const myId = useAuthStore((s) => s.user?.id ?? '');
-  const isStaff = useAuthStore((s) => s.user?.role === 'staff');
-  const [channel, setChannel] = useState<Channel>(isStaff ? 'employer' : 'admin');
-  const [conversation, setConversation] = useState<PartnerConversation | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -99,33 +83,25 @@ export default function MessagesScreen() {
   const [uploading, setUploading] = useState(false);
   const [sending, setSending] = useState(false);
   const listRef = useRef<FlatList<ChatMessage>>(null);
-  const base = CHANNEL_BASE[channel];
+  const base = `/partner/workforce-messages/${id}`;
 
-  const loadMessages = useCallback(async (convId: string, channelBase: string) => {
-    const res = await partnerFetch<{ items: ChatMessage[] }>(`${channelBase}/${convId}/messages`);
-    setMessages(res.items);
-    await partnerFetch(`${channelBase}/${convId}/read`, { method: 'PATCH' }).catch(() => {});
-  }, []);
-
-  const loadAll = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async () => {
+    if (!id) return;
     setError('');
-    setConversation(null);
-    setMessages([]);
     try {
-      const convo = await partnerFetch<PartnerConversation>(base);
-      setConversation(convo);
-      await loadMessages(convo._id, base);
+      const res = await partnerFetch<{ items: ChatMessage[] }>(`${base}/messages`);
+      setMessages(res.items);
+      await partnerFetch(`${base}/read`, { method: 'PATCH' }).catch(() => {});
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load messages');
     } finally {
       setLoading(false);
     }
-  }, [loadMessages, base]);
+  }, [base, id]);
 
   useEffect(() => {
-    void loadAll();
-  }, [loadAll]);
+    void load();
+  }, [load]);
 
   const scrollToEnd = useCallback((animated: boolean) => {
     requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated }));
@@ -136,16 +112,6 @@ export default function MessagesScreen() {
     scrollToEnd(messagesLen > 1);
   }, [messagesLen, scrollToEnd]);
 
-  usePartnerMessagingSocket({
-    conversationId: conversation?._id ?? null,
-    onNewMessage: (msg) => {
-      setMessages((prev) => (prev.some((m) => m._id === msg._id) ? prev : [...prev, msg]));
-      if (conversation) {
-        void partnerFetch(`${base}/${conversation._id}/read`, { method: 'PATCH' }).catch(() => {});
-      }
-    },
-  });
-
   function removePending() {
     setPendingAttachment(null);
     setPendingPreviewUri(null);
@@ -153,11 +119,11 @@ export default function MessagesScreen() {
 
   async function attachFrom(source: 'camera' | 'library') {
     const picked = await pickMessageImage(source);
-    if (!picked || !conversation) return;
+    if (!picked) return;
     setPendingPreviewUri(picked.uri);
     setUploading(true);
     try {
-      const att = await uploadAttachment(conversation._id, picked);
+      const att = await uploadAttachment(picked);
       setPendingAttachment(att);
     } catch (e) {
       Alert.alert('Upload failed', e instanceof Error ? e.message : 'Please try again.');
@@ -167,12 +133,12 @@ export default function MessagesScreen() {
     }
   }
 
-  async function uploadAttachment(conversationId: string, file: UploadFile): Promise<MessageAttachment> {
-    return partnerUpload<MessageAttachment>(`${base}/${conversationId}/upload`, file);
+  async function uploadAttachment(file: UploadFile): Promise<MessageAttachment> {
+    return partnerUpload<MessageAttachment>(`${base}/upload`, file);
   }
 
   function handleAttachPress() {
-    if (uploading || !conversation) return;
+    if (uploading) return;
     Alert.alert('Attach photo', undefined, [
       { text: 'Take photo', onPress: () => void attachFrom('camera') },
       { text: 'Choose from library', onPress: () => void attachFrom('library') },
@@ -181,18 +147,14 @@ export default function MessagesScreen() {
   }
 
   async function handleSend() {
-    if (!conversation) return;
     const trimmed = content.trim();
     if (!trimmed && !pendingAttachment) return;
     setSending(true);
     try {
-      const msg = await partnerFetch<ChatMessage>(`${base}/${conversation._id}/send`, {
+      const msg = await partnerFetch<ChatMessage>(`${base}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content: trimmed,
-          attachments: pendingAttachment ? [pendingAttachment] : [],
-        }),
+        body: JSON.stringify({ content: trimmed, attachments: pendingAttachment ? [pendingAttachment] : [] }),
       });
       setMessages((prev) => (prev.some((m) => m._id === msg._id) ? prev : [...prev, msg]));
       setContent('');
@@ -205,35 +167,12 @@ export default function MessagesScreen() {
   }
 
   const canSend = useMemo(
-    () => !sending && !uploading && !!conversation && (content.trim().length > 0 || !!pendingAttachment),
-    [sending, uploading, conversation, content, pendingAttachment],
+    () => !sending && !uploading && (content.trim().length > 0 || !!pendingAttachment),
+    [sending, uploading, content, pendingAttachment],
   );
 
   return (
     <Screen inStack padded={false}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Messages</Text>
-        <Text style={styles.subtitle}>
-          {channel === 'employer' ? 'Direct channel with your employer' : 'Direct support channel with Lunara'}
-        </Text>
-        {isStaff ? (
-          <View style={styles.tabRow}>
-            <Pressable
-              onPress={() => setChannel('employer')}
-              style={[styles.tab, channel === 'employer' && styles.tabActive]}
-            >
-              <Text style={[styles.tabText, channel === 'employer' && styles.tabTextActive]}>My Employer</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setChannel('admin')}
-              style={[styles.tab, channel === 'admin' && styles.tabActive]}
-            >
-              <Text style={[styles.tabText, channel === 'admin' && styles.tabTextActive]}>Lunara Support</Text>
-            </Pressable>
-          </View>
-        ) : null}
-      </View>
-
       {error ? (
         <View style={styles.center}>
           <Text style={styles.errorText}>{error}</Text>
@@ -277,8 +216,8 @@ export default function MessagesScreen() {
             <View style={styles.composeRow}>
               <Pressable
                 onPress={handleAttachPress}
-                disabled={uploading || !conversation}
-                style={[styles.attachButton, (uploading || !conversation) && styles.disabled]}
+                disabled={uploading}
+                style={[styles.attachButton, uploading && styles.disabled]}
                 accessibilityLabel="Attach photo"
               >
                 <Ionicons name="attach" size={20} color={colors.primary} />
@@ -290,7 +229,7 @@ export default function MessagesScreen() {
                 placeholderTextColor={colors.mutedForeground}
                 value={content}
                 onChangeText={setContent}
-                editable={!!conversation && !sending}
+                editable={!sending}
                 multiline
               />
 
@@ -317,26 +256,6 @@ export default function MessagesScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.xxxl },
-  header: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  title: { ...typography.heading, fontSize: 22 },
-  subtitle: { ...typography.caption, marginTop: 2 },
-  tabRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
-  tab: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  tabActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  tabText: { ...typography.caption, color: colors.mutedForeground },
-  tabTextActive: { color: colors.onPrimary },
   errorText: { ...typography.bodySm, color: colors.destructive, textAlign: 'center', paddingHorizontal: spacing.xl },
   emptyText: { ...typography.bodySm, color: colors.mutedForeground, textAlign: 'center' },
   listContent: { padding: spacing.lg, flexGrow: 1 },

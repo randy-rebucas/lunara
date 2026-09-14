@@ -214,3 +214,150 @@ export class AdminMessagingController {
     return { success: true, data: { ok: true } };
   }
 }
+
+// ─── Staff → employer channel ────────────────────────────────────────────────
+// Staff message their connected partner (employer) directly, as an individual thread separate
+// from the shared partner/staff↔admin support thread above. Partner owners aren't their own
+// employer, so this surface is staff-only; owners read/reply via EmployerMessagingController.
+
+@Controller('staff/employer-messages')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.STAFF)
+export class StaffEmployerMessagingController {
+  constructor(
+    private readonly messaging: MessagingService,
+    private readonly storageService: LocalStorageService,
+  ) {}
+
+  @Get()
+  async getConversation(@Req() req: any) {
+    const user = req.user as { sub: string; role: string };
+    const employerId = await this.messaging.resolveEmployerId(user.sub, user.role);
+    if (!employerId) throw new NotFoundException('No connected employer found');
+    const data = await this.messaging.getOrCreateConversation(user.sub, 'employer', employerId);
+    return { success: true, data };
+  }
+
+  @Get(':id/messages')
+  async listMessages(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Query('limit') limit?: string,
+    @Query('before') before?: string,
+  ) {
+    await this.messaging.assertOwnership(id, req.user.sub);
+    const items = await this.messaging.listMessages(id, limit ? Number(limit) : 30, before);
+    return { success: true, data: { items } };
+  }
+
+  @Post(':id/send')
+  async sendMessage(@Req() req: any, @Param('id') id: string, @Body() body: SendMessageDto) {
+    if (!body.content?.trim() && !body.attachments?.length) {
+      throw new BadRequestException('Message must have content or at least one attachment');
+    }
+    await this.messaging.assertOwnership(id, req.user.sub);
+    const user = req.user as { sub: string; email?: string };
+    const data = await this.messaging.sendEmployerMessage(
+      id,
+      user.sub,
+      'staff',
+      user.email ?? 'Staff',
+      body.content ?? '',
+      body.attachments ?? [],
+    );
+    return { success: true, data };
+  }
+
+  @Post(':id/upload')
+  @UseInterceptors(FileInterceptor('file', attachmentUploadOptions))
+  async uploadAttachment(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('No file provided');
+    const result = await this.storageService.uploadBuffer(
+      file.buffer,
+      'lunara/message-attachments',
+      undefined,
+      'auto',
+      file.mimetype,
+    );
+    const data = this.messaging.saveAttachment(file, result.secure_url);
+    return { success: true, data };
+  }
+
+  @Patch(':id/read')
+  async markRead(@Req() req: any, @Param('id') id: string) {
+    await this.messaging.assertOwnership(id, req.user.sub);
+    await this.messaging.markEmployerConversationRead(id, 'owner');
+    return { success: true, data: { ok: true } };
+  }
+}
+
+// ─── Partner (employer) → workforce inbox ────────────────────────────────────
+// The partner owner's combined inbox of their staff + rider employer-channel threads.
+
+@Controller('partner/workforce-messages')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.PARTNER)
+export class EmployerMessagingController {
+  constructor(
+    private readonly messaging: MessagingService,
+    private readonly storageService: LocalStorageService,
+  ) {}
+
+  @Get()
+  async listConversations(@Req() req: any) {
+    const data = await this.messaging.listEmployerConversations(req.user.sub);
+    return { success: true, data };
+  }
+
+  @Get(':id/messages')
+  async listMessages(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Query('limit') limit?: string,
+    @Query('before') before?: string,
+  ) {
+    await this.messaging.assertEmployerOwnership(id, req.user.sub);
+    const items = await this.messaging.listMessages(id, limit ? Number(limit) : 30, before);
+    return { success: true, data: { items } };
+  }
+
+  @Post(':id/send')
+  async sendMessage(@Req() req: any, @Param('id') id: string, @Body() body: SendMessageDto) {
+    if (!body.content?.trim() && !body.attachments?.length) {
+      throw new BadRequestException('Message must have content or at least one attachment');
+    }
+    await this.messaging.assertEmployerOwnership(id, req.user.sub);
+    const user = req.user as { sub: string; email?: string };
+    const data = await this.messaging.sendEmployerMessage(
+      id,
+      user.sub,
+      'employer',
+      user.email ?? 'Employer',
+      body.content ?? '',
+      body.attachments ?? [],
+    );
+    return { success: true, data };
+  }
+
+  @Post(':id/upload')
+  @UseInterceptors(FileInterceptor('file', attachmentUploadOptions))
+  async uploadAttachment(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('No file provided');
+    const result = await this.storageService.uploadBuffer(
+      file.buffer,
+      'lunara/message-attachments',
+      undefined,
+      'auto',
+      file.mimetype,
+    );
+    const data = this.messaging.saveAttachment(file, result.secure_url);
+    return { success: true, data };
+  }
+
+  @Patch(':id/read')
+  async markRead(@Req() req: any, @Param('id') id: string) {
+    await this.messaging.assertEmployerOwnership(id, req.user.sub);
+    await this.messaging.markEmployerConversationRead(id, 'employer');
+    return { success: true, data: { ok: true } };
+  }
+}

@@ -23,6 +23,10 @@ export interface LoginRequest {
   otp?: string;
 }
 
+export interface GoogleLoginRequest {
+  idToken: string;
+}
+
 export interface RegisterRequest {
   email?: string;
   phone?: string;

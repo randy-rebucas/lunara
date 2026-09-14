@@ -8,6 +8,7 @@ import { isValidPhilippineMobile } from '@lunara/utils';
 import { fetchOnboardingStatus, getOnboardingPath } from '@lunara/hooks/onboarding';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { AuthShell } from '../../../components/auth-shell';
+import { GoogleSignInButton } from '../../../components/google-sign-in-button';
 import { FormError } from '../../../components/marketing/marketing-design';
 import { Input } from '../../../components/ui/input';
 import { getFriendlyErrorMessage } from '../../../lib/format-error';
@@ -16,7 +17,7 @@ import { getRecaptchaToken } from '../../../lib/recaptcha';
 type OtpStep = 'phone' | 'code';
 
 export default function LoginPage() {
-  const { login, loginWithOtp, requestOtp, api, isAuthenticated } = useAuthContext();
+  const { login, loginWithGoogle, loginWithOtp, requestOtp, api, isAuthenticated } = useAuthContext();
   const router = useRouter();
   const [mode, setMode] = useState<'password' | 'otp'>('password');
   const [otpStep, setOtpStep] = useState<OtpStep>('phone');
@@ -95,6 +96,26 @@ export default function LoginPage() {
       router.replace(getOnboardingPath(status));
     } catch {
       router.replace('/dashboard');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleGoogleCredential(idToken: string) {
+    setError('');
+    setSubmitting(true);
+    try {
+      await loginWithGoogle(idToken);
+    } catch (err) {
+      setError(getFriendlyErrorMessage(err, 'Google sign-in failed. Please try again.'));
+      setSubmitting(false);
+      return;
+    }
+    try {
+      const status = await fetchOnboardingStatus(api);
+      router.push(getOnboardingPath(status));
+    } catch {
+      router.push('/dashboard');
     } finally {
       setSubmitting(false);
     }
@@ -228,6 +249,16 @@ export default function LoginPage() {
           </button>
         </form>
       )}
+
+      <div className="mt-6 flex items-center gap-3 text-xs font-medium uppercase text-muted">
+        <span className="h-px flex-1 bg-slate-200" />
+        or
+        <span className="h-px flex-1 bg-slate-200" />
+      </div>
+
+      <div className="mt-6">
+        <GoogleSignInButton onCredential={handleGoogleCredential} onError={setError} disabled={submitting} />
+      </div>
 
       <p className="mt-6 text-center text-sm text-muted">
         No account?{' '}

@@ -20,6 +20,8 @@ import { randomBytes } from 'crypto';
 
 import { Model } from 'mongoose';
 
+import { OAuth2Client } from 'google-auth-library';
+
 import { UserRole } from '@lunara/types';
 
 import { formatPhone, getPermissionsForRole } from '@lunara/utils';
@@ -30,6 +32,10 @@ import {
 } from '../customers/customers.constants';
 
 import { getJwtRefreshSecret } from '../../common/config/jwt-config';
+
+import { getGoogleOAuthAudiences } from '../../common/config/google-auth-config';
+
+import { decideGoogleLogin } from './google-login.logic';
 
 import { EmailService } from '../../common/email/email.service';
 
@@ -70,6 +76,8 @@ export class AuthService {
     private recaptchaService: RecaptchaService,
 
   ) {}
+
+  private readonly googleClient = new OAuth2Client();
 
 
 
@@ -231,6 +239,107 @@ export class AuthService {
   }
 
 
+
+  /** Customer-facing Google sign-in only (customer-web + customer-mobile) — verifies the ID token
+   * Google issued client-side, then finds-or-creates a CUSTOMER account. Every other account type
+   * (partner/staff/rider/admin) keeps signing in with a password, so an existing non-customer
+   * email is refused here rather than silently reusing that account. */
+  async loginWithGoogle(idToken: string) {
+    const audiences = getGoogleOAuthAudiences();
+    if (!audiences.length) {
+      throw new UnauthorizedException('Google sign-in is not configured');
+    }
+
+    let payload;
+    try {
+      const ticket = await this.googleClient.verifyIdToken({ idToken, audience: audiences });
+      payload = ticket.getPayload();
+    } catch {
+      throw new UnauthorizedException('Invalid Google credential');
+    }
+
+    let user = payload?.sub ? await this.userModel.findOne({ googleId: payload.sub }) : null;
+    const existingByEmail =
+      !user && payload?.email ? await this.userModel.findOne({ email: payload.email }) : null;
+    const matchedExisting = user ?? existingByEmail;
+
+    const decision = decideGoogleLogin(
+      payload
+        ? {
+            sub: payload.sub,
+            email: payload.email,
+            email_verified: payload.email_verified,
+            given_name: payload.given_name,
+            family_name: payload.family_name,
+          }
+        : undefined,
+      matchedExisting ? { role: matchedExisting.role, isActive: matchedExisting.isActive } : undefined,
+    );
+
+    switch (decision.outcome) {
+      case 'invalid-payload':
+        throw new UnauthorizedException('Invalid Google credential');
+      case 'unverified-email':
+        throw new UnauthorizedException('Google account email is not verified');
+      case 'non-customer-account':
+        throw new ForbiddenException(
+          'This account is not a customer account. Use the app for your account type.',
+        );
+      case 'deactivated-account':
+        throw new ForbiddenException('This account has been deactivated');
+    }
+    // payload.sub/email are guaranteed present past this point — decideGoogleLogin's 'proceed'
+    // outcome only occurs when both were checked non-empty.
+    const verifiedPayload = payload! as typeof payload & { sub: string; email: string };
+
+    if (!user) {
+      if (existingByEmail) {
+        existingByEmail.googleId = verifiedPayload.sub;
+        existingByEmail.isEmailVerified = true;
+        user = existingByEmail;
+
+        // Backfill the avatar only if the customer never set/uploaded one of their own — Google's
+        // picture shouldn't clobber a photo they picked deliberately after linking accounts.
+        if (payload?.picture) {
+          const customer = await this.customersService.findByUserId(user._id.toString());
+          if (customer && !customer.avatarUrl) {
+            await this.customersService.updateAvatar(user._id.toString(), payload.picture);
+          }
+        }
+      } else {
+        try {
+          user = await this.userModel.create({
+            email: verifiedPayload.email,
+            googleId: verifiedPayload.sub,
+            role: UserRole.CUSTOMER,
+            isActive: true,
+            isEmailVerified: true,
+          });
+
+          await this.customersService.create(
+            user._id.toString(),
+            verifiedPayload.given_name || OTP_PROFILE_PLACEHOLDER_FIRST_NAME,
+            verifiedPayload.family_name || OTP_PROFILE_PLACEHOLDER_LAST_NAME,
+            payload?.picture,
+          );
+          await this.promotionsService.grantSignupPromo(user._id.toString());
+        } catch (err) {
+          if ((err as { code?: number }).code === 11000) {
+            // Lost a concurrent registration race for this email/googleId.
+            user = await this.userModel.findOne({ googleId: verifiedPayload.sub });
+            if (!user) throw err;
+          } else {
+            throw err;
+          }
+        }
+      }
+    }
+
+    user.lastLoginAt = new Date();
+    await user.save();
+
+    return this.buildAuthResponse(user);
+  }
 
   async requestOtp(phone: string, recaptchaToken?: string, isMobileClient = false) {
     if (!isMobileClient) {

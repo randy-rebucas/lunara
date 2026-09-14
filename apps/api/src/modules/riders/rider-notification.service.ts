@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { OrderStatus } from '@lunara/types';
-import { formatCurrency, type RiderEarningType } from '@lunara/utils';
 import { NotificationDispatchService } from '../push/notification-dispatch.service';
 import { TrackingGateway } from '../realtime/tracking.gateway';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
@@ -78,29 +77,6 @@ export class RiderNotificationService {
     };
 
     await this.dispatch(riderUserId, title, body, data, 'assignmentReassigned');
-  }
-
-  async notifyEarningsCredited(
-    riderUserId: string,
-    referenceId: string,
-    earningType: RiderEarningType,
-    amount: number,
-    note?: string,
-  ) {
-    const title = RIDER_NOTIFICATION_TITLES.EARNINGS_CREDITED;
-    const label = earningType === 'pickup' || earningType === 'delivery'
-      ? `${earningType} · order ${referenceId.slice(-6).toUpperCase()}`
-      : note?.trim() || earningType;
-    const body = `${formatCurrency(amount)} credited — ${label}`;
-    const data = {
-      category: RIDER_NOTIFICATION_CATEGORY.EARNINGS,
-      type: RIDER_NOTIFICATION_TYPES.EARNINGS_CREDITED,
-      orderId: earningType === 'pickup' || earningType === 'delivery' ? referenceId : undefined,
-      earningType,
-      amount,
-    };
-
-    await this.dispatch(riderUserId, title, body, data, 'earnings_credited');
   }
 
   async notifyOrderRefunded(

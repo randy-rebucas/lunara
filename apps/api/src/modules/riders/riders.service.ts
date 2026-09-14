@@ -92,6 +92,14 @@ export class RidersService {
     };
   }
 
+  async markAllNotificationsRead(userId: string) {
+    await this.notificationModel.updateMany(
+      { userId: new Types.ObjectId(userId), read: false },
+      { $set: { read: true } },
+    );
+    return { success: true };
+  }
+
   async markNotificationRead(userId: string, notificationId: string) {
     const notification = await this.notificationModel.findById(notificationId);
     if (!notification) throw new NotFoundException('Notification not found');
@@ -319,10 +327,6 @@ export class RidersService {
       );
     }
 
-    void this.riderNotificationService
-      .notifyEarningsCredited(userId, orderId, type, amount)
-      .catch(() => {});
-
     await this.ledgerService.post(
       `rider-earning:${orderId}:${type}`,
       'rider_earning',
@@ -387,10 +391,6 @@ export class RidersService {
         `Wallet credit failed for rider ${userId}, manual earning ${referenceId} (${type}, ${amount}): ${(err as Error).message}`,
       );
     }
-
-    void this.riderNotificationService
-      .notifyEarningsCredited(userId, referenceId, type, amount, note)
-      .catch(() => {});
 
     await this.ledgerService.post(
       `rider-earning:${referenceId}`,

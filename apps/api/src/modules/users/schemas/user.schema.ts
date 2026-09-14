@@ -15,6 +15,11 @@ export class User {
   @Prop()
   passwordHash?: string;
 
+  /** Google "sub" claim — set once this account has signed in with Google. Customer-facing
+   * sign-in only (see AuthService.loginWithGoogle); other roles always sign in with a password. */
+  @Prop({ unique: true, sparse: true })
+  googleId?: string;
+
   @Prop({ required: true, enum: UserRole, default: UserRole.CUSTOMER, index: true })
   role!: UserRole;
 

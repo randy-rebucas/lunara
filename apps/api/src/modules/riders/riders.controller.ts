@@ -258,6 +258,12 @@ export class RidersController {
     return this.ridersService.listNotifications(req.user.sub, Number(limit));
   }
 
+  @Patch('notifications/read-all')
+  @Roles(UserRole.RIDER)
+  markAllNotificationsRead(@Req() req: { user: { sub: string } }) {
+    return this.ridersService.markAllNotificationsRead(req.user.sub);
+  }
+
   @Patch('notifications/:id/read')
   @Roles(UserRole.RIDER)
   markNotificationRead(

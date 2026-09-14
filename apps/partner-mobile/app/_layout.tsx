@@ -67,6 +67,8 @@ export default function RootLayout() {
         <Stack.Screen name="order/[id]/receiving" options={{ title: 'Shop receiving' }} />
         <Stack.Screen name="notifications" options={{ title: 'Notifications' }} />
         <Stack.Screen name="messages" options={{ title: 'Messages' }} />
+        <Stack.Screen name="workforce-messages/index" options={{ title: 'Team & rider messages' }} />
+        <Stack.Screen name="workforce-messages/[id]" options={{ title: 'Conversation' }} />
       </Stack>
     </SafeAreaProvider>
   );

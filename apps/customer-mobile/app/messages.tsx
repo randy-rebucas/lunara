@@ -14,31 +14,22 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import type { ChatMessage, MessageAttachment, PartnerConversation } from '@lunara/types';
-import { partnerFetch, partnerUpload } from '../src/api';
-import { getApiOrigin } from '../src/api-config';
+import type { ChatMessage, CustomerConversation, MessageAttachment } from '@lunara/types';
 import { Screen } from '../src/components/ui/screen';
-import { usePartnerMessagingSocket } from '../src/hooks/use-partner-messaging-socket';
+import { useCustomerMessagingSocket } from '../src/hooks/use-customer-messaging-socket';
 import { pickMessageImage } from '../src/lib/message-attachment';
-import type { UploadFile } from '../src/lib/upload-file';
+import { resolveMediaUrl } from '../src/lib/media-url';
 import { useAuthStore } from '../src/store/auth';
 import { colors, radius, spacing, typography } from '../src/theme';
 
-// LocalStorageService.uploadBuffer already returns a full absolute URL for message attachments
-// (they're served publicly under /uploads/public, no auth header needed) — resolving a relative
-// path here only matters for defensiveness against a future/legacy relative value.
-function resolveMediaUrl(path: string) {
-  if (!path) return '';
-  if (path.startsWith('http://') || path.startsWith('https://')) return path;
-  return `${getApiOrigin()}${path.startsWith('/') ? path : `/${path}`}`;
-}
+const BASE = '/customers/messages';
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 function AttachmentView({ attachment }: { attachment: MessageAttachment }) {
-  const url = resolveMediaUrl(attachment.url);
+  const url = resolveMediaUrl(attachment.url) ?? '';
   if (attachment.mimeType.startsWith('image/')) {
     return (
       <Pressable onPress={() => void Linking.openURL(url)} accessibilityRole="imagebutton">
@@ -78,18 +69,11 @@ function MessageBubble({ msg, myId }: { msg: ChatMessage; myId: string }) {
   );
 }
 
-type Channel = 'employer' | 'admin';
-
-const CHANNEL_BASE: Record<Channel, string> = {
-  employer: '/staff/employer-messages',
-  admin: '/partner/messages',
-};
-
 export default function MessagesScreen() {
   const myId = useAuthStore((s) => s.user?.id ?? '');
-  const isStaff = useAuthStore((s) => s.user?.role === 'staff');
-  const [channel, setChannel] = useState<Channel>(isStaff ? 'employer' : 'admin');
-  const [conversation, setConversation] = useState<PartnerConversation | null>(null);
+  const apiFetch = useAuthStore((s) => s.apiFetch);
+  const apiUpload = useAuthStore((s) => s.apiUpload);
+  const [conversation, setConversation] = useState<CustomerConversation | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -99,13 +83,12 @@ export default function MessagesScreen() {
   const [uploading, setUploading] = useState(false);
   const [sending, setSending] = useState(false);
   const listRef = useRef<FlatList<ChatMessage>>(null);
-  const base = CHANNEL_BASE[channel];
 
-  const loadMessages = useCallback(async (convId: string, channelBase: string) => {
-    const res = await partnerFetch<{ items: ChatMessage[] }>(`${channelBase}/${convId}/messages`);
+  const loadMessages = useCallback(async (convId: string) => {
+    const res = await apiFetch<{ items: ChatMessage[] }>(`${BASE}/${convId}/messages`);
     setMessages(res.items);
-    await partnerFetch(`${channelBase}/${convId}/read`, { method: 'PATCH' }).catch(() => {});
-  }, []);
+    await apiFetch(`${BASE}/${convId}/read`, { method: 'PATCH' }).catch(() => {});
+  }, [apiFetch]);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -113,17 +96,18 @@ export default function MessagesScreen() {
     setConversation(null);
     setMessages([]);
     try {
-      const convo = await partnerFetch<PartnerConversation>(base);
+      const convo = await apiFetch<CustomerConversation>(BASE);
       setConversation(convo);
-      await loadMessages(convo._id, base);
+      await loadMessages(convo._id);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load messages');
     } finally {
       setLoading(false);
     }
-  }, [loadMessages, base]);
+  }, [apiFetch, loadMessages]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional fetch/update-on-mount, not a synchronous render loop
     void loadAll();
   }, [loadAll]);
 
@@ -136,12 +120,12 @@ export default function MessagesScreen() {
     scrollToEnd(messagesLen > 1);
   }, [messagesLen, scrollToEnd]);
 
-  usePartnerMessagingSocket({
+  useCustomerMessagingSocket({
     conversationId: conversation?._id ?? null,
     onNewMessage: (msg) => {
       setMessages((prev) => (prev.some((m) => m._id === msg._id) ? prev : [...prev, msg]));
       if (conversation) {
-        void partnerFetch(`${base}/${conversation._id}/read`, { method: 'PATCH' }).catch(() => {});
+        void apiFetch(`${BASE}/${conversation._id}/read`, { method: 'PATCH' }).catch(() => {});
       }
     },
   });
@@ -157,7 +141,7 @@ export default function MessagesScreen() {
     setPendingPreviewUri(picked.uri);
     setUploading(true);
     try {
-      const att = await uploadAttachment(conversation._id, picked);
+      const att = await apiUpload<MessageAttachment>(`${BASE}/${conversation._id}/upload`, picked.formData);
       setPendingAttachment(att);
     } catch (e) {
       Alert.alert('Upload failed', e instanceof Error ? e.message : 'Please try again.');
@@ -165,10 +149,6 @@ export default function MessagesScreen() {
     } finally {
       setUploading(false);
     }
-  }
-
-  async function uploadAttachment(conversationId: string, file: UploadFile): Promise<MessageAttachment> {
-    return partnerUpload<MessageAttachment>(`${base}/${conversationId}/upload`, file);
   }
 
   function handleAttachPress() {
@@ -186,7 +166,7 @@ export default function MessagesScreen() {
     if (!trimmed && !pendingAttachment) return;
     setSending(true);
     try {
-      const msg = await partnerFetch<ChatMessage>(`${base}/${conversation._id}/send`, {
+      const msg = await apiFetch<ChatMessage>(`${BASE}/${conversation._id}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -210,28 +190,9 @@ export default function MessagesScreen() {
   );
 
   return (
-    <Screen inStack padded={false}>
+    <Screen padded={false}>
       <View style={styles.header}>
-        <Text style={styles.title}>Messages</Text>
-        <Text style={styles.subtitle}>
-          {channel === 'employer' ? 'Direct channel with your employer' : 'Direct support channel with Lunara'}
-        </Text>
-        {isStaff ? (
-          <View style={styles.tabRow}>
-            <Pressable
-              onPress={() => setChannel('employer')}
-              style={[styles.tab, channel === 'employer' && styles.tabActive]}
-            >
-              <Text style={[styles.tabText, channel === 'employer' && styles.tabTextActive]}>My Employer</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setChannel('admin')}
-              style={[styles.tab, channel === 'admin' && styles.tabActive]}
-            >
-              <Text style={[styles.tabText, channel === 'admin' && styles.tabTextActive]}>Lunara Support</Text>
-            </Pressable>
-          </View>
-        ) : null}
+        <Text style={styles.subtitle}>Direct support channel with Lunara</Text>
       </View>
 
       {error ? (
@@ -324,19 +285,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  title: { ...typography.heading, fontSize: 22 },
   subtitle: { ...typography.caption, marginTop: 2 },
-  tabRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
-  tab: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  tabActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  tabText: { ...typography.caption, color: colors.mutedForeground },
-  tabTextActive: { color: colors.onPrimary },
   errorText: { ...typography.bodySm, color: colors.destructive, textAlign: 'center', paddingHorizontal: spacing.xl },
   emptyText: { ...typography.bodySm, color: colors.mutedForeground, textAlign: 'center' },
   listContent: { padding: spacing.lg, flexGrow: 1 },

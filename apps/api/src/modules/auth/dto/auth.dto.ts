@@ -54,6 +54,11 @@ export class LoginDto {
   otp?: string;
 }
 
+export class GoogleLoginDto {
+  @IsString()
+  idToken!: string;
+}
+
 export class OtpRequestDto {
   @IsString()
   phone!: string;

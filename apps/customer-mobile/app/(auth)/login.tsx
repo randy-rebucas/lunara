@@ -22,6 +22,7 @@ import { brandIconSource } from '../../src/lib/brand-icon';
 import { BrandMark } from '../../src/components/ui/brand-mark';
 import { Button } from '../../src/components/ui/button';
 import { Card } from '../../src/components/ui/card';
+import { GOOGLE_AUTH_SUPPORTED, GoogleSignInButton } from '../../src/components/ui/google-sign-in-button';
 import { Input } from '../../src/components/ui/input';
 import { Screen } from '../../src/components/ui/screen';
 import { brandName, brandTagline, colors, radius, spacing, typography } from '../../src/theme';
@@ -40,7 +41,7 @@ const TRUST_ITEMS = [
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { loginWithOtp, loginWithEmail, requestOtp, apiFetch } = useAuthStore();
+  const { loginWithOtp, loginWithEmail, loginWithGoogle, requestOtp, apiFetch } = useAuthStore();
   const [mode, setMode] = useState<'otp' | 'email'>('otp');
   const [otpStep, setOtpStep] = useState<OtpStep>('phone');
   const [country, setCountry] = useState<Country>(COUNTRIES[0]);
@@ -121,6 +122,19 @@ export default function LoginScreen() {
       await redirectAfterAuth(apiFetch, router);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Login failed');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleGoogleCredential(idToken: string) {
+    setError('');
+    setSubmitting(true);
+    try {
+      await loginWithGoogle(idToken);
+      await redirectAfterAuth(apiFetch, router);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Google sign-in failed');
     } finally {
       setSubmitting(false);
     }
@@ -309,6 +323,17 @@ export default function LoginScreen() {
             </>
           )}
 
+          {GOOGLE_AUTH_SUPPORTED ? (
+            <>
+              <View style={styles.dividerRow}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or</Text>
+                <View style={styles.dividerLine} />
+              </View>
+              <GoogleSignInButton onCredential={handleGoogleCredential} onError={setError} disabled={submitting} />
+            </>
+          ) : null}
+
           {error ? (
             <View style={styles.errorRow}>
               <Ionicons name="alert-circle-outline" size={15} color={colors.destructive} />
@@ -425,6 +450,11 @@ const styles = StyleSheet.create({
   /* ── Form section ── */
   formSection: { padding: spacing.xl, paddingBottom: spacing.xxxl },
   formCard: { borderWidth: 0, gap: spacing.xs },
+
+  /* Google sign-in divider */
+  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginVertical: spacing.md },
+  dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
+  dividerText: { fontSize: 11, fontWeight: '600', color: colors.muted, textTransform: 'uppercase' },
 
   /* Mode tabs */
   modeRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },

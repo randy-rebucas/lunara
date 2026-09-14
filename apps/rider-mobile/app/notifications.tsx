@@ -28,7 +28,7 @@ const Separator = () => <View style={styles.separator} />;
 
 export default function NotificationsScreen() {
   const { setUnreadCount, notificationsVersion } = useRiderOperations();
-  const { items, loading, refreshing, error, refresh, markRead, load, unreadCount } =
+  const { items, loading, refreshing, error, refresh, markRead, markAllRead, load, unreadCount } =
     useNotifications(50);
   const [filter, setFilter] = useState<FilterKey>('all');
 
@@ -88,6 +88,12 @@ export default function NotificationsScreen() {
             <View style={styles.badge}>
               <Text style={styles.badgeText}>{unreadCount}</Text>
             </View>
+          ) : null}
+          <View style={{ flex: 1 }} />
+          {unreadCount > 0 ? (
+            <Pressable onPress={markAllRead} hitSlop={8}>
+              <Text style={styles.markAllText}>Mark all read</Text>
+            </Pressable>
           ) : null}
         </View>
         <Text style={styles.pageSubtitle}>Assignments, reminders and system alerts.</Text>
@@ -180,6 +186,11 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   pageSubtitle: { ...typography.bodySm, marginTop: spacing.xs },
+  markAllText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.primary,
+  },
 
   filterScroll: { flexGrow: 0 },
   filterRow: {

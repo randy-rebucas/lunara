@@ -24,6 +24,7 @@ import {
 import { BrandMark } from '../../src/components/ui/brand-mark';
 import { Button } from '../../src/components/ui/button';
 import { Card } from '../../src/components/ui/card';
+import { GOOGLE_AUTH_SUPPORTED, GoogleSignInButton } from '../../src/components/ui/google-sign-in-button';
 import { Input } from '../../src/components/ui/input';
 import { OnboardingProgress } from '../../src/components/onboarding-progress';
 import { Screen } from '../../src/components/ui/screen';
@@ -39,7 +40,7 @@ function formatCooldown(s: number) {
 
 export default function SignUpScreen() {
   const router = useRouter();
-  const { signupWithOtp, requestOtp, apiFetch } = useAuthStore();
+  const { signupWithOtp, loginWithGoogle, requestOtp, apiFetch } = useAuthStore();
   const [step, setStep] = useState<Step>('phone');
 
   // Country picker
@@ -139,6 +140,19 @@ export default function SignUpScreen() {
     }
   }
 
+  async function handleGoogleCredential(idToken: string) {
+    setError('');
+    setSubmitting(true);
+    try {
+      await loginWithGoogle(idToken);
+      await redirectAfterAuth(apiFetch, router);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Google sign-in failed');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   function handleChangeNumber() {
     setStep('phone');
     setOtpDigits(Array(6).fill(''));
@@ -220,6 +234,17 @@ export default function SignUpScreen() {
                 disabled={submitting || !localPhone.trim()}
                 style={styles.submitBtn}
               />
+
+              {GOOGLE_AUTH_SUPPORTED ? (
+                <>
+                  <View style={styles.dividerRow}>
+                    <View style={styles.dividerLine} />
+                    <Text style={styles.dividerText}>or</Text>
+                    <View style={styles.dividerLine} />
+                  </View>
+                  <GoogleSignInButton onCredential={handleGoogleCredential} onError={setError} disabled={submitting} />
+                </>
+              ) : null}
 
               <Text style={styles.termsText}>
                 By continuing, you agree to our{' '}
@@ -385,6 +410,11 @@ const styles = StyleSheet.create({
 
   /* Card */
   formCard: { borderWidth: 0, gap: spacing.xs },
+
+  /* Google sign-in divider */
+  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginVertical: spacing.md },
+  dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
+  dividerText: { fontSize: 11, fontWeight: '600', color: colors.muted, textTransform: 'uppercase' },
   title: { ...typography.title, fontSize: 22, marginTop: spacing.md },
   subtitle: { ...typography.bodySm, color: colors.slate700, marginBottom: spacing.md },
 

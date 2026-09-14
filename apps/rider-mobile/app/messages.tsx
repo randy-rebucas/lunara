@@ -14,13 +14,13 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import type { ChatMessage, MessageAttachment, PartnerConversation } from '@lunara/types';
-import { partnerFetch, partnerUpload } from '../src/api';
+import type { ChatMessage, MessageAttachment, RiderConversation } from '@lunara/types';
+import { riderMessagingFetch, riderMessagingUpload } from '../src/api';
 import { getApiOrigin } from '../src/api-config';
 import { Screen } from '../src/components/ui/screen';
-import { usePartnerMessagingSocket } from '../src/hooks/use-partner-messaging-socket';
+import { useRiderMessagingSocket } from '../src/hooks/use-rider-messaging-socket';
 import { pickMessageImage } from '../src/lib/message-attachment';
-import type { UploadFile } from '../src/lib/upload-file';
+import type { UploadFile } from '../src/lib/offline/types';
 import { useAuthStore } from '../src/store/auth';
 import { colors, radius, spacing, typography } from '../src/theme';
 
@@ -81,15 +81,15 @@ function MessageBubble({ msg, myId }: { msg: ChatMessage; myId: string }) {
 type Channel = 'employer' | 'admin';
 
 const CHANNEL_BASE: Record<Channel, string> = {
-  employer: '/staff/employer-messages',
-  admin: '/partner/messages',
+  employer: '/riders/employer-messages',
+  admin: '/riders/messages',
 };
 
 export default function MessagesScreen() {
   const myId = useAuthStore((s) => s.user?.id ?? '');
-  const isStaff = useAuthStore((s) => s.user?.role === 'staff');
-  const [channel, setChannel] = useState<Channel>(isStaff ? 'employer' : 'admin');
-  const [conversation, setConversation] = useState<PartnerConversation | null>(null);
+  const [channel, setChannel] = useState<Channel>('employer');
+  const [employerAvailable, setEmployerAvailable] = useState<boolean | null>(null);
+  const [conversation, setConversation] = useState<RiderConversation | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -102,18 +102,39 @@ export default function MessagesScreen() {
   const base = CHANNEL_BASE[channel];
 
   const loadMessages = useCallback(async (convId: string, channelBase: string) => {
-    const res = await partnerFetch<{ items: ChatMessage[] }>(`${channelBase}/${convId}/messages`);
+    const res = await riderMessagingFetch<{ items: ChatMessage[] }>(`${channelBase}/${convId}/messages`);
     setMessages(res.items);
-    await partnerFetch(`${channelBase}/${convId}/read`, { method: 'PATCH' }).catch(() => {});
+    await riderMessagingFetch(`${channelBase}/${convId}/read`, { method: 'PATCH' }).catch(() => {});
+  }, []);
+
+  // Probe the employer channel once on mount — riders without a connected partner get a 404 and
+  // fall back to admin-only (no employer tab shown at all), per product decision.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        await riderMessagingFetch<RiderConversation>('/riders/employer-messages');
+        if (!cancelled) setEmployerAvailable(true);
+      } catch {
+        if (!cancelled) {
+          setEmployerAvailable(false);
+          setChannel('admin');
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const loadAll = useCallback(async () => {
+    if (employerAvailable === null && channel === 'employer') return;
     setLoading(true);
     setError('');
     setConversation(null);
     setMessages([]);
     try {
-      const convo = await partnerFetch<PartnerConversation>(base);
+      const convo = await riderMessagingFetch<RiderConversation>(base);
       setConversation(convo);
       await loadMessages(convo._id, base);
     } catch (e) {
@@ -121,7 +142,7 @@ export default function MessagesScreen() {
     } finally {
       setLoading(false);
     }
-  }, [loadMessages, base]);
+  }, [loadMessages, base, channel, employerAvailable]);
 
   useEffect(() => {
     void loadAll();
@@ -136,12 +157,12 @@ export default function MessagesScreen() {
     scrollToEnd(messagesLen > 1);
   }, [messagesLen, scrollToEnd]);
 
-  usePartnerMessagingSocket({
+  useRiderMessagingSocket({
     conversationId: conversation?._id ?? null,
     onNewMessage: (msg) => {
       setMessages((prev) => (prev.some((m) => m._id === msg._id) ? prev : [...prev, msg]));
       if (conversation) {
-        void partnerFetch(`${base}/${conversation._id}/read`, { method: 'PATCH' }).catch(() => {});
+        void riderMessagingFetch(`${base}/${conversation._id}/read`, { method: 'PATCH' }).catch(() => {});
       }
     },
   });
@@ -168,7 +189,7 @@ export default function MessagesScreen() {
   }
 
   async function uploadAttachment(conversationId: string, file: UploadFile): Promise<MessageAttachment> {
-    return partnerUpload<MessageAttachment>(`${base}/${conversationId}/upload`, file);
+    return riderMessagingUpload<MessageAttachment>(`${base}/${conversationId}/upload`, file);
   }
 
   function handleAttachPress() {
@@ -186,7 +207,7 @@ export default function MessagesScreen() {
     if (!trimmed && !pendingAttachment) return;
     setSending(true);
     try {
-      const msg = await partnerFetch<ChatMessage>(`${base}/${conversation._id}/send`, {
+      const msg = await riderMessagingFetch<ChatMessage>(`${base}/${conversation._id}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -216,7 +237,7 @@ export default function MessagesScreen() {
         <Text style={styles.subtitle}>
           {channel === 'employer' ? 'Direct channel with your employer' : 'Direct support channel with Lunara'}
         </Text>
-        {isStaff ? (
+        {employerAvailable ? (
           <View style={styles.tabRow}>
             <Pressable
               onPress={() => setChannel('employer')}

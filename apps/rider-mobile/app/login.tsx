@@ -261,20 +261,6 @@ export default function LoginScreen() {
                   </Text>
                   {!loading ? <Ionicons name="arrow-forward" size={18} color="#fff" /> : null}
                 </Pressable>
-
-                <View style={styles.orRow}>
-                  <View style={styles.orLine} />
-                  <Text style={styles.orText}>OR</Text>
-                  <View style={styles.orLine} />
-                </View>
-
-                <Pressable style={[styles.qrBtn, styles.qrBtnDisabled]} disabled accessibilityRole="button">
-                  <Ionicons name="qr-code-outline" size={18} color={colors.mutedForeground} />
-                  <Text style={styles.qrBtnTextDisabled}>Scan QR code</Text>
-                  <View style={styles.comingSoonPill}>
-                    <Text style={styles.comingSoonText}>Coming soon</Text>
-                  </View>
-                </Pressable>
               </>
             ) : (
               /* ── OTP mode ── */
@@ -595,68 +581,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
     letterSpacing: 0.1,
-  },
-
-  // ── OR divider ──
-  orRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginBottom: spacing.xl,
-  },
-  orLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.border,
-  },
-  orText: {
-    ...typography.caption,
-    fontWeight: '600',
-    color: colors.mutedForeground,
-    letterSpacing: 0.5,
-  },
-
-  // ── QR scan button ──
-  qrBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.xl,
-    paddingVertical: spacing.md + 2,
-    backgroundColor: colors.surface,
-    marginBottom: spacing.xxl,
-  },
-  qrBtnText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.foreground,
-  },
-  qrBtnDisabled: {
-    opacity: 0.55,
-    backgroundColor: colors.surfaceMuted,
-  },
-  qrBtnTextDisabled: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.mutedForeground,
-  },
-  comingSoonPill: {
-    backgroundColor: colors.warningBg,
-    borderWidth: 1,
-    borderColor: colors.warningBorder,
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-  },
-  comingSoonText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.warning,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
 
   // ── OTP actions ──

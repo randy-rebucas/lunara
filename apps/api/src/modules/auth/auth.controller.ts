@@ -5,6 +5,7 @@ import { AuthService } from './auth.service';
 import {
   ChangePasswordDto,
   ForgotPasswordDto,
+  GoogleLoginDto,
   LoginDto,
   OtpRequestDto,
   RegisterDto,
@@ -41,6 +42,26 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.authService.login(dto);
+    const token = (result as { data?: { tokens?: { accessToken?: string } } })?.data?.tokens?.accessToken;
+    if (token) {
+      res.cookie(COOKIE_NAME, token, {
+        httpOnly: true,
+        sameSite: 'strict',
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: COOKIE_MAX_AGE,
+        path: '/',
+      });
+    }
+    return result;
+  }
+
+  @Post('google')
+  @Throttle(AUTH_THROTTLE)
+  async loginWithGoogle(
+    @Body() dto: GoogleLoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.loginWithGoogle(dto.idToken);
     const token = (result as { data?: { tokens?: { accessToken?: string } } })?.data?.tokens?.accessToken;
     if (token) {
       res.cookie(COOKIE_NAME, token, {

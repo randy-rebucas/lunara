@@ -8,6 +8,7 @@ import { formatPhone, isValidPhilippineMobile } from '@lunara/utils';
 import { fetchOnboardingStatus, getOnboardingPath } from '@lunara/hooks/onboarding';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { AuthShellWide } from '../../../components/auth-shell';
+import { GoogleSignInButton } from '../../../components/google-sign-in-button';
 import { FormError } from '../../../components/marketing/marketing-design';
 import { OnboardingProgress } from '../../../components/onboarding-progress';
 import { Input } from '../../../components/ui/input';
@@ -17,7 +18,7 @@ import { getRecaptchaToken } from '../../../lib/recaptcha';
 type Step = 'phone' | 'otp';
 
 export default function SignUpPage() {
-  const { signupWithOtp, requestOtp, api, isAuthenticated } = useAuthContext();
+  const { signupWithOtp, loginWithGoogle, requestOtp, api, isAuthenticated } = useAuthContext();
   const router = useRouter();
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
@@ -70,6 +71,20 @@ export default function SignUpPage() {
     }
   }
 
+  async function handleGoogleCredential(idToken: string) {
+    setError('');
+    setSubmitting(true);
+    try {
+      await loginWithGoogle(idToken);
+      const status = await fetchOnboardingStatus(api);
+      router.replace(getOnboardingPath(status));
+    } catch (err) {
+      setError(getFriendlyErrorMessage(err, 'Google sign-in failed. Please try again.'));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   function handleChangeNumber() {
     setStep('phone');
     setOtp('');
@@ -86,21 +101,33 @@ export default function SignUpPage() {
           <p className="mt-1 text-sm text-muted">Sign up with your mobile number</p>
 
           {step === 'phone' ? (
-            <form onSubmit={handleSendOtp} className="mt-6 space-y-4">
-              <Input
-                placeholder="Mobile number (+639...)"
-                aria-label="Mobile number"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                required
-                autoComplete="tel"
-                inputMode="tel"
-              />
-              {error && <FormError>{error}</FormError>}
-              <Button type="submit" className="w-full" size="lg" disabled={submitting}>
-                {submitting ? 'Sending…' : 'Send OTP'}
-              </Button>
-            </form>
+            <>
+              <form onSubmit={handleSendOtp} className="mt-6 space-y-4">
+                <Input
+                  placeholder="Mobile number (+639...)"
+                  aria-label="Mobile number"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  required
+                  autoComplete="tel"
+                  inputMode="tel"
+                />
+                {error && <FormError>{error}</FormError>}
+                <Button type="submit" className="w-full" size="lg" disabled={submitting}>
+                  {submitting ? 'Sending…' : 'Send OTP'}
+                </Button>
+              </form>
+
+              <div className="mt-6 flex items-center gap-3 text-xs font-medium uppercase text-muted">
+                <span className="h-px flex-1 bg-slate-200" />
+                or
+                <span className="h-px flex-1 bg-slate-200" />
+              </div>
+
+              <div className="mt-6">
+                <GoogleSignInButton onCredential={handleGoogleCredential} onError={setError} disabled={submitting} />
+              </div>
+            </>
           ) : (
             <form onSubmit={handleVerifyOtp} className="mt-6 space-y-4">
               <p className="text-sm text-muted">

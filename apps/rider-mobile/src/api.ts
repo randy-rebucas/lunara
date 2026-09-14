@@ -33,6 +33,17 @@ export async function riderUpload<T>(
 
 export { loadTaskWithCache, queueGps, isQueuedResponse };
 
+/** Chat sends/reads bypass the offline queue used by riderFetch/riderUpload above — a queued
+ * message would silently "send" while offline and only actually land on next sync, which is
+ * confusing for a live chat. Fail fast instead, same as partner-mobile's partnerFetch/partnerUpload. */
+export async function riderMessagingFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  return useAuthStore.getState().apiFetch<T>(path, init);
+}
+
+export async function riderMessagingUpload<T>(path: string, file: UploadFile): Promise<T> {
+  return useAuthStore.getState().apiUpload<T>(path, file);
+}
+
 export async function triggerSosNotify(orderId: string, lat?: number, lng?: number) {
   return useAuthStore.getState().apiFetch<{
     incidentId: string;

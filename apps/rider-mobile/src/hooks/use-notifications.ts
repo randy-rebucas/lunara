@@ -49,9 +49,14 @@ export function useNotifications(limit = 20) {
   );
 
   const markAllRead = useCallback(async () => {
-    const unread = items.filter((item) => !item.read);
-    await Promise.all(unread.map((item) => markRead(item._id)));
-  }, [items, markRead]);
+    if (!items.some((item) => !item.read)) return;
+    setItems((prev) => prev.map((item) => ({ ...item, read: true })));
+    try {
+      await apiFetch('/riders/notifications/read-all', { method: 'PATCH' });
+    } catch {
+      await load();
+    }
+  }, [apiFetch, items, load]);
 
   const unreadCount = useMemo(() => items.filter((item) => !item.read).length, [items]);
 

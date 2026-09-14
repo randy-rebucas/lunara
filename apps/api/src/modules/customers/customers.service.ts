@@ -22,11 +22,12 @@ export class CustomersService {
     private readonly addressesService: AddressesService,
   ) {}
 
-  async create(userId: string, firstName: string, lastName: string) {
+  async create(userId: string, firstName: string, lastName: string, avatarUrl?: string) {
     return this.customerModel.create({
       userId: new Types.ObjectId(userId),
       firstName,
       lastName,
+      avatarUrl,
       loyaltyPoints: 0,
     });
   }
