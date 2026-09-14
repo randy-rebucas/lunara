@@ -83,6 +83,8 @@ export function notificationCategoryIcon(
  * accept/receive step yet) routes to the receiving screen since that's the actionable next step
  * for staff. Falls back to no navigation when there's no order to open (tapping still marks read). */
 export function resolveStaffNotificationRoute(notification: StaffNotification): string | null {
+  if (notification.data?.type === 'new_message') return '/messages';
+
   const orderId = notification.data?.orderId;
   if (!orderId) return null;
 

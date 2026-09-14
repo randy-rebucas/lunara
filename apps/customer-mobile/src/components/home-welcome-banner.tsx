@@ -56,16 +56,16 @@ export function HomeWelcomeBanner({ profile, user }: HomeWelcomeBannerProps) {
         style={({ pressed }) => [styles.pointsRow, pressed && styles.pointsRowPressed]}
         onPress={() => router.push('/rewards')}
         accessibilityRole="button"
-        accessibilityLabel={hasPoints ? `${profile?.loyaltyPoints} loyalty points, view rewards` : 'View rewards'}
+        accessibilityLabel={hasPoints ? `${profile?.loyaltyPoints} referral points, view rewards` : 'View rewards'}
       >
         <View style={styles.pointsLeft}>
           <View style={styles.pointsIconWrap}>
             <Ionicons name="star" size={13} color={colors.star} />
           </View>
           <Text style={styles.pointsText}>
-            {hasPoints ? `${profile!.loyaltyPoints} pts` : 'Rewards'}
+            {hasPoints ? `${profile!.loyaltyPoints} referral pts` : 'Rewards'}
           </Text>
-          <Text style={styles.pointsHint}>{hasPoints ? '· tap to redeem' : '· start earning'}</Text>
+          <Text style={styles.pointsHint}>{hasPoints ? '· tap to view' : '· start earning'}</Text>
         </View>
         <Ionicons name="chevron-forward" size={16} color={colors.primary} />
       </Pressable>

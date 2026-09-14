@@ -232,7 +232,7 @@ export class ProcessingService {
     staffBranchId: string | undefined,
     dto: AdvanceProcessingDto,
   ) {
-    const order = await this.orderModel.findById(orderId);
+    let order = await this.orderModel.findById(orderId);
     if (!order) throw new NotFoundException('Order not found');
 
     assertOrderPortalAccess(
@@ -267,17 +267,37 @@ export class ProcessingService {
     if (!currentStep) throw new BadRequestException('Invalid processing state');
 
     const skipIroning = dto.skipIroning ?? order.laundryProcessing.ironingSkipped;
+
+    // Atomic claim of this step, guarded on the DB row rather than the in-memory doc: the
+    // withOrderLock() Map above only serializes calls within this one process, so a double-tap
+    // that lands on two different API instances/pods would otherwise both pass the in-memory
+    // checks and duplicate the step. The $ne filter makes only one of them actually persist.
+    const claim = await this.orderModel.updateOne(
+      { _id: order._id, 'laundryProcessing.completedSteps.stepId': { $ne: currentStepId } },
+      {
+        $push: {
+          'laundryProcessing.completedSteps': {
+            stepId: currentStepId,
+            completedAt: new Date(),
+            note: dto.note,
+            verifiedWeightKg: dto.verifiedWeightKg,
+            photoUrl: dto.photoUrl,
+          },
+        },
+      },
+    );
+    if (claim.matchedCount === 0) {
+      throw new BadRequestException(`Step "${currentStep.label}" was already recorded for this order`);
+    }
+
+    const reloaded = await this.orderModel.findById(orderId);
+    if (!reloaded) throw new NotFoundException('Order not found');
+    order = reloaded;
+    if (!order.laundryProcessing) order.laundryProcessing = { completedSteps: [], ironingSkipped: false };
+
     if (currentStepId === 'folding' && dto.skipIroning) {
       order.laundryProcessing.ironingSkipped = true;
     }
-
-    order.laundryProcessing.completedSteps.push({
-      stepId: currentStepId,
-      completedAt: new Date(),
-      note: dto.note,
-      verifiedWeightKg: dto.verifiedWeightKg,
-      photoUrl: dto.photoUrl,
-    });
 
     if (dto.verifiedWeightKg != null) {
       order.laundryProcessing.verifiedWeightKg = dto.verifiedWeightKg;

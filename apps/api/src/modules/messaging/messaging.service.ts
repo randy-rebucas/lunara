@@ -171,8 +171,10 @@ export class MessagingService {
         });
       }
     } else {
-      // Partner sent → notify admin (no push/socket channel for the admin inbox today, so email
-      // is the only signal until one exists).
+      // Partner sent → broadcast to every connected admin dashboard (not just admins already
+      // viewing this conversation — see TrackingGateway.emitAdminNewMessage) and email the admin
+      // notification address as a fallback for admins not currently online.
+      this.gateway.emitAdminNewMessage(wire);
       const preview = content?.trim().slice(0, 80) || 'Sent an attachment';
       void this.notifyAdminNewMessage(senderName, preview);
     }

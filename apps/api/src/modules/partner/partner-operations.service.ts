@@ -2500,16 +2500,32 @@ export class PartnerOperationsService {
    * suspended/past-due partner pays to reactivate before their next weekly invoice would bill
    * them) — advances the billing period by one month and reactivates the subscription
    * immediately, mirroring what markInvoicePaid does when a subscription-fee invoice is settled,
-   * but without requiring a pending invoice to exist first. */
+   * but without requiring a pending invoice to exist first. Also writes a paid, zero-order
+   * PartnerInvoice for the period being settled so this payment shows up in the partner's own
+   * Accounts/Income/Profit & Loss/Transactions screens — those all aggregate from
+   * /partner/invoices, so without a synthetic invoice here the partner would have no record of
+   * having paid at all. */
   async recordSubscriptionPayment(
     adminUserId: string,
     partnerId: string,
-    dto: { amountPhp: number; paymentReference?: string; note?: string },
+    dto: { amountPhp: number; paymentReference?: string; note?: string; idempotencyKey?: string },
   ) {
     const subscription = await this.subscriptionService.findByPartnerId(partnerId);
     if (!subscription) throw new NotFoundException('Subscription not found for this partner');
 
+    // Reserve the request itself (not just the ledger post) before advancing the period —
+    // advancePeriod has no dedupe of its own, so without this a retried/double-clicked submit
+    // would advance the billing period and post to the ledger twice.
+    if (dto.idempotencyKey) {
+      const claimed = await this.ledgerService.claim(`subscription-payment-request:${dto.idempotencyKey}`);
+      if (!claimed) {
+        return { success: true, data: subscription, duplicate: true };
+      }
+    }
+
     const wasDunning = ['past_due', 'grace_period', 'suspended'].includes(subscription.status);
+    const periodStart = subscription.currentPeriodStart;
+    const periodEnd = subscription.currentPeriodEnd;
 
     // advancePeriod loads/saves its own document instance, so re-fetch before transitionStatus
     // rather than reusing the now-stale `subscription` handle above — saving that stale instance
@@ -2525,8 +2541,28 @@ export class PartnerOperationsService {
     }
 
     const subscriptionId = (updated._id as Types.ObjectId).toString();
+    await this.invoiceModel.create({
+      partnerId: new Types.ObjectId(partnerId),
+      invoiceNumber: await this.nextInvoiceNumber(),
+      periodStart,
+      periodEnd,
+      totalOrders: 0,
+      cashOrders: 0,
+      digitalOrders: 0,
+      totalCollected: 0,
+      commissionDue: 0,
+      riderCostDue: 0,
+      subscriptionFeeDue: dto.amountPhp,
+      amountDue: dto.amountPhp,
+      commissionRate: 0,
+      status: 'paid',
+      paidAt: new Date(),
+      paidBy: new Types.ObjectId(adminUserId),
+      paymentReference: dto.paymentReference,
+      adminNote: dto.note,
+    });
     await this.ledgerService.post(
-      `manual-subscription-payment:${subscriptionId}:${Date.now()}`,
+      `manual-subscription-payment:${subscriptionId}:${dto.idempotencyKey ?? Date.now()}`,
       'subscription_fee',
       subscriptionId,
       [
@@ -2618,6 +2654,7 @@ export class PartnerOperationsService {
       totalCollected: i.totalCollected,
       commissionDue: i.commissionDue ?? 0,
       riderCostDue: i.riderCostDue ?? 0,
+      subscriptionFeeDue: i.subscriptionFeeDue ?? 0,
       amountDue: i.amountDue ?? 0,
       commissionRate: i.commissionRate ?? 0.20,
       status: i.status,

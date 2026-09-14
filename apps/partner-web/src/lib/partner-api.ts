@@ -286,6 +286,68 @@ export async function getBranchLoyaltyStats(branchId: string): Promise<BranchLoy
   return partnerFetch<BranchLoyaltyStats>(`/partner/branches/${branchId}/loyalty-stats`);
 }
 
+export interface RewardsCatalogItem {
+  id: string;
+  title: string;
+  description?: string;
+  points: number;
+  discountType: 'percent' | 'fixed';
+  discountValue: number;
+  isActive: boolean;
+}
+
+export interface PartnerRewardsProgram {
+  partnerUserId: string;
+  isActive: boolean;
+  pointsPerCompletedOrder: number;
+  catalog: RewardsCatalogItem[];
+}
+
+export interface RewardsCatalogItemInput {
+  title: string;
+  description?: string;
+  points: number;
+  discountType: 'percent' | 'fixed';
+  discountValue: number;
+}
+
+export async function getOwnRewardsProgram(): Promise<PartnerRewardsProgram> {
+  return partnerFetch<PartnerRewardsProgram>('/partner/rewards-program');
+}
+
+export async function updateOwnRewardsProgram(input: {
+  isActive?: boolean;
+  pointsPerCompletedOrder?: number;
+}): Promise<PartnerRewardsProgram> {
+  return partnerFetch<PartnerRewardsProgram>('/partner/rewards-program', {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function addRewardsCatalogItem(input: RewardsCatalogItemInput): Promise<PartnerRewardsProgram> {
+  return partnerFetch<PartnerRewardsProgram>('/partner/rewards-program/catalog', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateRewardsCatalogItem(
+  itemId: string,
+  input: Partial<RewardsCatalogItemInput> & { isActive?: boolean },
+): Promise<PartnerRewardsProgram> {
+  return partnerFetch<PartnerRewardsProgram>(`/partner/rewards-program/catalog/${itemId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteRewardsCatalogItem(itemId: string): Promise<PartnerRewardsProgram> {
+  return partnerFetch<PartnerRewardsProgram>(`/partner/rewards-program/catalog/${itemId}`, {
+    method: 'DELETE',
+  });
+}
+
 export interface PartnerCampaign {
   _id: string;
   title: string;

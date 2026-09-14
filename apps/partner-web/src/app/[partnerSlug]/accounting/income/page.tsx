@@ -7,6 +7,7 @@ import { DataPageStatus } from '../../../../components/data-page-status';
 import { StatCard } from '../../../../components/ui/card';
 import { PageHeader } from '../../../../components/ui/page-header';
 import { useRequirePartner } from '../../../../hooks/use-protected-page';
+import { invoiceNetIncome, sumInvoices } from '../../../../lib/accounting-totals';
 import { formatPeso } from '../../../../lib/format-peso';
 import { partnerFetch } from '../../../../lib/partner-api';
 import { usePartnerQuery } from '../../../../lib/use-partner-query';
@@ -15,12 +16,6 @@ function formatDateRange(start: string, end: string) {
   const fmt = (d: string) =>
     new Date(d).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
   return `${fmt(start)} – ${fmt(end)}`;
-}
-
-/** Net income for one invoice period: what the partner collected directly from customers, minus
- * what Lunara billed them (commission + fronted rider cost + subscription fee) for that period. */
-function netIncome(inv: PartnerInvoice) {
-  return inv.totalCollected - inv.amountDue;
 }
 
 export default function AccountingIncomePage() {
@@ -35,8 +30,7 @@ export default function AccountingIncomePage() {
     (a, b) => new Date(b.periodStart).getTime() - new Date(a.periodStart).getTime(),
   );
 
-  const totalCollected = invoices.reduce((s, i) => s + i.totalCollected, 0);
-  const totalFees = invoices.reduce((s, i) => s + i.amountDue, 0);
+  const { totalCollected, totalFeesBilled: totalFees } = sumInvoices(invoices);
   const totalNet = totalCollected - totalFees;
 
   return (
@@ -80,7 +74,7 @@ export default function AccountingIncomePage() {
                 </thead>
                 <tbody>
                   {invoices.map((inv) => {
-                    const net = netIncome(inv);
+                    const net = invoiceNetIncome(inv);
                     return (
                       <tr key={inv._id}>
                         <td className="font-medium text-slate-900">{formatDateRange(inv.periodStart, inv.periodEnd)}</td>

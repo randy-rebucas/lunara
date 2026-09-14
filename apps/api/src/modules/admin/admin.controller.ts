@@ -56,7 +56,6 @@ import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { CreateRiderDto } from './dto/create-rider.dto';
 import { BroadcastDto } from './dto/broadcast.dto';
 import { UpdatePromotionDto } from './dto/update-promotion.dto';
-import { ReviewPromotionDto } from './dto/review-promotion.dto';
 import { RecordChargebackDto } from './dto/record-chargeback.dto';
 import { UpdateLaundryAddonDto } from './dto/update-laundry-addon.dto';
 import { UpdateLaundryServiceDto } from './dto/update-laundry-service.dto';
@@ -663,15 +662,6 @@ export class AdminController {
   @Post('promotions/:id/reset-usage')
   resetPromotionUsage(@Param('id') id: string) {
     return this.adminService.resetPromotionUsage(id);
-  }
-
-  @Post('promotions/:id/review')
-  reviewPartnerPromotion(
-    @Param('id') id: string,
-    @Req() req: { user: { sub: string } },
-    @Body() dto: ReviewPromotionDto,
-  ) {
-    return this.adminService.reviewPartnerPromotion(id, req.user.sub, dto.action, dto.adminNote);
   }
 
   @Get('services')

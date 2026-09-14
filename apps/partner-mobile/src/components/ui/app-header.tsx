@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNotificationBadge } from '../../hooks/use-notification-badge';
+import { usePartnerMessageBadge } from '../../hooks/use-partner-message-badge';
 import { colors, radius, spacing, typography } from '../../theme';
 import { BrandMark } from './brand-mark';
 
@@ -11,6 +12,8 @@ export function AppHeader() {
   const router = useRouter();
   const unreadCount = useNotificationBadge();
   const hasUnread = unreadCount > 0;
+  const unreadMessages = usePartnerMessageBadge();
+  const hasUnreadMessages = unreadMessages > 0;
 
   return (
     <View style={[styles.wrap, { paddingTop: insets.top + spacing.sm }]}>
@@ -22,15 +25,27 @@ export function AppHeader() {
         </View>
       </View>
 
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={hasUnread ? 'Notifications, unread' : 'Notifications'}
-        style={styles.bellButton}
-        onPress={() => router.push('/notifications')}
-      >
-        <Ionicons name="notifications-outline" size={20} color={colors.primary} />
-        {hasUnread ? <View style={styles.badge} /> : null}
-      </Pressable>
+      <View style={styles.actions}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={hasUnreadMessages ? 'Messages, unread' : 'Messages'}
+          style={styles.bellButton}
+          onPress={() => router.push('/messages')}
+        >
+          <Ionicons name="chatbubble-outline" size={20} color={colors.primary} />
+          {hasUnreadMessages ? <View style={styles.badge} /> : null}
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={hasUnread ? 'Notifications, unread' : 'Notifications'}
+          style={styles.bellButton}
+          onPress={() => router.push('/notifications')}
+        >
+          <Ionicons name="notifications-outline" size={20} color={colors.primary} />
+          {hasUnread ? <View style={styles.badge} /> : null}
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -51,6 +66,7 @@ const styles = StyleSheet.create({
   wordmarkBlock: { flexShrink: 1 },
   wordmark: { ...typography.subheading, fontSize: 16, color: colors.primary, letterSpacing: 0.5 },
   wordmarkSub: { ...typography.label, fontSize: 10 },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   bellButton: {
     width: 36,
     height: 36,

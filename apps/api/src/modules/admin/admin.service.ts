@@ -1688,29 +1688,6 @@ export class AdminService {
     return { success: true, data: this.serializePromotion(promo) };
   }
 
-  /** Approves or rejects a partner-created promotion. Only 'approved' partner promotions become
-   * usable at checkout (see PromotionsService.applyCouponToQuote). */
-  async reviewPartnerPromotion(
-    id: string,
-    adminUserId: string,
-    action: 'approve' | 'reject',
-    adminNote?: string,
-  ) {
-    const promo = await this.promotionModel.findById(id);
-    if (!promo) throw new NotFoundException('Promotion not found');
-    if (!promo.partnerUserId) {
-      throw new BadRequestException('Only partner-created promotions require approval');
-    }
-
-    promo.approvalStatus = action === 'approve' ? 'approved' : 'rejected';
-    promo.reviewedAt = new Date();
-    promo.reviewedBy = new Types.ObjectId(adminUserId);
-    if (adminNote !== undefined) promo.adminNote = adminNote;
-    await promo.save();
-
-    return { success: true, data: this.serializePromotion(promo) };
-  }
-
   /** See PromotionsService.resetOrphanedUsage — clears usage tracking left behind by deleted
    * (e.g. spam-cleaned) accounts without touching real customers' own usage/caps. */
   async resetPromotionUsage(id: string) {

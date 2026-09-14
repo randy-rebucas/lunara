@@ -220,7 +220,7 @@ export default function ProfilePage() {
               <p className="mt-1 text-lg font-semibold text-slate-900">{displayName}</p>
               {profile?.loyaltyPoints != null && profile.loyaltyPoints > 0 && (
                 <p className="mt-1 text-sm font-medium text-primary">
-                  {profile.loyaltyPoints.toLocaleString()} loyalty points
+                  {profile.loyaltyPoints.toLocaleString()} referral points
                 </p>
               )}
               {user?.email && <p className="mt-1 text-sm text-muted">{user.email}</p>}

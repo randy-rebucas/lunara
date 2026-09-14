@@ -88,6 +88,18 @@ export class SubscriptionService {
     ]);
   }
 
+  /** Trials whose trialEndsAt has passed but are still sitting in 'trialing' — the weekly invoice
+   * sweep's isCycleDue check explicitly excludes 'trialing' (see PartnerOperationsService), so
+   * without this a trial never converts to a paying cycle on its own. Callers should flip these
+   * to 'active' via transitionStatus; currentPeriodEnd already equals trialEndsAt from
+   * createTrialSubscription, so the very next weekly sweep will see the cycle as due and bill it. */
+  async findExpiredTrials() {
+    return this.subscriptionModel.find({
+      status: 'trialing',
+      trialEndsAt: { $lt: new Date() },
+    });
+  }
+
   /** Subscriptions whose billing cycle ended more than `days` ago but are still in a status
    * that should have been processed by the weekly invoice cron or daily dunning sweep by now —
    * signals a stuck job or a bug, not normal operation (a healthy system never accumulates

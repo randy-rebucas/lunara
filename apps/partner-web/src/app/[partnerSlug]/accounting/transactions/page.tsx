@@ -10,6 +10,11 @@ import { formatPeso } from '../../../../lib/format-peso';
 import { listExpenses, partnerFetch, type PartnerExpense } from '../../../../lib/partner-api';
 import { usePartnerQuery } from '../../../../lib/use-partner-query';
 
+// GET /partner/revenue caps recentOrders at 200 (most recent completed orders) with no total
+// count or pagination — so a partner with more history than that will silently be missing
+// payment rows from what this page presents as a complete "transaction log" unless we say so.
+const PAYMENTS_CAP = 200;
+
 type TxType = 'payment' | 'invoice' | 'expense';
 
 interface Transaction {
@@ -102,6 +107,7 @@ export default function AccountingTransactionsPage() {
   }, [revenue, invoices, expenses]);
 
   const filtered = activeType === 'all' ? transactions : transactions.filter((t) => t.type === activeType);
+  const paymentsMayBeTruncated = (revenue?.recentOrders?.length ?? 0) >= PAYMENTS_CAP;
 
   if (!ready) return <AuthLoading message="Loading transactions…" />;
 
@@ -139,6 +145,13 @@ export default function AccountingTransactionsPage() {
               </button>
             ))}
           </div>
+
+          {paymentsMayBeTruncated && (
+            <p className="mt-3 text-xs text-muted">
+              Showing only your {PAYMENTS_CAP} most recent customer payments — older payments may not appear here.
+              Invoices and expenses are unaffected.
+            </p>
+          )}
 
           {filtered.length === 0 ? (
             <div className="mt-8 rounded-xl border border-border bg-surface p-8 text-center">

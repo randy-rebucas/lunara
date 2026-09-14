@@ -63,9 +63,10 @@ export class Promotion {
   @Prop({ enum: ['platform', 'partner'], default: 'platform' })
   fundedBy!: 'platform' | 'partner';
 
-  /** Partner-created promotions start 'pending' and aren't usable at checkout until an admin
-   * approves them (see PromotionsService.applyCouponToQuote). Platform promotions skip review
-   * entirely — 'approved' from creation. */
+  /** Partner promotions are a partner-level feature with no admin review step — always 'approved'
+   * from creation, same as platform promotions (see PromotionsService.createPartnerPromotion).
+   * 'pending'/'rejected' are retained only so any rows created before this change keep being
+   * treated as inactive by PromotionsService.applyCouponToQuote. */
   @Prop({ enum: ['approved', 'pending', 'rejected'], default: 'approved' })
   approvalStatus!: 'approved' | 'pending' | 'rejected';
 

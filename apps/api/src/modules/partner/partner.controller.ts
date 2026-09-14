@@ -39,6 +39,8 @@ import { LaundryAddon, LaundryAddonDocument } from '../catalog/schemas/laundry-a
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { BranchesService } from '../branches/branches.service';
 import { RewardsService } from '../rewards/rewards.service';
+import { UpdateRewardsProgramDto } from './dto/update-rewards-program.dto';
+import { CreateRewardsCatalogItemDto, UpdateRewardsCatalogItemDto } from './dto/rewards-catalog-item.dto';
 import { PartnerCampaignsService } from './partner-campaigns.service';
 import { SendCampaignDto } from './dto/send-campaign.dto';
 import { PartnerExpensesService } from './partner-expenses.service';
@@ -232,6 +234,42 @@ export class PartnerController {
   async getOwnBranchLoyaltyStats(@CurrentTenantId() tenantId: string, @Param('id') id: string) {
     await this.branchesService.getOwnBranchOrThrow(id, tenantId);
     return this.rewardsService.getLoyaltyStatsForBranch(id);
+  }
+
+  // Partner's own rewards/loyalty program — partner-level feature only, no admin involvement
+  // anywhere in this workflow (see RewardsService).
+  @Get('rewards-program')
+  @Roles(UserRole.PARTNER)
+  getOwnRewardsProgram(@CurrentTenantId() tenantId: string) {
+    return this.rewardsService.getOwnProgram(tenantId);
+  }
+
+  @Patch('rewards-program')
+  @Roles(UserRole.PARTNER)
+  updateOwnRewardsProgram(@CurrentTenantId() tenantId: string, @Body() dto: UpdateRewardsProgramDto) {
+    return this.rewardsService.updateOwnProgram(tenantId, dto);
+  }
+
+  @Post('rewards-program/catalog')
+  @Roles(UserRole.PARTNER)
+  addOwnRewardsCatalogItem(@CurrentTenantId() tenantId: string, @Body() dto: CreateRewardsCatalogItemDto) {
+    return this.rewardsService.addCatalogItem(tenantId, dto);
+  }
+
+  @Patch('rewards-program/catalog/:itemId')
+  @Roles(UserRole.PARTNER)
+  updateOwnRewardsCatalogItem(
+    @CurrentTenantId() tenantId: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: UpdateRewardsCatalogItemDto,
+  ) {
+    return this.rewardsService.updateCatalogItem(tenantId, itemId, dto);
+  }
+
+  @Delete('rewards-program/catalog/:itemId')
+  @Roles(UserRole.PARTNER)
+  deleteOwnRewardsCatalogItem(@CurrentTenantId() tenantId: string, @Param('itemId') itemId: string) {
+    return this.rewardsService.deleteCatalogItem(tenantId, itemId);
   }
 
   @Get('branches/:id/pricing')
@@ -496,6 +534,12 @@ export class PartnerController {
     @Query('limit') limit = '30',
   ) {
     return this.notificationsService.listNotifications(req.user.sub, Number(limit) || 30);
+  }
+
+  @Get('notifications/unread-count')
+  @Roles(UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN)
+  getUnreadNotificationCount(@Req() req: { user: { sub: string } }) {
+    return this.notificationsService.getUnreadCount(req.user.sub);
   }
 
   @Patch('notifications/read-all')
@@ -1389,9 +1433,7 @@ export class PartnerController {
         },
       );
     }
-    if (dto.phone !== undefined) {
-      await this.userModel.updateOne({ _id: customerId }, { $set: { phone: dto.phone } });
-    }
+    // Phone is intentionally not editable here — see UpdateCustomerDto's doc comment.
     return this.getCustomer(req, customerId, tenantId, staffBranchId);
   }
 }

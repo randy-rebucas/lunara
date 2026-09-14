@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, ChevronDown } from 'lucide-react';
 import { Button } from '@lunara/ui';
 import { useAuthContext } from '@lunara/hooks/auth-provider';
 import { AuthLoading } from '../../../components/auth-loading';
@@ -14,10 +14,25 @@ import { useDebouncedCallback } from '../../../hooks/use-debounced-callback';
 import { useProtectedPage } from '../../../hooks/use-protected-page';
 import { useCustomerQuery } from '../../../lib/use-customer-query';
 
+interface PartnerBalance {
+  partnerUserId: string;
+  partnerName: string;
+  balance: number;
+  tier: string;
+  nextTier: string | null;
+  pointsToNextTier: number;
+  currentTierMin: number;
+}
+
+interface RewardsSummary {
+  referralBalance: number;
+  partners: PartnerBalance[];
+}
+
 interface RewardsCatalogItem {
   id: string;
   title: string;
-  description: string;
+  description?: string;
   points: number;
   discountType: 'percent' | 'fixed';
   discountValue: number;
@@ -28,16 +43,7 @@ interface RewardsTransaction {
   amount: number;
   description: string;
   createdAt: string;
-}
-
-interface RewardsData {
-  balance: number;
-  tier: string;
-  nextTier: string | null;
-  pointsToNextTier: number;
-  currentTierMin: number;
-  transactions: RewardsTransaction[];
-  catalog: RewardsCatalogItem[];
+  partnerUserId?: string;
 }
 
 function formatTransactionDate(iso: string) {
@@ -54,12 +60,152 @@ function formatDiscount(item: RewardsCatalogItem) {
   return item.discountType === 'percent' ? `${item.discountValue}% off` : `₱${item.discountValue} off`;
 }
 
-export default function RewardsPage() {
+function ShopRewardsCard({
+  shop,
+  referralBalance,
+  onRedeemed,
+}: {
+  shop: PartnerBalance;
+  referralBalance: number;
+  onRedeemed: () => void;
+}) {
   const { api } = useAuthContext();
-  const { isLoading, ready } = useProtectedPage({ requireOnboarding: true });
+  const [expanded, setExpanded] = useState(false);
+  const [catalog, setCatalog] = useState<RewardsCatalogItem[] | null>(null);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState('');
   const [redeemingId, setRedeemingId] = useState<string | null>(null);
   const [redeemMessage, setRedeemMessage] = useState('');
   const [redeemError, setRedeemError] = useState('');
+
+  const available = shop.balance + referralBalance;
+  const nextTierMin = shop.balance + shop.pointsToNextTier;
+  const progress = shop.nextTier
+    ? Math.min(1, Math.max(0, (shop.balance - shop.currentTierMin) / (nextTierMin - shop.currentTierMin)))
+    : 1;
+
+  async function toggleExpanded() {
+    const next = !expanded;
+    setExpanded(next);
+    if (next && !catalog) {
+      setCatalogLoading(true);
+      setCatalogError('');
+      try {
+        const res = await api.get<RewardsCatalogItem[]>(`/rewards/catalog?partnerId=${shop.partnerUserId}`);
+        setCatalog(res.data);
+      } catch (e) {
+        setCatalogError(e instanceof Error ? e.message : 'Could not load this shop’s rewards');
+      } finally {
+        setCatalogLoading(false);
+      }
+    }
+  }
+
+  async function redeem(item: RewardsCatalogItem) {
+    setRedeemError('');
+    setRedeemMessage('');
+    setRedeemingId(item.id);
+    try {
+      const res = await api.post<{ voucher: { code: string } }>('/rewards/redeem', {
+        partnerId: shop.partnerUserId,
+        catalogItemId: item.id,
+      });
+      setRedeemMessage(
+        `Reward redeemed! Use code ${res.data.voucher.code} at ${shop.partnerName} to get "${item.title}".`,
+      );
+      onRedeemed();
+    } catch (e) {
+      setRedeemError(e instanceof Error ? e.message : 'Could not redeem this reward');
+    } finally {
+      setRedeemingId(null);
+    }
+  }
+
+  return (
+    <Card className="overflow-hidden">
+      <CardBody>
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="font-semibold text-slate-900">{shop.partnerName}</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              {shop.balance} pts · {shop.tier} tier
+            </p>
+          </div>
+          <button
+            type="button"
+            className="flex shrink-0 items-center gap-1 text-sm font-medium text-primary"
+            onClick={() => void toggleExpanded()}
+          >
+            {expanded ? 'Hide rewards' : 'View rewards'}
+            <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
+
+        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+          <div className="h-full rounded-full bg-primary" style={{ width: `${progress * 100}%` }} />
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {shop.nextTier
+            ? `Earn ${shop.pointsToNextTier} more points at this shop to reach ${shop.nextTier} tier`
+            : "You've reached the highest tier here"}
+        </p>
+
+        {expanded && (
+          <div className="mt-4 border-t border-border pt-4">
+            {redeemMessage && (
+              <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
+                {redeemMessage}
+              </div>
+            )}
+            {redeemError && (
+              <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+                {redeemError}
+              </div>
+            )}
+            {catalogLoading && <p className="text-sm text-muted-foreground">Loading rewards…</p>}
+            {catalogError && <p className="text-sm text-red-700">{catalogError}</p>}
+            {catalog && catalog.length === 0 && (
+              <p className="text-sm text-muted-foreground">This shop hasn&apos;t added any rewards yet.</p>
+            )}
+            {catalog && catalog.length > 0 && (
+              <div className="space-y-2">
+                {catalog.map((item) => {
+                  const canRedeem = available >= item.points;
+                  return (
+                    <div key={item.id} className="flex items-center gap-3 rounded-lg border border-border p-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-slate-900">{item.title}</p>
+                        {item.description && (
+                          <p className="mt-0.5 text-xs text-muted-foreground">{item.description}</p>
+                        )}
+                        <p className="mt-1 text-xs font-semibold text-primary">
+                          {item.points} pts · {formatDiscount(item)}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="min-h-11 shrink-0"
+                        disabled={!canRedeem || redeemingId !== null}
+                        onClick={() => void redeem(item)}
+                      >
+                        {redeemingId === item.id ? 'Redeeming…' : canRedeem ? 'Redeem' : `${item.points - available} to go`}
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </CardBody>
+    </Card>
+  );
+}
+
+export default function RewardsPage() {
+  const { api } = useAuthContext();
+  const { isLoading, ready } = useProtectedPage({ requireOnboarding: true });
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [referralStats, setReferralStats] = useState<{ referredCount: number; pointsEarned: number } | null>(
     null,
@@ -87,28 +233,23 @@ export default function RewardsPage() {
 
   const load = useCallback(async () => {
     if (!ready) {
-      return {
-        balance: 0,
-        tier: 'Moon',
-        nextTier: null,
-        pointsToNextTier: 0,
-        currentTierMin: 0,
-        transactions: [],
-        catalog: [],
-      } as RewardsData;
+      return { summary: { referralBalance: 0, partners: [] }, transactions: [] } as {
+        summary: RewardsSummary;
+        transactions: RewardsTransaction[];
+      };
     }
-    const [meRes, catalogRes] = await Promise.all([
-      api.get<Omit<RewardsData, 'catalog'>>('/rewards/me'),
-      api.get<RewardsCatalogItem[]>('/rewards/catalog'),
+    const [summaryRes, txRes] = await Promise.all([
+      api.get<RewardsSummary>('/rewards/me'),
+      api.get<RewardsTransaction[]>('/rewards/me/transactions'),
     ]);
-    return { ...meRes.data, catalog: catalogRes.data };
+    return { summary: summaryRes.data, transactions: txRes.data };
   }, [ready, api]);
 
   const { data, loading, error, reload } = useCustomerQuery(load, [ready, api]);
 
   // Loyalty points are credited as a side effect of order completion (orderEvent 'completed'
   // over the /tracking socket) — without this, a customer sitting on this page when their
-  // order completes would see stale balance/tier until they manually reload.
+  // order completes would see stale balances until they manually reload.
   const scheduleReload = useDebouncedCallback(() => {
     reload().catch(() => {});
   }, 500);
@@ -118,46 +259,19 @@ export default function RewardsPage() {
     return () => window.removeEventListener('lunara-notifications-bump', scheduleReload);
   }, [scheduleReload]);
 
-  async function redeem(item: RewardsCatalogItem) {
-    setRedeemError('');
-    setRedeemMessage('');
-    setRedeemingId(item.id);
-    try {
-      const res = await api.post<{ voucher: { code: string }; balance: number }>('/rewards/redeem', {
-        catalogItemId: item.id,
-      });
-      setRedeemMessage(
-        `Reward redeemed! Use code ${res.data.voucher.code} on your next order to get "${item.title}".`,
-      );
-      await reload();
-    } catch (e) {
-      setRedeemError(e instanceof Error ? e.message : 'Could not redeem this reward');
-    } finally {
-      setRedeemingId(null);
-    }
-  }
-
   if (isLoading || !ready) {
     return <AuthLoading message="Loading rewards…" />;
   }
 
-  const balance = data?.balance ?? 0;
-  const tier = data?.tier ?? 'Moon';
-  const nextTier = data?.nextTier ?? null;
-  const pointsToNextTier = data?.pointsToNextTier ?? 0;
-  const currentTierMin = data?.currentTierMin ?? 0;
+  const referralBalance = data?.summary.referralBalance ?? 0;
+  const partners = data?.summary.partners ?? [];
   const transactions = data?.transactions ?? [];
-  const catalog = data?.catalog ?? [];
-  const nextTierMin = balance + pointsToNextTier;
-  const progress = nextTier
-    ? Math.min(1, Math.max(0, (balance - currentTierMin) / (nextTierMin - currentTierMin)))
-    : 1;
 
   return (
     <PageShell className="lg:max-w-6xl">
       <PageHeader
         title="Rewards"
-        description="Earn points from completed orders and referrals, then redeem them for perks."
+        description="Each shop runs its own loyalty program — earn points from completed orders there, then redeem them for perks that shop offers."
       />
 
       <DataPageStatus loading={loading} error={error} loadingMessage="Loading rewards…" />
@@ -173,21 +287,12 @@ export default function RewardsPage() {
           <Card className="mt-6 overflow-hidden border-primary/15 bg-gradient-to-br from-primary/5 via-white to-secondary/10">
             <CardBody className="text-center">
               <p className="text-xs font-semibold uppercase tracking-wide text-primary/80">
-                Loyalty points
+                Referral bonus balance
               </p>
-              <p className="mt-2 text-4xl font-bold tracking-tight text-primary sm:text-5xl">{balance}</p>
-              <p className="mt-3 text-sm font-medium text-slate-700">Tier: {tier}</p>
-              <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-                {nextTier
-                  ? `Earn ${pointsToNextTier} more points to reach ${nextTier} tier`
-                  : "You've reached the highest tier"}
+              <p className="mt-2 text-4xl font-bold tracking-tight text-primary sm:text-5xl">{referralBalance}</p>
+              <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
+                Earned from referrals — usable as a top-up toward any shop&apos;s rewards below.
               </p>
-              <div className="mx-auto mt-4 h-1.5 w-full max-w-sm overflow-hidden rounded-full bg-slate-100">
-                <div
-                  className="h-full rounded-full bg-primary"
-                  style={{ width: `${progress * 100}%` }}
-                />
-              </div>
             </CardBody>
           </Card>
 
@@ -195,8 +300,8 @@ export default function RewardsPage() {
             title="Referral program"
             description={
               referralCode
-                ? `Share your code ${referralCode} — you both earn 100 loyalty points when they complete their first order.`
-                : 'Invite friends and earn 100 loyalty points per referral when they complete their first order.'
+                ? `Share your code ${referralCode} — you both earn 100 points when they complete their first order.`
+                : 'Invite friends and earn 100 points per referral when they complete their first order.'
             }
             referralCode={referralCode}
           />
@@ -220,46 +325,29 @@ export default function RewardsPage() {
             </div>
           )}
 
-          {redeemMessage && (
-            <div className="mt-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
-              {redeemMessage}
-            </div>
-          )}
-          {redeemError && (
-            <div className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-              {redeemError}
-            </div>
-          )}
-
           <section className="mt-8">
-            <h2 className="mb-4 text-lg font-semibold tracking-tight text-slate-900">Rewards catalog</h2>
-            <div className="list-stack">
-              {catalog.map((item) => {
-                const canRedeem = balance >= item.points;
-                return (
-                  <Card key={item.id}>
-                    <CardBody className="flex items-center gap-4 py-4">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium text-slate-900">{item.title}</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">{item.description}</p>
-                        <p className="mt-1 text-xs font-semibold text-primary">
-                          {item.points} pts · {formatDiscount(item)}
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="min-h-11 shrink-0"
-                        disabled={!canRedeem || redeemingId !== null}
-                        onClick={() => void redeem(item)}
-                      >
-                        {redeemingId === item.id ? 'Redeeming…' : canRedeem ? 'Redeem' : `${item.points - balance} to go`}
-                      </Button>
-                    </CardBody>
-                  </Card>
-                );
-              })}
-            </div>
+            <h2 className="mb-4 text-lg font-semibold tracking-tight text-slate-900">Your shops</h2>
+            {partners.length === 0 ? (
+              <Card>
+                <CardBody className="py-10 text-center">
+                  <p className="font-medium text-slate-900">No shop points yet</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Complete an order at a shop running a rewards program to start earning.
+                  </p>
+                </CardBody>
+              </Card>
+            ) : (
+              <div className="list-stack">
+                {partners.map((shop) => (
+                  <ShopRewardsCard
+                    key={shop.partnerUserId}
+                    shop={shop}
+                    referralBalance={referralBalance}
+                    onRedeemed={() => void reload()}
+                  />
+                ))}
+              </div>
+            )}
           </section>
 
           <section className="mt-8">

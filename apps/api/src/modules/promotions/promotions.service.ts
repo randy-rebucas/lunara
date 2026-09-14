@@ -202,6 +202,12 @@ export class PromotionsService implements OnModuleInit {
 
     if (resolved.type === 'personal') {
       const promo = resolved.customerPromo;
+      // A voucher redeemed from a partner's own rewards catalog only works at that partner's
+      // shops — same rule as a partner-created Promotion code just above. Platform vouchers
+      // (no partnerUserId, e.g. the signup promo) are unrestricted, as before.
+      if (promo.partnerUserId && (!partnerId || promo.partnerUserId.toString() !== partnerId)) {
+        throw new BadRequestException('This promo code is not valid for the selected shop');
+      }
       const eligibility = validateCustomerPromoForQuote(
         {
           code: promo.code,
@@ -228,8 +234,10 @@ export class PromotionsService implements OnModuleInit {
 
     const promo = resolved.promotion;
 
-    // Partner-scoped promotions only apply at their own shops, and only once admin-approved —
-    // treat both failures as "invalid code" rather than leaking why, same as any other ineligible code.
+    // Partner-scoped promotions only apply at their own shops. approvalStatus is always
+    // 'approved' for promotions created after admin review was removed from this workflow — the
+    // check remains only to keep honoring any pre-existing 'pending'/'rejected' rows as inactive.
+    // Treat both failures as "invalid code" rather than leaking why, same as any other ineligible code.
     if (promo.partnerUserId) {
       if (promo.approvalStatus !== 'approved') {
         throw new BadRequestException('Invalid or expired promo code');
@@ -572,8 +580,10 @@ export class PromotionsService implements OnModuleInit {
   }
 
   /** Partner self-service promo creation — always partner-funded (deducted from their own payout at
-   * settlement, never Lunara's cost) and scoped to their own branches only. Starts 'pending' and
-   * isn't usable at checkout until an admin approves it (see applyCouponToQuote above). */
+   * settlement, never Lunara's cost) and scoped to their own branches only. Partner promotions are
+   * a partner-level feature end to end: no admin review gate, live immediately at `approved` (see
+   * applyCouponToQuote above, which still checks this field so it keeps rejecting any
+   * pre-existing 'pending'/'rejected' rows from before this change). */
   async createPartnerPromotion(partnerUserId: string, dto: CreatePartnerPromotionDto) {
     if (dto.discountType === 'percent' && dto.discountValue > MAX_PARTNER_PERCENT_DISCOUNT) {
       throw new BadRequestException(
@@ -603,7 +613,7 @@ export class PromotionsService implements OnModuleInit {
         endsAt: dto.endsAt ? new Date(dto.endsAt) : undefined,
         partnerUserId: new Types.ObjectId(partnerUserId),
         fundedBy: 'partner',
-        approvalStatus: 'pending',
+        approvalStatus: 'approved',
       });
     } catch (e) {
       if ((e as { code?: number })?.code === 11000) {

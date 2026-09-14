@@ -11,7 +11,7 @@ import { colors, radius, spacing, typography } from '../src/theme';
 interface RewardsCatalogItem {
   id: string;
   title: string;
-  description: string;
+  description?: string;
   points: number;
   discountType: 'percent' | 'fixed';
   discountValue: number;
@@ -24,26 +24,20 @@ interface RewardsTransaction {
   createdAt: string;
 }
 
-interface RewardsBalance {
+interface PartnerBalance {
+  partnerUserId: string;
+  partnerName: string;
   balance: number;
   tier: string;
   nextTier: string | null;
   pointsToNextTier: number;
   currentTierMin: number;
-  transactions: RewardsTransaction[];
 }
 
-const CATALOG_STYLE: Record<
-  string,
-  { icon: keyof typeof Ionicons.glyphMap; color: string; bg: string }
-> = {
-  'free-pickup': { icon: 'cube-outline', color: colors.primary, bg: colors.primaryLight },
-  'free-delivery': { icon: 'bicycle-outline', color: colors.secondary, bg: colors.secondaryLight },
-  'discount-10': { icon: 'pricetag-outline', color: colors.accentDark, bg: colors.accentLight },
-  'discount-20': { icon: 'pricetag', color: colors.warning, bg: colors.warningBg },
-  'free-wash-fold-3kg': { icon: 'water-outline', color: '#DB2777', bg: '#FCE7F3' },
-};
-const DEFAULT_ITEM_STYLE = { icon: 'gift-outline' as const, color: colors.primary, bg: colors.primaryLight };
+interface RewardsSummary {
+  referralBalance: number;
+  partners: PartnerBalance[];
+}
 
 const TIER_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   Moon: 'moon',
@@ -52,28 +46,163 @@ const TIER_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   Galaxy: 'planet',
 };
 
+function formatDiscount(item: RewardsCatalogItem) {
+  return item.discountType === 'percent' ? `${item.discountValue}% off` : `₱${item.discountValue} off`;
+}
+
 function formatTransactionDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+function ShopRewardsCard({
+  shop,
+  referralBalance,
+  apiFetch,
+  onRedeemed,
+}: {
+  shop: PartnerBalance;
+  referralBalance: number;
+  apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
+  onRedeemed: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [catalog, setCatalog] = useState<RewardsCatalogItem[] | null>(null);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState('');
+  const [redeemingId, setRedeemingId] = useState<string | null>(null);
+
+  const available = shop.balance + referralBalance;
+  const nextTierMin = shop.balance + shop.pointsToNextTier;
+  const progress =
+    shop.nextTier && nextTierMin > shop.currentTierMin
+      ? Math.min(1, Math.max(0, (shop.balance - shop.currentTierMin) / (nextTierMin - shop.currentTierMin)))
+      : 1;
+
+  async function toggleExpanded() {
+    const next = !expanded;
+    setExpanded(next);
+    if (next && !catalog) {
+      setCatalogLoading(true);
+      setCatalogError('');
+      try {
+        const items = await apiFetch<RewardsCatalogItem[]>(`/rewards/catalog?partnerId=${shop.partnerUserId}`);
+        setCatalog(Array.isArray(items) ? items : []);
+      } catch (e) {
+        setCatalogError(e instanceof Error ? e.message : 'Could not load this shop’s rewards');
+      } finally {
+        setCatalogLoading(false);
+      }
+    }
+  }
+
+  async function redeem(item: RewardsCatalogItem) {
+    setRedeemingId(item.id);
+    try {
+      const result = await apiFetch<{ voucher: { code: string } }>('/rewards/redeem', {
+        method: 'POST',
+        body: JSON.stringify({ partnerId: shop.partnerUserId, catalogItemId: item.id }),
+      });
+      Alert.alert(
+        'Reward redeemed!',
+        `Use code ${result.voucher.code} at ${shop.partnerName} to get "${item.title}".`,
+      );
+      onRedeemed();
+    } catch (e) {
+      Alert.alert('Could not redeem', e instanceof Error ? e.message : 'Please try again.');
+    } finally {
+      setRedeemingId(null);
+    }
+  }
+
+  return (
+    <Card style={styles.shopCard}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`View rewards at ${shop.partnerName}`}
+        onPress={() => void toggleExpanded()}
+        style={styles.shopHeaderRow}
+      >
+        <View style={styles.tierIcon}>
+          <Ionicons name={TIER_ICONS[shop.tier] ?? 'star'} size={18} color={colors.primary} />
+        </View>
+        <View style={styles.shopTextCol}>
+          <Text style={styles.shopName}>{shop.partnerName}</Text>
+          <Text style={styles.shopSub}>
+            {shop.balance} pts · {shop.tier} tier
+          </Text>
+        </View>
+        <Ionicons name={expanded ? 'chevron-up' : 'chevron-forward'} size={18} color={colors.mutedForeground} />
+      </Pressable>
+
+      <View style={styles.progressTrack}>
+        <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
+      </View>
+      <Text style={styles.progressLabel}>
+        {shop.nextTier ? `Earn ${shop.pointsToNextTier} more points to reach ${shop.nextTier} tier` : 'Highest tier here'}
+      </Text>
+
+      {expanded ? (
+        <View style={styles.catalog}>
+          {catalogLoading ? <Text style={styles.historyEmpty}>Loading rewards…</Text> : null}
+          {catalogError ? <Text style={[styles.historyEmpty, { color: '#B91C1C' }]}>{catalogError}</Text> : null}
+          {catalog && catalog.length === 0 ? (
+            <Text style={styles.historyEmpty}>This shop hasn&apos;t added any rewards yet.</Text>
+          ) : null}
+          {catalog?.map((item) => {
+            const canRedeem = available >= item.points;
+            const toGo = item.points - available;
+            return (
+              <Card key={item.id} style={styles.rewardRow}>
+                <View style={styles.rewardCopy}>
+                  <Text style={styles.rewardTitle}>{item.title}</Text>
+                  <Text style={styles.rewardPoints}>
+                    {item.points} pts · {formatDiscount(item)}
+                  </Text>
+                  {item.description ? <Text style={styles.rewardDesc}>{item.description}</Text> : null}
+                </View>
+                <View style={styles.rewardStatusCol}>
+                  {canRedeem ? (
+                    <Button
+                      label={redeemingId === item.id ? 'Redeeming…' : 'Redeem'}
+                      variant="primary"
+                      size="sm"
+                      disabled={redeemingId !== null}
+                      onPress={() => redeem(item)}
+                    />
+                  ) : (
+                    <View style={styles.lockedPill}>
+                      <Ionicons name="lock-closed" size={12} color={colors.mutedForeground} />
+                      <Text style={styles.lockedText}>Locked</Text>
+                    </View>
+                  )}
+                  {!canRedeem ? <Text style={styles.toGoText}>{toGo} pts to go</Text> : null}
+                </View>
+              </Card>
+            );
+          })}
+        </View>
+      ) : null}
+    </Card>
+  );
+}
+
 export default function RewardsScreen() {
   const apiFetch = useAuthStore((s) => s.apiFetch);
-  const [rewards, setRewards] = useState<RewardsBalance | null>(null);
-  const [catalog, setCatalog] = useState<RewardsCatalogItem[]>([]);
+  const [summary, setSummary] = useState<RewardsSummary | null>(null);
+  const [transactions, setTransactions] = useState<RewardsTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [redeemingId, setRedeemingId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
 
   const load = useCallback(async () => {
     setError('');
     try {
-      const [balance, items] = await Promise.all([
-        apiFetch<RewardsBalance>('/rewards/me'),
-        apiFetch<RewardsCatalogItem[]>('/rewards/catalog'),
+      const [summaryRes, txRes] = await Promise.all([
+        apiFetch<RewardsSummary>('/rewards/me'),
+        apiFetch<RewardsTransaction[]>('/rewards/me/transactions'),
       ]);
-      setRewards(balance);
-      setCatalog(Array.isArray(items) ? items : []);
+      setSummary(summaryRes);
+      setTransactions(Array.isArray(txRes) ? txRes : []);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load rewards');
     } finally {
@@ -86,32 +215,8 @@ export default function RewardsScreen() {
     load();
   }, [load]);
 
-  async function redeem(item: RewardsCatalogItem) {
-    setRedeemingId(item.id);
-    try {
-      const result = await apiFetch<{ voucher: { code: string }; balance: number }>('/rewards/redeem', {
-        method: 'POST',
-        body: JSON.stringify({ catalogItemId: item.id }),
-      });
-      Alert.alert(
-        'Reward redeemed!',
-        `Use code ${result.voucher.code} on your next order to get "${item.title}".`,
-      );
-      await load();
-    } catch (e) {
-      Alert.alert('Could not redeem', e instanceof Error ? e.message : 'Please try again.');
-    } finally {
-      setRedeemingId(null);
-    }
-  }
-
-  const points = rewards?.balance ?? 0;
-  const currentTierMin = rewards?.currentTierMin ?? 0;
-  const nextTierMin = points + (rewards?.pointsToNextTier ?? 0);
-  const progress =
-    rewards?.nextTier && nextTierMin > currentTierMin
-      ? Math.min(1, Math.max(0, (points - currentTierMin) / (nextTierMin - currentTierMin)))
-      : 1;
+  const referralBalance = summary?.referralBalance ?? 0;
+  const partners = summary?.partners ?? [];
 
   return (
     <KeyboardSafeScrollView
@@ -126,7 +231,7 @@ export default function RewardsScreen() {
             <Text style={styles.heroTitleAccent}>doing laundry!</Text>{' '}
             <Ionicons name="sparkles" size={20} color={colors.star} />
           </Text>
-          <Text style={styles.sub}>Earn points from completed orders, referrals, and promotions.</Text>
+          <Text style={styles.sub}>Each shop runs its own rewards — earn there, redeem there.</Text>
         </View>
         <View style={styles.heroIllustration}>
           <Ionicons name="gift" size={34} color={colors.onPrimary} />
@@ -135,11 +240,11 @@ export default function RewardsScreen() {
 
       <DataLoadState loading={loading} error={error} loadingMessage="Loading rewards…" onRetry={load} />
 
-      {!loading && rewards ? (
+      {!loading && summary ? (
         <>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="View loyalty points details"
+            accessibilityLabel="View points history"
             onPress={() => setShowHistory((v) => !v)}
           >
             {({ pressed }) => (
@@ -148,10 +253,10 @@ export default function RewardsScreen() {
                   <Ionicons name="star" size={22} color={colors.onPrimary} />
                 </View>
                 <View style={styles.pointsTextCol}>
-                  <Text style={styles.pointsLabel}>Your loyalty points</Text>
-                  <Text style={styles.pointsValue}>{points}</Text>
+                  <Text style={styles.pointsLabel}>Referral bonus balance</Text>
+                  <Text style={styles.pointsValue}>{referralBalance}</Text>
                   <View style={styles.pointsHintPill}>
-                    <Text style={styles.pointsHint}>100 pts per successful referral</Text>
+                    <Text style={styles.pointsHint}>Usable as a top-up at any shop below</Text>
                   </View>
                 </View>
                 <Ionicons name={showHistory ? 'chevron-up' : 'chevron-forward'} size={18} color={colors.mutedForeground} />
@@ -161,10 +266,10 @@ export default function RewardsScreen() {
 
           {showHistory ? (
             <Card style={styles.historyCard}>
-              {rewards.transactions.length === 0 ? (
+              {transactions.length === 0 ? (
                 <Text style={styles.historyEmpty}>No point activity yet.</Text>
               ) : (
-                rewards.transactions.map((tx, i) => (
+                transactions.map((tx, i) => (
                   <View key={i} style={styles.historyRow}>
                     <View style={styles.historyTextCol}>
                       <Text style={styles.historyDesc}>{tx.description}</Text>
@@ -180,37 +285,8 @@ export default function RewardsScreen() {
             </Card>
           ) : null}
 
-          <Card style={styles.tierCard}>
-            <View style={styles.tierRow}>
-              <View style={styles.tierIcon}>
-                <Ionicons name={TIER_ICONS[rewards.tier] ?? 'star'} size={18} color={colors.primary} />
-              </View>
-              <View style={styles.tierTextCol}>
-                <Text style={styles.tierTitle}>Your tier: {rewards.tier}</Text>
-                <Text style={styles.tierHint}>
-                  {rewards.nextTier
-                    ? `Earn ${rewards.pointsToNextTier} more points to reach ${rewards.nextTier} tier`
-                    : 'You’ve reached the highest tier'}
-                </Text>
-              </View>
-              <View style={styles.tierBadge}>
-                <Ionicons
-                  name={TIER_ICONS[rewards.nextTier ?? rewards.tier] ?? 'star'}
-                  size={16}
-                  color={colors.primary}
-                />
-              </View>
-            </View>
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
-            </View>
-            <Text style={styles.progressLabel}>
-              {points} pts{rewards.nextTier ? ` / ${points + rewards.pointsToNextTier} pts` : ''}
-            </Text>
-          </Card>
-
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.catalogTitle}>Rewards catalog</Text>
+            <Text style={styles.catalogTitle}>Your shops</Text>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="How rewards work"
@@ -219,7 +295,7 @@ export default function RewardsScreen() {
               onPress={() =>
                 Alert.alert(
                   'How rewards work',
-                  'Earn points on completed orders, referrals, and promotions. Once you hit the points threshold for a reward, tap Redeem to get a voucher code for your next order.',
+                  'Each shop can run its own rewards program. Complete orders there to earn points, then redeem for a voucher good at that shop. A referral bonus can top up any shop’s redemption.',
                 )
               }
             >
@@ -228,54 +304,29 @@ export default function RewardsScreen() {
             </Pressable>
           </View>
 
-          <View style={styles.catalog}>
-            {catalog.map((item) => {
-              const style = CATALOG_STYLE[item.id] ?? DEFAULT_ITEM_STYLE;
-              const canRedeem = points >= item.points;
-              const toGo = item.points - points;
-              return (
-                <Card key={item.id} style={styles.rewardRow}>
-                  <View style={[styles.rewardIcon, { backgroundColor: style.bg }]}>
-                    <Ionicons name={style.icon} size={20} color={style.color} />
-                  </View>
-                  <View style={styles.rewardCopy}>
-                    <Text style={styles.rewardTitle}>{item.title}</Text>
-                    <Text style={[styles.rewardPoints, { color: style.color }]}>{item.points} pts</Text>
-                    <Text style={styles.rewardDesc}>{item.description}</Text>
-                  </View>
-                  <View style={styles.rewardStatusCol}>
-                    {canRedeem ? (
-                      <Button
-                        label={redeemingId === item.id ? 'Redeeming…' : 'Redeem'}
-                        variant="primary"
-                        size="sm"
-                        disabled={redeemingId !== null}
-                        onPress={() => redeem(item)}
-                      />
-                    ) : (
-                      <View style={styles.lockedPill}>
-                        <Ionicons name="lock-closed" size={12} color={colors.mutedForeground} />
-                        <Text style={styles.lockedText}>Locked</Text>
-                      </View>
-                    )}
-                    <Text style={[styles.toGoText, canRedeem && { color: colors.accentDark }]}>
-                      {canRedeem ? 'Ready to redeem' : `${toGo} pts to go`}
-                    </Text>
-                  </View>
-                </Card>
-              );
-            })}
-          </View>
-
-          <Card style={styles.noteCard}>
-            <View style={styles.noteIcon}>
-              <Ionicons name="gift" size={16} color={colors.onPrimary} />
+          {partners.length === 0 ? (
+            <Card style={styles.noteCard}>
+              <View style={styles.noteIcon}>
+                <Ionicons name="gift" size={16} color={colors.onPrimary} />
+              </View>
+              <View style={styles.noteTextCol}>
+                <Text style={styles.noteTitle}>No shop points yet</Text>
+                <Text style={styles.noteHint}>Complete an order at a shop running a rewards program to start earning.</Text>
+              </View>
+            </Card>
+          ) : (
+            <View style={styles.shopList}>
+              {partners.map((shop) => (
+                <ShopRewardsCard
+                  key={shop.partnerUserId}
+                  shop={shop}
+                  referralBalance={referralBalance}
+                  apiFetch={apiFetch}
+                  onRedeemed={() => void load()}
+                />
+              ))}
             </View>
-            <View style={styles.noteTextCol}>
-              <Text style={styles.noteTitle}>More rewards are coming soon!</Text>
-              <Text style={styles.noteHint}>Keep earning points by ordering and referring friends.</Text>
-            </View>
-          </Card>
+          )}
         </>
       ) : null}
     </KeyboardSafeScrollView>
@@ -333,35 +384,6 @@ const styles = StyleSheet.create({
   historyDate: { ...typography.caption, marginTop: 2 },
   historyAmount: { fontSize: 13, fontWeight: '700', color: colors.accentDark },
   historyAmountDebit: { color: colors.mutedForeground },
-  tierCard: { marginBottom: spacing.xl },
-  tierRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
-  tierIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.full,
-    backgroundColor: colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tierTextCol: { flex: 1 },
-  tierTitle: { fontSize: 15, fontWeight: '700', color: colors.foreground },
-  tierHint: { ...typography.caption, marginTop: 2 },
-  tierBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.md,
-    backgroundColor: colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  progressTrack: {
-    height: 6,
-    borderRadius: radius.full,
-    backgroundColor: colors.surfaceMuted,
-    overflow: 'hidden',
-  },
-  progressFill: { height: '100%', borderRadius: radius.full, backgroundColor: colors.primary },
-  progressLabel: { ...typography.caption, marginTop: spacing.xs, textAlign: 'right' },
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -372,22 +394,37 @@ const styles = StyleSheet.create({
   howItWorks: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   howItWorksPressed: { opacity: 0.7 },
   howItWorksText: { fontSize: 13, fontWeight: '600', color: colors.primary },
-  catalog: { gap: spacing.sm },
+  shopList: { gap: spacing.sm },
+  shopCard: { marginBottom: 0 },
+  shopHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
+  tierIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.full,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shopTextCol: { flex: 1 },
+  shopName: { fontSize: 15, fontWeight: '700', color: colors.foreground },
+  shopSub: { ...typography.caption, marginTop: 2 },
+  progressTrack: {
+    height: 6,
+    borderRadius: radius.full,
+    backgroundColor: colors.surfaceMuted,
+    overflow: 'hidden',
+  },
+  progressFill: { height: '100%', borderRadius: radius.full, backgroundColor: colors.primary },
+  progressLabel: { ...typography.caption, marginTop: spacing.xs },
+  catalog: { gap: spacing.sm, marginTop: spacing.md },
   rewardRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
   },
-  rewardIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   rewardCopy: { flex: 1 },
   rewardTitle: { fontWeight: '700', fontSize: 15, color: colors.foreground },
-  rewardPoints: { fontSize: 13, fontWeight: '700', marginTop: 2 },
+  rewardPoints: { fontSize: 13, fontWeight: '700', marginTop: 2, color: colors.primary },
   rewardDesc: { ...typography.caption, marginTop: 2 },
   rewardStatusCol: { alignItems: 'flex-end', gap: spacing.xs },
   lockedPill: {

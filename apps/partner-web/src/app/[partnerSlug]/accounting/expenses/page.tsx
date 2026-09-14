@@ -7,6 +7,7 @@ import { StatCard } from '../../../../components/ui/card';
 import { PageHeader } from '../../../../components/ui/page-header';
 import { RightDrawer } from '../../../../components/ui/right-drawer';
 import { useRequirePartner } from '../../../../hooks/use-protected-page';
+import { sumExpenses } from '../../../../lib/accounting-totals';
 import { formatPeso } from '../../../../lib/format-peso';
 import {
   createExpense,
@@ -118,13 +119,16 @@ export default function AccountingExpensesPage() {
 
   const list = expenses ?? [];
   const now = new Date();
-  const totalThisMonth = list
-    .filter((e) => {
+  const totalThisMonth = sumExpenses(
+    list.filter((e) => {
       const d = new Date(e.date);
       return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-    })
-    .reduce((s, e) => s + e.amount, 0);
-  const totalAllTime = list.reduce((s, e) => s + e.amount, 0);
+    }),
+  );
+  // Same sumExpenses the Accounts/Income/Profit & Loss pages use for "operating expenses", so
+  // this page's "All time" figure can't drift from the operatingExpenses/netIncome figures shown
+  // there even if that aggregation logic changes later (e.g. to exclude a voided entry).
+  const totalAllTime = sumExpenses(list);
 
   return (
     <div>

@@ -774,8 +774,14 @@ export default function StaffOrderProcessingPage() {
               setDispatchMessage('');
               setError('');
               try {
-                await partnerFetch(`/partner/orders/${id}/delivery/dispatch`, { method: 'POST' });
-                setDispatchMessage('Delivery offers sent to online riders.');
+                const res = await partnerFetch(`/partner/orders/${id}/delivery/dispatch`, { method: 'POST' });
+                const ridersNotified = (res as { ridersNotified?: number })?.ridersNotified ?? 0;
+                setDispatchMessage(
+                  ridersNotified > 0
+                    ? `Delivery offer sent to ${ridersNotified} online rider${ridersNotified === 1 ? '' : 's'}.`
+                    : 'No riders are online right now — the order stays queued until one comes online or you assign one manually.',
+                );
+                await reload();
               } catch (e) {
                 setError(e instanceof Error ? e.message : 'Failed to notify riders');
               } finally {

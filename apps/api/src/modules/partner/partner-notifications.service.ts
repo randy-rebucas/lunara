@@ -33,6 +33,19 @@ export class PartnerNotificationsService {
     };
   }
 
+  /**
+   * True total, unlike deriving "unread" from listNotifications' capped page — a partner with
+   * more unread notifications than the list's limit (30-100) would otherwise see the bell/header
+   * undercount how much is actually pending.
+   */
+  async getUnreadCount(userId: string) {
+    const count = await this.notificationModel.countDocuments({
+      userId: new Types.ObjectId(userId),
+      read: false,
+    });
+    return { success: true, data: { count } };
+  }
+
   async markNotificationRead(userId: string, notificationId: string) {
     const notification = await this.notificationModel.findById(notificationId);
     if (!notification) throw new NotFoundException('Notification not found');

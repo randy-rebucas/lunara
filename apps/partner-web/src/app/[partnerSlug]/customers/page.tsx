@@ -154,7 +154,6 @@ function CustomerDetailPanel({ customerId, onClose }: { customerId: string; onCl
   const [editing, setEditing] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [phone, setPhone] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
 
@@ -162,7 +161,6 @@ function CustomerDetailPanel({ customerId, onClose }: { customerId: string; onCl
     if (detail) {
       setFirstName(detail.firstName);
       setLastName(detail.lastName);
-      setPhone(detail.phone ?? '');
     }
     setEditing(false);
   }, [detail]);
@@ -173,7 +171,7 @@ function CustomerDetailPanel({ customerId, onClose }: { customerId: string; onCl
     try {
       const updated = await partnerFetch<PartnerCustomerDetail>(`/partner/customers/${customerId}`, {
         method: 'PATCH',
-        body: JSON.stringify({ firstName: firstName.trim(), lastName: lastName.trim(), phone: phone.trim() }),
+        body: JSON.stringify({ firstName: firstName.trim(), lastName: lastName.trim() }),
       });
       setData(updated);
       setEditing(false);
@@ -216,14 +214,10 @@ function CustomerDetailPanel({ customerId, onClose }: { customerId: string; onCl
                     onChange={(e) => setLastName(e.target.value)}
                   />
                 </div>
-                <div>
-                  <label className="text-xs font-medium text-muted">Phone</label>
-                  <input
-                    className="input-field mt-1 min-h-[2.5rem] w-full"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                  />
-                </div>
+                <p className="text-xs text-muted">
+                  Phone number can&apos;t be changed here — it&apos;s the customer&apos;s own login
+                  credential.
+                </p>
                 {saveError && <div className="alert-error">{saveError}</div>}
                 <div className="flex gap-2">
                   <button

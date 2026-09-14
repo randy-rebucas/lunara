@@ -24,9 +24,16 @@ export class PointsTransaction {
   sourceType!: 'order' | 'referral' | 'redemption';
 
   /** The shop the earning order was placed at (order-sourced credits only) — lets a partner see
-   * how much loyalty activity the platform-wide program is generating at their own shop. */
+   * how much loyalty activity their own program is generating at their own shop. */
   @Prop({ type: Types.ObjectId, index: true })
   branchId?: Types.ObjectId;
+
+  /** The partner this transaction's points belong to — every 'order' credit and any 'redemption'
+   * debit spent from a partner-scoped balance carries this (see RewardsService.creditForCompletedOrder
+   * and RewardsService.redeem). Absent for 'referral' credits/debits, which are a platform-wide
+   * balance usable as top-up at any partner's catalog rather than tied to one shop. */
+  @Prop({ type: Types.ObjectId, index: true })
+  partnerUserId?: Types.ObjectId;
 
   createdAt!: Date;
   updatedAt!: Date;

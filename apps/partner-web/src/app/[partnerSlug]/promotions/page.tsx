@@ -9,7 +9,7 @@ import { useProtectedPage } from '../../../hooks/use-protected-page';
 import { partnerFetch } from '../../../lib/partner-api';
 import { usePartnerQuery } from '../../../lib/use-partner-query';
 
-interface PartnerPromotion {
+interface OwnPromotion {
   _id: string;
   code: string;
   title: string;
@@ -19,10 +19,6 @@ interface PartnerPromotion {
   minOrderAmount?: number;
   startsAt?: string;
   endsAt?: string;
-  isOptedIn: boolean;
-}
-
-interface OwnPromotion extends PartnerPromotion {
   isActive: boolean;
   maxUsesPerCustomer?: number;
   fundedBy: 'platform' | 'partner';
@@ -58,24 +54,17 @@ function approvalBadge(promo: OwnPromotion) {
 }
 
 export default function PromotionsPage() {
-  const { ready, user } = useProtectedPage({
-    roles: [UserRole.PARTNER, UserRole.STAFF, UserRole.ADMIN],
+  // Promotions are a partner-level feature only — no admin/staff view onto this page anymore now
+  // that the platform-wide (admin-suggested) promotions section is gone. Backend still enforces
+  // this independently (@Roles(PARTNER) on /promotions/mine, POST, and the active-toggle).
+  const { ready } = useProtectedPage({
+    roles: [UserRole.PARTNER],
   });
-  // Only the PARTNER role owns promotions (backend scopes /promotions/mine, POST, and the
-  // active-toggle to @Roles(PARTNER) only) — STAFF/ADMIN would get a 403 on all three, so they
-  // only ever see the platform-wide list below.
-  const canManageOwn = user?.role === UserRole.PARTNER;
-
-  const loadPlatform = useCallback(async () => {
-    return partnerFetch<PartnerPromotion[]>('/partner/promotions');
-  }, []);
-  const { data: platformPromotions, loading: platformLoading, error: platformError, reload: reloadPlatform } = usePartnerQuery(loadPlatform, []);
 
   const loadOwn = useCallback(async () => {
-    if (!canManageOwn) return [];
     return partnerFetch<OwnPromotion[]>('/partner/promotions/mine');
-  }, [canManageOwn]);
-  const { data: ownPromotions, loading: ownLoading, error: ownError, reload: reloadOwn } = usePartnerQuery(loadOwn, [canManageOwn]);
+  }, []);
+  const { data: ownPromotions, loading: ownLoading, error: ownError, reload: reloadOwn } = usePartnerQuery(loadOwn, []);
 
   const [showForm, setShowForm] = useState(false);
   const [code, setCode] = useState('');
@@ -91,8 +80,6 @@ export default function PromotionsPage() {
   const [formError, setFormError] = useState('');
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [toggleError, setToggleError] = useState('');
-  const [togglingOptInId, setTogglingOptInId] = useState<string | null>(null);
-  const [optInError, setOptInError] = useState('');
 
   const discountCap = discountType === 'percent' ? MAX_PERCENT_DISCOUNT : MAX_FIXED_DISCOUNT;
 
@@ -149,34 +136,16 @@ export default function PromotionsPage() {
     }
   }
 
-  async function toggleOptIn(promo: PartnerPromotion) {
-    setTogglingOptInId(promo._id);
-    setOptInError('');
-    try {
-      await partnerFetch(`/partner/promotions/${promo._id}/opt-in`, {
-        method: 'PATCH',
-        body: JSON.stringify({ isOptedIn: !promo.isOptedIn }),
-      });
-      await reloadPlatform();
-    } catch (err) {
-      setOptInError(err instanceof Error ? err.message : 'Failed to update promotion');
-    } finally {
-      setTogglingOptInId(null);
-    }
-  }
-
   if (!ready) {
     return <AuthLoading message="Loading promotions…" />;
   }
 
   const ownList = ownPromotions ?? [];
-  const platformList = platformPromotions ?? [];
 
   return (
     <div>
-      <PageHeader title="Promotions" description="Create your own promo codes for customers booking at your shop, and see what Lunara is running platform-wide." />
+      <PageHeader title="Promotions" description="Create your own promo codes for customers booking at your shop." />
 
-      {canManageOwn && (
       <section className="mt-6">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-sm font-semibold text-slate-900">Your promo codes</h2>
@@ -186,7 +155,7 @@ export default function PromotionsPage() {
         </div>
         <p className="mt-1 text-xs text-muted">
           The discount comes out of your own payout, not Lunara&apos;s — it applies only to orders assigned to
-          your shop, and needs a quick admin review before it goes live.
+          your shop and goes live immediately, no admin review needed.
         </p>
 
         {toggleError && <div className="alert-error mt-3" role="alert">{toggleError}</div>}
@@ -247,7 +216,7 @@ export default function PromotionsPage() {
               </div>
             </div>
             <button type="submit" disabled={saving} className="btn-primary btn-sm">
-              {saving ? 'Submitting…' : 'Submit for review'}
+              {saving ? 'Creating…' : 'Create promo code'}
             </button>
           </form>
         )}
@@ -286,63 +255,6 @@ export default function PromotionsPage() {
                   onClick={() => void toggleActive(promo)}
                 >
                   {togglingId === promo._id ? 'Saving…' : promo.isActive ? 'Turn off' : 'Turn on'}
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      </section>
-      )}
-
-      <section className="mt-8">
-        <h2 className="text-sm font-semibold text-slate-900">Platform-wide promotions</h2>
-        <p className="mt-1 text-xs text-muted">
-          {canManageOwn
-            ? "Suggested by Lunara — these only apply at your shop once you opt in. Lunara covers the discount cost either way."
-            : 'Suggested by Lunara — customers can only use these at shops whose partner has opted in.'}
-        </p>
-
-        {optInError && <div className="alert-error mt-3" role="alert">{optInError}</div>}
-
-        <DataPageStatus loading={platformLoading} error={platformError} loadingMessage="Loading promotions…" />
-
-        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {!platformLoading && !platformError && platformList.length === 0 && (
-            <div className="card p-6 text-center text-sm text-muted sm:col-span-2 lg:col-span-3">No active promotions right now.</div>
-          )}
-          {platformList.map((promo) => (
-            <div key={promo._id} className="card flex flex-col p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-medium text-slate-900">{promo.title}</p>
-                  {promo.description && <p className="mt-1 text-sm text-muted">{promo.description}</p>}
-                </div>
-                <div className="flex shrink-0 items-center gap-1.5">
-                  {promo.isOptedIn ? (
-                    <span className="badge-accent">In use</span>
-                  ) : (
-                    <span className="badge-neutral">Suggested</span>
-                  )}
-                  <span className="badge-primary">{formatDiscount(promo)}</span>
-                </div>
-              </div>
-              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                <span className="font-mono uppercase">{promo.code}</span>
-                <span>{formatDateRange(promo)}</span>
-                {promo.minOrderAmount != null && <span>Min. order ₱{promo.minOrderAmount}</span>}
-              </div>
-              {canManageOwn && (
-                <button
-                  type="button"
-                  className="btn-outline btn-sm mt-3"
-                  disabled={togglingOptInId === promo._id}
-                  onClick={() => void toggleOptIn(promo)}
-                >
-                  {togglingOptInId === promo._id
-                    ? 'Saving…'
-                    : promo.isOptedIn
-                      ? 'Stop using at my shop'
-                      : 'Use at my shop'}
                 </button>
               )}
             </div>

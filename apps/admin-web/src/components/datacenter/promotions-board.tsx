@@ -28,7 +28,6 @@ interface Promotion {
   revenueImpact: number;
   partnerUserId?: string;
   fundedBy?: 'platform' | 'partner';
-  approvalStatus?: 'approved' | 'pending' | 'rejected';
   adminNote?: string;
 }
 
@@ -262,20 +261,6 @@ export function PromotionsBoard() {
       setActionError(err instanceof Error ? err.message : 'Failed to update promotion');
     } finally {
       setTogglingId(null);
-    }
-  }
-
-  const [reviewingId, setReviewingId] = useState<string | null>(null);
-  async function reviewPartnerPromo(p: Promotion, action: 'approve' | 'reject') {
-    setActionError('');
-    setReviewingId(p._id);
-    try {
-      await adminFetch(`/admin/promotions/${p._id}/review`, { method: 'POST', body: JSON.stringify({ action }) });
-      await reload();
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Failed to review promotion');
-    } finally {
-      setReviewingId(null);
     }
   }
 
@@ -573,11 +558,6 @@ export function PromotionsBoard() {
                               ) : (
                                 <span className="badge-neutral">Platform</span>
                               )}
-                              {p.approvalStatus === 'pending' ? (
-                                <span className="badge-warning ml-1">Pending review</span>
-                              ) : p.approvalStatus === 'rejected' ? (
-                                <span className="badge-danger ml-1">Rejected</span>
-                              ) : null}
                             </td>
                             <td className="whitespace-nowrap tabular-nums text-sm">{formatDiscount(p)}</td>
                             <td>
@@ -635,11 +615,6 @@ export function PromotionsBoard() {
                         ) : (
                           <span className="badge-neutral">Platform</span>
                         )}
-                        {selected.approvalStatus === 'pending' ? (
-                          <span className="badge-warning">Pending review</span>
-                        ) : selected.approvalStatus === 'rejected' ? (
-                          <span className="badge-danger">Rejected</span>
-                        ) : null}
                       </div>
                     </div>
                     <button
@@ -672,32 +647,6 @@ export function PromotionsBoard() {
                       <RailRow label="Scope" value="This partner's branches only" />
                     ) : null}
                   </RailSection>
-
-                  {selected.partnerUserId && selected.approvalStatus === 'pending' ? (
-                    <RailSection title="Review">
-                      <p className="mb-2 text-xs text-muted">
-                        Partner-created promo, awaiting approval before it&apos;s usable at checkout.
-                      </p>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          className="btn-primary btn-sm flex-1"
-                          disabled={reviewingId === selected._id}
-                          onClick={() => void reviewPartnerPromo(selected, 'approve')}
-                        >
-                          {reviewingId === selected._id ? 'Saving…' : 'Approve'}
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-outline btn-sm flex-1"
-                          disabled={reviewingId === selected._id}
-                          onClick={() => void reviewPartnerPromo(selected, 'reject')}
-                        >
-                          Reject
-                        </button>
-                      </div>
-                    </RailSection>
-                  ) : null}
 
                   <RailSection title="Performance">
                     <RailRow label="Redemptions" value={selected.redemptions.toLocaleString()} />

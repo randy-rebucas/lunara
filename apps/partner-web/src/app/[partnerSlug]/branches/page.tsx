@@ -39,6 +39,7 @@ export default function BranchesPage() {
   const [editingBranch, setEditingBranch] = useState<PartnerBranch | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
   const [busyBranchId, setBusyBranchId] = useState<string | null>(null);
 
   async function loadBranches() {
@@ -62,6 +63,7 @@ export default function BranchesPage() {
   function openCreateForm() {
     setEditingBranch(null);
     setForm(EMPTY_FORM);
+    setFormError('');
     setShowForm(true);
   }
 
@@ -75,11 +77,12 @@ export default function BranchesPage() {
       latitude: branch.latitude ?? DEFAULT_LATITUDE,
       longitude: branch.longitude ?? DEFAULT_LONGITUDE,
     });
+    setFormError('');
     setShowForm(true);
   }
 
   async function saveBranch() {
-    setRowError('');
+    setFormError('');
     setSaving(true);
     try {
       const { latitude, longitude, ...rest } = form;
@@ -94,7 +97,9 @@ export default function BranchesPage() {
       setEditingBranch(null);
       await loadBranches();
     } catch (e) {
-      setRowError(e instanceof Error ? e.message : 'Failed to save branch');
+      // Surfaced inside the drawer (not the page-level rowError banner), since the drawer
+      // overlays the table and a banner above it would be hidden while the form is open.
+      setFormError(e instanceof Error ? e.message : 'Failed to save branch');
     } finally {
       setSaving(false);
     }
@@ -210,7 +215,10 @@ export default function BranchesPage() {
 
       <RightDrawer
         open={showForm}
-        onClose={() => setShowForm(false)}
+        onClose={() => {
+          setShowForm(false);
+          setFormError('');
+        }}
         title={editingBranch ? 'Edit branch' : 'Add branch'}
       >
         <div className="grid gap-3">
@@ -230,6 +238,11 @@ export default function BranchesPage() {
             resetKey={editingBranch?._id}
           />
         </div>
+        {formError && (
+          <div className="alert-error mt-4" role="alert">
+            {formError}
+          </div>
+        )}
         <div className="mt-4">
           <button
             type="button"

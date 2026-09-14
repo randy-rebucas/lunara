@@ -875,6 +875,7 @@ export class BranchesService {
   async updateBranchForPartner(branchId: string, partnerUserId: string, dto: UpdateOwnBranchDto) {
     const branch = await this.getOwnBranchOrThrow(branchId, partnerUserId);
 
+    let promoteMainShop: BranchDocument | null = null;
     if (dto.isActive === false && branch.isActive) {
       const activeOrderCount = await this.orderModel.countDocuments({
         branchId: branch._id,
@@ -884,6 +885,23 @@ export class BranchesService {
         throw new BadRequestException(
           `Cannot deactivate: ${activeOrderCount} order(s) still in progress at this branch`,
         );
+      }
+
+      // The main shop is the fallback owner for network-wide config (e.g. resolveBranchHolidays
+      // falls back to the active main shop for branches without their own holiday list), so
+      // archiving it must hand that role to another active branch rather than leaving no branch
+      // flagged as main shop.
+      if (branch.isMainShop) {
+        promoteMainShop = await this.branchModel.findOne({
+          partnerUserId: branch.partnerUserId,
+          _id: { $ne: branch._id },
+          isActive: true,
+        });
+        if (!promoteMainShop) {
+          throw new BadRequestException(
+            'Cannot deactivate your only active branch. Add or reactivate another branch first.',
+          );
+        }
       }
     }
 
@@ -900,6 +918,12 @@ export class BranchesService {
     if (dto.dailyQuotaWeightKg !== undefined) branch.dailyQuotaWeightKg = dto.dailyQuotaWeightKg;
     if (dto.serviceRadiusKm !== undefined) branch.serviceRadiusKm = dto.serviceRadiusKm;
     if (dto.isActive !== undefined) branch.isActive = dto.isActive;
+
+    if (promoteMainShop) {
+      branch.isMainShop = false;
+      promoteMainShop.isMainShop = true;
+      await promoteMainShop.save();
+    }
 
     await branch.save();
     return {

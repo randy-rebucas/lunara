@@ -5,19 +5,25 @@ import { AuditLogService } from '../../modules/audit/audit-log.service';
 const MUTATING_METHODS = new Set(['POST', 'PATCH', 'PUT', 'DELETE']);
 const OBJECT_ID_RE = /^[a-f0-9]{24}$/i;
 
+const AUDITED_PREFIXES = ['/api/v1/admin', '/api/v1/partner/expenses'];
+
 function deriveAction(method: string, path: string) {
+  const prefix = path.startsWith('/api/v1/admin') ? '/api/v1/admin/' : '/api/v1/partner/';
+  const scope = prefix === '/api/v1/admin/' ? 'admin' : 'partner';
   const segments = path
-    .replace(/^\/api\/v1\/admin\/?/, '')
+    .replace(new RegExp(`^${prefix.replace(/\//g, '\\/')}?`), '')
     .split('/')
     .filter(Boolean)
     .map((seg) => (OBJECT_ID_RE.test(seg) ? ':id' : seg));
-  return `${method.toLowerCase()}.admin.${segments.join('.') || 'root'}`;
+  return `${method.toLowerCase()}.${scope}.${segments.join('.') || 'root'}`;
 }
 
 /**
- * Records every mutating (POST/PATCH/PUT/DELETE) request under /admin as an audit log entry,
- * attributed to the authenticated admin. Registered globally (app.module.ts) so new admin
- * routes are captured automatically with no per-endpoint wiring.
+ * Records every mutating (POST/PATCH/PUT/DELETE) request under /admin, plus the financial
+ * partner-expenses endpoints (bookkeeping entries that feed the partner accounting screens but
+ * otherwise have no audit trail), attributed to the authenticated actor. Registered globally
+ * (app.module.ts) so new admin routes are captured automatically with no per-endpoint wiring;
+ * new partner routes need an explicit prefix added to AUDITED_PREFIXES.
  */
 @Injectable()
 export class AuditLogInterceptor implements NestInterceptor {
@@ -30,7 +36,7 @@ export class AuditLogInterceptor implements NestInterceptor {
     const method = req.method as string;
     const path = (req.originalUrl as string) ?? req.url;
 
-    if (!MUTATING_METHODS.has(method) || !path.startsWith('/api/v1/admin')) {
+    if (!MUTATING_METHODS.has(method) || !AUDITED_PREFIXES.some((prefix) => path.startsWith(prefix))) {
       return next.handle();
     }
 

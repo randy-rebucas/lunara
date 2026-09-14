@@ -526,4 +526,13 @@ export class TrackingGateway implements OnGatewayConnection {
   emitNewMessage(conversationId: string, message: ChatMessage) {
     this.server.to(`conversation:${conversationId}`).emit('newMessage', message);
   }
+
+  /** Separate from emitNewMessage's per-conversation room: broadcasts to every connected admin
+   * dashboard (the 'admin:operations' room joined via joinAdminOperations) regardless of which
+   * conversation, if any, that admin currently has open — otherwise a partner's message only
+   * reaches an admin who happens to already be viewing that exact conversation thread, and
+   * everyone else's unread badge (useAdminMessageBadge) goes stale until their next page load. */
+  emitAdminNewMessage(message: ChatMessage) {
+    this.server.to('admin:operations').emit('newMessage', message);
+  }
 }

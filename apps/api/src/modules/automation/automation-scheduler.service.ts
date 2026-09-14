@@ -255,6 +255,37 @@ export class AutomationSchedulerService {
     }
   }
 
+  /** Daily sweep that converts expired trials to real billing cycles. isCycleDue (used by the
+   * weekly invoice sweep) explicitly treats 'trialing' as never due, so a trial past its
+   * trialEndsAt otherwise sits in free-tier limbo forever — this is what actually ends the
+   * Regular Partner (14-day) / Territorial Partner (30-day) free period. currentPeriodEnd was
+   * set equal to trialEndsAt at signup (see SubscriptionService.createTrialSubscription), so
+   * flipping status to 'active' here is enough: the next weekly generateScheduledInvoices run
+   * sees the cycle as due and bills + advances it normally, no separate invoicing logic needed. */
+  @Cron(CronExpression.EVERY_DAY_AT_2AM)
+  async sweepTrialExpirations() {
+    const expired = await this.subscriptionService.findExpiredTrials();
+    for (const subscription of expired) {
+      const partnerId = subscription.partnerId.toString();
+      try {
+        await this.subscriptionService.transitionStatus(subscription, 'active');
+        await this.notificationDispatchService.dispatch({
+          userId: partnerId,
+          title: 'Your free trial has ended',
+          body: 'Your subscription is now active and will be billed on your next invoice.',
+          data: { type: 'billing_trial_ended', subscriptionId: (subscription._id as Types.ObjectId).toString() },
+        });
+        await this.recordAutomationAction(
+          'automation.subscription.trial_expired',
+          `/admin/billing/subscriptions/${partnerId}`,
+          { partnerId, subscriptionId: (subscription._id as Types.ObjectId).toString() },
+        );
+      } catch (err) {
+        this.logger.warn(`Trial expiration sweep skipped for partner ${partnerId}: ${(err as Error).message}`);
+      }
+    }
+  }
+
   /** Weekly SMS + email platform stats sent to the admin contacts configured in Automation Settings.
    *  `force: true` (used by the manual "send now" admin endpoint) skips the enabled check so it can
    *  be tested without waiting for the weekly cron or flipping the toggle on first. */

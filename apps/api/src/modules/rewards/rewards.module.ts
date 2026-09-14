@@ -5,6 +5,10 @@ import { CustomerPromo, CustomerPromoSchema } from '../promotions/schemas/custom
 import { UserProfile, UserProfileSchema } from '../users/schemas/user-profile.schema';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { PointsTransaction, PointsTransactionSchema } from './schemas/points-transaction.schema';
+import {
+  PartnerRewardsProgram,
+  PartnerRewardsProgramSchema,
+} from './schemas/partner-rewards-program.schema';
 import { RewardsService } from './rewards.service';
 import { RewardsController } from './rewards.controller';
 
@@ -14,6 +18,7 @@ import { RewardsController } from './rewards.controller';
       { name: Customer.name, schema: CustomerSchema },
       { name: CustomerPromo.name, schema: CustomerPromoSchema },
       { name: PointsTransaction.name, schema: PointsTransactionSchema },
+      { name: PartnerRewardsProgram.name, schema: PartnerRewardsProgramSchema },
       { name: UserProfile.name, schema: UserProfileSchema },
       { name: Order.name, schema: OrderSchema },
     ]),

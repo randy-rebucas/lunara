@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { adminFetch } from '../../../lib/admin-api';
 import { formatPeso } from '../../../lib/format-peso';
 import { useAdminQuery } from '../../../lib/use-admin-query';
@@ -12,6 +12,7 @@ interface SubscriptionRow {
   partnerId: string;
   partnerEmail?: string;
   partnerPhone?: string;
+  planId: string;
   planName?: string;
   status: SubscriptionStatus;
   currentPeriodStart: string;
@@ -67,6 +68,9 @@ function RecordPaymentModal({
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Minted once per modal instance so a double-click or network retry of the same submission
+  // reuses the same key — the API dedupes on it instead of advancing the billing period twice.
+  const idempotencyKeyRef = useRef(crypto.randomUUID());
 
   async function handleSave() {
     const amount = Number(amountPhp);
@@ -84,6 +88,7 @@ function RecordPaymentModal({
           amountPhp: amount,
           paymentReference: paymentReference.trim() || undefined,
           note: note.trim() || undefined,
+          idempotencyKey: idempotencyKeyRef.current,
         }),
       });
       onSaved();
@@ -260,9 +265,112 @@ function ApplyPromoModal({
   );
 }
 
+interface Plan {
+  _id: string;
+  name: string;
+  monthlyPrice: number;
+}
+
+function ChangePlanModal({
+  subscription,
+  onClose,
+  onSaved,
+}: {
+  subscription: SubscriptionRow;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [plans, setPlans] = useState<Plan[] | null>(null);
+  const [planId, setPlanId] = useState('');
+  const [adminNote, setAdminNote] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    adminFetch<Plan[]>('/admin/billing/plans?includeInactive=true')
+      .then(setPlans)
+      .catch(() => setPlans([]));
+  }, []);
+
+  async function handleSave() {
+    if (!planId) {
+      setError('Select a plan');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await adminFetch(`/admin/billing/subscriptions/${subscription.partnerId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planId, adminNote: adminNote.trim() || undefined }),
+      });
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to change plan');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
+        <div className="dc-panel-header flex items-center justify-between">
+          <h2 className="font-semibold text-slate-900">Change plan</h2>
+          <button type="button" onClick={onClose} className="text-lg leading-none text-muted hover:text-slate-700">✕</button>
+        </div>
+        <div className="space-y-3 p-4">
+          <p className="text-sm text-muted">
+            {subscription.partnerEmail ?? subscription.partnerId} — currently {subscription.planName ?? 'no plan'}
+          </p>
+          <p className="text-xs text-muted">
+            Manual override — this reassigns the plan directly without charging any upgrade fee or
+            applying self-serve rules (e.g. it&apos;s the only way to downgrade a partner off the
+            Territorial Partner plan and release their reserved territory, which self-serve
+            deliberately blocks).
+          </p>
+          <div>
+            <label className="form-label">Plan</label>
+            <select value={planId} onChange={(e) => setPlanId(e.target.value)} className="input-field w-full">
+              <option value="">Select a plan…</option>
+              {(plans ?? [])
+                .filter((p) => p._id !== subscription.planId)
+                .map((p) => (
+                  <option key={p._id} value={p._id}>
+                    {p.name} — {formatPeso(p.monthlyPrice)}/mo
+                  </option>
+                ))}
+            </select>
+          </div>
+          <div>
+            <label className="form-label">Admin note <span className="font-normal text-muted">(optional)</span></label>
+            <textarea
+              value={adminNote}
+              onChange={(e) => setAdminNote(e.target.value)}
+              rows={2}
+              className="input-field w-full resize-none"
+              placeholder="e.g. Partner requested downgrade, territory released"
+            />
+          </div>
+          {error && <div className="alert-error">{error}</div>}
+          <div className="flex justify-end gap-2 pt-1">
+            <button type="button" onClick={onClose} className="btn-outline btn-sm">Cancel</button>
+            <button type="button" disabled={saving || !planId} className="btn-primary btn-sm disabled:opacity-50" onClick={handleSave}>
+              {saving ? 'Saving…' : 'Change plan'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PartnerSubscriptionsPage() {
   const [payingSubscription, setPayingSubscription] = useState<SubscriptionRow | null>(null);
   const [promoSubscription, setPromoSubscription] = useState<SubscriptionRow | null>(null);
+  const [changingPlanSubscription, setChangingPlanSubscription] = useState<SubscriptionRow | null>(null);
   const [filter, setFilter] = useState<'all' | 'attention'>('all');
 
   const loadSubscriptions = useCallback(() => adminFetch<SubscriptionRow[]>('/admin/billing/subscriptions'), []);
@@ -364,6 +472,9 @@ export default function PartnerSubscriptionsPage() {
                         : 'None on file'}
                     </td>
                     <td className="whitespace-nowrap text-right">
+                      <button type="button" className="btn-outline btn-sm mr-1.5" onClick={() => setChangingPlanSubscription(s)}>
+                        Change plan
+                      </button>
                       <button type="button" className="btn-outline btn-sm mr-1.5" onClick={() => setPromoSubscription(s)}>
                         Promo
                       </button>
@@ -391,6 +502,14 @@ export default function PartnerSubscriptionsPage() {
         <ApplyPromoModal
           subscription={promoSubscription}
           onClose={() => setPromoSubscription(null)}
+          onSaved={reload}
+        />
+      )}
+
+      {changingPlanSubscription && (
+        <ChangePlanModal
+          subscription={changingPlanSubscription}
+          onClose={() => setChangingPlanSubscription(null)}
           onSaved={reload}
         />
       )}

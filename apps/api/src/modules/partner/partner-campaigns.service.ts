@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { OrderStatus } from '@lunara/types';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
+import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
 import { PushNotificationService } from '../push/push-notification.service';
 import { PartnerCampaign, PartnerCampaignDocument } from './schemas/partner-campaign.schema';
 import { SendCampaignDto } from './dto/send-campaign.dto';
@@ -11,6 +12,7 @@ import { SendCampaignDto } from './dto/send-campaign.dto';
 export class PartnerCampaignsService {
   constructor(
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
+    @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
     @InjectModel(PartnerCampaign.name) private partnerCampaignModel: Model<PartnerCampaignDocument>,
     private pushNotificationService: PushNotificationService,
   ) {}
@@ -38,13 +40,32 @@ export class PartnerCampaignsService {
     return rows.map((r) => r._id.toString());
   }
 
+  /** Marketing pushes must respect the same push opt-out customers use for order/rewards
+   * notifications (Customer.notificationPreferences.push) — a partner campaign is not exempt
+   * just because it's partner-initiated rather than system-initiated. */
+  private async filterPushOptedIn(customerIds: string[]): Promise<string[]> {
+    const optedOut = await this.customerModel
+      .find({
+        userId: { $in: customerIds.map((id) => new Types.ObjectId(id)) },
+        'notificationPreferences.push': false,
+      })
+      .select('userId')
+      .lean();
+    const optedOutIds = new Set(optedOut.map((c) => c.userId.toString()));
+    return customerIds.filter((id) => !optedOutIds.has(id));
+  }
+
   async sendCampaign(partnerUserId: string, dto: SendCampaignDto) {
-    const customerIds = await this.resolveOwnCustomerIds(partnerUserId);
-    if (customerIds.length === 0) {
+    const allCustomerIds = await this.resolveOwnCustomerIds(partnerUserId);
+    if (allCustomerIds.length === 0) {
       throw new BadRequestException('No customers to send to yet');
     }
+    const recipientIds = await this.filterPushOptedIn(allCustomerIds);
+    if (recipientIds.length === 0) {
+      throw new BadRequestException('All of your customers have opted out of push notifications');
+    }
 
-    const sentCount = await this.pushNotificationService.sendToUsers(customerIds, {
+    const sentCount = await this.pushNotificationService.sendToUsers(recipientIds, {
       title: dto.title,
       body: dto.body,
     });
@@ -53,10 +74,10 @@ export class PartnerCampaignsService {
       partnerUserId: new Types.ObjectId(partnerUserId),
       title: dto.title,
       body: dto.body,
-      recipientCount: customerIds.length,
+      recipientCount: recipientIds.length,
       sentCount,
     });
 
-    return { success: true, data: { recipientCount: customerIds.length, sentCount } };
+    return { success: true, data: { recipientCount: recipientIds.length, sentCount } };
   }
 }

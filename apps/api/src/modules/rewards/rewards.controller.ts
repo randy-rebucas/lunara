@@ -1,9 +1,12 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { IsString } from 'class-validator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RewardsService } from './rewards.service';
 
 class RedeemRewardDto {
+  @IsString()
+  partnerId!: string;
+
   @IsString()
   catalogItemId!: string;
 }
@@ -13,25 +16,27 @@ class RedeemRewardDto {
 export class RewardsController {
   constructor(private readonly rewardsService: RewardsService) {}
 
+  /** Every shop this customer has point activity with, plus their platform-wide referral
+   * balance — there's no single global balance any more now that points are earned per-shop. */
   @Get('me')
-  getBalance(@Req() req: { user: { sub: string } }) {
-    return this.rewardsService.getBalanceAndHistory(req.user.sub);
+  getBalances(@Req() req: { user: { sub: string } }) {
+    return this.rewardsService.listMyBalances(req.user.sub);
   }
 
   @Get('me/transactions')
-  async getTransactions(@Req() req: { user: { sub: string } }) {
-    const { data } = await this.rewardsService.getBalanceAndHistory(req.user.sub);
-    return { success: true, data: data.transactions };
+  getTransactions(@Req() req: { user: { sub: string } }, @Query('partnerId') partnerId?: string) {
+    return this.rewardsService.getTransactions(req.user.sub, partnerId);
   }
 
   @Get('catalog')
-  getCatalog() {
-    return this.rewardsService.getCatalog();
+  getCatalog(@Query('partnerId') partnerId?: string) {
+    if (!partnerId) throw new BadRequestException('partnerId is required');
+    return this.rewardsService.getCatalogForPartner(partnerId);
   }
 
   @Post('redeem')
   redeem(@Req() req: { user: { sub: string } }, @Body() dto: RedeemRewardDto) {
-    return this.rewardsService.redeem(req.user.sub, dto.catalogItemId);
+    return this.rewardsService.redeem(req.user.sub, dto.partnerId, dto.catalogItemId);
   }
 
   @Get('me/referral-code')

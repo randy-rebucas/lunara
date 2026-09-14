@@ -7,6 +7,7 @@ import { DataPageStatus } from '../../../../components/data-page-status';
 import { StatCard } from '../../../../components/ui/card';
 import { PageHeader } from '../../../../components/ui/page-header';
 import { useRequirePartner } from '../../../../hooks/use-protected-page';
+import { sumExpenses, sumInvoices } from '../../../../lib/accounting-totals';
 import { formatPeso } from '../../../../lib/format-peso';
 import { listExpenses, partnerFetch, type PartnerExpense } from '../../../../lib/partner-api';
 import { usePartnerQuery } from '../../../../lib/use-partner-query';
@@ -46,36 +47,37 @@ export default function AccountingProfitLossPage() {
   }
 
   const trend = useMemo(() => {
-    const buckets = new Map<string, { revenue: number; fees: number; expenses: number }>();
+    // Bucket the raw records per month, then hand each bucket to the same sumInvoices/sumExpenses
+    // used by the Accounts and Income pages — so if that aggregation ever changes (e.g. excluding
+    // a voided invoice), the three pages can't drift apart from re-deriving it separately here.
+    const invoicesByMonth = new Map<string, PartnerInvoice[]>();
+    const expensesByMonth = new Map<string, PartnerExpense[]>();
     const now = new Date();
     for (let i = MONTHS_TO_SHOW - 1; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      buckets.set(monthKey(d), { revenue: 0, fees: 0, expenses: 0 });
+      invoicesByMonth.set(monthKey(d), []);
+      expensesByMonth.set(monthKey(d), []);
     }
 
     for (const inv of invoices ?? []) {
-      const key = monthKey(new Date(inv.periodStart));
-      const bucket = buckets.get(key);
-      if (!bucket) continue;
-      bucket.revenue += inv.totalCollected;
-      bucket.fees += inv.amountDue;
+      invoicesByMonth.get(monthKey(new Date(inv.periodStart)))?.push(inv);
     }
-
     for (const exp of (expenses ?? []) as PartnerExpense[]) {
-      const key = monthKey(new Date(exp.date));
-      const bucket = buckets.get(key);
-      if (!bucket) continue;
-      bucket.expenses += exp.amount;
+      expensesByMonth.get(monthKey(new Date(exp.date)))?.push(exp);
     }
 
-    return [...buckets.entries()].map(([key, b]) => ({
-      month: key,
-      label: monthLabel(key),
-      revenue: b.revenue,
-      fees: b.fees,
-      expenses: b.expenses,
-      netProfit: b.revenue - b.fees - b.expenses,
-    }));
+    return [...invoicesByMonth.keys()].map((key) => {
+      const { totalCollected: revenue, totalFeesBilled: fees } = sumInvoices(invoicesByMonth.get(key) ?? []);
+      const monthExpenses = sumExpenses(expensesByMonth.get(key) ?? []);
+      return {
+        month: key,
+        label: monthLabel(key),
+        revenue,
+        fees,
+        expenses: monthExpenses,
+        netProfit: revenue - fees - monthExpenses,
+      };
+    });
   }, [invoices, expenses]);
 
   if (!ready) return <AuthLoading message="Loading profit & loss…" />;

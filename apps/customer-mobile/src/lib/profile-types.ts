@@ -13,6 +13,8 @@ export interface CustomerProfile {
   firstName: string;
   lastName: string;
   avatarUrl?: string;
+  /** Referral-bonus balance only — loyalty is a partner-level feature now (see RewardsService),
+   * so per-shop order points live in /rewards/me, not here. */
   loyaltyPoints?: number;
   isBusiness?: boolean;
 }

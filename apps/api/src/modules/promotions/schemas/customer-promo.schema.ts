@@ -38,6 +38,12 @@ export class CustomerPromo {
   @Prop({ type: Types.ObjectId })
   sourcePromotionId?: Types.ObjectId;
 
+  /** Set when this voucher was redeemed from a partner's own rewards catalog — restricts it to
+   * that partner's shops, same scoping rule as a partner-created Promotion (see
+   * PromotionsService.applyCouponToQuote). Absent for platform vouchers (e.g. the signup promo). */
+  @Prop({ type: Types.ObjectId, index: true })
+  partnerUserId?: Types.ObjectId;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

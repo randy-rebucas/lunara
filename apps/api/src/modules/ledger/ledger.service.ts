@@ -136,6 +136,23 @@ export class LedgerService {
     return map;
   }
 
+  /**
+   * Reserves a caller-supplied idempotency key via the same uniquely-indexed marker collection
+   * `post()` uses. Returns true if this call newly claimed the key (caller should proceed), false
+   * if it was already claimed (caller should treat the operation as already done and skip it).
+   * Lets multi-step operations (not just a single ledger post) guard their entire side-effect
+   * chain against a duplicated/retried request.
+   */
+  async claim(key: string): Promise<boolean> {
+    try {
+      await this.markerModel.create({ transactionRef: key });
+      return true;
+    } catch (err) {
+      if (this.isDuplicateKeyError(err)) return false;
+      throw err;
+    }
+  }
+
   private isDuplicateKeyError(err: unknown): boolean {
     return typeof err === 'object' && err !== null && (err as { code?: number }).code === 11000;
   }

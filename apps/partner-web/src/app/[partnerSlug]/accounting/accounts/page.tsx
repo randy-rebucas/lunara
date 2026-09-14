@@ -2,11 +2,12 @@
 
 import Link from 'next/link';
 import { useCallback } from 'react';
-import type { PartnerInvoice, PartnerRevenueData } from '@lunara/types';
+import type { PartnerInvoice } from '@lunara/types';
 import { AuthLoading } from '../../../../components/auth-loading';
 import { DataPageStatus } from '../../../../components/data-page-status';
 import { PageHeader } from '../../../../components/ui/page-header';
 import { useRequirePartner } from '../../../../hooks/use-protected-page';
+import { computeTotals } from '../../../../lib/accounting-totals';
 import { formatPeso } from '../../../../lib/format-peso';
 import { listExpenses, partnerFetch } from '../../../../lib/partner-api';
 import { usePartnerPath } from '../../../../lib/partner-path';
@@ -15,12 +16,6 @@ import { usePartnerQuery } from '../../../../lib/use-partner-query';
 export default function AccountingAccountsPage() {
   const { ready } = useRequirePartner();
   const toPath = usePartnerPath();
-
-  const loadRevenue = useCallback(() => partnerFetch<PartnerRevenueData>('/partner/revenue'), []);
-  const { data: revenue, loading: revenueLoading, error: revenueError, reload: reloadRevenue } = usePartnerQuery(
-    loadRevenue,
-    [],
-  );
 
   const loadInvoices = useCallback(() => partnerFetch<PartnerInvoice[]>('/partner/invoices'), []);
   const { data: invoices, loading: invoicesLoading, error: invoicesError, reload: reloadInvoices } = usePartnerQuery(
@@ -34,27 +29,26 @@ export default function AccountingAccountsPage() {
     [],
   );
 
-  const loading = revenueLoading || invoicesLoading || expensesLoading;
-  const error = revenueError || invoicesError || expensesError;
+  const loading = invoicesLoading || expensesLoading;
+  const error = invoicesError || expensesError;
 
   function reloadAll() {
-    reloadRevenue();
     reloadInvoices();
     reloadExpenses();
   }
 
   if (!ready) return <AuthLoading message="Loading accounts…" />;
 
-  const grossRevenue = revenue?.allTimeRevenue ?? 0;
-  const feesBilled = (invoices ?? []).reduce((s, i) => s + i.amountDue, 0);
-  const operatingExpenses = (expenses ?? []).reduce((s, e) => s + e.amount, 0);
-  const netIncome = grossRevenue - feesBilled - operatingExpenses;
+  // Same invoice-based totals the Income and Profit & Loss pages use, so "net income" agrees
+  // across all three screens instead of mixing this page's revenue source with theirs.
+  const { totalCollected: grossRevenue, totalFeesBilled: feesBilled, totalExpenses: operatingExpenses, netIncome } =
+    computeTotals(invoices ?? [], expenses ?? []);
 
   const accounts = [
     {
       name: 'Revenue',
       type: 'Income',
-      description: 'Gross amount collected directly from customers, all time.',
+      description: 'Gross amount collected directly from customers across all invoiced billing periods.',
       balance: grossRevenue,
       href: '/revenue',
     },

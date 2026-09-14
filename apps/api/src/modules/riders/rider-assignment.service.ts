@@ -183,7 +183,7 @@ export class RiderAssignmentService {
   }
 
   /** Marks the order as an open delivery offer and pings online riders — same mechanism as the manual dispatch-search flow. */
-  private async broadcastDeliveryOffer(order: OrderDocument) {
+  private async broadcastDeliveryOffer(order: OrderDocument): Promise<number> {
     if (!order.delivery) order.delivery = {};
     if (!order.delivery.offeredAt) {
       order.delivery.offeredAt = new Date();
@@ -201,7 +201,9 @@ export class RiderAssignmentService {
     this.trackingGateway.emitOrderEvent(orderId, 'findingDeliveryRider', {
       message: 'Looking for a rider to deliver your laundry…',
     });
-    void this.riderOfferPush.notifyOnlineRiders({
+    // Awaited (not fire-and-forget) so callers can report back to the partner portal how many
+    // riders were actually reached, instead of always claiming "offers sent".
+    return this.riderOfferPush.notifyOnlineRiders({
       title: 'New delivery offer',
       body: `Delivery from ${order.branchName ?? 'shop'} · ${order.bookingType.replace(/_/g, ' ')}`,
       data: {
@@ -518,6 +520,7 @@ export class RiderAssignmentService {
     }
 
     const branch = order.branchId ? await this.branchModel.findById(order.branchId) : null;
+    let ridersNotified: number | undefined;
     if (branch?.assignedRiderId) {
       const rider = await this.riderModel.findOne({ userId: branch.assignedRiderId });
       if (rider?.isOnline) {
@@ -532,11 +535,17 @@ export class RiderAssignmentService {
           // fall through to the manual/suggested dispatch flow below
         }
       } else {
-        await this.broadcastDeliveryOffer(order);
+        ridersNotified = await this.broadcastDeliveryOffer(order);
       }
     } else if (branch?.portalSettings?.autoAssignRider) {
       const assigned = await this.autoAssignBestRankedDeliveryRider(orderId);
       if (assigned) return assigned;
+      ridersNotified = await this.broadcastDeliveryOffer(order);
+    } else {
+      // No branch default rider and auto-assign is off — still broadcast to whoever is online
+      // instead of silently parking the order, since the portal tells the partner "riders are
+      // notified automatically" regardless of branch configuration.
+      ridersNotified = await this.broadcastDeliveryOffer(order);
     }
 
     const now = new Date();
@@ -572,6 +581,7 @@ export class RiderAssignmentService {
         orderId,
         status: order.status,
         awaitingDeliveryDispatchAt: order.awaitingDeliveryDispatchAt,
+        ridersNotified: ridersNotified ?? 0,
       },
     };
   }
