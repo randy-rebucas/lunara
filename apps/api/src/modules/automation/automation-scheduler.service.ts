@@ -286,6 +286,41 @@ export class AutomationSchedulerService {
     }
   }
 
+  /** Daily health check for subscriptions whose billing cycle ended more than 3 days ago but are
+   * still sitting in a status the weekly invoice cron / daily dunning sweep should have already
+   * processed — see SubscriptionService.getStaleSubscriptions. A healthy system never accumulates
+   * these, so any hit here means a stuck job or a bug and is worth a human looking at it. */
+  @Cron(CronExpression.EVERY_DAY_AT_3AM)
+  async alertStaleSubscriptions() {
+    try {
+      const stale = await this.subscriptionService.getStaleSubscriptions(3);
+      if (stale.length === 0) return;
+
+      this.logger.warn(`${stale.length} subscription(s) appear stuck past their billing cycle end`);
+
+      const email = await this.settingsService.getAdminNotificationEmail();
+      if (email) {
+        const lines = stale
+          .map((s) => `- partner ${s.partnerId.toString()}: status=${s.status}, cycle ended ${s.currentPeriodEnd?.toISOString().slice(0, 10)}`)
+          .join('\n');
+        await this.emailService.send({
+          to: email,
+          subject: `Lunara billing: ${stale.length} stale subscription(s) need attention`,
+          text:
+            `The following subscriptions are past their billing cycle end but were not processed ` +
+            `by the invoice or dunning sweeps:\n\n${lines}\n\nCheck /admin/partners/subscriptions.`,
+        });
+      }
+
+      await this.recordAutomationAction('automation.subscription.stale_alert', '/admin/partners/subscriptions', {
+        count: stale.length,
+        partnerIds: stale.map((s) => s.partnerId.toString()),
+      });
+    } catch (err) {
+      this.logger.warn(`Stale subscription check failed: ${(err as Error).message}`);
+    }
+  }
+
   /** Weekly SMS + email platform stats sent to the admin contacts configured in Automation Settings.
    *  `force: true` (used by the manual "send now" admin endpoint) skips the enabled check so it can
    *  be tested without waiting for the weekly cron or flipping the toggle on first. */
