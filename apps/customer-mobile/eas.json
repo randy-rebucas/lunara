@@ -21,13 +21,15 @@
     "preview-jelave": {
       "extends": "preview",
       "env": {
-        "LUNARA_PARTNER_SLUG": "jelave"
+        "LUNARA_PARTNER_SLUG": "jelave",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "04440518860-5daco7tns1uduif97m322c59u851ikip.apps.googleusercontent.com"
       }
     },
     "preview-3d-laundry-hub": {
       "extends": "preview",
       "env": {
-        "LUNARA_PARTNER_SLUG": "3d-laundry-hub"
+        "LUNARA_PARTNER_SLUG": "3d-laundry-hub",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "04440518860-5daco7tns1uduif97m322c59u851ikip.apps.googleusercontent.com"
       }
     },
     "production": {
@@ -40,13 +42,15 @@
     "production-jelave": {
       "extends": "production",
       "env": {
-        "LUNARA_PARTNER_SLUG": "jelave"
+        "LUNARA_PARTNER_SLUG": "jelave",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "04440518860-5daco7tns1uduif97m322c59u851ikip.apps.googleusercontent.com"
       }
     },
     "production-3d-laundry-hub": {
       "extends": "production",
       "env": {
-        "LUNARA_PARTNER_SLUG": "3d-laundry-hub"
+        "LUNARA_PARTNER_SLUG": "3d-laundry-hub",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "04440518860-5daco7tns1uduif97m322c59u851ikip.apps.googleusercontent.com"
       }
     },
     "preview-lunara-development-territory": {
